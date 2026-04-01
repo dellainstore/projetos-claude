@@ -1,0 +1,13 @@
+[Unit]
+Description=Telegram Claude Bot - Della Sistemas
+After=network.target
+
+[Service]
+WorkingDirectory=/var/www/della-sistemas/projetos-claude/telegram-bot
+ExecStart=/var/www/della-sistemas/projetos-claude/telegram-bot/venv/bin/python bot.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/var/www/della-sistemas/projetos-claude/telegram-bot/.env
+
+[Install]
+WantedBy=multi-user.target
