@@ -26,6 +26,13 @@ projetos-claude/
 - **A cada atualização**, commitar e fazer push para o GitHub
 - Manter o `.gitignore` atualizado (ignorar `venv/`, `.env`, `__pycache__/`, etc.)
 
+## Segurança — arquivos .env
+
+- **NUNCA** subir arquivos `.env` para o GitHub — eles ficam apenas na VPS
+- O `.env` contém credenciais reais (tokens, API keys, senhas) e não deve ser versionado
+- Sempre criar um `.env.example` com as variáveis necessárias mas **sem os valores reais**
+- Verificar antes de qualquer commit se não há `.env` sendo rastreado (`git status`)
+
 ## Projetos
 
 ### Bot-Telegram
