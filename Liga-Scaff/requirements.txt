@@ -1,0 +1,5 @@
+streamlit>=1.37,<2.0
+reportlab>=4.0
+bcrypt>=4.0
+python-dotenv>=1.0
+pandas>=2.2

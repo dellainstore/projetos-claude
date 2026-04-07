@@ -28,7 +28,7 @@ src/
   pdf_generator.py  — geração de PDF com ReportLab
   ranking.py        — cálculo de ranking
   scoring.py        — cálculo de pontuação
-  utils.py          — utilitários gerais
+  utils.py          — utilitários gerais (inclui fmt_data para datas)
 assets/             — arquivos estáticos (imagens, CSS extra)
 data/
   liga_scaff.db     — banco SQLite (não versionar dados reais)
@@ -41,6 +41,20 @@ start.sh            — script para iniciar o app
 - Cores principais: `#f5a623` (laranja) e `#1a1a2e` (azul escuro)
 - Toda lógica de negócio fica em `src/`, as pages só chamam funções de lá
 - Banco inicializado via `db.init_db()` no startup
+- **Datas sempre exibidas como DD/MM/AAAA** — usar `fmt_data()` de `src/utils.py`
+- **Renomeação do menu lateral:** item "app" é renomeado para "Inicial" via JavaScript injetado em `auth.render_sidebar_user()` (usando `st.components.v1.html` com `window.parent.document`)
+
+## Dashboard principal (app.py)
+- Layout de 4 cards em **2 linhas × 2 colunas** (linha 1: Temporada Ativa + Próxima Rodada; linha 2: Rodadas Concluídas + Jogadores)
+- Nome completo da temporada exibido sem truncamento
+
+## Motor de Sorteio (src/draw_engine.py)
+- **Regra obrigatória:** no mesmo dia, nenhum jogador repete parceiro ou adversário (backtracking com rejeição imediata)
+- **Regra soft (histórico):** aceita parâmetro `historico_jogos` com jogos dos últimos N sorteios concluídos. Avalia até 150 soluções válidas, pontua cada uma (parceiro repetido = 2 pts, adversário repetido = 1 pt) e retorna a de menor penalidade. Sai imediatamente se encontrar score 0.
+- Função `db.get_historico_jogos_rodadas(rodada_id, n=2)` retorna jogos das últimas N rodadas concluídas da temporada para alimentar o histórico.
+
+## Download de PDF (Sorteio)
+- O botão "Baixar Planilha PDF" na aba Sorteio é um `st.download_button` com o PDF pré-gerado — um clique já baixa sem precisar rolar a página.
 
 ## Como rodar
 ```bash
@@ -54,7 +68,8 @@ streamlit run app.py
 - Repositório: `dellainstore/projetos-claude` (pasta `Liga-Scaff/`)
 - Push via HTTPS com token do gh CLI:
   ```bash
-  TOKEN=$(gh auth token) && git -C /var/www/della-sistemas/projetos-claude remote set-url origin "https://dellainstore:${TOKEN}@github.com/dellainstore/projetos-claude.git"
+  TOKEN=$(/tmp/gh_2.67.0_linux_amd64/bin/gh auth token)
+  git -C /var/www/della-sistemas/projetos-claude remote set-url origin "https://dellainstore:${TOKEN}@github.com/dellainstore/projetos-claude.git"
   git -C /var/www/della-sistemas/projetos-claude add Liga-Scaff/ && git -C /var/www/della-sistemas/projetos-claude commit -m "msg" && git -C /var/www/della-sistemas/projetos-claude push
   ```
 - `gh` CLI em `/tmp/gh_2.67.0_linux_amd64/bin/gh`
