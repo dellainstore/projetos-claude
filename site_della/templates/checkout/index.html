@@ -1,7 +1,566 @@
 {% extends 'base.html' %}
+{% load static %}
+
+{% block titulo %}Checkout — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<div class="checkout-wrapper">
+
+  {# ── Stepper ──────────────────────────────────────────────────────────── #}
+  <div class="checkout-stepper" aria-label="Etapas do checkout">
+    <div class="stepper-item ativo" data-step="1">
+      <span class="stepper-num">1</span>
+      <span class="stepper-label">Dados e entrega</span>
+    </div>
+    <div class="stepper-line"></div>
+    <div class="stepper-item" data-step="2">
+      <span class="stepper-num">2</span>
+      <span class="stepper-label">Frete</span>
+    </div>
+    <div class="stepper-line"></div>
+    <div class="stepper-item" data-step="3">
+      <span class="stepper-num">3</span>
+      <span class="stepper-label">Pagamento</span>
+    </div>
+  </div>
+
+  <form method="post" id="form-checkout" novalidate>
+    {% csrf_token %}
+
+    {# Campos hidden do frete #}
+    {{ form.opcao_frete }}
+    {{ form.servico_frete_nome }}
+    {{ form.valor_frete }}
+    {{ form.prazo_frete }}
+
+    <div class="checkout-body">
+
+      {# ── Coluna esquerda — etapas ──────────────────────────────────── #}
+      <div class="checkout-etapas">
+
+        {# Erros gerais #}
+        {% if form.non_field_errors %}
+        <div class="checkout-erros">
+          {% for erro in form.non_field_errors %}<p>{{ erro }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        {# ─── Etapa 1: Dados pessoais + Endereço ──────────────────────── #}
+        <section class="checkout-secao" id="secao-1" aria-labelledby="titulo-secao-1">
+          <h2 class="checkout-secao-titulo" id="titulo-secao-1">
+            <span class="secao-num">1</span> Seus dados
+          </h2>
+
+          <div class="checkout-grid-2">
+            <div class="checkout-campo {% if form.nome_completo.errors %}erro{% endif %}">
+              <label for="{{ form.nome_completo.id_for_label }}">Nome completo *</label>
+              {{ form.nome_completo }}
+              {% for e in form.nome_completo.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+            <div class="checkout-campo {% if form.email.errors %}erro{% endif %}">
+              <label for="{{ form.email.id_for_label }}">E-mail *</label>
+              {{ form.email }}
+              {% for e in form.email.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+            <div class="checkout-campo {% if form.cpf.errors %}erro{% endif %}">
+              <label for="{{ form.cpf.id_for_label }}">CPF *</label>
+              {{ form.cpf }}
+              {% for e in form.cpf.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+            <div class="checkout-campo {% if form.telefone.errors %}erro{% endif %}">
+              <label for="{{ form.telefone.id_for_label }}">Telefone</label>
+              {{ form.telefone }}
+            </div>
+          </div>
+
+          <h3 class="checkout-sub-titulo">Endereço de entrega</h3>
+
+          <div class="checkout-grid-cep">
+            <div class="checkout-campo {% if form.cep.errors %}erro{% endif %}">
+              <label for="{{ form.cep.id_for_label }}">CEP *</label>
+              <div class="cep-wrapper">
+                {{ form.cep }}
+                <button type="button" id="btn-buscar-cep" class="btn-cep" aria-label="Buscar CEP">
+                  <i class="fas fa-search"></i>
+                </button>
+              </div>
+              <a href="https://buscacepinter.correios.com.br/" target="_blank" rel="noopener noreferrer"
+                 class="link-nao-sei-cep">Não sei meu CEP</a>
+              {% for e in form.cep.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+          </div>
+
+          <div id="campos-endereco" class="checkout-grid-end {% if not form.cep.value %}hidden{% endif %}">
+            <div class="checkout-campo col-span-2 {% if form.logradouro.errors %}erro{% endif %}">
+              <label for="{{ form.logradouro.id_for_label }}">Rua / Avenida *</label>
+              {{ form.logradouro }}
+              {% for e in form.logradouro.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+            <div class="checkout-campo {% if form.numero_entrega.errors %}erro{% endif %}">
+              <label for="{{ form.numero_entrega.id_for_label }}">Número *</label>
+              {{ form.numero_entrega }}
+              {% for e in form.numero_entrega.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+            <div class="checkout-campo">
+              <label for="{{ form.complemento.id_for_label }}">Complemento</label>
+              {{ form.complemento }}
+            </div>
+            <div class="checkout-campo {% if form.bairro.errors %}erro{% endif %}">
+              <label for="{{ form.bairro.id_for_label }}">Bairro *</label>
+              {{ form.bairro }}
+              {% for e in form.bairro.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+            <div class="checkout-campo {% if form.cidade.errors %}erro{% endif %}">
+              <label for="{{ form.cidade.id_for_label }}">Cidade *</label>
+              {{ form.cidade }}
+              {% for e in form.cidade.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+            <div class="checkout-campo {% if form.estado.errors %}erro{% endif %}">
+              <label for="{{ form.estado.id_for_label }}">UF *</label>
+              {{ form.estado }}
+              {% for e in form.estado.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+            </div>
+          </div>
+
+          <div class="checkout-secao-footer">
+            <button type="button" class="btn-primario" id="btn-ir-frete">
+              Continuar para entrega <i class="fas fa-arrow-right"></i>
+            </button>
+          </div>
+        </section>
+
+        {# ─── Etapa 2: Frete ────────────────────────────────────────── #}
+        <section class="checkout-secao bloqueada" id="secao-2" aria-labelledby="titulo-secao-2">
+          <h2 class="checkout-secao-titulo" id="titulo-secao-2">
+            <span class="secao-num">2</span> Opções de entrega
+          </h2>
+
+          <div id="frete-loading" class="frete-loading hidden">
+            <i class="fas fa-spinner fa-spin"></i> Calculando frete…
+          </div>
+
+          <div id="frete-opcoes" class="frete-opcoes">
+            {# preenchido via JS após ViaCEP #}
+          </div>
+
+          <div id="frete-erro" class="frete-erro hidden">
+            Não foi possível calcular o frete. Verifique o CEP e tente novamente.
+          </div>
+
+          <div class="checkout-secao-footer">
+            <button type="button" class="btn-secundario" id="btn-voltar-dados">
+              <i class="fas fa-arrow-left"></i> Voltar
+            </button>
+            <button type="button" class="btn-primario" id="btn-ir-pagamento">
+              Continuar para pagamento <i class="fas fa-arrow-right"></i>
+            </button>
+          </div>
+        </section>
+
+        {# ─── Etapa 3: Pagamento ────────────────────────────────────── #}
+        <section class="checkout-secao bloqueada" id="secao-3" aria-labelledby="titulo-secao-3">
+          <h2 class="checkout-secao-titulo" id="titulo-secao-3">
+            <span class="secao-num">3</span> Pagamento
+          </h2>
+
+          {# Tabs de forma de pagamento #}
+          <div class="pagamento-tabs" role="tablist" aria-label="Forma de pagamento">
+            <button type="button" role="tab" class="pagamento-tab ativa" data-tab="pix"
+                    aria-selected="true" aria-controls="tab-pix">
+              <i class="fas fa-qrcode"></i> Pix
+            </button>
+            <button type="button" role="tab" class="pagamento-tab" data-tab="cartao"
+                    aria-selected="false" aria-controls="tab-cartao">
+              <i class="far fa-credit-card"></i> Cartão de crédito
+            </button>
+          </div>
+
+          {# Tab Pix #}
+          <div id="tab-pix" role="tabpanel" class="pagamento-tabpanel ativo">
+            <input type="radio" name="forma_pagamento" value="pix" id="radio_pix"
+                   checked class="sr-only">
+
+            <div class="pix-info">
+              <div class="pix-icone-wrapper">
+                <i class="fas fa-qrcode" style="font-size:3rem;color:var(--dourado);"></i>
+              </div>
+              <div>
+                <p class="pix-titulo">Pague com Pix</p>
+                <ul class="pix-vantagens">
+                  <li><i class="fas fa-check"></i> Aprovação instantânea</li>
+                  <li><i class="fas fa-check"></i> Disponível 24h por dia</li>
+                  <li><i class="fas fa-check"></i> Sem taxas adicionais</li>
+                </ul>
+                <p class="pix-instrucao">
+                  Após confirmar o pedido, você verá o QR Code para pagar.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {# Tab Cartão #}
+          <div id="tab-cartao" role="tabpanel" class="pagamento-tabpanel">
+            <input type="radio" name="forma_pagamento" value="cartao_credito" id="radio_cartao"
+                   class="sr-only">
+
+            <div class="cartao-form">
+              <p class="cartao-aviso">
+                <i class="fas fa-lock"></i>
+                Seus dados são criptografados e nunca armazenados em nossos servidores.
+              </p>
+              <div class="checkout-grid-2">
+                <div class="checkout-campo col-span-2">
+                  <label for="cartao_numero">Número do cartão</label>
+                  <input type="text" id="cartao_numero" name="cartao_numero"
+                         placeholder="0000 0000 0000 0000" maxlength="19"
+                         inputmode="numeric" autocomplete="cc-number"
+                         class="checkout-input" data-cartao>
+                </div>
+                <div class="checkout-campo col-span-2">
+                  <label for="cartao_nome">Nome no cartão</label>
+                  <input type="text" id="cartao_nome" name="cartao_nome"
+                         placeholder="Como está impresso no cartão"
+                         autocomplete="cc-name" class="checkout-input" data-cartao>
+                </div>
+                <div class="checkout-campo">
+                  <label for="cartao_validade">Validade</label>
+                  <input type="text" id="cartao_validade" name="cartao_validade"
+                         placeholder="MM/AA" maxlength="5"
+                         inputmode="numeric" autocomplete="cc-exp"
+                         class="checkout-input" data-cartao>
+                </div>
+                <div class="checkout-campo">
+                  <label for="cartao_cvv">CVV</label>
+                  <input type="text" id="cartao_cvv" name="cartao_cvv"
+                         placeholder="000" maxlength="4"
+                         inputmode="numeric" autocomplete="cc-csc"
+                         class="checkout-input" data-cartao>
+                </div>
+                <div class="checkout-campo col-span-2">
+                  <label for="{{ form.parcelas.id_for_label }}">Parcelas</label>
+                  {{ form.parcelas }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# Observação #}
+          <div class="checkout-campo" style="margin-top:1.5rem;">
+            <label for="{{ form.observacao.id_for_label }}">Observações (opcional)</label>
+            {{ form.observacao }}
+          </div>
+
+          <div class="checkout-secao-footer">
+            <button type="button" class="btn-secundario" id="btn-voltar-frete">
+              <i class="fas fa-arrow-left"></i> Voltar
+            </button>
+            <button type="submit" class="btn-primario btn-confirmar" id="btn-confirmar">
+              <i class="fas fa-lock"></i> Confirmar pedido
+            </button>
+          </div>
+        </section>
+
+      </div>{# /checkout-etapas #}
+
+      {# ── Resumo do pedido (direita) ─────────────────────────────── #}
+      <aside class="checkout-resumo" aria-label="Resumo do pedido">
+        <h2 class="checkout-resumo-titulo">Resumo</h2>
+
+        <div class="checkout-resumo-itens">
+          {% for item in itens %}
+          <div class="resumo-item">
+            <div class="resumo-item-foto">
+              {% if item.imagem %}
+                <img src="{{ item.imagem }}" alt="{{ item.nome }}" loading="lazy">
+              {% else %}
+                <div class="resumo-item-sem-foto"></div>
+              {% endif %}
+              <span class="resumo-item-qty">{{ item.quantidade }}</span>
+            </div>
+            <div class="resumo-item-info">
+              <p class="resumo-item-nome">{{ item.nome }}</p>
+              {% if item.variacao_desc %}
+                <p class="resumo-item-var">{{ item.variacao_desc }}</p>
+              {% endif %}
+            </div>
+            <p class="resumo-item-preco">R$ {{ item.subtotal|floatformat:2 }}</p>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="checkout-resumo-linha">
+          <span>Subtotal</span>
+          <span>R$ {{ subtotal|floatformat:2 }}</span>
+        </div>
+        <div class="checkout-resumo-linha" id="resumo-frete-linha">
+          <span>Frete</span>
+          <span id="resumo-frete-valor" class="text-gray-400 text-sm">A calcular</span>
+        </div>
+        <div class="checkout-resumo-total">
+          <span>Total</span>
+          <span id="resumo-total">R$ {{ subtotal|floatformat:2 }}</span>
+        </div>
+
+        <div class="checkout-resumo-selos">
+          <span><i class="fas fa-lock"></i> Compra segura</span>
+          <span><i class="fas fa-shield-alt"></i> Dados protegidos</span>
+          <span><i class="fas fa-undo-alt"></i> 7 dias p/ troca</span>
+        </div>
+      </aside>
+
+    </div>{# /checkout-body #}
+  </form>
+
+</div>{# /checkout-wrapper #}
+{% endblock %}
+
+{% block js_extra %}
+<script>
+(function() {
+  'use strict';
+
+  const SUBTOTAL = parseFloat('{{ subtotal|floatformat:2 }}'.replace(',', '.'));
+
+  // ── Elementos ────────────────────────────────────────────────────────────
+  const secoes  = document.querySelectorAll('.checkout-secao');
+  const steppers = document.querySelectorAll('.stepper-item');
+  let etapaAtual = 1;
+
+  // ── Stepper / navegação ──────────────────────────────────────────────────
+  function irParaEtapa(n) {
+    etapaAtual = n;
+    secoes.forEach((s, i) => {
+      s.classList.toggle('bloqueada', i + 1 !== n);
+      s.classList.toggle('ativa', i + 1 === n);
+    });
+    steppers.forEach((s, i) => {
+      s.classList.toggle('ativo', i + 1 === n);
+      s.classList.toggle('concluido', i + 1 < n);
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  document.getElementById('btn-ir-frete')?.addEventListener('click', () => {
+    if (!validarEtapa1()) return;
+    irParaEtapa(2);
+    carregarFrete();
+  });
+
+  document.getElementById('btn-voltar-dados')?.addEventListener('click', () => irParaEtapa(1));
+  document.getElementById('btn-ir-pagamento')?.addEventListener('click', () => {
+    if (!validarFrete()) return;
+    irParaEtapa(3);
+  });
+  document.getElementById('btn-voltar-frete')?.addEventListener('click', () => irParaEtapa(2));
+
+  // ── Validação etapa 1 ────────────────────────────────────────────────────
+  function validarEtapa1() {
+    const obrigatorios = [
+      'id_nome_completo', 'id_email', 'id_cpf',
+      'id_cep', 'id_logradouro', 'id_numero_entrega',
+      'id_bairro', 'id_cidade', 'id_estado',
+    ];
+    let ok = true;
+    obrigatorios.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const vazio = !el.value.trim();
+      el.closest('.checkout-campo')?.classList.toggle('erro', vazio);
+      if (vazio) ok = false;
+    });
+    if (!ok) {
+      document.getElementById('id_nome_completo')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return ok;
+  }
+
+  function validarFrete() {
+    const opcaoFrete = document.getElementById('id_opcao_frete')?.value;
+    if (!opcaoFrete) {
+      document.getElementById('frete-erro').classList.remove('hidden');
+      document.getElementById('frete-erro').textContent = 'Selecione uma opção de frete.';
+      return false;
+    }
+    return true;
+  }
+
+  // ── ViaCEP — autocompletar endereço ─────────────────────────────────────
+  const cepInput  = document.getElementById('id_cep');
+  const btnCep    = document.getElementById('btn-buscar-cep');
+  const camposEnd = document.getElementById('campos-endereco');
+
+  async function buscarCep(cep) {
+    const cepLimpo = cep.replace(/\D/g, '');
+    if (cepLimpo.length !== 8) return;
+
+    btnCep.disabled = true;
+    btnCep.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+      const res  = await fetch(`/carrinho/cep/${cepLimpo}/`);
+      const dados = await res.json();
+
+      if (dados.status === 'ok') {
+        document.getElementById('id_logradouro').value = dados.logradouro;
+        document.getElementById('id_bairro').value     = dados.bairro;
+        document.getElementById('id_cidade').value     = dados.cidade;
+        document.getElementById('id_estado').value     = dados.estado;
+        camposEnd.classList.remove('hidden');
+        document.getElementById('id_numero_entrega')?.focus();
+      } else {
+        alert('CEP não encontrado. Verifique e tente novamente.');
+      }
+    } catch (e) {
+      alert('Não foi possível consultar o CEP. Preencha o endereço manualmente.');
+      camposEnd.classList.remove('hidden');
+    } finally {
+      btnCep.disabled = false;
+      btnCep.innerHTML = '<i class="fas fa-search"></i>';
+    }
+  }
+
+  btnCep?.addEventListener('click', () => buscarCep(cepInput.value));
+
+  cepInput?.addEventListener('blur', () => {
+    const v = cepInput.value.replace(/\D/g, '');
+    if (v.length === 8) buscarCep(v);
+  });
+
+  // Máscara CEP
+  cepInput?.addEventListener('input', () => {
+    let v = cepInput.value.replace(/\D/g, '').slice(0, 8);
+    if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5);
+    cepInput.value = v;
+  });
+
+  // Máscara CPF
+  const cpfInput = document.getElementById('id_cpf');
+  cpfInput?.addEventListener('input', () => {
+    let v = cpfInput.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 9) v = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9);
+    else if (v.length > 6) v = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);
+    else if (v.length > 3) v = v.slice(0,3)+'.'+v.slice(3);
+    cpfInput.value = v;
+  });
+
+  // Máscara telefone
+  const telInput = document.querySelector('input[name="telefone"]');
+  telInput?.addEventListener('input', () => {
+    let v = telInput.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 6) v = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7);
+    else if (v.length > 2) v = '(' + v.slice(0,2) + ') ' + v.slice(2);
+    telInput.value = v;
+  });
+
+  // Máscara cartão
+  document.getElementById('cartao_numero')?.addEventListener('input', function() {
+    let v = this.value.replace(/\D/g, '').slice(0, 16);
+    this.value = v.replace(/(.{4})/g, '$1 ').trim();
+  });
+
+  document.getElementById('cartao_validade')?.addEventListener('input', function() {
+    let v = this.value.replace(/\D/g, '').slice(0, 4);
+    if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
+    this.value = v;
+  });
+
+  // ── Calcular frete ───────────────────────────────────────────────────────
+  async function carregarFrete() {
+    const cep = document.getElementById('id_cep').value.replace(/\D/g, '');
+    const loading = document.getElementById('frete-loading');
+    const opcoesEl = document.getElementById('frete-opcoes');
+    const erroEl = document.getElementById('frete-erro');
+
+    loading.classList.remove('hidden');
+    opcoesEl.innerHTML = '';
+    erroEl.classList.add('hidden');
+
+    try {
+      const res = await fetch(`/carrinho/frete/?cep=${cep}`);
+      const dados = await res.json();
+
+      loading.classList.add('hidden');
+
+      if (dados.status !== 'ok' || !dados.opcoes?.length) {
+        erroEl.classList.remove('hidden');
+        return;
+      }
+
+      opcoesEl.innerHTML = dados.opcoes.map((op, i) => `
+        <label class="frete-opcao" for="frete_${op.id}">
+          <input type="radio" name="_frete_visual" id="frete_${op.id}"
+                 value="${op.id}" ${i === 0 ? 'checked' : ''}
+                 data-preco="${op.preco}" data-nome="${op.nome} ${op.empresa}"
+                 data-prazo="${op.prazo}" onchange="selecionarFrete(this)">
+          <span class="frete-opcao-info">
+            <span class="frete-opcao-nome">${op.nome} <small>${op.empresa}</small></span>
+            <span class="frete-opcao-prazo">${op.descricao}</span>
+          </span>
+          <span class="frete-opcao-preco">R$ ${parseFloat(op.preco).toFixed(2).replace('.', ',')}</span>
+        </label>
+      `).join('');
+
+      // Seleciona automaticamente o primeiro
+      const primeiroRadio = opcoesEl.querySelector('input[type="radio"]');
+      if (primeiroRadio) selecionarFrete(primeiroRadio);
+
+    } catch (e) {
+      loading.classList.add('hidden');
+      erroEl.classList.remove('hidden');
+    }
+  }
+
+  window.selecionarFrete = function(radio) {
+    document.getElementById('id_opcao_frete').value = radio.value;
+    document.getElementById('id_servico_frete_nome').value = radio.dataset.nome;
+    document.getElementById('id_valor_frete').value = radio.dataset.preco;
+    document.getElementById('id_prazo_frete').value = radio.dataset.prazo;
+
+    const frete = parseFloat(radio.dataset.preco);
+    const total = SUBTOTAL + frete;
+
+    document.getElementById('resumo-frete-valor').textContent =
+      'R$ ' + frete.toFixed(2).replace('.', ',');
+    document.getElementById('resumo-total').textContent =
+      'R$ ' + total.toFixed(2).replace('.', ',');
+  };
+
+  // ── Tabs pagamento ───────────────────────────────────────────────────────
+  document.querySelectorAll('.pagamento-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.pagamento-tab').forEach(t => {
+        t.classList.remove('ativa');
+        t.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('.pagamento-tabpanel').forEach(p => p.classList.remove('ativo'));
+
+      tab.classList.add('ativa');
+      tab.setAttribute('aria-selected', 'true');
+
+      const tabId = tab.dataset.tab;
+      document.getElementById(`tab-${tabId}`)?.classList.add('ativo');
+
+      // Marca o radio correspondente
+      if (tabId === 'pix') document.getElementById('radio_pix').checked = true;
+      else document.getElementById('radio_cartao').checked = true;
+    });
+  });
+
+  // ── Confirmar pedido ─────────────────────────────────────────────────────
+  document.getElementById('form-checkout')?.addEventListener('submit', function(e) {
+    const btn = document.getElementById('btn-confirmar');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando…';
+  });
+
+  // Se houver erros do servidor, mostrar etapa com erro
+  {% if form.errors %}
+    // Re-abre na etapa 1 se há erro nos dados pessoais/endereço
+    irParaEtapa(1);
+  {% endif %}
+
+})();
+</script>
 {% endblock %}

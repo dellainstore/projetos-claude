@@ -282,6 +282,20 @@ JS: `static/js/della.js`
 - [x] **Etapa 7** — Nginx config + Gunicorn systemd (prontos para instalar)
 - [x] **Etapa 8** — Homepage completa (hero, categorias, produtos, look, manifesto, depoimentos, instagram, newsletter, whatsapp, footer)
 - [x] **Etapa 9** — Loja (grid + filtros sidebar + paginação), página de produto (galeria, variações, acordeões, avaliações, relacionados), carrinho funcional (sessão, add/remover/atualizar via AJAX, drawer dinâmico)
+- [x] **Etapa 10** — Checkout completo (stepper 3 etapas, ViaCEP, Melhor Envio com fallback, Pix QR Code EMV, Cartão de Crédito), criação real de Pedido+ItemPedido, página de confirmação com polling de status Pix
+
+### Detalhes da Etapa 10
+| Arquivo | O que foi feito |
+|---|---|
+| `apps/pedidos/forms.py` | `CheckoutForm` completo: dados pessoais, endereço, frete, pagamento; máscaras e validação de CPF/CEP |
+| `apps/pedidos/views.py` | `checkout()`: GET pré-preenche dados do usuário logado, POST cria Pedido+ItemPedido+limpa carrinho; `calcular_frete()`; `consultar_cep()` via ViaCEP; `confirmacao_pedido()` com geração de QR Code Pix |
+| `apps/pagamentos/pix.py` | Gerador de payload Pix EMV padrão BACEN (CRC-16/CCITT-FALSE) + QR Code PNG base64 via `qrcode` |
+| `apps/pagamentos/services/melhorenvio.py` | Integração real Melhor Envio API v2 com fallback PAC/SEDEX quando token não configurado |
+| `apps/pagamentos/views.py` | `pix_gerar()` e `pix_status()` reais; hooks PagSeguro/Stone estruturados |
+| `templates/checkout/index.html` | Stepper visual 3 etapas (dados+endereço → frete → pagamento); ViaCEP autocomplete; cálculo de frete AJAX; tabs Pix/Cartão; máscaras JS |
+| `templates/checkout/confirmacao.html` | QR Code Pix exibido, botão copiar código, polling automático de status (30s), detalhes do pedido |
+| `della.css` | +500 linhas: stepper, campos, frete, tabs pagamento, Pix, confirmação, responsivo |
+| `settings/base.py` + `.env.example` | `PIX_CHAVE` adicionado |
 
 ### Detalhes da Etapa 9
 | Arquivo | O que foi feito |
@@ -298,7 +312,7 @@ JS: `static/js/della.js`
 
 ## Etapas Pendentes
 
-- [ ] **Etapa 10** — Checkout completo: CEP (ViaCEP), cálculo de frete (Melhor Envio), pagamento (PagSeguro + Stone + Pix)
+- [ ] **Etapa 11** — Área do cliente: login/cadastro, minha conta, histórico de pedidos, endereços, wishlist
 - [ ] **Etapa 11** — Área do cliente: login/cadastro, minha conta, histórico de pedidos, endereços, wishlist
 - [ ] **Etapa 12** — Django Admin customizado: produtos com fotos inline, pedidos com status, relatórios básicos
 - [ ] **Etapa 13** — Integração Bling: OAuth2, envio automático de pedido ao confirmar pagamento, NF-e
@@ -370,4 +384,4 @@ Variáveis principais:
 
 ---
 
-*Última atualização: Etapa 9 concluída — Loja, Detalhe do produto e Carrinho funcionando.*
+*Última atualização: Etapa 10 concluída — Checkout completo com Pix, Melhor Envio e criação real de pedidos.*

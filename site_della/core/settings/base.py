@@ -230,8 +230,11 @@ WHATSAPP_NUMBER_2 = config('WHATSAPP_NUMBER_2', default='')
 
 INSTAGRAM_ACCESS_TOKEN = config('INSTAGRAM_ACCESS_TOKEN', default='')
 
-MELHOR_ENVIO_TOKEN = config('MELHOR_ENVIO_TOKEN', default='')
+MELHOR_ENVIO_TOKEN   = config('MELHOR_ENVIO_TOKEN', default='')
 MELHOR_ENVIO_SANDBOX = config('MELHOR_ENVIO_SANDBOX', default=True, cast=bool)
+
+# Chave Pix (CPF, CNPJ, e-mail, telefone ou chave aleatória)
+PIX_CHAVE = config('PIX_CHAVE', default='')
 
 # ─── Sessão ───────────────────────────────────────────────────────────────────
 

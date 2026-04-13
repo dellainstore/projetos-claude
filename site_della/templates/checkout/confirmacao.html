@@ -1,7 +1,226 @@
 {% extends 'base.html' %}
+{% load static %}
+
+{% block titulo %}Pedido {{ pedido.numero }} — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
+<div class="confirmacao-wrapper">
+
+  {# ── Cabeçalho de sucesso ─────────────────────────────────────────────── #}
+  <div class="confirmacao-topo">
+    <div class="confirmacao-icone">
+      <i class="fas fa-check"></i>
+    </div>
+    <p class="subtitulo-secao">Pedido recebido</p>
+    <h1 class="confirmacao-titulo">Obrigada pela sua compra!</h1>
+    <p class="confirmacao-numero">Pedido <strong>{{ pedido.numero }}</strong></p>
+    <p class="confirmacao-email">
+      Uma confirmação será enviada para <strong>{{ pedido.email }}</strong>
+    </p>
+  </div>
+
+  <div class="confirmacao-body">
+
+    {# ── Pix ──────────────────────────────────────────────────────────── #}
+    {% if pedido.forma_pagamento == 'pix' %}
+    <section class="confirmacao-pix" aria-labelledby="titulo-pix">
+      <h2 id="titulo-pix" class="confirmacao-secao-titulo">
+        <i class="fas fa-qrcode"></i> Pagamento via Pix
+      </h2>
+
+      {% if pix_qrcode %}
+      <div class="pix-instrucoes">
+        <ol class="pix-passos">
+          <li>Abra o aplicativo do seu banco</li>
+          <li>Acesse a área Pix e escolha <em>Pagar com QR Code</em></li>
+          <li>Aponte a câmera para o código abaixo</li>
+          <li>Confirme o pagamento de <strong>R$ {{ pedido.total|floatformat:2 }}</strong></li>
+        </ol>
+      </div>
+
+      <div class="pix-qrcode-bloco">
+        <img src="data:image/png;base64,{{ pix_qrcode }}"
+             alt="QR Code Pix — Pedido {{ pedido.numero }}"
+             class="pix-qrcode-img">
+        <div class="pix-valor">R$ {{ pedido.total|floatformat:2 }}</div>
+      </div>
+
+      {% if pix_payload %}
+      <div class="pix-copiar-bloco">
+        <p class="pix-copiar-label">Ou copie o código Pix:</p>
+        <div class="pix-copiar-input-wrapper">
+          <input type="text" id="pix-payload-input" value="{{ pix_payload }}"
+                 readonly class="pix-copiar-input" aria-label="Código Pix copia e cola">
+          <button type="button" id="btn-copiar-pix" class="btn-copiar-pix"
+                  onclick="copiarPix()">
+            <i class="far fa-copy"></i> Copiar
+          </button>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="pix-aviso">
+        <i class="fas fa-clock"></i>
+        O QR Code expira em <strong>30 minutos</strong>.
+        Após o pagamento, o pedido é confirmado automaticamente.
+      </div>
+
+      <div id="pix-status-bloco" class="pix-status-aguardando">
+        <i class="fas fa-spinner fa-spin"></i>
+        Aguardando confirmação do pagamento…
+        <button type="button" id="btn-verificar-pix" class="link-verificar-pix"
+                onclick="verificarPix()">Verificar agora</button>
+      </div>
+
+      {% else %}
+      <div class="pix-sem-chave">
+        <i class="fas fa-info-circle"></i>
+        <p>
+          Seu pedido foi recebido! Realize o pagamento via Pix para nossa chave
+          e informe o número do pedido <strong>{{ pedido.numero }}</strong> na descrição.
+        </p>
+        <p>Valor: <strong>R$ {{ pedido.total|floatformat:2 }}</strong></p>
+        <p class="text-sm" style="color:var(--cinza-texto);margin-top:.5rem;">
+          Entre em contato pelo WhatsApp para receber a chave Pix.
+        </p>
+      </div>
+      {% endif %}
+    </section>
+
+    {% elif pedido.forma_pagamento == 'cartao_credito' %}
+    <section class="confirmacao-cartao" aria-labelledby="titulo-cartao">
+      <h2 id="titulo-cartao" class="confirmacao-secao-titulo">
+        <i class="far fa-credit-card"></i> Cartão de Crédito
+      </h2>
+      <div class="confirmacao-status">
+        <span class="status-badge aguardando">Em processamento</span>
+        <p>Seu pagamento está sendo analisado. Você receberá um e-mail assim que for confirmado.</p>
+      </div>
+    </section>
+    {% endif %}
+
+    {# ── Detalhes ─────────────────────────────────────────────────────── #}
+    <section class="confirmacao-detalhes" aria-labelledby="titulo-detalhes">
+      <h2 id="titulo-detalhes" class="confirmacao-secao-titulo">
+        <i class="fas fa-receipt"></i> Detalhes do pedido
+      </h2>
+
+      <div class="confirmacao-grid">
+
+        <div class="confirmacao-card">
+          <h3 class="confirmacao-card-titulo">Endereço de entrega</h3>
+          <p>{{ pedido.nome_completo }}</p>
+          <p>{{ pedido.logradouro }}, {{ pedido.numero_entrega }}
+            {% if pedido.complemento %} — {{ pedido.complemento }}{% endif %}
+          </p>
+          <p>{{ pedido.bairro }}</p>
+          <p>{{ pedido.cidade }} — {{ pedido.estado }}</p>
+          <p>CEP: {{ pedido.cep_entrega|slice:":5" }}-{{ pedido.cep_entrega|slice:"5:" }}</p>
+          {% if pedido.transportadora %}
+            <p style="margin-top:.75rem;font-weight:500;">{{ pedido.transportadora }}</p>
+          {% endif %}
+        </div>
+
+        <div class="confirmacao-card">
+          <h3 class="confirmacao-card-titulo">Valores</h3>
+          <div class="conf-linha">
+            <span>Subtotal</span>
+            <span>R$ {{ pedido.subtotal|floatformat:2 }}</span>
+          </div>
+          <div class="conf-linha">
+            <span>Frete</span>
+            <span>R$ {{ pedido.frete|floatformat:2 }}</span>
+          </div>
+          {% if pedido.desconto %}
+          <div class="conf-linha">
+            <span>Desconto</span>
+            <span style="color:#27ae60;">− R$ {{ pedido.desconto|floatformat:2 }}</span>
+          </div>
+          {% endif %}
+          <div class="conf-linha total">
+            <span>Total</span>
+            <span>R$ {{ pedido.total|floatformat:2 }}</span>
+          </div>
+          {% if pedido.parcelas > 1 %}
+            <p style="font-size:.78rem;color:var(--cinza-texto);margin-top:.35rem;">{{ pedido.parcelas }}x sem juros</p>
+          {% endif %}
+        </div>
+
+      </div>
+
+      <div class="conf-itens">
+        <h3 class="confirmacao-card-titulo" style="margin-bottom:1rem;">Itens</h3>
+        {% for item in itens %}
+        <div class="conf-item">
+          <div class="conf-item-info">
+            <p class="conf-item-nome">{{ item.nome_produto }}</p>
+            {% if item.variacao_desc %}
+              <p class="conf-item-var">{{ item.variacao_desc }}</p>
+            {% endif %}
+            <p class="conf-item-qty">Qtd: {{ item.quantidade }}</p>
+          </div>
+          <p class="conf-item-preco">R$ {{ item.subtotal|floatformat:2 }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <div class="confirmacao-proximos">
+      <a href="{% url 'produtos:loja' %}" class="btn-primario">
+        <i class="fas fa-shopping-bag"></i> Continuar comprando
+      </a>
+      {% if request.user.is_authenticated %}
+      <a href="{% url 'pedidos:meus_pedidos' %}" class="btn-secundario">Meus pedidos</a>
+      {% endif %}
+    </div>
+
+  </div>
 </div>
+{% endblock %}
+
+{% block js_extra %}
+{% if pedido.forma_pagamento == 'pix' and pix_qrcode %}
+<script>
+function copiarPix() {
+  const input = document.getElementById('pix-payload-input');
+  navigator.clipboard?.writeText(input.value).then(() => {
+    const btn = document.getElementById('btn-copiar-pix');
+    btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+    setTimeout(() => { btn.innerHTML = '<i class="far fa-copy"></i> Copiar'; }, 2500);
+  }).catch(() => { input.select(); document.execCommand('copy'); });
+}
+
+async function verificarPix() {
+  const btn = document.getElementById('btn-verificar-pix');
+  btn.textContent = 'Verificando…';
+  try {
+    const res   = await fetch('/pagamento/pix/status/{{ pedido.numero }}/');
+    const dados = await res.json();
+    if (dados.status === 'pago') {
+      clearInterval(pollingId);
+      document.getElementById('pix-status-bloco').innerHTML =
+        '<span style="color:#27ae60;font-weight:500;"><i class="fas fa-check-circle"></i> Pagamento confirmado! Seu pedido está em processamento.</span>';
+    } else {
+      btn.textContent = 'Verificar agora';
+    }
+  } catch(e) { btn.textContent = 'Verificar agora'; }
+}
+
+let tentativas = 0;
+const pollingId = setInterval(async () => {
+  if (++tentativas > 20) { clearInterval(pollingId); return; }
+  try {
+    const res   = await fetch('/pagamento/pix/status/{{ pedido.numero }}/');
+    const dados = await res.json();
+    if (dados.status === 'pago') {
+      clearInterval(pollingId);
+      document.getElementById('pix-status-bloco').innerHTML =
+        '<span style="color:#27ae60;font-weight:500;"><i class="fas fa-check-circle"></i> Pagamento confirmado!</span>';
+    }
+  } catch(e) {}
+}, 30000);
+</script>
+{% endif %}
 {% endblock %}
