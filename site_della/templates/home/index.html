@@ -1,0 +1,395 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block titulo %}Della Instore — Moda Feminina Premium{% endblock %}
+{% block navbar_class %}transparente{% endblock %}
+
+{% block conteudo %}
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   HERO — Vídeo fullscreen
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section class="hero" aria-label="Banner principal">
+
+  {# Vídeo de fundo — troque pelo seu vídeo real #}
+  <video id="hero-video" class="hero-video" autoplay loop muted playsinline
+         poster="{% static 'images/brand/hero-poster.jpg' %}"
+         aria-hidden="true">
+    <source src="{% static 'images/brand/hero.mp4' %}" type="video/mp4">
+  </video>
+
+  <div class="hero-overlay" aria-hidden="true"></div>
+
+  <div class="hero-content">
+    <p class="hero-pretitulo fade-in">Nova Coleção 2025</p>
+    <h1 class="hero-titulo fade-in fade-in-delay-1">
+      Elegância que<br><em>veste a alma</em>
+    </h1>
+    <p class="hero-subtitulo fade-in fade-in-delay-2">
+      Peças únicas para mulheres únicas
+    </p>
+    <a href="{% url 'produtos:loja' %}" class="btn-hero fade-in fade-in-delay-3">
+      Explorar coleção <i class="fas fa-arrow-right text-xs"></i>
+    </a>
+  </div>
+
+  {# Botão mute #}
+  <button id="btn-mute" class="hero-mute-btn" aria-label="Ativar/desativar som do vídeo">
+    <i id="mute-icon" class="fas fa-volume-mute"></i>
+  </button>
+
+  {# Hint de scroll #}
+  <div class="hero-scroll-hint" aria-hidden="true">
+    <span>Rolar</span>
+    <i class="fas fa-chevron-down text-xs"></i>
+  </div>
+
+</section>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   CATEGORIAS
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section aria-labelledby="titulo-categorias">
+  <div class="secao">
+    <header class="secao-header fade-in">
+      <p class="subtitulo-secao">Explore</p>
+      <h2 class="titulo-secao" id="titulo-categorias">Nossas categorias</h2>
+    </header>
+
+    <div class="categorias-grid">
+      {% for cat in categorias_destaque %}
+        <a href="{% url 'produtos:loja_categoria' cat.slug %}" class="categoria-card fade-in fade-in-delay-{{ forloop.counter }}"
+           aria-label="Ver categoria {{ cat.nome }}">
+          {% if cat.imagem %}
+            <img src="{{ cat.imagem.url }}" alt="{{ cat.nome }}" loading="lazy">
+          {% else %}
+            <img src="{% static 'images/brand/categoria-placeholder.jpg' %}" alt="{{ cat.nome }}" loading="lazy">
+          {% endif %}
+          <div class="categoria-overlay">
+            <span class="categoria-nome">{{ cat.nome }}</span>
+            <span class="categoria-link">
+              Ver coleção <i class="fas fa-arrow-right text-xs"></i>
+            </span>
+          </div>
+        </a>
+      {% empty %}
+        {# Placeholders enquanto não há categorias cadastradas #}
+        {% for nome in categorias_placeholder %}
+          <div class="categoria-card fade-in">
+            <img src="{% static 'images/brand/categoria-placeholder.jpg' %}" alt="{{ nome }}" loading="lazy">
+            <div class="categoria-overlay">
+              <span class="categoria-nome">{{ nome }}</span>
+              <span class="categoria-link">Ver coleção <i class="fas fa-arrow-right text-xs"></i></span>
+            </div>
+          </div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   PRODUTOS EM DESTAQUE
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section aria-labelledby="titulo-destaque">
+  <div class="secao" style="padding-top: 2rem;">
+    <header class="secao-header fade-in">
+      <p class="subtitulo-secao">Seleção</p>
+      <h2 class="titulo-secao" id="titulo-destaque">Destaques da semana</h2>
+      <p>Peças exclusivas que unem conforto, estilo e sofisticação.</p>
+    </header>
+
+    <div class="produtos-grid">
+      {% for produto in produtos_destaque %}
+        <article class="produto-card fade-in fade-in-delay-{{ forloop.counter }}" aria-labelledby="produto-{{ produto.id }}">
+          <a href="{{ produto.get_absolute_url }}" class="produto-foto" aria-label="Ver {{ produto.nome }}">
+
+            {# Badges #}
+            {% if produto.em_promocao %}
+              <span class="produto-badge badge-promo" aria-label="Em promoção">-{{ produto.percentual_desconto }}%</span>
+            {% elif produto.novo %}
+              <span class="produto-badge badge-novo" aria-label="Novo">Novo</span>
+            {% endif %}
+
+            {# Foto principal #}
+            {% with produto.imagem_principal as img %}
+              {% if img %}
+                <img src="{{ img.imagem.url }}" alt="{{ img.alt|default:produto.nome }}"
+                     class="foto-principal" loading="lazy">
+              {% else %}
+                <img src="{% static 'images/brand/produto-placeholder.jpg' %}" alt="{{ produto.nome }}"
+                     class="foto-principal" loading="lazy">
+              {% endif %}
+            {% endwith %}
+
+            {# Foto hover (segunda imagem) #}
+            {% with produto.imagens.all|slice:"1:2" as imgs_hover %}
+              {% for img in imgs_hover %}
+                <img src="{{ img.imagem.url }}" alt="{{ produto.nome }} — foto alternativa"
+                     class="foto-hover" loading="lazy" aria-hidden="true">
+              {% endfor %}
+            {% endwith %}
+
+          </a>
+
+          {# Ações sobre a foto #}
+          <div class="produto-acoes" aria-hidden="true">
+            <button class="btn-add-carrinho"
+                    data-produto-id="{{ produto.id }}"
+                    aria-label="Adicionar {{ produto.nome }} ao carrinho">
+              Adicionar
+            </button>
+            <button class="btn-wishlist {% if produto.id in wishlist_ids %}ativo{% endif %}"
+                    data-wishlist-id="{{ produto.id }}"
+                    aria-label="{% if produto.id in wishlist_ids %}Remover da wishlist{% else %}Adicionar à wishlist{% endif %}">
+              <i class="{% if produto.id in wishlist_ids %}fas{% else %}far{% endif %} fa-heart"></i>
+            </button>
+          </div>
+
+          {# Info #}
+          <div class="produto-info">
+            <p class="produto-categoria">{{ produto.categoria.nome }}</p>
+            <h3 class="produto-nome" id="produto-{{ produto.id }}">
+              <a href="{{ produto.get_absolute_url }}">{{ produto.nome }}</a>
+            </h3>
+            <div class="produto-preco">
+              <span class="preco-atual">R$ {{ produto.preco_atual|floatformat:2 }}</span>
+              {% if produto.em_promocao %}
+                <span class="preco-original">R$ {{ produto.preco|floatformat:2 }}</span>
+                <span class="preco-desconto">-{{ produto.percentual_desconto }}%</span>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+      {% empty %}
+        {# Estado vazio — sem produtos cadastrados ainda #}
+        <div class="col-span-4 text-center py-16 text-gray-400">
+          <i class="far fa-shopping-bag text-4xl mb-4 block"></i>
+          <p class="font-light">Produtos em breve</p>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="btn-centro fade-in">
+      <a href="{% url 'produtos:loja' %}" class="btn-secundario">
+        Ver toda a coleção <i class="fas fa-arrow-right text-xs ml-2"></i>
+      </a>
+    </div>
+  </div>
+</section>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   SHOP THE LOOK
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section class="shop-the-look" aria-labelledby="titulo-look">
+  <div class="shop-the-look-inner">
+
+    {# Foto do look com pontos interativos #}
+    <div class="look-foto fade-in">
+      <img src="{% static 'images/brand/look-semana.jpg' %}" alt="Look da semana Della Instore" loading="lazy">
+
+      {# Pontos interativos — posições em % da imagem #}
+      <div class="look-ponto" style="top:35%;left:45%;" role="button" tabindex="0" aria-label="Ver produto no look">
+        <div class="look-ponto-tooltip">
+          <p style="font-size:0.75rem;font-weight:500;">Body Rendado Preto</p>
+          <p style="font-size:0.8rem;color:var(--dourado);">R$ 189,00</p>
+        </div>
+      </div>
+      <div class="look-ponto" style="top:65%;left:50%;" role="button" tabindex="0" aria-label="Ver produto no look">
+        <div class="look-ponto-tooltip">
+          <p style="font-size:0.75rem;font-weight:500;">Calça Couro Off-white</p>
+          <p style="font-size:0.8rem;color:var(--dourado);">R$ 349,00</p>
+        </div>
+      </div>
+    </div>
+
+    {# Descrição do look #}
+    <div class="look-info fade-in fade-in-delay-2">
+      <p class="subtitulo-secao">Inspiração</p>
+      <h2 class="titulo-secao" id="titulo-look" style="margin-top:0.75rem;margin-bottom:1.25rem;">
+        Look da semana
+      </h2>
+      <p style="color:var(--cinza-texto);font-size:0.95rem;font-weight:300;line-height:1.8;max-width:420px;">
+        Sofisticação no detalhe. Este look combina sensualidade e elegância para uma noite especial ou uma ocasião que pede presença marcante.
+      </p>
+
+      {% if look_produtos %}
+        <ul class="look-produtos-lista" role="list">
+          {% for produto in look_produtos %}
+            <li class="look-produto-item">
+              {% if produto.imagem_principal %}
+                <img src="{{ produto.imagem_principal.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb">
+              {% endif %}
+              <div style="flex:1">
+                <p style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--cinza-texto);margin-bottom:0.2rem;">{{ produto.categoria.nome }}</p>
+                <p style="font-family:var(--fonte-titulo);font-size:1rem;margin-bottom:0.3rem;">{{ produto.nome }}</p>
+                <p style="font-size:0.9rem;font-weight:500;">R$ {{ produto.preco_atual|floatformat:2 }}</p>
+              </div>
+              <a href="{{ produto.get_absolute_url }}" class="btn-primario" style="padding:0.6rem 1.2rem;font-size:0.65rem;">
+                Ver
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <ul class="look-produtos-lista">
+          <li class="look-produto-item">
+            <img src="{% static 'images/brand/produto-placeholder.jpg' %}" alt="Produto" class="look-produto-thumb">
+            <div style="flex:1">
+              <p style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--cinza-texto);margin-bottom:0.2rem;">Body</p>
+              <p style="font-family:var(--fonte-titulo);font-size:1rem;margin-bottom:0.3rem;">Body Rendado Preto</p>
+              <p style="font-size:0.9rem;font-weight:500;">R$ 189,00</p>
+            </div>
+            <a href="{% url 'produtos:loja' %}" class="btn-primario" style="padding:0.6rem 1.2rem;font-size:0.65rem;">Ver</a>
+          </li>
+        </ul>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   MANIFESTO DA MARCA
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section class="manifesto" aria-labelledby="titulo-manifesto">
+  <div class="manifesto-inner">
+    <h2 class="manifesto-titulo fade-in" id="titulo-manifesto">
+      Para a mulher que sabe<br>
+      <em>exatamente quem é</em>
+    </h2>
+    <p class="manifesto-texto fade-in fade-in-delay-1">
+      A Della Instore nasceu do desejo de vestir a mulher moderna com peças que transcendem a moda.
+      Cada detalhe é pensado para realçar não apenas a beleza exterior, mas a confiança e a essência
+      de quem usa. Moda com propósito, elegância com alma.
+    </p>
+    <p class="manifesto-assinatura fade-in fade-in-delay-2">— Della Instore</p>
+  </div>
+</section>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   DEPOIMENTOS
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section aria-labelledby="titulo-depoimentos">
+  <div class="secao">
+    <header class="secao-header fade-in">
+      <p class="subtitulo-secao">Clientes</p>
+      <h2 class="titulo-secao" id="titulo-depoimentos">O que dizem sobre nós</h2>
+    </header>
+
+    <div class="depoimentos-slider">
+      {% for dep in depoimentos %}
+        <article class="depoimento-card fade-in fade-in-delay-{{ forloop.counter }}">
+          <div class="depoimento-estrelas" aria-label="{{ dep.nota }} estrelas de 5">
+            {% for i in "12345" %}
+              {% if forloop.counter <= dep.nota %}★{% else %}☆{% endif %}
+            {% endfor %}
+          </div>
+          <blockquote class="depoimento-texto">"{{ dep.comentario }}"</blockquote>
+          <cite class="depoimento-autor not-italic">{{ dep.nome_publico }}</cite>
+        </article>
+      {% empty %}
+        {# Depoimentos estáticos como placeholder #}
+        <article class="depoimento-card fade-in">
+          <div class="depoimento-estrelas" aria-label="5 estrelas">★★★★★</div>
+          <blockquote class="depoimento-texto">"A qualidade das peças é incomparável. O body que comprei ficou perfeito e recebi elogios a noite toda."</blockquote>
+          <cite class="depoimento-autor not-italic">Ana Carolina M.</cite>
+        </article>
+        <article class="depoimento-card fade-in fade-in-delay-1">
+          <div class="depoimento-estrelas" aria-label="5 estrelas">★★★★★</div>
+          <blockquote class="depoimento-texto">"Entrega rápida, embalagem linda e a peça chegou exatamente como na foto. Já é minha loja favorita."</blockquote>
+          <cite class="depoimento-autor not-italic">Juliana F.</cite>
+        </article>
+        <article class="depoimento-card fade-in fade-in-delay-2">
+          <div class="depoimento-estrelas" aria-label="5 estrelas">★★★★★</div>
+          <blockquote class="depoimento-texto">"Atendimento impecável e a coleção de couro é simplesmente apaixonante. Della Instore é referência."</blockquote>
+          <cite class="depoimento-autor not-italic">Beatriz S.</cite>
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   INSTAGRAM
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section style="padding: 0 0 6rem;" aria-labelledby="titulo-instagram">
+  <div style="max-width:1400px;margin:0 auto;padding:0 2rem;">
+    <header class="instagram-header fade-in">
+      <p class="subtitulo-secao">Siga-nos</p>
+      <a href="https://instagram.com/dellainstore" target="_blank" rel="noopener noreferrer"
+         class="instagram-handle" aria-label="Seguir @dellainstore no Instagram">
+        @dellainstore
+      </a>
+      <h2 class="sr-only" id="titulo-instagram">Nosso Instagram</h2>
+    </header>
+
+    <div class="instagram-grid fade-in">
+      {% for post in instagram_posts %}
+        <a href="{{ post.permalink }}" target="_blank" rel="noopener noreferrer"
+           class="instagram-item" aria-label="Ver post no Instagram">
+          <img src="{{ post.thumbnail_url|default:post.media_url }}" alt="Post Della Instore no Instagram" loading="lazy">
+          <div class="instagram-overlay" aria-hidden="true">
+            <i class="fab fa-instagram"></i>
+          </div>
+        </a>
+      {% empty %}
+        {# Placeholders enquanto não há integração com Instagram #}
+        {% for i in "123456" %}
+          <div class="instagram-item fade-in">
+            <img src="{% static 'images/brand/instagram-placeholder.jpg' %}" alt="Instagram Della Instore" loading="lazy">
+            <div class="instagram-overlay" aria-hidden="true">
+              <i class="fab fa-instagram"></i>
+            </div>
+          </div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   NEWSLETTER
+   ══════════════════════════════════════════════════════════════════════════════ #}
+<section class="newsletter" aria-labelledby="titulo-newsletter">
+  <div class="newsletter-inner">
+    <header class="fade-in">
+      <p class="subtitulo-secao">Exclusividade</p>
+      <h2 class="titulo-secao" id="titulo-newsletter" style="margin-top:0.75rem;margin-bottom:0.75rem;">
+        Entre para o clube
+      </h2>
+      <p style="color:var(--cinza-texto);font-size:0.9rem;font-weight:300;line-height:1.7;">
+        Receba em primeira mão lançamentos, promoções exclusivas<br>
+        e inspirações de moda diretamente no seu e-mail.
+      </p>
+    </header>
+
+    <form id="form-newsletter" class="newsletter-form fade-in fade-in-delay-1"
+          novalidate aria-label="Inscrição na newsletter">
+      {% csrf_token %}
+      <label for="newsletter-email" class="sr-only">Seu e-mail</label>
+      <input type="email" id="newsletter-email" name="email"
+             class="newsletter-input"
+             placeholder="seu@email.com.br"
+             required
+             autocomplete="email"
+             maxlength="254"
+             aria-required="true">
+      <button type="submit" class="newsletter-btn">Inscrever-se</button>
+    </form>
+
+    <p id="newsletter-aviso" class="newsletter-aviso fade-in fade-in-delay-2">
+      Ao se inscrever você concorda com nossa
+      <a href="{% url 'produtos:politica_privacidade' %}" style="text-decoration:underline;">política de privacidade</a>.
+      Sem spam, apenas o melhor da moda.
+    </p>
+  </div>
+</section>
+
+{% endblock %}

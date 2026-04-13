@@ -1,0 +1,506 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block titulo %}{{ produto.nome }} — Della Instore{% endblock %}
+{% block meta_descricao %}{{ produto.descricao|truncatewords:25 }}{% endblock %}
+{% block og_titulo %}{{ produto.nome }} — Della Instore{% endblock %}
+{% block og_descricao %}{{ produto.descricao|truncatewords:20 }}{% endblock %}
+{% block og_imagem %}
+  {% with img=produto.imagem_principal %}
+    {% if img %}{{ request.scheme }}://{{ request.get_host }}{{ img.imagem.url }}{% else %}{% static 'images/brand/og-default.jpg' %}{% endif %}
+  {% endwith %}
+{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+
+{% block navbar_class %}solida{% endblock %}
+
+{% block conteudo %}
+<div class="produto-detalhe-wrapper">
+
+  {# Breadcrumb #}
+  <nav class="breadcrumb" aria-label="Navegação estrutural">
+    <a href="{% url 'produtos:home' %}">Início</a>
+    <span class="breadcrumb-sep">/</span>
+    <a href="{% url 'produtos:loja' %}">Loja</a>
+    <span class="breadcrumb-sep">/</span>
+    <a href="{% url 'produtos:loja_categoria' produto.categoria.slug %}">{{ produto.categoria.nome }}</a>
+    <span class="breadcrumb-sep">/</span>
+    <span aria-current="page">{{ produto.nome }}</span>
+  </nav>
+
+  {# ── Bloco principal: galeria + info ─────────────────────────────────── #}
+  <div class="produto-detalhe-inner">
+
+    {# Galeria #}
+    <div class="produto-galeria" id="produto-galeria">
+      <div class="galeria-principal">
+        {% with img=produto.imagem_principal %}
+          <img id="foto-principal"
+               src="{% if img %}{{ img.imagem.url }}{% else %}{% static 'images/brand/produto-placeholder.jpg' %}{% endif %}"
+               alt="{{ img.alt|default:produto.nome }}"
+               class="galeria-foto-principal">
+        {% endwith %}
+
+        {% if produto.em_promocao %}
+          <span class="produto-badge promo galeria-badge">-{{ produto.percentual_desconto }}%</span>
+        {% elif produto.novo %}
+          <span class="produto-badge novo galeria-badge">Novo</span>
+        {% endif %}
+      </div>
+
+      {% if imagens|length > 1 %}
+      <div class="galeria-thumbs" id="galeria-thumbs" role="list" aria-label="Galeria de fotos">
+        {% for img in imagens %}
+        <button class="galeria-thumb {% if img.principal %}ativa{% endif %}"
+                data-src="{{ img.imagem.url }}"
+                data-alt="{{ img.alt|default:produto.nome }}"
+                role="listitem"
+                aria-label="Foto {{ forloop.counter }}">
+          <img src="{{ img.imagem.url }}" alt="{{ img.alt|default:produto.nome }}" loading="lazy">
+        </button>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    {# Info do produto #}
+    <div class="produto-info" id="produto-info">
+
+      <p class="produto-info-cat">{{ produto.categoria.nome }}</p>
+      <h1 class="produto-info-nome">{{ produto.nome }}</h1>
+
+      {# Avaliações resumo #}
+      {% if total_aval > 0 %}
+      <div class="produto-info-stars" aria-label="{{ media_notas }} de 5 estrelas">
+        {% for i in "12345" %}
+          {% if forloop.counter <= media_notas %}
+            <i class="fas fa-star"></i>
+          {% else %}
+            <i class="far fa-star"></i>
+          {% endif %}
+        {% endfor %}
+        <span class="produto-info-stars-count">({{ total_aval }})</span>
+      </div>
+      {% endif %}
+
+      {# Preço #}
+      <div class="produto-info-preco">
+        {% if produto.em_promocao %}
+          <span class="preco-de">R$ {{ produto.preco|floatformat:2 }}</span>
+          <span class="preco-por destaque">R$ {{ produto.preco_promocional|floatformat:2 }}</span>
+          <span class="preco-economia">Você economiza R$ {{ produto.preco|floatformat:2|add:"-0" }}</span>
+        {% else %}
+          <span class="preco-por destaque">R$ {{ produto.preco|floatformat:2 }}</span>
+        {% endif %}
+        <span class="preco-parcelamento">ou 3x de R$ {% widthratio produto.preco_atual 3 1 %} sem juros</span>
+      </div>
+
+      {# Variações — COR #}
+      {% if variacoes_cor %}
+      <div class="produto-variacoes" id="variacoes-cor">
+        <p class="variacao-label">Cor: <strong id="label-cor-selecionada">Selecione</strong></p>
+        <div class="variacoes-cores">
+          {% for var in variacoes_cor %}
+          <button class="variacao-cor {% if not var.disponivel %}esgotado{% endif %}"
+                  data-variacao-id="{{ var.pk }}"
+                  data-tipo="cor"
+                  data-nome="{{ var.nome }}"
+                  style="background:{% if var.codigo_hex %}{{ var.codigo_hex }}{% else %}#ccc{% endif %};"
+                  title="{{ var.nome }}{% if not var.disponivel %} — Esgotado{% endif %}"
+                  {% if not var.disponivel %}aria-disabled="true"{% endif %}>
+            {% if not var.disponivel %}<span class="var-risco"></span>{% endif %}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# Variações — TAMANHO #}
+      {% if variacoes_tamanho %}
+      <div class="produto-variacoes" id="variacoes-tamanho">
+        <p class="variacao-label">Tamanho: <strong id="label-tamanho-selecionado">Selecione</strong></p>
+        <div class="variacoes-tamanhos">
+          {% for var in variacoes_tamanho %}
+          <button class="variacao-tamanho {% if not var.disponivel %}esgotado{% endif %}"
+                  data-variacao-id="{{ var.pk }}"
+                  data-tipo="tamanho"
+                  data-nome="{{ var.nome }}"
+                  {% if not var.disponivel %}aria-disabled="true"{% endif %}>
+            {{ var.nome }}
+          </button>
+          {% endfor %}
+        </div>
+        <a href="#guia-tamanhos" class="link-guia-tamanhos">
+          <i class="far fa-ruler-horizontal"></i> Guia de tamanhos
+        </a>
+      </div>
+      {% endif %}
+
+      {# Quantidade + Adicionar ao carrinho #}
+      <div class="produto-comprar">
+        <div class="quantidade-selector">
+          <button class="qty-btn" id="qty-menos" aria-label="Diminuir quantidade">−</button>
+          <input type="number" id="qty-input" value="1" min="1" max="10"
+                 class="qty-input" aria-label="Quantidade" readonly>
+          <button class="qty-btn" id="qty-mais" aria-label="Aumentar quantidade">+</button>
+        </div>
+
+        <button class="btn-primario btn-comprar"
+                id="btn-adicionar-carrinho"
+                data-produto-id="{{ produto.pk }}"
+                aria-label="Adicionar {{ produto.nome }} ao carrinho">
+          <i class="far fa-shopping-bag"></i>
+          Adicionar ao carrinho
+        </button>
+      </div>
+
+      <button class="btn-wishlist-detalhe {% if na_wishlist %}ativo{% endif %}"
+              data-wishlist-id="{{ produto.pk }}"
+              id="btn-wishlist-detalhe">
+        <i class="{% if na_wishlist %}fas{% else %}far{% endif %} fa-heart"></i>
+        {% if na_wishlist %}Salvo na wishlist{% else %}Salvar na wishlist{% endif %}
+      </button>
+
+      {# Descrição #}
+      <div class="produto-info-desc">
+        <button class="acordeao-btn" aria-expanded="true" data-acordeao="desc">
+          Descrição <i class="fas fa-chevron-up"></i>
+        </button>
+        <div class="acordeao-conteudo aberto" id="acordeao-desc">
+          <p>{{ produto.descricao|linebreaksbr }}</p>
+        </div>
+      </div>
+
+      {% if produto.composicao %}
+      <div class="produto-info-desc">
+        <button class="acordeao-btn" aria-expanded="false" data-acordeao="comp">
+          Composição <i class="fas fa-chevron-down"></i>
+        </button>
+        <div class="acordeao-conteudo" id="acordeao-comp">
+          <p>{{ produto.composicao }}</p>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="produto-info-desc">
+        <button class="acordeao-btn" aria-expanded="false" data-acordeao="entrega">
+          Entrega e trocas <i class="fas fa-chevron-down"></i>
+        </button>
+        <div class="acordeao-conteudo" id="acordeao-entrega">
+          <ul class="info-lista">
+            <li><i class="fas fa-shipping-fast"></i> Frete calculado no checkout via Melhor Envio</li>
+            <li><i class="fas fa-undo-alt"></i> Trocas em até 7 dias após o recebimento</li>
+            <li><i class="fas fa-lock"></i> Compra 100% segura e protegida</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>{# /produto-info #}
+  </div>{# /produto-detalhe-inner #}
+
+  {# ── Avaliações ──────────────────────────────────────────────────────── #}
+  {% if avaliacoes %}
+  <section class="produto-avaliacoes" aria-labelledby="titulo-avaliacoes">
+    <div class="avaliacoes-inner">
+      <h2 class="titulo-secao" id="titulo-avaliacoes">Avaliações</h2>
+
+      <div class="avaliacoes-resumo">
+        <div class="avaliacao-media">
+          <span class="avaliacao-nota-grande">{{ media_notas }}</span>
+          <div class="stars-grandes" aria-label="{{ media_notas }} de 5 estrelas">
+            {% for i in "12345" %}
+              <i class="{% if forloop.counter <= media_notas %}fas{% else %}far{% endif %} fa-star"></i>
+            {% endfor %}
+          </div>
+          <span class="avaliacao-total-text">{{ total_aval }} avaliação{{ total_aval|pluralize:",ões" }}</span>
+        </div>
+      </div>
+
+      <div class="avaliacoes-lista">
+        {% for av in avaliacoes %}
+        <div class="avaliacao-item">
+          <div class="avaliacao-cabecalho">
+            <span class="avaliacao-nome">{{ av.nome_publico }}</span>
+            <div class="avaliacao-stars" aria-label="{{ av.nota }} de 5 estrelas">
+              {% for i in "12345" %}
+                <i class="{% if forloop.counter <= av.nota %}fas{% else %}far{% endif %} fa-star"></i>
+              {% endfor %}
+            </div>
+          </div>
+          {% if av.titulo %}<p class="avaliacao-titulo">{{ av.titulo }}</p>{% endif %}
+          {% if av.comentario %}<p class="avaliacao-comentario">{{ av.comentario }}</p>{% endif %}
+          <time class="avaliacao-data" datetime="{{ av.criada_em|date:'Y-m-d' }}">{{ av.criada_em|date:"d/m/Y" }}</time>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── Produtos relacionados ───────────────────────────────────────────── #}
+  {% if relacionados %}
+  <section class="relacionados-secao" aria-labelledby="titulo-relacionados">
+    <div class="relacionados-inner">
+      <p class="subtitulo-secao">Você também pode gostar</p>
+      <h2 class="titulo-secao" id="titulo-relacionados">Peças relacionadas</h2>
+
+      <div class="relacionados-grid">
+        {% for p in relacionados %}
+        <article class="produto-card fade-in">
+          <a href="{{ p.get_absolute_url }}" class="produto-card-foto-link">
+            <div class="produto-card-foto">
+              {% with img=p.imagem_principal %}
+                <img src="{% if img %}{{ img.imagem.url }}{% else %}{% static 'images/brand/produto-placeholder.jpg' %}{% endif %}"
+                     alt="{% if img %}{{ img.alt|default:p.nome }}{% else %}{{ p.nome }}{% endif %}"
+                     loading="lazy" class="foto-principal">
+              {% endwith %}
+            </div>
+          </a>
+          <div class="produto-card-info">
+            <a href="{{ p.get_absolute_url }}" class="produto-card-nome">{{ p.nome }}</a>
+            <div class="produto-card-preco">
+              {% if p.em_promocao %}
+                <span class="preco-de">R$ {{ p.preco|floatformat:2 }}</span>
+                <span class="preco-por">R$ {{ p.preco_promocional|floatformat:2 }}</span>
+              {% else %}
+                <span class="preco-por">R$ {{ p.preco|floatformat:2 }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+</div>{# /produto-detalhe-wrapper #}
+{% endblock %}
+
+{% block js_extra %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  // ── Galeria: troca de foto ao clicar na thumbnail ──────────────────────
+  const fotoPrincipal = document.getElementById('foto-principal');
+  const thumbs = document.querySelectorAll('.galeria-thumb');
+
+  thumbs.forEach(thumb => {
+    thumb.addEventListener('click', () => {
+      fotoPrincipal.src = thumb.dataset.src;
+      fotoPrincipal.alt = thumb.dataset.alt;
+      thumbs.forEach(t => t.classList.remove('ativa'));
+      thumb.classList.add('ativa');
+    });
+  });
+
+  // ── Variações: seleção de cor ──────────────────────────────────────────
+  const botoesVariacao = document.querySelectorAll('.variacao-cor, .variacao-tamanho');
+  const labelCorSel     = document.getElementById('label-cor-selecionada');
+  const labelTamSel     = document.getElementById('label-tamanho-selecionado');
+  let variacaoSelecionadaId = null;
+
+  botoesVariacao.forEach(btn => {
+    if (btn.getAttribute('aria-disabled') === 'true') return;
+
+    btn.addEventListener('click', () => {
+      const tipo = btn.dataset.tipo;
+      const nome = btn.dataset.nome;
+
+      // Desseleciona outros do mesmo tipo
+      document.querySelectorAll(`.variacao-${tipo}`).forEach(b => b.classList.remove('selecionado'));
+      btn.classList.add('selecionado');
+
+      if (tipo === 'cor' && labelCorSel) labelCorSel.textContent = nome;
+      if (tipo === 'tamanho' && labelTamSel) labelTamSel.textContent = nome;
+
+      variacaoSelecionadaId = btn.dataset.variacaoId;
+    });
+  });
+
+  // ── Quantidade ────────────────────────────────────────────────────────
+  const qtyInput = document.getElementById('qty-input');
+  const btnMenos = document.getElementById('qty-menos');
+  const btnMais  = document.getElementById('qty-mais');
+
+  btnMenos?.addEventListener('click', () => {
+    const v = parseInt(qtyInput.value);
+    if (v > 1) qtyInput.value = v - 1;
+  });
+
+  btnMais?.addEventListener('click', () => {
+    const v = parseInt(qtyInput.value);
+    if (v < 10) qtyInput.value = v + 1;
+  });
+
+  // ── Adicionar ao carrinho (com quantidade e variação) ──────────────────
+  const btnComprar = document.getElementById('btn-adicionar-carrinho');
+
+  btnComprar?.addEventListener('click', async () => {
+    const produtoId  = btnComprar.dataset.produtoId;
+    const quantidade = parseInt(qtyInput?.value || 1);
+    const csrfToken  = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+    btnComprar.disabled = true;
+    const textoOriginal = btnComprar.innerHTML;
+    btnComprar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adicionando...';
+
+    try {
+      const res = await fetch(`/carrinho/adicionar/${produtoId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({
+          variacao_id: variacaoSelecionadaId || '',
+          quantidade:  quantidade,
+        }),
+      });
+
+      const dados = await res.json();
+
+      if (dados.status === 'ok') {
+        // Atualiza badge e drawer
+        atualizarDrawer(dados);
+
+        btnComprar.innerHTML = '<i class="fas fa-check"></i> Adicionado!';
+        setTimeout(() => {
+          btnComprar.innerHTML = textoOriginal;
+          btnComprar.disabled = false;
+        }, 2000);
+      }
+    } catch (err) {
+      btnComprar.innerHTML = textoOriginal;
+      btnComprar.disabled  = false;
+    }
+  });
+
+  // ── Acordeão #}
+  document.querySelectorAll('.acordeao-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id       = btn.dataset.acordeao;
+      const conteudo = document.getElementById(`acordeao-${id}`);
+      const icon     = btn.querySelector('i');
+      const aberto   = conteudo.classList.toggle('aberto');
+      btn.setAttribute('aria-expanded', aberto);
+      if (icon) icon.className = aberto ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+    });
+  });
+
+  // ── Atualizar drawer ───────────────────────────────────────────────────
+  function atualizarDrawer(dados) {
+    const badge      = document.querySelector('.badge-carrinho');
+    const totalValor = document.querySelector('.drawer-total-valor');
+    const listaEl    = document.getElementById('drawer-itens-lista');
+    const drawerOverlay  = document.getElementById('drawer-overlay');
+    const drawerCarrinho = document.getElementById('drawer-carrinho');
+
+    if (badge) badge.textContent = dados.total_itens;
+
+    if (totalValor) {
+      const valor = parseFloat(dados.total_valor);
+      totalValor.textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+    }
+
+    if (listaEl && dados.itens) {
+      listaEl.innerHTML = dados.itens.map(item => `
+        <div class="drawer-item" data-chave="${item.chave}">
+          <div class="drawer-item-foto">
+            ${item.imagem ? `<img src="${item.imagem}" alt="${item.nome}" loading="lazy">` : '<div class="drawer-item-sem-foto"></div>'}
+          </div>
+          <div class="drawer-item-info">
+            <p class="drawer-item-nome">${item.nome}</p>
+            ${item.variacao ? `<p class="drawer-item-variacao">${item.variacao}</p>` : ''}
+            <p class="drawer-item-preco">R$ ${parseFloat(item.subtotal).toFixed(2).replace('.', ',')}</p>
+            <div class="drawer-item-qty">
+              <button class="drawer-qty-btn" onclick="alterarQtyDrawer('${item.chave}', ${item.quantidade - 1})">−</button>
+              <span>${item.quantidade}</span>
+              <button class="drawer-qty-btn" onclick="alterarQtyDrawer('${item.chave}', ${item.quantidade + 1})">+</button>
+            </div>
+          </div>
+          <button class="drawer-item-remover" onclick="removerItemDrawer('${item.chave}')" aria-label="Remover item">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    // Abre o drawer
+    drawerOverlay?.classList.add('aberto');
+    drawerCarrinho?.classList.add('aberto');
+    document.body.style.overflow = 'hidden';
+  }
+
+});
+
+// ── Funções globais para o drawer ──────────────────────────────────────────
+async function removerItemDrawer(chave) {
+  const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+  try {
+    const res   = await fetch(`/carrinho/remover/${chave}/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+    });
+    const dados = await res.json();
+    if (dados.status === 'ok') atualizarDrawerGlobal(dados);
+  } catch (e) {}
+}
+
+async function alterarQtyDrawer(chave, quantidade) {
+  if (quantidade < 1) { removerItemDrawer(chave); return; }
+  const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+  try {
+    const res   = await fetch('/carrinho/atualizar/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+      },
+      body: JSON.stringify({ chave, quantidade }),
+    });
+    const dados = await res.json();
+    if (dados.status === 'ok') atualizarDrawerGlobal(dados);
+  } catch (e) {}
+}
+
+function atualizarDrawerGlobal(dados) {
+  const badge      = document.querySelector('.badge-carrinho');
+  const totalValor = document.querySelector('.drawer-total-valor');
+  const listaEl    = document.getElementById('drawer-itens-lista');
+
+  if (badge) badge.textContent = dados.total_itens;
+  if (totalValor) {
+    const valor = parseFloat(dados.total_valor);
+    totalValor.textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+  }
+
+  if (listaEl && dados.itens !== undefined) {
+    if (dados.itens.length === 0) {
+      listaEl.innerHTML = '<p class="text-center text-gray-400 text-sm mt-12 font-light">Seu carrinho está vazio.</p>';
+    } else {
+      listaEl.innerHTML = dados.itens.map(item => `
+        <div class="drawer-item" data-chave="${item.chave}">
+          <div class="drawer-item-foto">
+            ${item.imagem ? `<img src="${item.imagem}" alt="${item.nome}" loading="lazy">` : '<div class="drawer-item-sem-foto"></div>'}
+          </div>
+          <div class="drawer-item-info">
+            <p class="drawer-item-nome">${item.nome}</p>
+            ${item.variacao ? `<p class="drawer-item-variacao">${item.variacao}</p>` : ''}
+            <p class="drawer-item-preco">R$ ${parseFloat(item.subtotal).toFixed(2).replace('.', ',')}</p>
+            <div class="drawer-item-qty">
+              <button class="drawer-qty-btn" onclick="alterarQtyDrawer('${item.chave}', ${item.quantidade - 1})">−</button>
+              <span>${item.quantidade}</span>
+              <button class="drawer-qty-btn" onclick="alterarQtyDrawer('${item.chave}', ${item.quantidade + 1})">+</button>
+            </div>
+          </div>
+          <button class="drawer-item-remover" onclick="removerItemDrawer('${item.chave}')" aria-label="Remover item">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+  }
+}
+</script>
+{% endblock %}

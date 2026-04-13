@@ -1,0 +1,373 @@
+# Della Instore — Site E-commerce Premium
+**CLAUDE.md — Contexto completo para continuação do desenvolvimento**
+
+---
+
+## Visão Geral do Projeto
+
+Loja virtual de moda feminina premium chamada **Della Instore**.
+- **Stack:** Django 5.1 + PostgreSQL + Gunicorn + Nginx
+- **Frontend:** HTML/CSS/JS com Tailwind CSS (CDN) + CSS customizado
+- **VPS:** Ubuntu, 1 vCore, 1.9GB RAM, IP `159.203.101.232`
+- **Domínio definitivo:** `www.dellainstore.com.br` (ainda aponta para site antigo)
+- **Domínio de testes:** `novo.dellainstore.com.br` (DNS já criado na UOL Host)
+- **Repositório:** `dellainstore/projetos-claude` no GitHub
+
+---
+
+## Localização do Projeto
+
+```
+/var/www/della-sistemas/projetos-claude/site_della/
+```
+
+### Estrutura de pastas principal
+```
+site_della/
+├── core/
+│   ├── settings/
+│   │   ├── base.py          ← settings compartilhado (com segurança)
+│   │   ├── production.py    ← HTTPS, HSTS, cookies seguros
+│   │   └── development.py   ← debug, e-mail no console
+│   ├── urls.py              ← roteador raiz
+│   ├── wsgi.py
+│   └── asgi.py
+├── apps/
+│   ├── produtos/            ← catálogo, categorias, variações, avaliações
+│   ├── pedidos/             ← carrinho (sessão), checkout, pedidos
+│   ├── pagamentos/          ← PagSeguro, Stone, Pix
+│   ├── bling/               ← integração ERP Bling
+│   ├── usuarios/            ← Cliente (auth customizado), Endereço
+│   └── core_utils/
+│       └── sanitize.py      ← sanitizadores de input (XSS, CPF, CEP, imagem)
+├── templates/
+│   ├── base.html            ← template raiz (navbar, footer, drawer, whatsapp)
+│   ├── home/
+│   │   └── index.html       ← homepage completa (8 seções)
+│   ├── produtos/            ← stubs criados (loja, detalhe, busca, wishlist)
+│   ├── pedidos/             ← stubs criados
+│   ├── checkout/            ← stubs criados
+│   └── usuarios/            ← stubs criados
+├── static/
+│   ├── css/della.css        ← todo CSS customizado da marca
+│   └── js/della.js          ← JS principal (navbar, carrinho, AJAX, animações)
+├── media/                   ← uploads de produtos
+├── logs/                    ← logs do gunicorn e django
+├── scripts/
+│   ├── setup_postgres.sh        ← instala e cria banco della_site
+│   ├── setup_django.sh          ← migrate + collectstatic + createsuperuser
+│   ├── instalar_servico.sh      ← instala Gunicorn systemd + Nginx + Certbot
+│   ├── check_security.sh        ← verifica .env, DEBUG, SECRET_KEY antes do deploy
+│   ├── gunicorn_della_site.service  ← arquivo do serviço systemd
+│   └── nginx_della_site.conf    ← config Nginx (testes + bloco produção comentado)
+├── .env                     ← variáveis reais (NÃO subir no git)
+├── .env.example             ← template sem valores reais
+├── .gitignore
+├── manage.py
+└── requirements.txt
+```
+
+---
+
+## Ambiente Virtual
+
+```bash
+cd /var/www/della-sistemas/projetos-claude/site_della
+source venv/bin/activate
+```
+
+---
+
+## Banco de Dados
+
+- **Banco:** `della_site`
+- **Usuário:** `della_user`
+- **Senha:** no `.env` → `DB_PASSWORD`
+- **Status:** PostgreSQL instalado, banco criado, migrations aplicadas ✓
+
+### Rodar migrations após alterações em models:
+```bash
+source venv/bin/activate
+python manage.py makemigrations
+python manage.py migrate
+```
+
+---
+
+## Servidor de Desenvolvimento
+
+```bash
+source venv/bin/activate
+python manage.py runserver 0.0.0.0:8000 --settings=core.settings.base
+```
+
+Acesso: `http://159.203.101.232:8000`
+
+> **IP deve estar no ALLOWED_HOSTS do .env** — já configurado: `159.203.101.232` incluído.
+
+> **Atenção:** porta 8000 precisa estar aberta no UFW para acesso externo:
+> ```bash
+> sudo ufw allow 8000/tcp   # abre para teste
+> sudo ufw delete allow 8000/tcp  # fecha depois
+> ```
+
+---
+
+## Deploy em Produção (quando pronto)
+
+```bash
+# 1. Instala Gunicorn como serviço + Nginx + SSL (subdomínio novo.dellainstore.com.br)
+sudo bash scripts/instalar_servico.sh
+
+# 2. Verificação de segurança antes de qualquer push/deploy
+bash scripts/check_security.sh
+```
+
+### Quando trocar para www.dellainstore.com.br:
+1. Editar `/etc/nginx/sites-available/della_site` — comentar bloco "testes", descomentar bloco "produção"
+2. `sudo certbot --nginx -d www.dellainstore.com.br -d dellainstore.com.br`
+3. Atualizar `ALLOWED_HOSTS` no `.env`
+4. `sudo systemctl reload nginx`
+
+---
+
+## Comandos Úteis
+
+```bash
+# Verificar status do serviço Gunicorn
+sudo systemctl status gunicorn_della_site
+
+# Reiniciar Gunicorn após alterações no código
+sudo systemctl restart gunicorn_della_site
+
+# Logs do Gunicorn em tempo real
+sudo journalctl -u gunicorn_della_site -f
+
+# Testar config Nginx e recarregar
+sudo nginx -t && sudo systemctl reload nginx
+
+# Coletar arquivos estáticos
+python manage.py collectstatic --noinput
+```
+
+---
+
+## Models Criados
+
+### `apps/usuarios/`
+| Model | Campos principais |
+|---|---|
+| `Cliente` | email (login), nome, sobrenome, cpf, telefone, genero — auth customizado sem username |
+| `Endereco` | cep, logradouro, numero, complemento, bairro, cidade, estado, principal |
+
+### `apps/produtos/`
+| Model | Campos principais |
+|---|---|
+| `Categoria` | nome, slug, imagem, ordem, ativa |
+| `Produto` | categoria, nome, slug, descricao, composicao, preco, preco_promocional, ativo, destaque, bling_id, sku |
+| `ProdutoImagem` | produto, imagem (validada por magic bytes), alt, principal, ordem |
+| `Variacao` | produto, tipo (tamanho/cor), nome, codigo_hex, estoque, ativa |
+| `Avaliacao` | produto, cliente, nota, titulo, comentario, **aprovada** (moderação manual) |
+
+### `apps/pedidos/`
+| Model | Campos principais |
+|---|---|
+| `Pedido` | numero (DI-2024-XXXX), cliente, dados do comprador copiados, endereço copiado, subtotal, frete, total, status, gateway, codigo_rastreio, bling_pedido_id |
+| `ItemPedido` | pedido, produto, variacao, nome/preco copiados (imutável), quantidade |
+| `HistoricoPedido` | log de mudanças de status |
+| `Carrinho` | classe de sessão em `apps/pedidos/carrinho.py` |
+
+### `apps/pagamentos/`
+| Model | Campos |
+|---|---|
+| `Pagamento` | pedido, gateway, gateway_id, status, valor, dados_retorno (JSON) |
+
+### `apps/bling/`
+| Model | Campos |
+|---|---|
+| `BlingToken` | access_token, refresh_token, expira_em |
+| `BlingLog` | tipo, pedido, sucesso, payload_enviado, resposta, erro |
+
+---
+
+## Segurança Implementada
+
+| Camada | O que faz |
+|---|---|
+| `scripts/check_security.sh` | Verifica .env no git, SECRET_KEY hardcoded, DEBUG em prod |
+| `apps/core_utils/sanitize.py` | `sanitize_text`, `sanitize_name`, `sanitize_address`, `sanitize_phone`, `sanitize_cep`, `validate_cpf`, `validate_cnpj`, `validate_image_upload` (magic bytes) |
+| `django-axes` | Bloqueia IP após 5 tentativas de login falhas por 1 hora |
+| `django-csp` | Content-Security-Policy headers |
+| Django CSRF | Ativo em todos os forms |
+| Nginx | Bloqueia .env, .git, .sql; bloqueia scripts em /media/; headers de segurança |
+| `production.py` | HTTPS obrigatório, HSTS, cookies seguros, X-Frame-Options DENY |
+| ORM Django | Zero SQL raw — proteção contra SQL injection |
+| `Avaliacao.aprovada` | Avaliações de clientes passam por moderação antes de aparecer |
+
+---
+
+## Homepage — Seções Implementadas
+
+Template: `templates/home/index.html`
+CSS: `static/css/della.css`
+JS: `static/js/della.js`
+
+| Seção | Status |
+|---|---|
+| Hero vídeo fullscreen com mute/unmute | ✓ |
+| Categorias (grid 4 colunas, hover zoom) | ✓ |
+| Produtos destaque (hover troca foto, add carrinho AJAX) | ✓ |
+| Shop the Look (foto com pontos interativos) | ✓ |
+| Manifesto da marca | ✓ |
+| Depoimentos (3 colunas com estrelas) | ✓ |
+| Feed Instagram (placeholders + estrutura para API) | ✓ |
+| Newsletter (AJAX + sanitização) | ✓ |
+| WhatsApp flutuante (2 contatos, abre/fecha) | ✓ |
+| Drawer carrinho (slide lateral) | ✓ |
+| Footer completo (4 colunas + social + selos) | ✓ |
+| Navbar transparente→sólida ao rolar | ✓ |
+| Animações fade-in ao scroll | ✓ |
+| Mobile responsive | ✓ |
+
+### Imagens necessárias (colocar em `static/images/brand/`):
+- `hero.mp4` — vídeo do hero (ou `.webm`)
+- `hero-poster.jpg` — frame inicial do vídeo (fallback)
+- `categoria-placeholder.jpg` — foto genérica de categoria
+- `produto-placeholder.jpg` — foto genérica de produto
+- `instagram-placeholder.jpg` — foto genérica do grid Instagram
+- `look-semana.jpg` — foto do Shop the Look
+- `og-default.jpg` — imagem Open Graph (1200×630)
+- `favicon.ico` — favicon da marca
+
+---
+
+## URLs Registradas
+
+```
+/                          → homepage
+/loja/                     → listagem de produtos
+/loja/<categoria>/         → produtos por categoria
+/produto/<slug>/           → detalhe do produto
+/busca/                    → busca
+/wishlist/                 → lista de desejos
+
+/conta/entrar/             → login
+/conta/cadastro/           → cadastro de cliente
+/conta/minha-conta/        → área do cliente
+/conta/recuperar-senha/    → recuperação de senha
+
+/carrinho/                 → carrinho
+/carrinho/adicionar/<id>/  → add produto (POST/AJAX)
+/carrinho/checkout/        → fluxo de checkout
+/carrinho/confirmacao/<n>/ → pedido confirmado
+
+/pagamento/pagseguro/...   → retorno/notificação PagSeguro
+/pagamento/stone/webhook/  → webhook Stone
+/pagamento/pix/...         → geração QR Code Pix
+
+/bling/webhook/            → notificações ERP
+/painel/                   → Django Admin
+```
+
+---
+
+## Etapas Concluídas ✓
+
+- [x] **Etapa 1** — Estrutura de pastas do projeto
+- [x] **Etapa 2** — Ambiente virtual Python + dependências (`requirements.txt`)
+- [x] **Etapa 3** — Settings com segurança multicamada (base/production/development) + `sanitize.py`
+- [x] **Etapa 4** — Apps Django criados + URLs completas de todos os apps
+- [x] **Etapa 5** — PostgreSQL instalado, banco `della_site` criado, migrations aplicadas
+- [x] **Etapa 6** — Models principais (Cliente, Produto, Pedido, Pagamento, Bling)
+- [x] **Etapa 7** — Nginx config + Gunicorn systemd (prontos para instalar)
+- [x] **Etapa 8** — Homepage completa (hero, categorias, produtos, look, manifesto, depoimentos, instagram, newsletter, whatsapp, footer)
+- [x] **Etapa 9** — Loja (grid + filtros sidebar + paginação), página de produto (galeria, variações, acordeões, avaliações, relacionados), carrinho funcional (sessão, add/remover/atualizar via AJAX, drawer dinâmico)
+
+### Detalhes da Etapa 9
+| Arquivo | O que foi feito |
+|---|---|
+| `apps/produtos/views.py` | `loja`: filtros por categoria/preço/novidade/promoção, ordenação, paginação. `detalhe_produto`: galeria, variações, avaliações, relacionados |
+| `apps/pedidos/views.py` | `carrinho`, `adicionar_ao_carrinho`, `remover_do_carrinho`, `atualizar_carrinho` — todos retornam JSON com itens atualizados para drawer |
+| `templates/produtos/loja.html` | Grid 4 colunas, sidebar com filtros, paginação, cards com hover + wishlist |
+| `templates/produtos/detalhe.html` | Galeria com thumbs, seleção de cor/tamanho, qty selector, acordeões, avaliações, produtos relacionados |
+| `templates/pedidos/carrinho.html` | Página completa do carrinho: itens, atualizar qty, remover, resumo lateral |
+| `static/css/della.css` | Estilos para loja, card produto, detalhe, drawer items, carrinho, botões primário/secundário |
+| `static/js/della.js` | `atualizarDrawerConteudo()`, `drawerRemover()`, `drawerAlterarQty()` — drawer AJAX global |
+
+---
+
+## Etapas Pendentes
+
+- [ ] **Etapa 10** — Checkout completo: CEP (ViaCEP), cálculo de frete (Melhor Envio), pagamento (PagSeguro + Stone + Pix)
+- [ ] **Etapa 11** — Área do cliente: login/cadastro, minha conta, histórico de pedidos, endereços, wishlist
+- [ ] **Etapa 12** — Django Admin customizado: produtos com fotos inline, pedidos com status, relatórios básicos
+- [ ] **Etapa 13** — Integração Bling: OAuth2, envio automático de pedido ao confirmar pagamento, NF-e
+- [ ] **Etapa 14** — E-mails transacionais: confirmação de pedido, envio com rastreio, recuperação de senha
+- [ ] **Etapa 15** — Integração Instagram Feed (API Graph)
+- [ ] **Etapa 16** — Deploy final: instalar Gunicorn+Nginx, SSL, variáveis de produção, trocar domínio
+
+---
+
+## Dependências Instaladas (`requirements.txt`)
+
+```
+Django==5.1.15
+psycopg2-binary==2.9.11
+gunicorn==25.3.0
+Pillow==12.2.0
+python-decouple==3.8
+requests==2.33.1
+whitenoise==6.12.0
+bleach==6.3.0
+django-axes==8.3.1
+django-csp==4.0
+django-extensions==4.1
+django-storages==1.14.6
+boto3==1.42.88
+```
+
+---
+
+## Variáveis de Ambiente (`.env`)
+
+Arquivo em `/var/www/della-sistemas/projetos-claude/site_della/.env`
+Template em `.env.example`
+
+Variáveis principais:
+- `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`
+- `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`
+- `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`
+- `PAGSEGURO_EMAIL`, `PAGSEGURO_TOKEN`, `PAGSEGURO_SANDBOX`
+- `STONE_CLIENT_ID`, `STONE_CLIENT_SECRET`, `STONE_SANDBOX`
+- `BLING_CLIENT_ID`, `BLING_CLIENT_SECRET`
+- `WHATSAPP_NUMBER_1`, `WHATSAPP_NUMBER_2`
+- `INSTAGRAM_ACCESS_TOKEN`
+- `MELHOR_ENVIO_TOKEN`, `MELHOR_ENVIO_SANDBOX`
+
+---
+
+## Design System
+
+| Token | Valor |
+|---|---|
+| Cor preto | `#0a0a0a` |
+| Cor branco | `#fafafa` |
+| Cor dourado | `#c9a96e` |
+| Cor dourado claro | `#e8d5b0` |
+| Cor cinza claro | `#f5f5f3` |
+| Fonte títulos | `Playfair Display` (serif) |
+| Fonte corpo | `Jost` (sans-serif) |
+| Transição padrão | `all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)` |
+
+---
+
+## Como Continuar numa Nova Conversa
+
+1. Abra uma nova conversa no Claude Code
+2. Cole ou referencie este arquivo como contexto
+3. Diga: **"Continuando o desenvolvimento do site Della Instore. O CLAUDE.md está em `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md`. Próxima etapa: Etapa 9 — Loja com filtros, página de produto e carrinho funcional."**
+4. O Claude vai ler este arquivo e continuar de onde parou
+
+---
+
+*Última atualização: Etapa 9 concluída — Loja, Detalhe do produto e Carrinho funcionando.*

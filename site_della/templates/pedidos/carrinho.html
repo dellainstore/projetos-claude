@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block titulo %}Carrinho — Della Instore{% endblock %}
+{% block navbar_class %}solida{% endblock %}
+
+{% block conteudo %}
+<div class="carrinho-wrapper">
+
+  <div class="carrinho-topo">
+    <p class="subtitulo-secao">Resumo</p>
+    <h1 class="carrinho-titulo">Meu Carrinho</h1>
+  </div>
+
+  {% if itens %}
+  <div class="carrinho-layout">
+
+    {# ── Lista de itens ─────────────────────────────────────────────── #}
+    <div class="carrinho-itens" id="carrinho-itens-lista">
+      {% for item in itens %}
+      <div class="carrinho-item" data-chave="{{ item.chave }}" id="item-{{ item.chave }}">
+
+        <div class="carrinho-item-foto">
+          {% if item.imagem %}
+            <img src="{{ item.imagem }}" alt="{{ item.nome }}" loading="lazy">
+          {% else %}
+            <div class="carrinho-item-sem-foto"></div>
+          {% endif %}
+        </div>
+
+        <div class="carrinho-item-info">
+          <p class="carrinho-item-nome">{{ item.nome }}</p>
+          {% if item.variacao_desc %}
+            <p class="carrinho-item-variacao">{{ item.variacao_desc }}</p>
+          {% endif %}
+          <p class="carrinho-item-preco-unit">R$ {{ item.preco_decimal|floatformat:2 }} cada</p>
+        </div>
+
+        <div class="carrinho-item-qty">
+          <button class="qty-btn carrinho-qty-btn"
+                  data-chave="{{ item.chave }}"
+                  data-acao="diminuir"
+                  aria-label="Diminuir quantidade">−</button>
+          <span class="carrinho-qty-valor" id="qty-{{ item.chave }}">{{ item.quantidade }}</span>
+          <button class="qty-btn carrinho-qty-btn"
+                  data-chave="{{ item.chave }}"
+                  data-acao="aumentar"
+                  aria-label="Aumentar quantidade">+</button>
+        </div>
+
+        <p class="carrinho-item-subtotal" id="sub-{{ item.chave }}">
+          R$ {{ item.subtotal|floatformat:2 }}
+        </p>
+
+        <button class="carrinho-item-remover"
+                data-chave="{{ item.chave }}"
+                aria-label="Remover {{ item.nome }}">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+
+      </div>
+      {% endfor %}
+    </div>
+
+    {# ── Resumo lateral ─────────────────────────────────────────────── #}
+    <aside class="carrinho-resumo" aria-label="Resumo do pedido">
+      <h2 class="carrinho-resumo-titulo">Resumo do pedido</h2>
+
+      <div class="carrinho-resumo-linha">
+        <span>Subtotal (<span id="resumo-qtd">{{ carrinho|length }}</span> ite{{ carrinho|length|pluralize:"m,ns" }})</span>
+        <span id="resumo-subtotal">R$ {{ total|floatformat:2 }}</span>
+      </div>
+
+      <div class="carrinho-resumo-linha">
+        <span>Frete</span>
+        <span class="text-gray-400 text-sm">Calculado no checkout</span>
+      </div>
+
+      <div class="carrinho-resumo-total">
+        <span>Total</span>
+        <span id="resumo-total">R$ {{ total|floatformat:2 }}</span>
+      </div>
+
+      <a href="{% url 'pedidos:checkout' %}" class="btn-primario btn-finalizar w-full justify-center">
+        Finalizar compra
+      </a>
+
+      <a href="{% url 'produtos:loja' %}" class="btn-secundario continuar-comprando">
+        <i class="fas fa-arrow-left"></i> Continuar comprando
+      </a>
+
+      <div class="carrinho-selos">
+        <span><i class="fas fa-lock"></i> Compra segura</span>
+        <span><i class="fas fa-shield-alt"></i> Dados protegidos</span>
+      </div>
+    </aside>
+
+  </div>
+
+  {% else %}
+  {# Carrinho vazio #}
+  <div class="carrinho-vazio">
+    <i class="far fa-shopping-bag"></i>
+    <h2>Seu carrinho está vazio</h2>
+    <p>Explore nossa coleção e encontre peças incríveis para você.</p>
+    <a href="{% url 'produtos:loja' %}" class="btn-primario">
+      Explorar a loja
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block js_extra %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+  // ── Botões +/- de quantidade ───────────────────────────────────────────
+  document.querySelectorAll('.carrinho-qty-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const chave = btn.dataset.chave;
+      const acao  = btn.dataset.acao;
+      const qtyEl = document.getElementById(`qty-${chave}`);
+      let qty     = parseInt(qtyEl?.textContent || 1);
+
+      if (acao === 'diminuir') qty -= 1;
+      else qty += 1;
+
+      if (qty < 1) {
+        await removerItem(chave);
+        return;
+      }
+
+      try {
+        const res   = await fetch('/carrinho/atualizar/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ chave, quantidade: qty }),
+        });
+        const dados = await res.json();
+        if (dados.status === 'ok') atualizarPagina(dados, chave, qty);
+      } catch (e) {}
+    });
+  });
+
+  // ── Botões remover ─────────────────────────────────────────────────────
+  document.querySelectorAll('.carrinho-item-remover').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const chave = btn.dataset.chave;
+      await removerItem(chave);
+    });
+  });
+
+  async function removerItem(chave) {
+    try {
+      const res   = await fetch(`/carrinho/remover/${chave}/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+      });
+      const dados = await res.json();
+      if (dados.status === 'ok') {
+        // Remove visualmente
+        const itemEl = document.getElementById(`item-${chave}`);
+        itemEl?.remove();
+        atualizarResumo(dados);
+
+        // Se vazio, recarrega para mostrar estado vazio
+        if (dados.total_itens === 0) location.reload();
+      }
+    } catch (e) {}
+  }
+
+  function atualizarPagina(dados, chave, novaQty) {
+    // Atualiza qty exibida
+    const qtyEl = document.getElementById(`qty-${chave}`);
+    if (qtyEl) qtyEl.textContent = novaQty;
+
+    // Recalcula subtotal do item (busca o preço unitário)
+    const itemEl = document.getElementById(`item-${chave}`);
+    const precoUnitText = itemEl?.querySelector('.carrinho-item-preco-unit')?.textContent || '';
+    const precoUnit = parseFloat(precoUnitText.replace('R$', '').replace(',', '.').trim());
+    const subEl = document.getElementById(`sub-${chave}`);
+    if (subEl && !isNaN(precoUnit)) {
+      subEl.textContent = 'R$ ' + (precoUnit * novaQty).toFixed(2).replace('.', ',');
+    }
+
+    atualizarResumo(dados);
+  }
+
+  function atualizarResumo(dados) {
+    // Badge navbar
+    const badge = document.querySelector('.badge-carrinho');
+    if (badge) badge.textContent = dados.total_itens;
+
+    // Resumo lateral
+    const resumoQtd      = document.getElementById('resumo-qtd');
+    const resumoSubtotal = document.getElementById('resumo-subtotal');
+    const resumoTotal    = document.getElementById('resumo-total');
+    const total = parseFloat(dados.total_valor);
+    const totalFmt = 'R$ ' + total.toFixed(2).replace('.', ',');
+
+    if (resumoQtd) resumoQtd.textContent = dados.total_itens;
+    if (resumoSubtotal) resumoSubtotal.textContent = totalFmt;
+    if (resumoTotal) resumoTotal.textContent = totalFmt;
+
+    // Drawer
+    const drawerTotal = document.querySelector('.drawer-total-valor');
+    if (drawerTotal) drawerTotal.textContent = totalFmt;
+  }
+});
+</script>
+{% endblock %}

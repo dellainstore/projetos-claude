@@ -1,0 +1,42 @@
+[Unit]
+Description=Gunicorn — Della Instore (site_della)
+After=network.target postgresql.service
+
+[Service]
+User=neto
+Group=www-data
+WorkingDirectory=/var/www/della-sistemas/projetos-claude/site_della
+
+# Carrega variáveis de ambiente do .env
+EnvironmentFile=/var/www/della-sistemas/projetos-claude/site_della/.env
+Environment="DJANGO_SETTINGS_MODULE=core.settings.production"
+
+# Socket Unix (mais seguro que porta TCP — só Nginx acessa)
+ExecStart=/var/www/della-sistemas/projetos-claude/site_della/venv/bin/gunicorn \
+    --workers 2 \
+    --worker-class sync \
+    --bind unix:/run/gunicorn_della_site.sock \
+    --timeout 60 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --log-level warning \
+    --error-logfile /var/www/della-sistemas/projetos-claude/site_della/logs/gunicorn_error.log \
+    --access-logfile /var/www/della-sistemas/projetos-claude/site_della/logs/gunicorn_access.log \
+    core.wsgi:application
+
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# Reinicia automaticamente se cair (exceto parada manual)
+Restart=on-failure
+RestartSec=5
+
+# Permissão do socket para o Nginx ler
+RuntimeDirectory=gunicorn_della_site
+RuntimeDirectoryMode=0755
+
+# Limites de segurança do processo
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
