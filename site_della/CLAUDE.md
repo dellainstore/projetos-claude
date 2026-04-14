@@ -251,10 +251,17 @@ JS: `static/js/della.js`
 /busca/                    → busca
 /wishlist/                 → lista de desejos
 
-/conta/entrar/             → login
-/conta/cadastro/           → cadastro de cliente
-/conta/minha-conta/        → área do cliente
-/conta/recuperar-senha/    → recuperação de senha
+/conta/entrar/                        → login
+/conta/sair/                          → logout
+/conta/cadastro/                      → cadastro de cliente
+/conta/minha-conta/                   → dashboard da conta
+/conta/minha-conta/editar/            → editar perfil
+/conta/minha-conta/enderecos/         → lista de endereços
+/conta/minha-conta/enderecos/novo/    → novo endereço
+/conta/minha-conta/pedidos/           → histórico de pedidos
+/conta/minha-conta/pedidos/<n>/       → detalhe do pedido
+/conta/recuperar-senha/               → recuperação de senha
+/conta/recuperar-senha/confirmar/.../  → nova senha com token
 
 /carrinho/                 → carrinho
 /carrinho/adicionar/<id>/  → add produto (POST/AJAX)
@@ -283,6 +290,18 @@ JS: `static/js/della.js`
 - [x] **Etapa 8** — Homepage completa (hero, categorias, produtos, look, manifesto, depoimentos, instagram, newsletter, whatsapp, footer)
 - [x] **Etapa 9** — Loja (grid + filtros sidebar + paginação), página de produto (galeria, variações, acordeões, avaliações, relacionados), carrinho funcional (sessão, add/remover/atualizar via AJAX, drawer dinâmico)
 - [x] **Etapa 10** — Checkout completo (stepper 3 etapas, ViaCEP, Melhor Envio com fallback, Pix QR Code EMV, Cartão de Crédito), criação real de Pedido+ItemPedido, página de confirmação com polling de status Pix
+- [x] **Etapa 11** — Área do cliente: login, cadastro, minha conta, editar perfil, endereços CRUD, histórico de pedidos, detalhe de pedido, wishlist, recuperação de senha com token por e-mail
+- [x] **Etapa 12** — Django Admin customizado: produtos com fotos inline, pedidos com status e ações, relatório geral
+
+### Detalhes da Etapa 11
+| Arquivo | O que foi feito |
+|---|---|
+| `apps/usuarios/forms.py` | 6 formulários: LoginForm (axes-aware), CadastroForm (ModelForm com senhas), EditarPerfilForm, EnderecoForm (CEP cleaned), RecuperarSenhaForm, NovaSenhaForm (com validators Django) |
+| `apps/usuarios/views.py` | Todas as views reais: login (next param seguro), cadastro (auto-login), minha_conta, editar_perfil, endereços CRUD, definir_principal (AJAX), meus_pedidos, detalhe_pedido, recuperar_senha (token+e-mail), confirmar_senha |
+| `apps/usuarios/urls.py` | 14 rotas: /conta/entrar/, /conta/cadastro/, /conta/minha-conta/, /conta/minha-conta/editar/, /conta/minha-conta/enderecos/*, /conta/minha-conta/pedidos/*, /conta/recuperar-senha/* |
+| `templates/usuarios/*.html` | 9 templates: login, cadastro, minha_conta (dashboard), editar_perfil, enderecos, endereco_form (com CEP autocomplete), meus_pedidos, detalhe_pedido, recuperar_senha, confirmar_senha |
+| `templates/produtos/wishlist.html` | Wishlist com sidebar de conta, grid de produtos, link para toggle |
+| `static/css/della.css` | +400 linhas: layout sidebar+conteúdo, sidebar nav, cards de conta, badges de status de pedido, grid de endereços, botões de ação, estados vazios, responsivo |
 
 ### Detalhes da Etapa 10
 | Arquivo | O que foi feito |
@@ -312,9 +331,6 @@ JS: `static/js/della.js`
 
 ## Etapas Pendentes
 
-- [ ] **Etapa 11** — Área do cliente: login/cadastro, minha conta, histórico de pedidos, endereços, wishlist
-- [ ] **Etapa 11** — Área do cliente: login/cadastro, minha conta, histórico de pedidos, endereços, wishlist
-- [ ] **Etapa 12** — Django Admin customizado: produtos com fotos inline, pedidos com status, relatórios básicos
 - [ ] **Etapa 13** — Integração Bling: OAuth2, envio automático de pedido ao confirmar pagamento, NF-e
 - [ ] **Etapa 14** — E-mails transacionais: confirmação de pedido, envio com rastreio, recuperação de senha
 - [ ] **Etapa 15** — Integração Instagram Feed (API Graph)
@@ -378,10 +394,25 @@ Variáveis principais:
 ## Como Continuar numa Nova Conversa
 
 1. Abra uma nova conversa no Claude Code
-2. Cole ou referencie este arquivo como contexto
-3. Diga: **"Continuando o desenvolvimento do site Della Instore. O CLAUDE.md está em `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md`. Próxima etapa: Etapa 9 — Loja com filtros, página de produto e carrinho funcional."**
-4. O Claude vai ler este arquivo e continuar de onde parou
+2. Cole exatamente a frase abaixo:
+
+> **"Continuando o desenvolvimento do site Della Instore. Leia o arquivo `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md` e continue pela Etapa 13 — Integração Bling."**
+
+3. O Claude vai ler este arquivo e continuar de onde parou
 
 ---
 
-*Última atualização: Etapa 10 concluída — Checkout completo com Pix, Melhor Envio e criação real de pedidos.*
+### Detalhes da Etapa 12
+| Arquivo | O que foi feito |
+|---|---|
+| `apps/produtos/admin.py` | `CategoriaAdmin` (thumb, total produtos), `ProdutoAdmin` (thumb inline, badge promoção, estoque colorido, média avaliações, ações ativar/desativar/destaque), `ProdutoImagemInline` (preview 60px), `VariacaoInline` (tabular), `AvaliacaoInline` (stackado, só leitura), `AvaliacaoAdmin` (aprovar/reprovar em massa) |
+| `apps/pedidos/admin.py` | `PedidoAdmin` (badge status colorido, inlines ItemPedido+HistoricoPedido readonly, ações de mudança de status com log automático em `HistoricoPedido`) |
+| `apps/usuarios/admin.py` | `ClienteAdmin` (herda `UserAdmin`, login por email, `EnderecoInline`), `EnderecoAdmin`, `WishlistAdmin` |
+| `apps/pagamentos/admin.py` | `PagamentoAdmin` (badge status, valor formatado em R$, `dados_retorno` colapsável) |
+| `apps/bling/admin.py` | `BlingTokenAdmin` (badge válido/expirado, readonly), `BlingLogAdmin` (badge OK/Erro, resumo do erro) |
+| `apps/core_utils/admin_views.py` | View `relatorio()` com: faturamento 30 dias, pedidos por status, top 10 produtos, variações com estoque crítico |
+| `templates/admin/relatorio.html` | Template do relatório com cards de KPIs, tabelas de status e top produtos, estoque crítico |
+| `templates/admin/index.html` | Override do index admin para adicionar botão "Relatório Geral" no topo |
+| `core/urls.py` | Rota `/painel/relatorio/` registrada via `staff_member_required` |
+
+*Última atualização: Etapa 12 concluída — Django Admin customizado (produtos, pedidos, usuários, pagamentos, Bling + relatório geral).*

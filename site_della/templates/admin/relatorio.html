@@ -1,0 +1,137 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Relatório — Della Instore{% endblock %}
+
+{% block content %}
+<style>
+  .rel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .rel-card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 20px; text-align: center; }
+  .rel-card .valor { font-size: 2rem; font-weight: 700; color: #0a0a0a; }
+  .rel-card .label { font-size: 12px; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .rel-card.gold .valor { color: #c9a96e; }
+  .rel-card.verde .valor { color: #27ae60; }
+  .rel-card.laranja .valor { color: #f39c12; }
+  .rel-card.vermelho .valor { color: #e74c3c; }
+
+  .rel-section { background: #fff; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 24px; overflow: hidden; }
+  .rel-section h3 { margin: 0; padding: 12px 16px; background: #f8f8f8; border-bottom: 1px solid #ddd; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #444; }
+  .rel-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rel-table th { background: #f8f8f8; padding: 8px 12px; text-align: left; color: #555; font-weight: 600; border-bottom: 1px solid #eee; }
+  .rel-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
+  .rel-table tr:last-child td { border-bottom: none; }
+  .rel-table tr:hover td { background: #fafafa; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; color: #fff; }
+  .badge-ok    { background: #27ae60; }
+  .badge-warn  { background: #f39c12; }
+  .badge-error { background: #e74c3c; }
+</style>
+
+<h1 style="margin-bottom: 24px; font-size: 1.4rem;">Relatório Geral</h1>
+<p style="color:#666; margin-bottom: 24px; font-size: 13px;">Atualizado em tempo real. Dados dos últimos 30 dias quando aplicável.</p>
+
+<!-- Cards de resumo -->
+<div class="rel-grid">
+  <div class="rel-card gold">
+    <div class="valor">R$ {{ faturamento_30d }}</div>
+    <div class="label">Faturamento (30 dias)</div>
+  </div>
+  <div class="rel-card verde">
+    <div class="valor">{{ pedidos_confirmados }}</div>
+    <div class="label">Pedidos confirmados (30 dias)</div>
+  </div>
+  <div class="rel-card laranja">
+    <div class="valor">{{ pedidos_aguardando }}</div>
+    <div class="label">Aguardando pagamento</div>
+  </div>
+  <div class="rel-card">
+    <div class="valor">{{ total_clientes }}</div>
+    <div class="label">Clientes cadastrados</div>
+  </div>
+  <div class="rel-card">
+    <div class="valor">{{ total_produtos }}</div>
+    <div class="label">Produtos ativos</div>
+  </div>
+  <div class="rel-card vermelho">
+    <div class="valor">{{ sem_estoque }}</div>
+    <div class="label">Variações sem estoque</div>
+  </div>
+  <div class="rel-card laranja">
+    <div class="valor">{{ avaliacoes_pendentes }}</div>
+    <div class="label">Avaliações pendentes</div>
+  </div>
+</div>
+
+<!-- Pedidos por status -->
+<div class="rel-section">
+  <h3>Pedidos por status</h3>
+  <table class="rel-table">
+    <thead>
+      <tr><th>Status</th><th>Quantidade</th><th>Total (R$)</th></tr>
+    </thead>
+    <tbody>
+      {% for item in pedidos_por_status %}
+      <tr>
+        <td>{{ item.label }}</td>
+        <td>{{ item.quantidade }}</td>
+        <td>R$ {{ item.total }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3" style="color:#999;">Nenhum pedido ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Top produtos mais vendidos -->
+<div class="rel-section">
+  <h3>Top 10 produtos mais vendidos (todos os tempos)</h3>
+  <table class="rel-table">
+    <thead>
+      <tr><th>#</th><th>Produto</th><th>Unidades vendidas</th><th>Receita (R$)</th></tr>
+    </thead>
+    <tbody>
+      {% for p in top_produtos %}
+      <tr>
+        <td style="color:#999;">{{ forloop.counter }}</td>
+        <td><a href="{% url 'admin:produtos_produto_change' p.produto__id %}">{{ p.produto__nome }}</a></td>
+        <td>{{ p.total_qty }}</td>
+        <td>R$ {{ p.receita }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" style="color:#999;">Nenhum pedido ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Estoque crítico -->
+<div class="rel-section">
+  <h3>Estoque crítico (variações com 0–4 unidades)</h3>
+  <table class="rel-table">
+    <thead>
+      <tr><th>Produto</th><th>Tipo</th><th>Variação</th><th>Estoque</th></tr>
+    </thead>
+    <tbody>
+      {% for v in estoque_critico %}
+      <tr>
+        <td><a href="{% url 'admin:produtos_produto_change' v.produto.id %}">{{ v.produto.nome }}</a></td>
+        <td>{{ v.get_tipo_display }}</td>
+        <td>{{ v.nome }}</td>
+        <td>
+          {% if v.estoque == 0 %}
+            <span class="badge badge-error">Esgotado</span>
+          {% else %}
+            <span class="badge badge-warn">{{ v.estoque }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" style="color:#999;">Nenhuma variação crítica.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
