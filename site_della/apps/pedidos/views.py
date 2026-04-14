@@ -227,6 +227,13 @@ def _processar_checkout(request, form, cart):
         # Salva número do pedido na sessão (para exibir confirmação)
         request.session['ultimo_pedido'] = pedido.numero
 
+        # Dispara e-mail de confirmação (falha silenciosa — não bloqueia o fluxo)
+        try:
+            from .emails import enviar_confirmacao_pedido
+            enviar_confirmacao_pedido(pedido)
+        except Exception as exc:
+            logger.warning('Não foi possível enviar e-mail de confirmação: %s', exc)
+
         return redirect('pedidos:confirmacao', numero=pedido.numero)
 
     except Exception as e:

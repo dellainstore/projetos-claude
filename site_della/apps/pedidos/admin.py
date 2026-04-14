@@ -151,7 +151,8 @@ class PedidoAdmin(admin.ModelAdmin):
 
     # ── Ações de status ────────────────────────────────────────────────────────
 
-    def _mudar_status(self, request, queryset, novo_status, label, enviar_bling=False):
+    def _mudar_status(self, request, queryset, novo_status, label,
+                      enviar_bling=False, enviar_email_envio=False):
         atualizados = 0
         for pedido in queryset:
             if pedido.status != novo_status:
@@ -168,7 +169,26 @@ class PedidoAdmin(admin.ModelAdmin):
                 if enviar_bling and novo_status == 'pagamento_confirmado':
                     self._tentar_enviar_bling(request, pedido)
 
+                if enviar_email_envio and novo_status == 'enviado':
+                    self._tentar_enviar_email_envio(request, pedido)
+
         self.message_user(request, f'{atualizados} pedido(s) marcado(s) como "{label}".')
+
+    def _tentar_enviar_email_envio(self, request, pedido):
+        """Envia e-mail de notificação de envio com rastreio."""
+        try:
+            from apps.pedidos.emails import enviar_notificacao_envio
+            ok = enviar_notificacao_envio(pedido)
+            if ok:
+                self.message_user(request, f'E-mail de envio disparado para {pedido.email}.')
+            else:
+                self.message_user(
+                    request,
+                    f'Não foi possível enviar o e-mail de envio para {pedido.email}. Verifique as configurações de e-mail.',
+                    level='WARNING',
+                )
+        except Exception as exc:
+            logger.error('Erro ao enviar e-mail de envio do pedido %s: %s', pedido.numero, exc)
 
     def _tentar_enviar_bling(self, request, pedido):
         """Envia o pedido ao Bling silenciosamente; avisa se falhar."""
@@ -202,9 +222,9 @@ class PedidoAdmin(admin.ModelAdmin):
     def marcar_em_separacao(self, request, queryset):
         self._mudar_status(request, queryset, 'em_separacao', 'Em Separação')
 
-    @admin.action(description='→ Enviado')
+    @admin.action(description='→ Enviado (+ e-mail de rastreio)')
     def marcar_enviado(self, request, queryset):
-        self._mudar_status(request, queryset, 'enviado', 'Enviado')
+        self._mudar_status(request, queryset, 'enviado', 'Enviado', enviar_email_envio=True)
 
     @admin.action(description='→ Entregue')
     def marcar_entregue(self, request, queryset):

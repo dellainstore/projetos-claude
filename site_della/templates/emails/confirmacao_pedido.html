@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedido confirmado — Della Instore</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f3;padding:32px 0;">
+  <tr>
+    <td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- HEADER -->
+        <tr>
+          <td style="background:#0a0a0a;padding:32px 40px;text-align:center;">
+            <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;
+                        color:#c9a96e;letter-spacing:3px;">DELLA INSTORE</div>
+            <div style="font-size:11px;color:#888;letter-spacing:2px;margin-top:4px;text-transform:uppercase;">
+              Moda Feminina Premium
+            </div>
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td style="background:#c9a96e;padding:24px 40px;text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:#0a0a0a;letter-spacing:1px;">
+              Pedido Recebido!
+            </div>
+            <div style="font-size:14px;color:#5a4a30;margin-top:6px;">
+              Obrigada pela sua compra, {{ pedido.nome_completo.split.0 }}.
+            </div>
+          </td>
+        </tr>
+
+        <!-- BODY -->
+        <tr>
+          <td style="background:#ffffff;padding:36px 40px;">
+
+            <p style="margin:0 0 20px;font-size:15px;color:#333;line-height:1.6;">
+              Seu pedido foi recebido com sucesso e está sendo processado.
+              Você receberá uma atualização assim que o pagamento for confirmado.
+            </p>
+
+            <!-- Número do pedido -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="background:#f9f6f0;border:1px solid #e8d5b0;border-radius:6px;
+                          margin-bottom:28px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;
+                               margin-bottom:4px;">Número do Pedido</div>
+                  <div style="font-size:22px;font-weight:700;color:#c9a96e;
+                               font-family:Georgia,serif;letter-spacing:2px;">
+                    {{ pedido.numero }}
+                  </div>
+                </td>
+                <td style="padding:16px 20px;text-align:right;">
+                  <div style="font-size:12px;color:#888;text-transform:uppercase;
+                               letter-spacing:1px;margin-bottom:4px;">Data</div>
+                  <div style="font-size:14px;color:#333;font-weight:600;">
+                    {{ pedido.criado_em|date:"d/m/Y H\hi" }}
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Itens -->
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;
+                         letter-spacing:1px;color:#666;margin-bottom:12px;">
+              Itens do Pedido
+            </div>
+
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="border-collapse:collapse;margin-bottom:24px;">
+              <tr style="background:#f5f5f3;">
+                <td style="padding:10px 12px;font-size:12px;font-weight:700;
+                            text-transform:uppercase;letter-spacing:.5px;color:#666;">Produto</td>
+                <td style="padding:10px 12px;font-size:12px;font-weight:700;
+                            text-transform:uppercase;letter-spacing:.5px;color:#666;
+                            text-align:center;">Qtd</td>
+                <td style="padding:10px 12px;font-size:12px;font-weight:700;
+                            text-transform:uppercase;letter-spacing:.5px;color:#666;
+                            text-align:right;">Subtotal</td>
+              </tr>
+              {% for item in pedido.itens.all %}
+              <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:12px 12px;">
+                  <div style="font-size:14px;color:#222;font-weight:600;">
+                    {{ item.nome_produto }}
+                  </div>
+                  {% if item.variacao_desc %}
+                  <div style="font-size:12px;color:#888;margin-top:2px;">
+                    {{ item.variacao_desc }}
+                  </div>
+                  {% endif %}
+                </td>
+                <td style="padding:12px;text-align:center;font-size:14px;color:#555;">
+                  {{ item.quantidade }}
+                </td>
+                <td style="padding:12px;text-align:right;font-size:14px;
+                            color:#222;font-weight:600;">
+                  R$ {{ item.subtotal|floatformat:2 }}
+                </td>
+              </tr>
+              {% endfor %}
+            </table>
+
+            <!-- Totais -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="margin-bottom:28px;">
+              <tr>
+                <td style="padding:6px 0;font-size:14px;color:#555;">Subtotal</td>
+                <td style="padding:6px 0;font-size:14px;color:#333;
+                            text-align:right;">R$ {{ pedido.subtotal|floatformat:2 }}</td>
+              </tr>
+              {% if pedido.desconto %}
+              <tr>
+                <td style="padding:6px 0;font-size:14px;color:#27ae60;">Desconto</td>
+                <td style="padding:6px 0;font-size:14px;color:#27ae60;
+                            text-align:right;">- R$ {{ pedido.desconto|floatformat:2 }}</td>
+              </tr>
+              {% endif %}
+              <tr>
+                <td style="padding:6px 0;font-size:14px;color:#555;">Frete</td>
+                <td style="padding:6px 0;font-size:14px;color:#333;
+                            text-align:right;">
+                  {% if pedido.frete %}R$ {{ pedido.frete|floatformat:2 }}{% else %}Grátis{% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 0 6px;font-size:16px;font-weight:700;
+                            color:#0a0a0a;border-top:2px solid #f0f0f0;">Total</td>
+                <td style="padding:12px 0 6px;font-size:16px;font-weight:700;
+                            color:#c9a96e;text-align:right;border-top:2px solid #f0f0f0;">
+                  R$ {{ pedido.total|floatformat:2 }}
+                </td>
+              </tr>
+            </table>
+
+            <!-- Endereço de entrega -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="background:#f9f9f9;border-radius:6px;margin-bottom:28px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <div style="font-size:12px;font-weight:700;text-transform:uppercase;
+                               letter-spacing:1px;color:#666;margin-bottom:8px;">
+                    Endereço de Entrega
+                  </div>
+                  <div style="font-size:14px;color:#333;line-height:1.7;">
+                    {{ pedido.logradouro }}, {{ pedido.numero_entrega }}
+                    {% if pedido.complemento %} — {{ pedido.complemento }}{% endif %}<br>
+                    {{ pedido.bairro }} — {{ pedido.cidade }}/{{ pedido.estado }}<br>
+                    CEP: {{ pedido.cep_entrega|slice:":5" }}-{{ pedido.cep_entrega|slice:"5:" }}
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Forma de pagamento -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="background:#f9f9f9;border-radius:6px;margin-bottom:32px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <div style="font-size:12px;font-weight:700;text-transform:uppercase;
+                               letter-spacing:1px;color:#666;margin-bottom:6px;">
+                    Pagamento
+                  </div>
+                  <div style="font-size:14px;color:#333;">
+                    {{ pedido.get_forma_pagamento_display }}
+                    {% if pedido.parcelas > 1 %} em {{ pedido.parcelas }}x{% endif %}
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- CTA -->
+            <div style="text-align:center;margin-bottom:8px;">
+              <a href="{{ site_url }}/conta/minha-conta/pedidos/{{ pedido.numero }}/"
+                 style="display:inline-block;background:#0a0a0a;color:#c9a96e;
+                         padding:14px 36px;border-radius:3px;text-decoration:none;
+                         font-size:13px;font-weight:700;letter-spacing:1.5px;
+                         text-transform:uppercase;">
+                Acompanhar Pedido
+              </a>
+            </div>
+
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background:#0a0a0a;padding:28px 40px;text-align:center;">
+            <div style="font-size:11px;color:#555;line-height:1.8;">
+              Dúvidas? Fale conosco pelo WhatsApp ou pelo e-mail<br>
+              <a href="mailto:contato@dellainstore.com.br"
+                 style="color:#c9a96e;text-decoration:none;">
+                contato@dellainstore.com.br
+              </a>
+            </div>
+            <div style="margin-top:16px;font-size:10px;color:#444;letter-spacing:1px;">
+              DELLA INSTORE — MODA FEMININA PREMIUM
+            </div>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

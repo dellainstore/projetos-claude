@@ -222,6 +222,8 @@ STONE_CLIENT_ID = config('STONE_CLIENT_ID', default='')
 STONE_CLIENT_SECRET = config('STONE_CLIENT_SECRET', default='')
 STONE_SANDBOX = config('STONE_SANDBOX', default=True, cast=bool)
 
+SITE_URL = config('SITE_URL', default='http://159.203.101.232:8000')
+
 BLING_CLIENT_ID     = config('BLING_CLIENT_ID', default='')
 BLING_CLIENT_SECRET = config('BLING_CLIENT_SECRET', default='')
 BLING_REDIRECT_URI  = config('BLING_REDIRECT_URI', default='http://localhost:8000/bling/callback/')

@@ -293,6 +293,7 @@ JS: `static/js/della.js`
 - [x] **Etapa 11** — Área do cliente: login, cadastro, minha conta, editar perfil, endereços CRUD, histórico de pedidos, detalhe de pedido, wishlist, recuperação de senha com token por e-mail
 - [x] **Etapa 12** — Django Admin customizado: produtos com fotos inline, pedidos com status e ações, relatório geral
 - [x] **Etapa 13** — Integração Bling: OAuth2 completo, cliente API v3, envio automático de pedido ao confirmar pagamento, emissão de NF-e, webhook para rastreio e status
+- [x] **Etapa 14** — E-mails transacionais: confirmação de pedido (HTML), notificação de envio com rastreio (HTML), recuperação de senha (HTML)
 
 ### Detalhes da Etapa 11
 | Arquivo | O que foi feito |
@@ -329,6 +330,31 @@ JS: `static/js/della.js`
 | `static/js/della.js` | `atualizarDrawerConteudo()`, `drawerRemover()`, `drawerAlterarQty()` — drawer AJAX global |
 
 ---
+
+### Detalhes da Etapa 14
+| Arquivo | O que foi feito |
+|---|---|
+| `apps/pedidos/emails.py` | `enviar_confirmacao_pedido(pedido)` e `enviar_notificacao_envio(pedido)` — HTML + texto plano via `EmailMultiAlternatives`; falha silenciosa com log |
+| `apps/usuarios/emails.py` | `enviar_recuperacao_senha(usuario, link)` — e-mail HTML de reset de senha |
+| `templates/emails/confirmacao_pedido.html` | E-mail HTML completo: header dourado, número do pedido, itens, totais, endereço, forma de pagamento, CTA "Acompanhar Pedido" |
+| `templates/emails/envio_rastreio.html` | E-mail HTML: código de rastreio em destaque, botão "Rastrear Entrega", itens enviados, endereço |
+| `templates/emails/recuperacao_senha.html` | E-mail HTML: botão "Criar Nova Senha", link alternativo em texto, aviso de validade 24h |
+| `apps/pedidos/views.py` | Hook em `_processar_checkout`: dispara `enviar_confirmacao_pedido` após criar pedido |
+| `apps/pedidos/admin.py` | Ação "→ Enviado" agora dispara `enviar_notificacao_envio` automaticamente; helper `_tentar_enviar_email_envio` |
+| `apps/usuarios/views.py` | `recuperar_senha` usa o novo `enviar_recuperacao_senha` HTML (removido `send_mail` plain text) |
+| `core/settings/base.py` | `SITE_URL` adicionado (usado nos links dos e-mails) |
+
+### Configuração de e-mail para produção
+```
+# .env — preencher com credenciais reais
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=contato@dellainstore.com.br
+EMAIL_HOST_PASSWORD=senha-de-app-gmail
+DEFAULT_FROM_EMAIL=Della Instore <contato@dellainstore.com.br>
+SITE_URL=https://www.dellainstore.com.br
+```
+> Para Gmail: ativar verificação 2 fatores → gerar "Senha de App" nas configurações de segurança.
 
 ## Etapas Pendentes
 - [ ] **Etapa 14** — E-mails transacionais: confirmação de pedido, envio com rastreio, recuperação de senha
@@ -395,7 +421,7 @@ Variáveis principais:
 1. Abra uma nova conversa no Claude Code
 2. Cole exatamente a frase abaixo:
 
-> **"Continuando o desenvolvimento do site Della Instore. Leia o arquivo `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md` e continue pela Etapa 14 — E-mails transacionais."**
+> **"Continuando o desenvolvimento do site Della Instore. Leia o arquivo `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md` e continue pela Etapa 15 — Instagram Feed."**
 
 3. O Claude vai ler este arquivo e continuar de onde parou
 
