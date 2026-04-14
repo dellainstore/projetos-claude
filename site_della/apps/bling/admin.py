@@ -5,19 +5,29 @@ from .models import BlingToken, BlingLog
 
 @admin.register(BlingToken)
 class BlingTokenAdmin(admin.ModelAdmin):
-    list_display = ('expira_em', 'badge_valido', 'criado_em', 'atualizado_em')
+    list_display = ('expira_em', 'badge_valido', 'criado_em', 'atualizado_em', 'btn_autorizar')
     readonly_fields = ('access_token', 'refresh_token', 'expira_em', 'criado_em', 'atualizado_em')
     ordering = ('-criado_em',)
+    change_list_template = 'admin/bling_token_changelist.html'
 
     def badge_valido(self, obj):
         if obj.valido:
             return format_html(
-                '<span style="background:#27ae60;color:#fff;padding:2px 8px;border-radius:3px;font-size:11px;">Válido</span>'
+                '<span style="background:#27ae60;color:#fff;padding:2px 8px;'
+                'border-radius:3px;font-size:11px;">Válido</span>'
             )
         return format_html(
-            '<span style="background:#e74c3c;color:#fff;padding:2px 8px;border-radius:3px;font-size:11px;">Expirado</span>'
+            '<span style="background:#e74c3c;color:#fff;padding:2px 8px;'
+            'border-radius:3px;font-size:11px;">Expirado</span>'
         )
     badge_valido.short_description = 'Token'
+
+    def btn_autorizar(self, obj):
+        return format_html(
+            '<a href="/bling/autorizar/" style="background:#c9a96e;color:#fff;padding:3px 10px;'
+            'border-radius:3px;font-size:11px;text-decoration:none;">Renovar</a>'
+        )
+    btn_autorizar.short_description = 'Ação'
 
     def has_add_permission(self, request):
         return False
@@ -35,10 +45,12 @@ class BlingLogAdmin(admin.ModelAdmin):
     def badge_sucesso(self, obj):
         if obj.sucesso:
             return format_html(
-                '<span style="background:#27ae60;color:#fff;padding:2px 8px;border-radius:3px;font-size:11px;">OK</span>'
+                '<span style="background:#27ae60;color:#fff;padding:2px 8px;'
+                'border-radius:3px;font-size:11px;">OK</span>'
             )
         return format_html(
-            '<span style="background:#e74c3c;color:#fff;padding:2px 8px;border-radius:3px;font-size:11px;">Erro</span>'
+            '<span style="background:#e74c3c;color:#fff;padding:2px 8px;'
+            'border-radius:3px;font-size:11px;">Erro</span>'
         )
     badge_sucesso.short_description = 'Resultado'
 

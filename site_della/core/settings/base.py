@@ -222,8 +222,9 @@ STONE_CLIENT_ID = config('STONE_CLIENT_ID', default='')
 STONE_CLIENT_SECRET = config('STONE_CLIENT_SECRET', default='')
 STONE_SANDBOX = config('STONE_SANDBOX', default=True, cast=bool)
 
-BLING_CLIENT_ID = config('BLING_CLIENT_ID', default='')
+BLING_CLIENT_ID     = config('BLING_CLIENT_ID', default='')
 BLING_CLIENT_SECRET = config('BLING_CLIENT_SECRET', default='')
+BLING_REDIRECT_URI  = config('BLING_REDIRECT_URI', default='http://localhost:8000/bling/callback/')
 
 WHATSAPP_NUMBER_1 = config('WHATSAPP_NUMBER_1', default='')
 WHATSAPP_NUMBER_2 = config('WHATSAPP_NUMBER_2', default='')

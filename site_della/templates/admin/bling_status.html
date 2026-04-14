@@ -1,0 +1,47 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Integração Bling — Della Instore{% endblock %}
+
+{% block content %}
+<style>
+  .bling-box {
+    max-width: 520px;
+    margin: 40px auto;
+    padding: 32px 36px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    text-align: center;
+  }
+  .bling-icon { font-size: 3rem; margin-bottom: 16px; }
+  .bling-box h2 { font-size: 1.3rem; margin-bottom: 12px; }
+  .bling-box p { color: #555; font-size: 14px; line-height: 1.6; }
+  .btn-bling {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 24px;
+    background: #c9a96e;
+    color: #fff;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+  }
+</style>
+
+<div class="bling-box">
+  {% if sucesso %}
+    <div class="bling-icon">✅</div>
+    <h2>Bling conectado com sucesso!</h2>
+    <p>{{ mensagem }}</p>
+    <a class="btn-bling" href="/painel/bling/blingtoken/">Ver tokens salvos</a>
+  {% else %}
+    <div class="bling-icon">❌</div>
+    <h2>Falha na autorização</h2>
+    <p>{{ mensagem }}</p>
+    <a class="btn-bling" href="/bling/autorizar/">Tentar novamente</a>
+  {% endif %}
+  <br><br>
+  <a href="/painel/" style="font-size:13px;color:#999;">← Voltar ao painel</a>
+</div>
+{% endblock %}

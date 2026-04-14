@@ -292,6 +292,7 @@ JS: `static/js/della.js`
 - [x] **Etapa 10** — Checkout completo (stepper 3 etapas, ViaCEP, Melhor Envio com fallback, Pix QR Code EMV, Cartão de Crédito), criação real de Pedido+ItemPedido, página de confirmação com polling de status Pix
 - [x] **Etapa 11** — Área do cliente: login, cadastro, minha conta, editar perfil, endereços CRUD, histórico de pedidos, detalhe de pedido, wishlist, recuperação de senha com token por e-mail
 - [x] **Etapa 12** — Django Admin customizado: produtos com fotos inline, pedidos com status e ações, relatório geral
+- [x] **Etapa 13** — Integração Bling: OAuth2 completo, cliente API v3, envio automático de pedido ao confirmar pagamento, emissão de NF-e, webhook para rastreio e status
 
 ### Detalhes da Etapa 11
 | Arquivo | O que foi feito |
@@ -330,8 +331,6 @@ JS: `static/js/della.js`
 ---
 
 ## Etapas Pendentes
-
-- [ ] **Etapa 13** — Integração Bling: OAuth2, envio automático de pedido ao confirmar pagamento, NF-e
 - [ ] **Etapa 14** — E-mails transacionais: confirmação de pedido, envio com rastreio, recuperação de senha
 - [ ] **Etapa 15** — Integração Instagram Feed (API Graph)
 - [ ] **Etapa 16** — Deploy final: instalar Gunicorn+Nginx, SSL, variáveis de produção, trocar domínio
@@ -396,7 +395,7 @@ Variáveis principais:
 1. Abra uma nova conversa no Claude Code
 2. Cole exatamente a frase abaixo:
 
-> **"Continuando o desenvolvimento do site Della Instore. Leia o arquivo `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md` e continue pela Etapa 13 — Integração Bling."**
+> **"Continuando o desenvolvimento do site Della Instore. Leia o arquivo `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md` e continue pela Etapa 14 — E-mails transacionais."**
 
 3. O Claude vai ler este arquivo e continuar de onde parou
 
@@ -415,4 +414,28 @@ Variáveis principais:
 | `templates/admin/index.html` | Override do index admin para adicionar botão "Relatório Geral" no topo |
 | `core/urls.py` | Rota `/painel/relatorio/` registrada via `staff_member_required` |
 
-*Última atualização: Etapa 12 concluída — Django Admin customizado (produtos, pedidos, usuários, pagamentos, Bling + relatório geral).*
+### Detalhes da Etapa 13
+| Arquivo | O que foi feito |
+|---|---|
+| `apps/bling/oauth.py` | `get_authorize_url()`, `exchange_code()`, `refresh_token()`, `get_valid_access_token()` — fluxo OAuth2 completo com auto-refresh |
+| `apps/bling/api.py` | `BlingAPI` + `BlingAPIError` — cliente HTTP para API v3: `criar_pedido_venda`, `consultar_pedido_venda`, `atualizar_situacao_pedido`, `emitir_nfe_do_pedido`, `consultar_nfe`, `enviar_nfe_sefaz` |
+| `apps/bling/services.py` | `enviar_pedido_bling(pedido)` e `emitir_nfe_bling(pedido)` — funções de alto nível com log completo em `BlingLog`; `_montar_payload_pedido()` monta JSON completo para a API v3 |
+| `apps/bling/views.py` | `oauth_autorizar` (staff only → redireciona para Bling), `oauth_callback` (troca code por token, salva), `webhook` (recebe notificações: atualiza rastreio, status, NF-e) |
+| `apps/bling/urls.py` | Adicionada rota `/bling/autorizar/` |
+| `apps/bling/admin.py` | `BlingTokenAdmin` com botão "Autorizar Bling" no changelist via template customizado |
+| `apps/pedidos/admin.py` | Ação "→ Pagamento confirmado" agora dispara `enviar_pedido_bling` automaticamente; novas ações "Bling: enviar pedidos" e "Bling: emitir NF-e"; badge Bling/NF-e na listagem |
+| `templates/admin/bling_status.html` | Página de resultado do OAuth (sucesso/erro) |
+| `templates/admin/bling_token_changelist.html` | Override do changelist com botão "Autorizar Bling" |
+| `core/settings/base.py` | Adicionado `BLING_REDIRECT_URI` |
+| `.env.example` | Atualizado com `BLING_REDIRECT_URI` e instruções de configuração |
+
+### Como configurar o Bling na prática
+1. Criar um aplicativo em [developer.bling.com.br](https://developer.bling.com.br/aplicativos)
+2. Copiar `Client ID` e `Client Secret` para o `.env`
+3. Registrar no app Bling a URL de callback: `https://www.dellainstore.com.br/bling/callback/`
+4. Configurar `BLING_REDIRECT_URI` no `.env`
+5. Acessar `/bling/autorizar/` no admin para fazer o primeiro login
+6. Configurar o webhook no painel Bling → Integrações → Webhooks → URL: `https://www.dellainstore.com.br/bling/webhook/`
+7. Para NF-e: configurar CFOP, NCM e tributação dos produtos no painel do Bling antes de usar a ação de emissão
+
+*Última atualização: Etapa 13 concluída — Integração Bling completa (OAuth2, API v3, envio de pedidos, NF-e, webhook).*

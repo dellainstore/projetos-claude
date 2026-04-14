@@ -1,0 +1,12 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+  <li>
+    <a href="/bling/autorizar/"
+       style="background:#c9a96e;color:#fff;padding:6px 14px;border-radius:4px;
+              font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;">
+      🔗 Autorizar Bling
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}
