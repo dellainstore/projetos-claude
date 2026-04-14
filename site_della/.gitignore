@@ -31,6 +31,10 @@ ENV/
 # Static (coletados pelo collectstatic)
 staticfiles/
 
+# Cache do Django
+cache/*
+!cache/.gitkeep
+
 # IDE
 .vscode/
 .idea/

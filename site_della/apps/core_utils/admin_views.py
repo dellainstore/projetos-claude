@@ -87,6 +87,33 @@ def relatorio(request):
     return render(request, 'admin/relatorio.html', context)
 
 
+@staff_member_required
+def instagram_refresh(request):
+    """
+    Limpa o cache do Instagram e força nova busca na próxima visita à homepage.
+    Acessível em: /painel/instagram/refresh/
+    """
+    from apps.produtos.instagram import limpar_cache_instagram, buscar_posts_instagram
+    from django.contrib import messages
+    from django.shortcuts import redirect
+
+    limpar_cache_instagram()
+
+    # Tenta buscar imediatamente para validar o token
+    posts = buscar_posts_instagram(limit=9)
+
+    if posts:
+        messages.success(request, f'Feed do Instagram atualizado: {len(posts)} post(s) carregados.')
+    else:
+        messages.warning(
+            request,
+            'Cache limpo, mas nenhum post foi carregado. '
+            'Verifique se INSTAGRAM_ACCESS_TOKEN está configurado e válido no .env.'
+        )
+
+    return redirect('/painel/')
+
+
 def _fmt(valor):
     """Formata Decimal no padrão brasileiro: 1.234,56"""
     return f'{valor:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from apps.core_utils.admin_views import relatorio as admin_relatorio
+from apps.core_utils.admin_views import relatorio as admin_relatorio, instagram_refresh
 
 # Personaliza o cabeçalho do Django Admin
 admin.site.site_header = 'Della Instore — Administração'
@@ -13,6 +13,7 @@ urlpatterns = [
     # Admin Django
     path('painel/', admin.site.urls),
     path('painel/relatorio/', admin_relatorio, name='admin_relatorio'),
+    path('painel/instagram/refresh/', instagram_refresh, name='admin_instagram_refresh'),
 
     # Homepage e páginas institucionais
     path('', include('apps.produtos.urls', namespace='produtos')),

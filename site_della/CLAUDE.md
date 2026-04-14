@@ -294,6 +294,7 @@ JS: `static/js/della.js`
 - [x] **Etapa 12** — Django Admin customizado: produtos com fotos inline, pedidos com status e ações, relatório geral
 - [x] **Etapa 13** — Integração Bling: OAuth2 completo, cliente API v3, envio automático de pedido ao confirmar pagamento, emissão de NF-e, webhook para rastreio e status
 - [x] **Etapa 14** — E-mails transacionais: confirmação de pedido (HTML), notificação de envio com rastreio (HTML), recuperação de senha (HTML)
+- [x] **Etapa 15** — Instagram Feed: API Graph com cache de 1 hora, fallback para placeholders, botão de atualização no admin
 
 ### Detalhes da Etapa 11
 | Arquivo | O que foi feito |
@@ -355,6 +356,29 @@ DEFAULT_FROM_EMAIL=Della Instore <contato@dellainstore.com.br>
 SITE_URL=https://www.dellainstore.com.br
 ```
 > Para Gmail: ativar verificação 2 fatores → gerar "Senha de App" nas configurações de segurança.
+
+### Detalhes da Etapa 15
+| Arquivo | O que foi feito |
+|---|---|
+| `apps/produtos/instagram.py` | `buscar_posts_instagram(limit)` com cache de 1h; filtra vídeos sem thumb; trata token expirado; `limpar_cache_instagram()` para forçar refresh; `renovar_token_longa_duracao()` helper para renovação manual |
+| `apps/produtos/views.py` | `homepage()` chama `_get_instagram_posts()` com falha silenciosa |
+| `apps/core_utils/admin_views.py` | View `instagram_refresh` (staff-only): limpa cache e faz preview imediato |
+| `core/urls.py` | Rota `/painel/instagram/refresh/` |
+| `templates/admin/index.html` | Botão "Atualizar Feed Instagram" no painel |
+| `core/settings/base.py` | `CACHES` com FileBasedCache (compatível com múltiplos workers); `INSTAGRAM_APP_ID` e `INSTAGRAM_APP_SECRET` |
+
+### Como configurar o Instagram na prática
+1. Criar app em [developers.facebook.com](https://developers.facebook.com) → Produto: **Instagram Basic Display**
+2. Adicionar conta Instagram de teste e gerar **User Token** (curta duração, 1h)
+3. Trocar por **Long-Lived Token** (60 dias) pelo shell:
+   ```bash
+   source venv/bin/activate
+   python manage.py shell --settings=core.settings.base
+   # >>> from apps.produtos.instagram import renovar_token_longa_duracao
+   # >>> print(renovar_token_longa_duracao('TOKEN_CURTO'))
+   ```
+4. Colar o token resultante em `INSTAGRAM_ACCESS_TOKEN` no `.env`
+5. Acessar `/painel/instagram/refresh/` para carregar o feed imediatamente
 
 ## Etapas Pendentes
 - [ ] **Etapa 14** — E-mails transacionais: confirmação de pedido, envio com rastreio, recuperação de senha
@@ -421,7 +445,7 @@ Variáveis principais:
 1. Abra uma nova conversa no Claude Code
 2. Cole exatamente a frase abaixo:
 
-> **"Continuando o desenvolvimento do site Della Instore. Leia o arquivo `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md` e continue pela Etapa 15 — Instagram Feed."**
+> **"Continuando o desenvolvimento do site Della Instore. Leia o arquivo `/var/www/della-sistemas/projetos-claude/site_della/CLAUDE.md` e continue pela Etapa 16 — Deploy final."**
 
 3. O Claude vai ler este arquivo e continuar de onde parou
 

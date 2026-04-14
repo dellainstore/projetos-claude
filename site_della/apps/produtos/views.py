@@ -7,6 +7,15 @@ from django.db.models import Q, Avg, Count
 from django.conf import settings
 
 
+def _get_instagram_posts() -> list:
+    """Busca posts do Instagram com tratamento de falha silenciosa."""
+    try:
+        from .instagram import buscar_posts_instagram
+        return buscar_posts_instagram(limit=9)
+    except Exception:
+        return []
+
+
 def homepage(request):
     from apps.produtos.models import Categoria, Produto, Avaliacao
 
@@ -35,7 +44,7 @@ def homepage(request):
         'depoimentos':            depoimentos,
         'look_produtos':          look_produtos,
         'wishlist_ids':           wishlist_ids,
-        'instagram_posts':        [],
+        'instagram_posts':        _get_instagram_posts(),
         'WHATSAPP_NUMBER_1':      settings.WHATSAPP_NUMBER_1,
         'WHATSAPP_NUMBER_2':      settings.WHATSAPP_NUMBER_2,
     }
