@@ -112,23 +112,32 @@ sudo nginx -t && sudo systemctl reload nginx
 **Socket:** `/run/gunicorn_della_site/gunicorn.sock`
 **Serviço:** `gunicorn_della_site` (systemd, usuário `neto`, 2 workers)
 
-### Pendência Nginx
-O `scripts/nginx_della_site.conf` foi atualizado para `client_max_body_size 50M`, mas o arquivo ao vivo em `/etc/nginx/sites-available/della_site` ainda tem 10M. Aplicar manualmente:
-```bash
-sudo sed -i 's/client_max_body_size 10M;/client_max_body_size 50M;/g' /etc/nginx/sites-available/della_site
-sudo nginx -t && sudo systemctl reload nginx
-```
+**`client_max_body_size 50M`** — ✅ aplicado em `/etc/nginx/sites-available/della_site`.
 
 ---
 
 ## Quando Trocar para www.dellainstore.com.br
 
-1. Editar `/etc/nginx/sites-available/della_site` — comentar bloco "testes", descomentar bloco "produção"
-2. `sudo certbot --nginx -d www.dellainstore.com.br -d dellainstore.com.br`
-3. Atualizar `ALLOWED_HOSTS` no `.env`
-4. Atualizar `SITE_URL` no `.env`
-5. Atualizar `BLING_REDIRECT_URI` no `.env`
-6. `sudo systemctl reload nginx && sudo systemctl restart gunicorn_della_site`
+**Obs:** O domínio principal será `www.dellainstore.com.br`. O domínio `www.dellainstore.com` (também comprado na UOL) fará **redirect 301** para o `.com.br`.
+
+### Passo a passo (fazer quando DNS propagar):
+1. No painel UOL, apontar `dellainstore.com` e `www.dellainstore.com` para o IP `159.203.101.232` (registro A)
+2. Editar `/etc/nginx/sites-available/della_site`:
+   - Comentar bloco "testes" (`novo.dellainstore.com.br`)
+   - Descomentar bloco "produção" (`www.dellainstore.com.br`)
+   - Adicionar bloco de redirect 301 para os domínios `.com`:
+     ```nginx
+     server {
+         listen 80;
+         server_name dellainstore.com www.dellainstore.com;
+         return 301 https://www.dellainstore.com.br$request_uri;
+     }
+     ```
+3. `sudo certbot --nginx -d www.dellainstore.com.br -d dellainstore.com.br -d dellainstore.com -d www.dellainstore.com`
+4. Atualizar `ALLOWED_HOSTS` no `.env` (adicionar `dellainstore.com,www.dellainstore.com`)
+5. Atualizar `SITE_URL` no `.env` → `https://www.dellainstore.com.br`
+6. Atualizar `BLING_REDIRECT_URI` no `.env` → `https://www.dellainstore.com.br/bling/callback/`
+7. `sudo systemctl reload nginx && sudo systemctl restart gunicorn_della_site`
 
 ---
 
@@ -199,7 +208,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## Navbar (base.html)
 
-**Logo D'ELLA Instore:** duas linhas empilhadas — `.navbar-logo-della` (Playfair Display, 1.45rem, letra-spacing 0.18em) e `.navbar-logo-instore` (Jost, 0.5rem, letra-spacing 0.5em). Mesma estrutura no footer (`.footer-logo-della` / `.footer-logo-instore`).
+**Logo D'ELLA Instore:** duas linhas empilhadas — `.navbar-logo-della` (Playfair Display, **1.7rem**, letra-spacing 0.18em) e `.navbar-logo-instore` (Jost, **0.68rem**, letra-spacing 0.48em, `text-align: center`). `.navbar-logo` usa `align-items: stretch` para que o Instore ocupe exatamente a largura da D'ELLA. Mesma estrutura no footer: `.footer-logo-della` (1.6rem) e `.footer-logo-instore` (**0.72rem**, centralizado).
 
 Estrutura em 2 linhas:
 ```
@@ -350,7 +359,7 @@ curl -s https://novo.dellainstore.com.br/ | grep -oE 'della\.[a-z0-9]+\.(js|css)
 - `.hero-mute-btn { bottom: 2rem; left: 2rem; }` — botão mute no canto inferior esquerdo (longe dos dots)
 - `.produto-acoes` usa `visibility: hidden/visible` (não `display:none`) para transição suave + pointer-events corretos
 - `.variacao-cor { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }` — torna bolinhas brancas visíveis
-- **Hero slider:** timer = 6 segundos (`SLIDE_DURACAO = 6000` em `della.js`). Swipe horizontal (touchstart/touchend) na seção `#hero-slider` troca slides no mobile; threshold 40px e ignora gesto vertical. Dots com `z-index: 10` e `touch-action: manipulation` — `touchstart` nos dots chama `e.stopPropagation()` para não acionar o swipe listener ao mesmo tempo. IDs dos `<video>` foram removidos (eram duplicados, causavam comportamento inconsistente).
+- **Hero slider:** timer = 6 segundos (`SLIDE_DURACAO = 6000` em `della.js`). Swipe horizontal (touchstart/touchend) na seção `#hero-slider` troca slides no mobile; threshold 40px e ignora gesto vertical. Dots com `z-index: 10` e `touch-action: manipulation`. `touchstart` nos dots é **não-passivo** (`{ passive: false }`) e chama `e.stopPropagation()` + `e.preventDefault()` — impede swipe do hero E cancela o ghost-click/atraso de 300ms do iOS. `.hero-slides` tem `pointer-events: none` (container não absorve eventos; slides individuais gerenciam o próprio `pointer-events`). `.hero` tem `touch-action: manipulation`. IDs dos `<video>` foram removidos (eram duplicados, causavam comportamento inconsistente).
 - **Hero vídeo autoplay:** além de `autoplay muted playsinline`, o `della.js` força `.play()` em `loadeddata`/`canplay` — alguns navegadores cancelam autoplay após `v.load()` (que acontece no swap do vídeo mobile).
 - **Look da semana — pontos "+" (fix definitivo):** estrutura de dois divs: `.look-foto-outer` (`position:relative; aspect-ratio:3/4`) é o containing block dos pontos; dentro dele `.look-foto` (`position:absolute; inset:0; overflow:hidden`) só clipa a imagem. Os `.look-ponto` são filhos diretos do `.look-foto-outer` (irmãos do `.look-foto`), nunca dentro dele — assim não são clipeados pelo `overflow:hidden` da imagem.
 - **Look da semana — valores decimais em CSS inline (BUG de localização):** `LANGUAGE_CODE=pt-br + USE_I18N=True` faz `DecimalField` renderizar `56.4` como `56,4` → vírgula quebra parsing CSS em `style="top:56,4%"` e empilha todos os pontos em 0,0. Solução: `{% load l10n %}` + filtro `|unlocalize` em todas as saídas de `ponto1_top/esq`, `ponto2_top/esq`, `ponto3_top/esq` (`templates/home/index.html`).
@@ -444,20 +453,14 @@ Auditoria completa rodada nesta data. Resultado detalhado abaixo — usar como b
   - PagSeguro: reconsultar `notificationCode` via API autenticada com credenciais.
   - Stone: validar header `X-Stone-Signature` (HMAC) antes de processar.
 
-**A1 — Upload sem validação em conteúdo** (`apps/conteudo/models.py` + `apps/produtos/models.py:Categoria.imagem`)
-- `validate_image_upload` (magic bytes, em `apps/core_utils/sanitize.py`) só está em `ProdutoImagem`. Adicionar `validators=[validate_image_upload]` em `BannerPrincipal.foto/foto_mobile`, `MiniBanner.foto`, `LookDaSemana.foto` e `Categoria.imagem`.
+**A1 — Upload sem validação em conteúdo** ✅ RESOLVIDO
+- `validate_image_upload` (magic bytes) adicionado em `BannerPrincipal.clean()`, `MiniBanner.clean()`, `LookDaSemana.clean()` e `Categoria.clean()`.
 
-**A2 — Vídeos de banner (`FileField`) sem validação**
-- `BannerPrincipal.video` e `video_mobile` aceitam qualquer binário até 50MB. Limitar extensões (.mp4/.webm) e tamanho via `FileExtensionValidator` + validador custom.
+**A2 — Vídeos de banner sem validação** ✅ RESOLVIDO
+- `FileExtensionValidator(['mp4', 'webm'])` adicionado em `BannerPrincipal.video` e `video_mobile`.
 
-**M2 — `CSRF_TRUSTED_ORIGINS` explícito em `production.py`**
-```python
-CSRF_TRUSTED_ORIGINS = [
-    'https://novo.dellainstore.com.br',
-    'https://www.dellainstore.com.br',
-    'https://dellainstore.com.br',
-]
-```
+**M2 — `CSRF_TRUSTED_ORIGINS` explícito em `production.py`** ✅ RESOLVIDO
+- Inclui `novo.dellainstore.com.br`, `www.dellainstore.com.br`, `dellainstore.com.br`, `www.dellainstore.com`, `dellainstore.com`.
 
 **M3 — CSP com `'unsafe-inline'` em script/style** (médio prazo)
 - Necessário hoje pela CDN do Tailwind. Compilar Tailwind localmente (`npm run build`) para remover `'unsafe-inline'` de `script-src` e fortalecer proteção XSS.
@@ -474,12 +477,10 @@ CSRF_TRUSTED_ORIGINS = [
 - `next_url` validado (`startswith('/')`) no login
 - Nginx bloqueia `.env`, `.git`, `.sql`, scripts em `/media/`
 
-### Ordem sugerida para a próxima sessão de segurança
-1. C2 (HMAC webhook Bling) — precisa do segredo no painel Bling → Webhooks.
-2. C3 quando ligar pagamento real (reconsulta PagSeguro + HMAC Stone).
-3. A1/A2 (validators de upload em Banner/Mini/Look/Categoria e vídeos).
-4. M2 (`CSRF_TRUSTED_ORIGINS`) antes de migrar para `www.dellainstore.com.br`.
-5. M3 (compilar Tailwind local) em fase posterior.
+### Pendências de segurança para próximas sessões
+1. **C2** (HMAC webhook Bling) — aguardando discussão sobre renovação dos tokens. Precisa: definir `BLING_WEBHOOK_SECRET` no `.env` + cadastrar mesmo segredo no painel Bling → Webhooks.
+2. **C3** quando ligar pagamento real — reconsulta PagSeguro + HMAC Stone.
+3. **M3** (compilar Tailwind local) — em fase posterior, remove `unsafe-inline` do CSP.
 
 ### Helper reutilizável: `_pode_acessar_pedido`
 Se surgir nova view que expõe dados de `Pedido`, usar o mesmo pattern (definido em `apps/pagamentos/views.py`):
@@ -517,7 +518,7 @@ def _pode_acessar_pedido(request, pedido) -> bool:
 ```
 SECRET_KEY=...
 DEBUG=False
-ALLOWED_HOSTS=novo.dellainstore.com.br,www.dellainstore.com.br,dellainstore.com.br,159.203.101.232
+ALLOWED_HOSTS=novo.dellainstore.com.br,www.dellainstore.com.br,dellainstore.com.br,www.dellainstore.com,dellainstore.com,159.203.101.232
 DB_NAME=della_site
 DB_USER=della_user
 DB_PASSWORD=...
@@ -546,12 +547,12 @@ SITE_URL=https://novo.dellainstore.com.br
 
 | Item | Prioridade |
 |---|---|
-| Aumentar `client_max_body_size` para 50M no nginx ao vivo (requer sudo) | Alta |
 | E-mail SMTP (porta 465) — aguardando liberação Digital Ocean | Média |
-| Migrar para `www.dellainstore.com.br` | Quando aprovado |
-| C2 — HMAC webhook Bling (precisa segredo no painel Bling → Webhooks) | Alta (antes de ir ao ar) |
-| A1/A2 — validators de upload em Banner/MiniBanner/LookDaSemana/Categoria e vídeos | Alta (antes de ir ao ar) |
-| M2 — `CSRF_TRUSTED_ORIGINS` em `production.py` antes de migrar domínio | Média |
+| **Redirect `.com` → `.com.br`** — apontar DNS da UOL para `159.203.101.232`, depois configurar Nginx + certbot | Alta (quando DNS propagar) |
+| **Migrar para `www.dellainstore.com.br`** — ver checklist em "Quando Trocar" acima | Quando aprovado |
+| **C2 — HMAC webhook Bling** — aguardando renovação dos tokens; precisará de `BLING_WEBHOOK_SECRET` no `.env` e no painel Bling | Alta (antes de ir ao ar) |
+| **C3 — Webhooks PagSeguro/Stone** — validar HMAC quando ligar pagamento real | Quando ativar pagamentos |
+| **M3 — Compilar Tailwind local** — remove `unsafe-inline` do CSP | Fase posterior |
 | Instagram API (feed real de fotos) | Opcional |
 
 ---
