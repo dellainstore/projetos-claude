@@ -36,6 +36,8 @@ class Categoria(models.Model):
     def clean(self):
         self.nome = sanitize_text(self.nome, max_length=80)
         self.descricao = sanitize_text(self.descricao, max_length=500)
+        if self.imagem and hasattr(self.imagem, 'file'):
+            validate_image_upload(self.imagem)
 
     def save(self, *args, **kwargs):
         if not self.slug:

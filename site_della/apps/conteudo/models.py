@@ -1,6 +1,8 @@
 import uuid
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
+from apps.core_utils.sanitize import validate_image_upload
 
 
 def banner_upload_path(instance, filename):
@@ -36,9 +38,11 @@ class BannerPrincipal(models.Model):
 
     video      = models.FileField(
         'Vídeo (MP4) — Desktop', upload_to=banner_upload_path, blank=True,
+        validators=[FileExtensionValidator(['mp4', 'webm'])],
         help_text='Somente se tipo = Vídeo. Formato MP4, paisagem 1920×1080px, até 50 MB.')
     video_mobile = models.FileField(
         'Vídeo (MP4) — Mobile', upload_to=banner_upload_path, blank=True,
+        validators=[FileExtensionValidator(['mp4', 'webm'])],
         help_text='Opcional. Versão vertical para celular. Retrato 1080×1920px (9:16), até 30 MB.')
     foto       = models.ImageField(
         'Foto — Desktop', upload_to=banner_upload_path, blank=True,
@@ -80,6 +84,10 @@ class BannerPrincipal(models.Model):
                 raise ValidationError({'video': 'Envie o arquivo de vídeo para este slide.'})
             if self.tipo == 'foto' and not self.foto:
                 raise ValidationError({'foto': 'Envie a foto para este slide.'})
+        # Valida magic bytes das imagens enviadas
+        for campo in (self.foto, self.foto_mobile, self.poster):
+            if campo and hasattr(campo, 'file'):
+                validate_image_upload(campo)
 
 
 class MiniBanner(models.Model):
@@ -105,6 +113,10 @@ class MiniBanner(models.Model):
 
     def __str__(self):
         return f'Mini banner — {self.get_posicao_display()}'
+
+    def clean(self):
+        if self.foto and hasattr(self.foto, 'file'):
+            validate_image_upload(self.foto)
 
 
 class LookDaSemana(models.Model):
@@ -160,6 +172,10 @@ class LookDaSemana(models.Model):
         from django.utils.formats import date_format
         data = date_format(self.criado_em, 'd/m/Y') if self.criado_em else ''
         return f'{self.titulo} ({data})'
+
+    def clean(self):
+        if self.foto and hasattr(self.foto, 'file'):
+            validate_image_upload(self.foto)
 
 
 class PaginaEstatica(models.Model):

@@ -118,9 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // touchstart para resposta imediata no mobile (sem delay de 300ms)
       dot.addEventListener('touchstart', (e) => {
         e.stopPropagation(); // impede que o swipe do heroEl interprete esse toque
+        e.preventDefault();  // cancela ghost-click e atraso de 300ms do iOS
         irParaSlide(parseInt(dot.dataset.para, 10));
         iniciarTimer();
-      }, { passive: true });
+      }, { passive: false }); // não-passivo para permitir preventDefault
     });
 
     const heroEl = document.getElementById('hero-slider');

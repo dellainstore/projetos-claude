@@ -26,6 +26,15 @@ CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = False  # False permite que JS leia o token para chamadas AJAX
 CSRF_COOKIE_SAMESITE = 'Lax'
 
+# Origens confiáveis para CSRF (M2 — obrigatório com HTTPS e proxy reverso)
+CSRF_TRUSTED_ORIGINS = [
+    'https://novo.dellainstore.com.br',
+    'https://www.dellainstore.com.br',
+    'https://dellainstore.com.br',
+    'https://www.dellainstore.com',
+    'https://dellainstore.com',
+]
+
 # Bloqueia conteúdo mixed HTTP/HTTPS
 SECURE_BROWSER_XSS_FILTER = True
 
