@@ -10,7 +10,7 @@ Loja virtual de moda feminina premium chamada **D'ELLA Instore**.
 - **Frontend:** HTML/CSS/JS com Tailwind CSS (CDN) + CSS customizado
 - **VPS:** Ubuntu, 1 vCore, 1.9GB RAM, IP `159.203.101.232`
 - **Domínio de testes (ativo):** `novo.dellainstore.com.br` — site no ar com HTTPS ✓
-- **Domínio definitivo:** `www.dellainstore.com.br` (ainda aponta para site antigo — migrar quando aprovado)
+- **Domínio definitivo:** `www.dellainstore.com` — `.com.br` fará redirect 301 para o `.com`
 - **Repositório:** `dellainstore/projetos-claude` no GitHub
 
 ---
@@ -116,28 +116,43 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
-## Quando Trocar para www.dellainstore.com.br
+## Migração para www.dellainstore.com
 
-**Obs:** O domínio principal será `www.dellainstore.com.br`. O domínio `www.dellainstore.com` (também comprado na UOL) fará **redirect 301** para o `.com.br`.
+**Domínio principal:** `www.dellainstore.com`
+**Redirects 301 para o principal:** `dellainstore.com`, `www.dellainstore.com.br`, `dellainstore.com.br`
 
 ### Passo a passo (fazer quando DNS propagar):
-1. No painel UOL, apontar `dellainstore.com` e `www.dellainstore.com` para o IP `159.203.101.232` (registro A)
-2. Editar `/etc/nginx/sites-available/della_site`:
-   - Comentar bloco "testes" (`novo.dellainstore.com.br`)
-   - Descomentar bloco "produção" (`www.dellainstore.com.br`)
-   - Adicionar bloco de redirect 301 para os domínios `.com`:
-     ```nginx
-     server {
-         listen 80;
-         server_name dellainstore.com www.dellainstore.com;
-         return 301 https://www.dellainstore.com.br$request_uri;
-     }
-     ```
-3. `sudo certbot --nginx -d www.dellainstore.com.br -d dellainstore.com.br -d dellainstore.com -d www.dellainstore.com`
-4. Atualizar `ALLOWED_HOSTS` no `.env` (adicionar `dellainstore.com,www.dellainstore.com`)
-5. Atualizar `SITE_URL` no `.env` → `https://www.dellainstore.com.br`
-6. Atualizar `BLING_REDIRECT_URI` no `.env` → `https://www.dellainstore.com.br/bling/callback/`
-7. `sudo systemctl reload nginx && sudo systemctl restart gunicorn_della_site`
+1. No painel UOL, apontar **ambos os domínios** para o IP `159.203.101.232` (registro A):
+   - `dellainstore.com` → `159.203.101.232`
+   - `www.dellainstore.com` → `159.203.101.232`
+   - `dellainstore.com.br` → `159.203.101.232`
+   - `www.dellainstore.com.br` → `159.203.101.232`
+2. Editar `/etc/nginx/sites-available/della_site` — substituir bloco "testes" pelo bloco definitivo:
+   ```nginx
+   # Domínio principal
+   server {
+       listen 443 ssl;
+       server_name www.dellainstore.com;
+       # ... configuração principal do site ...
+   }
+   # Redirects 301 → principal
+   server {
+       listen 80;
+       server_name dellainstore.com www.dellainstore.com dellainstore.com.br www.dellainstore.com.br;
+       return 301 https://www.dellainstore.com$request_uri;
+   }
+   server {
+       listen 443 ssl;
+       server_name dellainstore.com dellainstore.com.br www.dellainstore.com.br;
+       return 301 https://www.dellainstore.com$request_uri;
+   }
+   ```
+3. `sudo certbot --nginx -d www.dellainstore.com -d dellainstore.com -d www.dellainstore.com.br -d dellainstore.com.br`
+4. Atualizar no `.env`:
+   - `ALLOWED_HOSTS=www.dellainstore.com,dellainstore.com,www.dellainstore.com.br,dellainstore.com.br,159.203.101.232`
+   - `SITE_URL=https://www.dellainstore.com`
+   - `BLING_REDIRECT_URI=https://www.dellainstore.com/bling/callback/`
+5. `sudo systemctl reload nginx && sudo systemctl restart gunicorn_della_site`
 
 ---
 
@@ -548,8 +563,7 @@ SITE_URL=https://novo.dellainstore.com.br
 | Item | Prioridade |
 |---|---|
 | E-mail SMTP (porta 465) — aguardando liberação Digital Ocean | Média |
-| **Redirect `.com` → `.com.br`** — apontar DNS da UOL para `159.203.101.232`, depois configurar Nginx + certbot | Alta (quando DNS propagar) |
-| **Migrar para `www.dellainstore.com.br`** — ver checklist em "Quando Trocar" acima | Quando aprovado |
+| **Migrar para `www.dellainstore.com`** — apontar DNS `.com` e `.com.br` na UOL para `159.203.101.232`, configurar Nginx + certbot, atualizar `.env`. Ver checklist em "Migração" acima | Quando aprovado |
 | **C2 — HMAC webhook Bling** — aguardando renovação dos tokens; precisará de `BLING_WEBHOOK_SECRET` no `.env` e no painel Bling | Alta (antes de ir ao ar) |
 | **C3 — Webhooks PagSeguro/Stone** — validar HMAC quando ligar pagamento real | Quando ativar pagamentos |
 | **M3 — Compilar Tailwind local** — remove `unsafe-inline` do CSP | Fase posterior |
