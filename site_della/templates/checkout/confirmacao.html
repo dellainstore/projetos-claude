@@ -8,7 +8,7 @@
 {% block conteudo %}
 <div class="confirmacao-wrapper">
 
-  {# ── Cabeçalho de sucesso ─────────────────────────────────────────────── #}
+  
   <div class="confirmacao-topo">
     <div class="confirmacao-icone">
       <i class="fas fa-check"></i>
@@ -23,7 +23,7 @@
 
   <div class="confirmacao-body">
 
-    {# ── Pix ──────────────────────────────────────────────────────────── #}
+    
     {% if pedido.forma_pagamento == 'pix' %}
     <section class="confirmacao-pix" aria-labelledby="titulo-pix">
       <h2 id="titulo-pix" class="confirmacao-secao-titulo">
@@ -101,7 +101,7 @@
     </section>
     {% endif %}
 
-    {# ── Detalhes ─────────────────────────────────────────────────────── #}
+    
     <section class="confirmacao-detalhes" aria-labelledby="titulo-detalhes">
       <h2 id="titulo-detalhes" class="confirmacao-secao-titulo">
         <i class="fas fa-receipt"></i> Detalhes do pedido

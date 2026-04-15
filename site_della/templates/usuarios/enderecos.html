@@ -1,7 +1,105 @@
 {% extends 'base.html' %}
+{% block titulo %}Meus Endereços — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-area">
+  <div class="conta-area-inner">
+
+    <aside class="conta-sidebar">
+      <div class="conta-sidebar-perfil">
+        <div class="conta-avatar">{{ request.user.nome|first|upper }}</div>
+        <div>
+          <p class="conta-sidebar-nome">{{ request.user.get_full_name }}</p>
+          <p class="conta-sidebar-email">{{ request.user.email }}</p>
+        </div>
+      </div>
+      <nav class="conta-sidebar-nav">
+        <a href="{% url 'usuarios:minha_conta' %}" class="conta-nav-link">
+          <i class="fas fa-house"></i> Início
+        </a>
+        <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-nav-link">
+          <i class="fas fa-bag-shopping"></i> Meus pedidos
+        </a>
+        <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link ativo">
+          <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
+          <i class="far fa-heart"></i> Lista de desejos
+        </a>
+        <a href="{% url 'usuarios:editar_perfil' %}" class="conta-nav-link">
+          <i class="far fa-user"></i> Editar perfil
+        </a>
+        <a href="{% url 'usuarios:logout' %}" class="conta-nav-link conta-nav-link--sair">
+          <i class="fas fa-arrow-right-from-bracket"></i> Sair
+        </a>
+      </nav>
+    </aside>
+
+    <section class="conta-conteudo">
+
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="conta-alerta conta-alerta--{{ msg.tags }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <div class="conta-secao-header">
+        <h2 class="conta-secao-titulo">Meus Endereços</h2>
+        <a href="{% url 'usuarios:novo_endereco' %}" class="btn-conta-primario btn-conta-primario--sm">
+          <i class="fas fa-plus"></i> Novo endereço
+        </a>
+      </div>
+
+      {% if enderecos %}
+        <div class="conta-enderecos-grid">
+          {% for end in enderecos %}
+            <div class="conta-endereco-card{% if end.principal %} principal{% endif %}">
+              <div class="conta-endereco-topo">
+                <span class="conta-end-apelido">
+                  <i class="fas fa-location-dot"></i> {{ end.apelido }}
+                </span>
+                {% if end.principal %}
+                  <span class="conta-badge-principal">Principal</span>
+                {% endif %}
+              </div>
+              <p>{{ end.logradouro }}, {{ end.numero }}{% if end.complemento %}, {{ end.complemento }}{% endif %}</p>
+              <p>{{ end.bairro }}</p>
+              <p>{{ end.cidade }} / {{ end.estado }}</p>
+              <p>CEP: {{ end.get_cep_formatado }}</p>
+
+              <div class="conta-endereco-acoes">
+                <a href="{% url 'usuarios:editar_endereco' end.pk %}" class="conta-btn-acao">
+                  <i class="fas fa-pen"></i> Editar
+                </a>
+                {% if not end.principal %}
+                  <form method="post" action="{% url 'usuarios:definir_principal' end.pk %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="conta-btn-acao">
+                      <i class="far fa-star"></i> Tornar principal
+                    </button>
+                  </form>
+                  <form method="post" action="{% url 'usuarios:excluir_endereco' end.pk %}"
+                        onsubmit="return confirm('Remover este endereço?')">
+                    {% csrf_token %}
+                    <button type="submit" class="conta-btn-acao conta-btn-acao--perigo">
+                      <i class="fas fa-trash"></i> Remover
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="conta-vazio-bloco">
+          <i class="fas fa-location-dot conta-vazio-icon"></i>
+          <p>Nenhum endereço cadastrado ainda.</p>
+          <a href="{% url 'usuarios:novo_endereco' %}" class="btn-conta-primario">Adicionar endereço</a>
+        </div>
+      {% endif %}
+
+    </section>
+  </div>
+</main>
 {% endblock %}

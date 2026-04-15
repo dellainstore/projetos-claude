@@ -1,7 +1,64 @@
 {% extends 'base.html' %}
+{% block titulo %}Nova Senha — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-page">
+  <div class="conta-box">
+
+    {% if token_invalido %}
+      <div class="conta-header">
+        <h1 class="conta-titulo">Link inválido</h1>
+      </div>
+      <div class="conta-alerta conta-alerta--error">
+        <i class="far fa-circle-xmark"></i>
+        Este link de recuperação é inválido ou já expirou.
+      </div>
+      <p class="conta-texto-centro" style="margin-top:1.5rem;">
+        <a href="{% url 'usuarios:recuperar_senha' %}" class="btn-conta-primario">Solicitar novo link</a>
+      </p>
+
+    {% else %}
+      <div class="conta-header">
+        <h1 class="conta-titulo">Nova Senha</h1>
+        <p class="conta-subtitulo">Crie uma nova senha para sua conta.</p>
+      </div>
+
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="conta-alerta conta-alerta--{{ msg.tags }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+
+      {% if form.non_field_errors %}
+        <div class="conta-alerta conta-alerta--error">
+          {% for erro in form.non_field_errors %}{{ erro }}{% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <div class="conta-campo">
+          <label class="conta-label">Nova senha</label>
+          {{ form.senha }}
+          {% if form.senha.errors %}
+            {% for e in form.senha.errors %}<span class="conta-erro">{{ e }}</span>{% endfor %}
+          {% endif %}
+        </div>
+
+        <div class="conta-campo">
+          <label class="conta-label">Confirmar nova senha</label>
+          {{ form.confirmar_senha }}
+          {% if form.confirmar_senha.errors %}
+            <span class="conta-erro">{{ form.confirmar_senha.errors.0 }}</span>
+          {% endif %}
+        </div>
+
+        <button type="submit" class="btn-conta-primario">Redefinir senha</button>
+      </form>
+    {% endif %}
+
+  </div>
+</main>
 {% endblock %}

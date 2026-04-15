@@ -1,7 +1,155 @@
 {% extends 'base.html' %}
+{% block titulo %}{{ titulo }} — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-area">
+  <div class="conta-area-inner">
+
+    <aside class="conta-sidebar">
+      <div class="conta-sidebar-perfil">
+        <div class="conta-avatar">{{ request.user.nome|first|upper }}</div>
+        <div>
+          <p class="conta-sidebar-nome">{{ request.user.get_full_name }}</p>
+          <p class="conta-sidebar-email">{{ request.user.email }}</p>
+        </div>
+      </div>
+      <nav class="conta-sidebar-nav">
+        <a href="{% url 'usuarios:minha_conta' %}" class="conta-nav-link">
+          <i class="fas fa-house"></i> Início
+        </a>
+        <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-nav-link">
+          <i class="fas fa-bag-shopping"></i> Meus pedidos
+        </a>
+        <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link ativo">
+          <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
+          <i class="far fa-heart"></i> Lista de desejos
+        </a>
+        <a href="{% url 'usuarios:editar_perfil' %}" class="conta-nav-link">
+          <i class="far fa-user"></i> Editar perfil
+        </a>
+        <a href="{% url 'usuarios:logout' %}" class="conta-nav-link conta-nav-link--sair">
+          <i class="fas fa-arrow-right-from-bracket"></i> Sair
+        </a>
+      </nav>
+    </aside>
+
+    <section class="conta-conteudo">
+      <h2 class="conta-secao-titulo">{{ titulo }}</h2>
+
+      <div class="conta-card">
+        <form method="post" novalidate id="form-endereco">
+          {% csrf_token %}
+
+          <div class="conta-grid-2">
+            <div class="conta-campo">
+              <label class="conta-label">Apelido</label>
+              {{ form.apelido }}
+              {% if form.apelido.errors %}<span class="conta-erro">{{ form.apelido.errors.0 }}</span>{% endif %}
+            </div>
+            <div class="conta-campo">
+              <label class="conta-label">Tipo</label>
+              {{ form.tipo }}
+            </div>
+          </div>
+
+          <div class="conta-campo">
+            <label class="conta-label">CEP *</label>
+            <div class="conta-cep-row">
+              {{ form.cep }}
+              <button type="button" id="btn-buscar-cep" class="btn-conta-secundario">
+                <i class="fas fa-magnifying-glass"></i> Buscar
+              </button>
+            </div>
+            {% if form.cep.errors %}<span class="conta-erro">{{ form.cep.errors.0 }}</span>{% endif %}
+          </div>
+
+          <div id="campos-endereco">
+            <div class="conta-campo">
+              <label class="conta-label">Logradouro *</label>
+              {{ form.logradouro }}
+              {% if form.logradouro.errors %}<span class="conta-erro">{{ form.logradouro.errors.0 }}</span>{% endif %}
+            </div>
+
+            <div class="conta-grid-2">
+              <div class="conta-campo">
+                <label class="conta-label">Número *</label>
+                {{ form.numero }}
+                {% if form.numero.errors %}<span class="conta-erro">{{ form.numero.errors.0 }}</span>{% endif %}
+              </div>
+              <div class="conta-campo">
+                <label class="conta-label">Complemento</label>
+                {{ form.complemento }}
+              </div>
+            </div>
+
+            <div class="conta-grid-3">
+              <div class="conta-campo">
+                <label class="conta-label">Bairro *</label>
+                {{ form.bairro }}
+                {% if form.bairro.errors %}<span class="conta-erro">{{ form.bairro.errors.0 }}</span>{% endif %}
+              </div>
+              <div class="conta-campo">
+                <label class="conta-label">Cidade *</label>
+                {{ form.cidade }}
+              </div>
+              <div class="conta-campo">
+                <label class="conta-label">Estado *</label>
+                {{ form.estado }}
+              </div>
+            </div>
+          </div>
+
+          <div class="conta-campo">
+            <label class="conta-lembrar">
+              {{ form.principal }}
+              <span>Definir como endereço principal</span>
+            </label>
+          </div>
+
+          <div class="conta-acoes">
+            <button type="submit" class="btn-conta-primario">Salvar endereço</button>
+            <a href="{% url 'usuarios:enderecos' %}" class="btn-conta-secundario">Cancelar</a>
+          </div>
+
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+{% endblock %}
+
+{% block js_extra %}
+<script>
+// Máscara CEP
+document.getElementById('id_end_cep')?.addEventListener('input', function(){
+  let v = this.value.replace(/\D/g,'').slice(0,8);
+  if(v.length > 5) v = v.replace(/(\d{5})(\d{1,3})/,'$1-$2');
+  this.value = v;
+});
+
+// Buscar CEP via ViaCEP
+document.getElementById('btn-buscar-cep')?.addEventListener('click', async function(){
+  const cep = document.getElementById('id_end_cep').value.replace(/\D/g,'');
+  if(cep.length !== 8){ alert('CEP inválido.'); return; }
+  this.textContent = 'Buscando...';
+  try {
+    const r = await fetch(`/carrinho/cep/?cep=${cep}`);
+    const d = await r.json();
+    if(d.erro){ alert('CEP não encontrado.'); return; }
+    document.getElementById('id_end_logradouro').value = d.logradouro || '';
+    document.getElementById('id_end_bairro').value = d.bairro || '';
+    document.getElementById('id_end_cidade').value = d.localidade || '';
+    document.getElementById('id_end_estado').value = d.uf || '';
+    document.getElementById('campos-endereco').style.display = 'block';
+    document.querySelector('[name="numero"]')?.focus();
+  } catch(e) {
+    alert('Erro ao buscar CEP.');
+  } finally {
+    this.innerHTML = '<i class="fas fa-magnifying-glass"></i> Buscar';
+  }
+});
+</script>
 {% endblock %}

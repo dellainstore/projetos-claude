@@ -4,9 +4,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ─── Navbar: transparente no hero, sólida ao rolar ─────────────────────────
   const navbar = document.getElementById('navbar');
+  // Se a página já iniciou com navbar sólida (ex: home com hero abaixo do menu),
+  // não aplicar o efeito de transparência ao scroll.
+  const navbarComEfeitoScroll = navbar && navbar.classList.contains('transparente');
 
   function atualizarNavbar() {
-    if (!navbar) return;
+    if (!navbar || !navbarComEfeitoScroll) return;
     if (window.scrollY > 60) {
       navbar.classList.remove('transparente');
       navbar.classList.add('solida');
@@ -19,6 +22,149 @@ document.addEventListener('DOMContentLoaded', () => {
   if (navbar) {
     atualizarNavbar();
     window.addEventListener('scroll', atualizarNavbar, { passive: true });
+  }
+
+  // ─── Hero: swap vídeo mobile antes do autoplay ─────────────────────────────
+  if (window.innerWidth < 768) {
+    document.querySelectorAll('.hero-video[data-src-mobile]').forEach(function(v) {
+      const src = v.querySelector('source');
+      if (src) { src.src = v.dataset.srcMobile; v.load(); }
+    });
+  }
+
+  // Força play em todos os vídeos do hero (alguns navegadores bloqueiam autoplay
+  // após .load(); chamar .play() explicitamente com muted=true é permitido)
+  document.querySelectorAll('.hero-video').forEach(function(v) {
+    v.muted = true;
+    const tryPlay = () => v.play().catch(() => {});
+    tryPlay();
+    v.addEventListener('loadeddata', tryPlay, { once: true });
+    v.addEventListener('canplay', tryPlay, { once: true });
+  });
+
+  // ─── Hero Slider ───────────────────────────────────────────────────────────
+  const heroSlides    = document.querySelectorAll('.hero-slide');
+  const heroDots      = document.querySelectorAll('.hero-dot');
+  const heroProgress  = document.getElementById('hero-progress');
+  const SLIDE_DURACAO = 6000; // 6 segundos por slide
+  let slideAtual  = 0;
+  let sliderTimer = null;
+  let progressTimer = null;
+
+  function iniciarProgressBar() {
+    if (!heroProgress) return;
+    heroProgress.style.transition = 'none';
+    heroProgress.style.width = '0%';
+    // força reflow antes de iniciar a animação
+    void heroProgress.offsetWidth;
+    heroProgress.style.transition = `width ${SLIDE_DURACAO}ms linear`;
+    heroProgress.style.width = '100%';
+  }
+
+  function irParaSlide(idx) {
+    if (!heroSlides.length) return;
+
+    // Slide anterior
+    const slideAnt = heroSlides[slideAtual];
+    heroDots[slideAtual]?.classList.remove('ativo');
+    heroDots[slideAtual]?.setAttribute('aria-selected', 'false');
+    slideAnt.classList.remove('ativo');
+
+    // Pausar vídeo se estava no slide de vídeo
+    const videoAnt = slideAnt.querySelector('video');
+    if (videoAnt) videoAnt.pause();
+
+    slideAtual = idx;
+    const slideNovo = heroSlides[slideAtual];
+    slideNovo.classList.add('ativo');
+    heroDots[slideAtual]?.classList.add('ativo');
+    heroDots[slideAtual]?.setAttribute('aria-selected', 'true');
+
+    // Tocar vídeo no novo slide se for vídeo
+    const videoNovo = slideNovo.querySelector('video');
+    if (videoNovo) {
+      videoNovo.currentTime = 0;
+      videoNovo.play().catch(() => {});
+    }
+
+    iniciarProgressBar();
+  }
+
+  function proximoSlide() {
+    const prox = (slideAtual + 1) % heroSlides.length;
+    irParaSlide(prox);
+  }
+
+  function iniciarTimer() {
+    clearInterval(sliderTimer);
+    sliderTimer = setInterval(proximoSlide, SLIDE_DURACAO);
+    iniciarProgressBar();
+  }
+
+  function pararTimer() {
+    clearInterval(sliderTimer);
+    if (heroProgress) {
+      heroProgress.style.transition = 'none';
+    }
+  }
+
+  if (heroSlides.length > 1) {
+    heroDots.forEach(dot => {
+      // click para desktop
+      dot.addEventListener('click', () => {
+        irParaSlide(parseInt(dot.dataset.para, 10));
+        iniciarTimer();
+      });
+      // touchstart para resposta imediata no mobile (sem delay de 300ms)
+      dot.addEventListener('touchstart', (e) => {
+        e.stopPropagation(); // impede que o swipe do heroEl interprete esse toque
+        irParaSlide(parseInt(dot.dataset.para, 10));
+        iniciarTimer();
+      }, { passive: true });
+    });
+
+    const heroEl = document.getElementById('hero-slider');
+    if (heroEl) {
+      heroEl.addEventListener('mouseenter', pararTimer);
+      heroEl.addEventListener('mouseleave', iniciarTimer);
+
+      // Swipe horizontal (mobile) — ignora se o toque foi num dot
+      let touchStartX = 0, touchStartY = 0, touchAtivo = false;
+      heroEl.addEventListener('touchstart', (e) => {
+        if (e.target.classList.contains('hero-dot')) return; // dot cuida de si
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchAtivo = true;
+      }, { passive: true });
+      heroEl.addEventListener('touchend', (e) => {
+        if (!touchAtivo) return;
+        touchAtivo = false;
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+        const total = heroSlides.length;
+        const prox = dx < 0 ? (slideAtual + 1) % total : (slideAtual - 1 + total) % total;
+        irParaSlide(prox);
+        iniciarTimer();
+      }, { passive: true });
+    }
+
+    iniciarTimer();
+  }
+
+  // Se o primeiro slide tem vídeo sem loop, avançar ao terminar
+  const primeiroVideoHero = heroSlides.length > 0
+    ? heroSlides[0].querySelector('video')
+    : null;
+  if (primeiroVideoHero && heroSlides.length > 1) {
+    let videoJaAvancou = false;
+    primeiroVideoHero.addEventListener('ended', () => {
+      if (videoJaAvancou) return;
+      videoJaAvancou = true;
+      clearInterval(sliderTimer);
+      proximoSlide();
+      iniciarTimer();
+    });
   }
 
   // ─── Hero: mute/unmute do vídeo ────────────────────────────────────────────
@@ -277,12 +423,133 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ─── Menu mobile ──────────────────────────────────────────────────────────
-  const btnMenuMobile   = document.getElementById('btn-menu-mobile');
-  const menuMobilePanel = document.getElementById('menu-mobile');
+  const btnMenuMobile     = document.getElementById('btn-menu-mobile');
+  const btnFecharMenuMob  = document.getElementById('btn-menu-mobile-fechar');
+  const menuMobilePanel   = document.getElementById('menu-mobile');
+
+  function abrirMenuMobile() {
+    menuMobilePanel?.classList.add('aberto');
+    btnMenuMobile?.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+  }
+  function fecharMenuMobile() {
+    menuMobilePanel?.classList.remove('aberto');
+    btnMenuMobile?.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+  }
 
   btnMenuMobile?.addEventListener('click', () => {
-    const aberto = menuMobilePanel?.classList.toggle('aberto');
-    btnMenuMobile.setAttribute('aria-expanded', aberto);
+    if (menuMobilePanel?.classList.contains('aberto')) {
+      fecharMenuMobile();
+    } else {
+      abrirMenuMobile();
+    }
+  });
+  btnFecharMenuMob?.addEventListener('click', fecharMenuMobile);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && menuMobilePanel?.classList.contains('aberto')) fecharMenuMobile();
+  });
+
+  // ─── Look da semana: tap no "+" abre/fecha o card (apenas touch) ──────────
+  // Desktop segue com :hover. Em celular, o primeiro tap abre o card; tap no
+  // "+" de novo fecha; tap fora fecha. Tap no próprio card navega ao produto.
+  if (window.matchMedia('(hover: none)').matches) {
+    const pontos = document.querySelectorAll('.look-ponto');
+    if (pontos.length) {
+      pontos.forEach(p => {
+        p.addEventListener('click', (e) => {
+          if (e.target.closest('.look-ponto-tooltip')) return;
+          e.preventDefault();
+          const jaAberto = p.classList.contains('aberto');
+          pontos.forEach(o => o.classList.remove('aberto'));
+          if (!jaAberto) p.classList.add('aberto');
+        });
+      });
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.look-ponto')) {
+          pontos.forEach(p => p.classList.remove('aberto'));
+        }
+      });
+    }
+  }
+
+  // ─── Sidebar: árvore de categorias ────────────────────────────────────────
+  document.querySelectorAll('.sidebar-cat-mae').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const subcats = btn.nextElementSibling;
+      if (!subcats) return;
+      const aberta = subcats.classList.toggle('aberta');
+      btn.classList.toggle('expandida', aberta);
+    });
+  });
+
+  // ─── Galeria do produto: setas + swipe ─────────────────────────────────────
+  const galeriaPrincipal = document.querySelector('.galeria-principal');
+  const galeriaFoto      = document.getElementById('foto-principal');
+  const galeriaThumbs    = document.querySelectorAll('.galeria-thumb');
+
+  if (galeriaThumbs.length > 1 && galeriaPrincipal) {
+    let indexAtual = 0;
+
+    function irParaFoto(idx) {
+      const total = galeriaThumbs.length;
+      indexAtual = (idx + total) % total;
+      const thumb = galeriaThumbs[indexAtual];
+      if (galeriaFoto) {
+        galeriaFoto.src = thumb.dataset.src;
+        galeriaFoto.alt = thumb.dataset.alt;
+      }
+      galeriaThumbs.forEach(t => t.classList.remove('ativa'));
+      thumb.classList.add('ativa');
+    }
+
+    const btnPrev = document.querySelector('.galeria-nav-prev');
+    const btnNext = document.querySelector('.galeria-nav-next');
+
+    btnPrev?.addEventListener('click', () => irParaFoto(indexAtual - 1));
+    btnNext?.addEventListener('click', () => irParaFoto(indexAtual + 1));
+
+    // Sincroniza indexAtual quando usuário clica em uma thumb
+    galeriaThumbs.forEach((thumb, idx) => {
+      thumb.addEventListener('click', () => { indexAtual = idx; });
+    });
+
+    // Swipe horizontal na foto principal (mobile)
+    let gStartX = 0, gStartY = 0, gAtivo = false;
+    galeriaPrincipal.addEventListener('touchstart', (e) => {
+      gStartX = e.touches[0].clientX;
+      gStartY = e.touches[0].clientY;
+      gAtivo = true;
+    }, { passive: true });
+    galeriaPrincipal.addEventListener('touchend', (e) => {
+      if (!gAtivo) return;
+      gAtivo = false;
+      const dx = e.changedTouches[0].clientX - gStartX;
+      const dy = e.changedTouches[0].clientY - gStartY;
+      if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+      irParaFoto(dx < 0 ? indexAtual + 1 : indexAtual - 1);
+    }, { passive: true });
+  }
+
+  // ─── Modal: guia de tamanhos ──────────────────────────────────────────────
+  const linkGuia   = document.getElementById('link-guia-tamanhos');
+  const modalGuia  = document.getElementById('modal-guia-tamanhos');
+  const btnFecharModal = document.getElementById('btn-fechar-modal-guia');
+
+  function abrirModal() {
+    modalGuia?.classList.add('aberto');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function fecharModal() {
+    modalGuia?.classList.remove('aberto');
+    document.body.style.overflow = '';
+  }
+
+  linkGuia?.addEventListener('click', (e) => { e.preventDefault(); abrirModal(); });
+  btnFecharModal?.addEventListener('click', fecharModal);
+  modalGuia?.addEventListener('click', (e) => {
+    if (e.target === modalGuia) fecharModal();
   });
 
 });

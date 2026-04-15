@@ -1,98 +1,97 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static l10n %}
 
-{% block titulo %}Della Instore — Moda Feminina Premium{% endblock %}
-{% block navbar_class %}transparente{% endblock %}
+{% block titulo %}D'ELLA Instore — Moda Feminina Premium{% endblock %}
+{% block navbar_class %}solida{% endblock %}
 
 {% block conteudo %}
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   HERO — Vídeo fullscreen
-   ══════════════════════════════════════════════════════════════════════════════ #}
-<section class="hero" aria-label="Banner principal">
 
-  {# Vídeo de fundo — troque pelo seu vídeo real #}
-  <video id="hero-video" class="hero-video" autoplay loop muted playsinline
-         poster="{% static 'images/brand/hero-poster.jpg' %}"
-         aria-hidden="true">
-    <source src="{% static 'images/brand/hero.mp4' %}" type="video/mp4">
-  </video>
+<section class="hero" id="hero-slider" aria-label="Banner principal">
 
-  <div class="hero-overlay" aria-hidden="true"></div>
+  {% if banners %}
+  <div class="hero-slides" id="hero-slides-container">
+    {% for banner in banners %}
+    <div class="hero-slide {% if forloop.first %}ativo{% endif %}" data-slide="{{ forloop.counter0 }}">
 
-  <div class="hero-content">
-    <p class="hero-pretitulo fade-in">Nova Coleção 2025</p>
-    <h1 class="hero-titulo fade-in fade-in-delay-1">
-      Elegância que<br><em>veste a alma</em>
-    </h1>
-    <p class="hero-subtitulo fade-in fade-in-delay-2">
-      Peças únicas para mulheres únicas
-    </p>
-    <a href="{% url 'produtos:loja' %}" class="btn-hero fade-in fade-in-delay-3">
-      Explorar coleção <i class="fas fa-arrow-right text-xs"></i>
-    </a>
+      {% if banner.tipo == 'video' and banner.video %}
+        <video class="hero-video" autoplay muted playsinline
+               {% if banner.poster %}poster="{{ banner.poster.url }}"{% endif %}
+               {% if banner.video_mobile %}data-src-mobile="{{ banner.video_mobile.url }}"{% endif %}
+               aria-hidden="true">
+          <source src="{{ banner.video.url }}" type="video/mp4">
+        </video>
+      {% elif banner.foto %}
+        <picture>
+          {% if banner.foto_mobile %}
+            <source media="(max-width: 767px)" srcset="{{ banner.foto_mobile.url }}">
+          {% endif %}
+          <img src="{{ banner.foto.url }}" alt="{{ banner.titulo }}"
+               class="hero-foto" loading="eager" aria-hidden="true">
+        </picture>
+      {% endif %}
+
+      <div class="hero-overlay" aria-hidden="true"></div>
+      {% if banner.pretitulo or banner.titulo or banner.subtitulo or banner.texto_botao %}
+      <div class="hero-content">
+        {% if banner.pretitulo %}<p class="hero-pretitulo">{{ banner.pretitulo }}</p>{% endif %}
+        {% if banner.titulo %}
+          {% if forloop.first %}<h1 class="hero-titulo">{% else %}<h2 class="hero-titulo">{% endif %}
+            {% if banner.titulo_italico %}
+              {{ banner.titulo|cut:banner.titulo_italico }}<em>{{ banner.titulo_italico }}</em>
+            {% else %}
+              {{ banner.titulo }}
+            {% endif %}
+          {% if forloop.first %}</h1>{% else %}</h2>{% endif %}
+        {% endif %}
+        {% if banner.subtitulo %}<p class="hero-subtitulo">{{ banner.subtitulo }}</p>{% endif %}
+        {% if banner.texto_botao %}
+        <a href="{{ banner.url_botao }}" class="btn-hero">
+          {{ banner.texto_botao }} <i class="fas fa-arrow-right text-xs"></i>
+        </a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
   </div>
 
-  {# Botão mute #}
+  {% if banners|length > 1 %}
+  <div class="hero-dots" role="tablist" aria-label="Navegar entre slides">
+    {% for banner in banners %}
+    <button class="hero-dot {% if forloop.first %}ativo{% endif %}"
+            data-para="{{ forloop.counter0 }}"
+            role="tab"
+            aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+            aria-label="Slide {{ forloop.counter }}"></button>
+    {% endfor %}
+  </div>
+  <div id="hero-progress" class="hero-progress" aria-hidden="true"></div>
+  {% endif %}
+
+  {% else %}
+  <div class="hero-slides" id="hero-slides-container">
+    <div class="hero-slide ativo" data-slide="0">
+      <video id="hero-video" class="hero-video" autoplay muted playsinline
+             poster="{% static 'images/brand/hero-poster.jpg' %}" aria-hidden="true">
+        <source src="{% static 'images/brand/hero.mp4' %}" type="video/mp4">
+      </video>
+      <div class="hero-overlay" aria-hidden="true"></div>
+    </div>
+  </div>
+  {% endif %}
+
   <button id="btn-mute" class="hero-mute-btn" aria-label="Ativar/desativar som do vídeo">
     <i id="mute-icon" class="fas fa-volume-mute"></i>
   </button>
 
-  {# Hint de scroll #}
-  <div class="hero-scroll-hint" aria-hidden="true">
-    <span>Rolar</span>
-    <i class="fas fa-chevron-down text-xs"></i>
-  </div>
-
 </section>
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   CATEGORIAS
-   ══════════════════════════════════════════════════════════════════════════════ #}
-<section aria-labelledby="titulo-categorias">
-  <div class="secao">
-    <header class="secao-header fade-in">
-      <p class="subtitulo-secao">Explore</p>
-      <h2 class="titulo-secao" id="titulo-categorias">Nossas categorias</h2>
-    </header>
-
-    <div class="categorias-grid">
-      {% for cat in categorias_destaque %}
-        <a href="{% url 'produtos:loja_categoria' cat.slug %}" class="categoria-card fade-in fade-in-delay-{{ forloop.counter }}"
-           aria-label="Ver categoria {{ cat.nome }}">
-          {% if cat.imagem %}
-            <img src="{{ cat.imagem.url }}" alt="{{ cat.nome }}" loading="lazy">
-          {% else %}
-            <img src="{% static 'images/brand/categoria-placeholder.jpg' %}" alt="{{ cat.nome }}" loading="lazy">
-          {% endif %}
-          <div class="categoria-overlay">
-            <span class="categoria-nome">{{ cat.nome }}</span>
-            <span class="categoria-link">
-              Ver coleção <i class="fas fa-arrow-right text-xs"></i>
-            </span>
-          </div>
-        </a>
-      {% empty %}
-        {# Placeholders enquanto não há categorias cadastradas #}
-        {% for nome in categorias_placeholder %}
-          <div class="categoria-card fade-in">
-            <img src="{% static 'images/brand/categoria-placeholder.jpg' %}" alt="{{ nome }}" loading="lazy">
-            <div class="categoria-overlay">
-              <span class="categoria-nome">{{ nome }}</span>
-              <span class="categoria-link">Ver coleção <i class="fas fa-arrow-right text-xs"></i></span>
-            </div>
-          </div>
-        {% endfor %}
-      {% endfor %}
-    </div>
-  </div>
-</section>
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   PRODUTOS EM DESTAQUE
-   ══════════════════════════════════════════════════════════════════════════════ #}
+
+
 <section aria-labelledby="titulo-destaque">
   <div class="secao" style="padding-top: 2rem;">
     <header class="secao-header fade-in">
@@ -104,53 +103,49 @@
     <div class="produtos-grid">
       {% for produto in produtos_destaque %}
         <article class="produto-card fade-in fade-in-delay-{{ forloop.counter }}" aria-labelledby="produto-{{ produto.id }}">
-          <a href="{{ produto.get_absolute_url }}" class="produto-foto" aria-label="Ver {{ produto.nome }}">
+          <div class="produto-imagem-wrapper">
+            <a href="{{ produto.get_absolute_url }}" class="produto-foto" aria-label="Ver {{ produto.nome }}">
 
-            {# Badges #}
-            {% if produto.em_promocao %}
-              <span class="produto-badge badge-promo" aria-label="Em promoção">-{{ produto.percentual_desconto }}%</span>
-            {% elif produto.novo %}
-              <span class="produto-badge badge-novo" aria-label="Novo">Novo</span>
-            {% endif %}
-
-            {# Foto principal #}
-            {% with produto.imagem_principal as img %}
-              {% if img %}
-                <img src="{{ img.imagem.url }}" alt="{{ img.alt|default:produto.nome }}"
-                     class="foto-principal" loading="lazy">
-              {% else %}
-                <img src="{% static 'images/brand/produto-placeholder.jpg' %}" alt="{{ produto.nome }}"
-                     class="foto-principal" loading="lazy">
+              {% if produto.em_promocao %}
+                <span class="produto-badge badge-promo" aria-label="Em promoção">-{{ produto.percentual_desconto }}%</span>
+              {% elif produto.novo %}
+                <span class="produto-badge badge-novo" aria-label="Novo">Novo</span>
               {% endif %}
-            {% endwith %}
 
-            {# Foto hover (segunda imagem) #}
-            {% with produto.imagens.all|slice:"1:2" as imgs_hover %}
-              {% for img in imgs_hover %}
-                <img src="{{ img.imagem.url }}" alt="{{ produto.nome }} — foto alternativa"
-                     class="foto-hover" loading="lazy" aria-hidden="true">
-              {% endfor %}
-            {% endwith %}
+              {% with produto.imagem_principal as img %}
+                {% if img %}
+                  <img src="{{ img.imagem.url }}" alt="{{ img.alt|default:produto.nome }}"
+                       class="foto-principal" loading="lazy">
+                {% else %}
+                  <img src="{% static 'images/brand/produto-placeholder.jpg' %}" alt="{{ produto.nome }}"
+                       class="foto-principal" loading="lazy">
+                {% endif %}
+              {% endwith %}
 
-          </a>
+              {% with produto.imagens.all|slice:"1:2" as imgs_hover %}
+                {% for img in imgs_hover %}
+                  <img src="{{ img.imagem.url }}" alt="{{ produto.nome }} — foto alternativa"
+                       class="foto-hover" loading="lazy" aria-hidden="true">
+                {% endfor %}
+              {% endwith %}
 
-          {# Ações sobre a foto #}
-          <div class="produto-acoes" aria-hidden="true">
-            <button class="btn-add-carrinho"
-                    data-produto-id="{{ produto.id }}"
-                    aria-label="Adicionar {{ produto.nome }} ao carrinho">
-              Adicionar
-            </button>
-            <button class="btn-wishlist {% if produto.id in wishlist_ids %}ativo{% endif %}"
-                    data-wishlist-id="{{ produto.id }}"
-                    aria-label="{% if produto.id in wishlist_ids %}Remover da wishlist{% else %}Adicionar à wishlist{% endif %}">
-              <i class="{% if produto.id in wishlist_ids %}fas{% else %}far{% endif %} fa-heart"></i>
-            </button>
+            </a>
+
+            <div class="produto-acoes" aria-hidden="true">
+              <button class="btn-add-carrinho"
+                      data-produto-id="{{ produto.id }}"
+                      aria-label="Adicionar {{ produto.nome }} ao carrinho">
+                <i class="fas fa-bag-shopping"></i> Adicionar
+              </button>
+              <button class="btn-wishlist {% if produto.id in wishlist_ids %}ativo{% endif %}"
+                      data-wishlist-id="{{ produto.id }}"
+                      aria-label="{% if produto.id in wishlist_ids %}Remover da wishlist{% else %}Adicionar à wishlist{% endif %}">
+                <i class="{% if produto.id in wishlist_ids %}fas{% else %}far{% endif %} fa-heart"></i>
+              </button>
+            </div>
           </div>
 
-          {# Info #}
           <div class="produto-info">
-            <p class="produto-categoria">{{ produto.categoria.nome }}</p>
             <h3 class="produto-nome" id="produto-{{ produto.id }}">
               <a href="{{ produto.get_absolute_url }}">{{ produto.nome }}</a>
             </h3>
@@ -158,13 +153,15 @@
               <span class="preco-atual">R$ {{ produto.preco_atual|floatformat:2 }}</span>
               {% if produto.em_promocao %}
                 <span class="preco-original">R$ {{ produto.preco|floatformat:2 }}</span>
-                <span class="preco-desconto">-{{ produto.percentual_desconto }}%</span>
               {% endif %}
             </div>
+            {% if produto.parcelamento_texto %}
+              <span class="produto-parcelamento">{{ produto.parcelamento_texto }}</span>
+            {% endif %}
           </div>
         </article>
       {% empty %}
-        {# Estado vazio — sem produtos cadastrados ainda #}
+        
         <div class="col-span-4 text-center py-16 text-gray-400">
           <i class="far fa-shopping-bag text-4xl mb-4 block"></i>
           <p class="font-light">Produtos em breve</p>
@@ -181,39 +178,84 @@
 </section>
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   SHOP THE LOOK
-   ══════════════════════════════════════════════════════════════════════════════ #}
+
+{% if mini_banners %}
+<section class="mini-banners" aria-label="Destaques">
+  <div class="mini-banners-grid">
+    {% for mb in mini_banners %}
+    <a href="{{ mb.url }}" class="mini-banner fade-in {% if not forloop.first %}fade-in-delay-1{% endif %}"
+       style="background-image: url('{{ mb.foto.url }}');"
+       aria-label="{{ mb.titulo|default:'Ver coleção' }}">
+      <div class="mini-banner-overlay"></div>
+      {% if mb.pretitulo or mb.titulo %}
+      <div class="mini-banner-content">
+        {% if mb.pretitulo %}<p class="mini-banner-pretitulo">{{ mb.pretitulo }}</p>{% endif %}
+        {% if mb.titulo %}<h3 class="mini-banner-titulo">{{ mb.titulo }}</h3>{% endif %}
+        <span class="mini-banner-btn">Conferir</span>
+      </div>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+
+
 <section class="shop-the-look" aria-labelledby="titulo-look">
   <div class="shop-the-look-inner">
 
-    {# Foto do look com pontos interativos #}
-    <div class="look-foto fade-in">
-      <img src="{% static 'images/brand/look-semana.jpg' %}" alt="Look da semana Della Instore" loading="lazy">
+    <div class="look-foto-outer">
+      <div class="look-foto fade-in">
+        {% if look_obj and look_obj.foto %}
+          <img src="{{ look_obj.foto.url }}" alt="{{ look_obj.titulo }} — Della Instore" loading="lazy">
+        {% else %}
+          <img src="{% static 'images/brand/look-semana.jpg' %}" alt="Look da semana Della Instore" loading="lazy">
+        {% endif %}
+      </div>
 
-      {# Pontos interativos — posições em % da imagem #}
-      <div class="look-ponto" style="top:35%;left:45%;" role="button" tabindex="0" aria-label="Ver produto no look">
-        <div class="look-ponto-tooltip">
-          <p style="font-size:0.75rem;font-weight:500;">Body Rendado Preto</p>
-          <p style="font-size:0.8rem;color:var(--dourado);">R$ 189,00</p>
-        </div>
-      </div>
-      <div class="look-ponto" style="top:65%;left:50%;" role="button" tabindex="0" aria-label="Ver produto no look">
-        <div class="look-ponto-tooltip">
-          <p style="font-size:0.75rem;font-weight:500;">Calça Couro Off-white</p>
-          <p style="font-size:0.8rem;color:var(--dourado);">R$ 349,00</p>
-        </div>
-      </div>
+      {% if look_obj %}
+        {% if look_obj.produto_ponto1 %}
+          <a href="{{ look_obj.produto_ponto1.get_absolute_url }}" class="look-ponto"
+             style="top:{{ look_obj.ponto1_top|unlocalize }}%;left:{{ look_obj.ponto1_esq|unlocalize }}%;"
+             aria-label="{{ look_obj.produto_ponto1.nome }}">
+            <div class="look-ponto-tooltip">
+              <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto1.nome }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto1.preco_atual|floatformat:2 }}</p>
+            </div>
+          </a>
+        {% endif %}
+        {% if look_obj.produto_ponto2 %}
+          <a href="{{ look_obj.produto_ponto2.get_absolute_url }}" class="look-ponto"
+             style="top:{{ look_obj.ponto2_top|unlocalize }}%;left:{{ look_obj.ponto2_esq|unlocalize }}%;"
+             aria-label="{{ look_obj.produto_ponto2.nome }}">
+            <div class="look-ponto-tooltip">
+              <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto2.nome }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto2.preco_atual|floatformat:2 }}</p>
+            </div>
+          </a>
+        {% endif %}
+        {% if look_obj.produto_ponto3 %}
+          <a href="{{ look_obj.produto_ponto3.get_absolute_url }}" class="look-ponto"
+             style="top:{{ look_obj.ponto3_top|unlocalize }}%;left:{{ look_obj.ponto3_esq|unlocalize }}%;"
+             aria-label="{{ look_obj.produto_ponto3.nome }}">
+            <div class="look-ponto-tooltip">
+              <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto3.nome }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto3.preco_atual|floatformat:2 }}</p>
+            </div>
+          </a>
+        {% endif %}
+      {% endif %}
     </div>
 
-    {# Descrição do look #}
+    
     <div class="look-info fade-in fade-in-delay-2">
       <p class="subtitulo-secao">Inspiração</p>
       <h2 class="titulo-secao" id="titulo-look" style="margin-top:0.75rem;margin-bottom:1.25rem;">
         Look da semana
       </h2>
       <p style="color:var(--cinza-texto);font-size:0.95rem;font-weight:300;line-height:1.8;max-width:420px;">
-        Sofisticação no detalhe. Este look combina sensualidade e elegância para uma noite especial ou uma ocasião que pede presença marcante.
+        {% if look_obj and look_obj.descricao %}{{ look_obj.descricao }}{% else %}Sofisticação no detalhe. Este look combina sensualidade e elegância para uma noite especial ou uma ocasião que pede presença marcante.{% endif %}
       </p>
 
       {% if look_produtos %}
@@ -224,9 +266,9 @@
                 <img src="{{ produto.imagem_principal.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb">
               {% endif %}
               <div style="flex:1">
-                <p style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--cinza-texto);margin-bottom:0.2rem;">{{ produto.categoria.nome }}</p>
-                <p style="font-family:var(--fonte-titulo);font-size:1rem;margin-bottom:0.3rem;">{{ produto.nome }}</p>
-                <p style="font-size:0.9rem;font-weight:500;">R$ {{ produto.preco_atual|floatformat:2 }}</p>
+                <p style="font-family:var(--fonte-titulo);font-size:0.95rem;margin-bottom:0.2rem;">{{ produto.nome }}</p>
+                <p style="font-size:0.85rem;font-weight:500;">R$ {{ produto.preco_atual|floatformat:2 }}</p>
+                {% if produto.parcelamento_texto %}<p style="font-size:0.72rem;color:var(--cinza-texto);">{{ produto.parcelamento_texto }}</p>{% endif %}
               </div>
               <a href="{{ produto.get_absolute_url }}" class="btn-primario" style="padding:0.6rem 1.2rem;font-size:0.65rem;">
                 Ver
@@ -252,9 +294,7 @@
 </section>
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   MANIFESTO DA MARCA
-   ══════════════════════════════════════════════════════════════════════════════ #}
+
 <section class="manifesto" aria-labelledby="titulo-manifesto">
   <div class="manifesto-inner">
     <h2 class="manifesto-titulo fade-in" id="titulo-manifesto">
@@ -271,9 +311,7 @@
 </section>
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   DEPOIMENTOS
-   ══════════════════════════════════════════════════════════════════════════════ #}
+
 <section aria-labelledby="titulo-depoimentos">
   <div class="secao">
     <header class="secao-header fade-in">
@@ -293,7 +331,7 @@
           <cite class="depoimento-autor not-italic">{{ dep.nome_publico }}</cite>
         </article>
       {% empty %}
-        {# Depoimentos estáticos como placeholder #}
+        
         <article class="depoimento-card fade-in">
           <div class="depoimento-estrelas" aria-label="5 estrelas">★★★★★</div>
           <blockquote class="depoimento-texto">"A qualidade das peças é incomparável. O body que comprei ficou perfeito e recebi elogios a noite toda."</blockquote>
@@ -315,9 +353,7 @@
 </section>
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   INSTAGRAM
-   ══════════════════════════════════════════════════════════════════════════════ #}
+
 <section style="padding: 0 0 6rem;" aria-labelledby="titulo-instagram">
   <div style="max-width:1400px;margin:0 auto;padding:0 2rem;">
     <header class="instagram-header fade-in">
@@ -329,6 +365,7 @@
       <h2 class="sr-only" id="titulo-instagram">Nosso Instagram</h2>
     </header>
 
+    {% if instagram_posts %}
     <div class="instagram-grid fade-in">
       {% for post in instagram_posts %}
         <a href="{{ post.permalink }}" target="_blank" rel="noopener noreferrer"
@@ -338,25 +375,28 @@
             <i class="fab fa-instagram"></i>
           </div>
         </a>
-      {% empty %}
-        {# Placeholders enquanto não há integração com Instagram #}
-        {% for i in "123456" %}
-          <div class="instagram-item fade-in">
-            <img src="{% static 'images/brand/instagram-placeholder.jpg' %}" alt="Instagram Della Instore" loading="lazy">
-            <div class="instagram-overlay" aria-hidden="true">
-              <i class="fab fa-instagram"></i>
-            </div>
-          </div>
-        {% endfor %}
       {% endfor %}
     </div>
+    {% else %}
+    <a href="https://instagram.com/dellainstore" target="_blank" rel="noopener noreferrer"
+       class="instagram-cta-banner fade-in" aria-label="Seguir @dellainstore no Instagram">
+      <div class="instagram-cta-icon">
+        <i class="fab fa-instagram"></i>
+      </div>
+      <div class="instagram-cta-texto">
+        <span class="instagram-cta-handle">@dellainstore</span>
+        <span class="instagram-cta-desc">Acompanhe nossos lançamentos, looks e novidades no Instagram</span>
+      </div>
+      <div class="instagram-cta-btn">
+        Seguir <i class="fas fa-arrow-right"></i>
+      </div>
+    </a>
+    {% endif %}
   </div>
 </section>
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   NEWSLETTER
-   ══════════════════════════════════════════════════════════════════════════════ #}
+
 <section class="newsletter" aria-labelledby="titulo-newsletter">
   <div class="newsletter-inner">
     <header class="fade-in">

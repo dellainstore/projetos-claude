@@ -5,115 +5,145 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
 
-  {# SEO #}
-  <title>{% block titulo %}Della Instore — Moda Feminina Premium{% endblock %}</title>
-  <meta name="description" content="{% block meta_descricao %}Della Instore — Moda feminina premium. Body, Underwear, Beachwear, Casual, Couro, Fitness e Ballet. Elegância que veste a alma.{% endblock %}">
+  
+  <title>{% block titulo %}D'ELLA Instore — Moda Feminina Premium{% endblock %}</title>
+  <meta name="description" content="{% block meta_descricao %}D'ELLA Instore — Moda feminina premium. Body, Underwear, Beachwear, Casual, Couro, Fitness e Ballet. Elegância que veste a alma.{% endblock %}">
   <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
 
-  {# Open Graph #}
-  <meta property="og:site_name" content="Della Instore">
-  <meta property="og:title" content="{% block og_titulo %}Della Instore — Moda Feminina Premium{% endblock %}">
+  
+  <meta property="og:site_name" content="D'ELLA Instore">
+  <meta property="og:title" content="{% block og_titulo %}D'ELLA Instore — Moda Feminina Premium{% endblock %}">
   <meta property="og:description" content="{% block og_descricao %}Moda feminina premium.{% endblock %}">
   <meta property="og:image" content="{% block og_imagem %}{% static 'images/brand/og-default.jpg' %}{% endblock %}">
   <meta property="og:type" content="website">
 
-  {# Canonical #}
+  
   {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 
-  {# Favicon #}
+  
   <link rel="icon" type="image/x-icon" href="{% static 'images/brand/favicon.ico' %}">
 
-  {# Fontes — pré-conecta para performance #}
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
 
-  {# Font Awesome — ícones #}
+  
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
-  {# Tailwind CDN — utilitários #}
+  
   <script src="https://cdn.tailwindcss.com"></script>
 
-  {# CSS customizado #}
+  
   <link rel="stylesheet" href="{% static 'css/della.css' %}">
 
   {% block css_extra %}{% endblock %}
 </head>
 <body>
 
-{# ── Navbar ────────────────────────────────────────────────────────────────── #}
+
 <nav id="navbar" class="navbar {% block navbar_class %}transparente{% endblock %}" role="navigation" aria-label="Menu principal">
-  <div class="navbar-inner">
 
-    {# Menu esquerdo #}
-    <ul class="navbar-menu">
-      {% for cat in categorias_menu %}
-        <li><a href="{% url 'produtos:loja_categoria' cat.slug %}">{{ cat.nome }}</a></li>
-      {% empty %}
-        <li><a href="{% url 'produtos:loja' %}">Loja</a></li>
-        <li><a href="{% url 'produtos:loja' %}">Novidades</a></li>
-        <li><a href="{% url 'produtos:loja' %}">Sale</a></li>
-      {% endfor %}
-    </ul>
 
-    {# Logo #}
-    <a href="{% url 'produtos:home' %}" class="navbar-logo" aria-label="Della Instore — Página inicial">
-      Della Instore
+  <div class="navbar-topo">
+    <div class="navbar-topo-esq">
+      <button id="btn-menu-mobile" aria-label="Menu" aria-expanded="false">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+    <a href="{% url 'produtos:home' %}" class="navbar-logo" aria-label="D'ELLA Instore — Página inicial">
+      <span class="navbar-logo-della">D'ELLA</span>
+      <span class="navbar-logo-instore">Instore</span>
     </a>
-
-    {# Ações direita #}
     <div class="navbar-acoes">
       <a href="{% url 'produtos:busca' %}" aria-label="Buscar">
-        <i class="far fa-search"></i>
+        <i class="fas fa-magnifying-glass"></i>
       </a>
-
       {% if user.is_authenticated %}
         <a href="{% url 'usuarios:minha_conta' %}" aria-label="Minha conta">
           <i class="far fa-user"></i>
-        </a>
-        <a href="{% url 'produtos:wishlist' %}" aria-label="Wishlist">
-          <i class="far fa-heart"></i>
         </a>
       {% else %}
         <a href="{% url 'usuarios:login' %}" aria-label="Entrar">
           <i class="far fa-user"></i>
         </a>
       {% endif %}
-
+      {% if WHATSAPP_NUMBER_1 %}
+      <a href="https://wa.me/{{ WHATSAPP_NUMBER_1 }}?text=Olá! Vim pelo site da Della Instore e gostaria de ajuda."
+         target="_blank" rel="noopener noreferrer" aria-label="Suporte via WhatsApp">
+        <i class="fab fa-whatsapp"></i>
+      </a>
+      {% endif %}
       <button data-abrir-carrinho aria-label="Carrinho ({{ carrinho_total_itens }} itens)">
-        <i class="far fa-shopping-bag"></i>
+        <i class="fas fa-bag-shopping"></i>
         {% if carrinho_total_itens > 0 %}
           <span class="badge-carrinho">{{ carrinho_total_itens }}</span>
         {% endif %}
       </button>
-
-      {# Hambúrguer mobile #}
-      <button id="btn-menu-mobile" class="md:hidden" aria-label="Menu" aria-expanded="false">
-        <i class="fas fa-bars"></i>
-      </button>
     </div>
-
   </div>
+
+
+  <div class="navbar-categorias-bar">
+    <ul class="navbar-menu">
+      {% for cat in categorias_menu %}
+        {% with subs=cat.subcategorias.all %}
+        {% if subs %}
+          <li class="navbar-item-dropdown">
+            <a href="{% url 'produtos:loja_categoria' cat.slug %}" class="navbar-link-pai">
+              {{ cat.nome }} <i class="fas fa-chevron-down navbar-chevron"></i>
+            </a>
+            <ul class="navbar-dropdown">
+              {% for sub in subs %}
+                {% if sub.ativa %}
+                <li><a href="{% url 'produtos:loja_categoria' sub.slug %}">{{ sub.nome }}</a></li>
+                {% endif %}
+              {% endfor %}
+            </ul>
+          </li>
+        {% else %}
+          <li><a href="{% url 'produtos:loja_categoria' cat.slug %}">{{ cat.nome }}</a></li>
+        {% endif %}
+        {% endwith %}
+      {% empty %}
+        <li><a href="{% url 'produtos:loja' %}">Loja</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+
 </nav>
 
-{# ── Menu Mobile ───────────────────────────────────────────────────────────── #}
-<div id="menu-mobile" class="fixed inset-0 bg-white z-[1050] flex flex-col p-8 transform -translate-x-full transition-transform duration-300 [&.aberto]:translate-x-0">
+
+<div id="menu-mobile" class="fixed inset-0 bg-white z-[1050] flex flex-col p-8 overflow-y-auto overscroll-contain transform -translate-x-full transition-transform duration-300 [&.aberto]:translate-x-0">
   <div class="flex justify-between items-center mb-10">
-    <span class="font-['Playfair_Display'] text-2xl">Della Instore</span>
-    <button id="btn-menu-mobile-fechar" onclick="document.getElementById('menu-mobile').classList.remove('aberto')" class="text-2xl">&times;</button>
+    <span class="font-['Playfair_Display'] text-2xl tracking-wide">D'ELLA <span class="font-['Jost'] font-light text-base tracking-widest">Instore</span></span>
+    <button id="btn-menu-mobile-fechar" class="text-2xl" aria-label="Fechar menu">&times;</button>
   </div>
-  <nav class="flex flex-col gap-6">
+  <nav class="flex flex-col gap-0">
     {% for cat in categorias_menu %}
-      <a href="{% url 'produtos:loja_categoria' cat.slug %}" class="text-2xl font-light tracking-wide border-b border-gray-100 pb-4">{{ cat.nome }}</a>
+      {% with subs=cat.subcategorias.all %}
+      <a href="{% url 'produtos:loja_categoria' cat.slug %}"
+         class="text-2xl font-light tracking-wide border-b border-gray-100 py-4">{{ cat.nome }}</a>
+      {% if subs %}
+        {% for sub in subs %}
+          {% if sub.ativa %}
+          <a href="{% url 'produtos:loja_categoria' sub.slug %}"
+             class="text-base font-light tracking-widest text-gray-500 border-b border-gray-50 py-3 pl-5">
+            — {{ sub.nome }}
+          </a>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      {% endwith %}
     {% empty %}
-      <a href="{% url 'produtos:loja' %}" class="text-2xl font-light">Loja</a>
+      <a href="{% url 'produtos:loja' %}" class="text-2xl font-light py-4">Loja</a>
     {% endfor %}
-    <a href="{% url 'produtos:sobre' %}" class="text-lg font-light text-gray-500">Sobre</a>
-    <a href="{% url 'produtos:contato' %}" class="text-lg font-light text-gray-500">Contato</a>
+    <a href="{% url 'produtos:sobre' %}" class="text-lg font-light text-gray-500 py-4">Sobre</a>
+    <a href="{% url 'produtos:contato' %}" class="text-lg font-light text-gray-500 py-4">Contato</a>
   </nav>
 </div>
 
-{# ── Mensagens Django ──────────────────────────────────────────────────────── #}
+
 {% if messages %}
   <div id="mensagens-sistema" class="fixed top-20 right-4 z-[1200] flex flex-col gap-2 max-w-sm">
     {% for msg in messages %}
@@ -127,12 +157,12 @@
   <script>setTimeout(() => { const el = document.getElementById('mensagens-sistema'); if(el) el.remove(); }, 5000);</script>
 {% endif %}
 
-{# ── Conteúdo principal ────────────────────────────────────────────────────── #}
+
 <main id="conteudo-principal">
   {% block conteudo %}{% endblock %}
 </main>
 
-{# ── Drawer Carrinho ───────────────────────────────────────────────────────── #}
+
 <div id="drawer-overlay" class="drawer-overlay" aria-hidden="true"></div>
 <aside id="drawer-carrinho" class="drawer-carrinho" aria-label="Carrinho de compras">
   <div class="drawer-header">
@@ -160,7 +190,7 @@
   </div>
 </aside>
 
-{# ── WhatsApp Flutuante ─────────────────────────────────────────────────────── #}
+
 {% if WHATSAPP_NUMBER_1 or WHATSAPP_NUMBER_2 %}
 <div class="whatsapp-fab" role="complementary" aria-label="Fale conosco pelo WhatsApp">
   <div id="whatsapp-opcoes" class="whatsapp-opcoes" aria-hidden="true">
@@ -195,75 +225,96 @@
 </div>
 {% endif %}
 
-{# ── Footer ────────────────────────────────────────────────────────────────── #}
+
 {% block footer %}
 <footer class="footer" role="contentinfo">
   <div class="footer-inner">
     <div class="footer-grid">
 
-      {# Coluna 1 — Marca #}
+      <!-- Coluna 1: Brand -->
       <div>
-        <div class="footer-logo">Della Instore</div>
+        <div class="footer-logo">
+          <span class="footer-logo-della">D'ELLA</span>
+          <span class="footer-logo-instore">Instore</span>
+        </div>
         <p class="footer-desc">
           Moda feminina premium que celebra a feminilidade em todas as suas formas.
           Peças cuidadosamente selecionadas para mulheres que entendem de elegância.
         </p>
         <div class="footer-social">
-          <a href="#" aria-label="Instagram" rel="noopener noreferrer"><i class="fab fa-instagram"></i></a>
-          <a href="#" aria-label="Pinterest" rel="noopener noreferrer"><i class="fab fa-pinterest-p"></i></a>
-          <a href="#" aria-label="TikTok" rel="noopener noreferrer"><i class="fab fa-tiktok"></i></a>
+          <a href="https://www.instagram.com/dellainstore" target="_blank" aria-label="Instagram @dellainstore" rel="noopener noreferrer"><i class="fab fa-instagram"></i></a>
+          <a href="https://www.tiktok.com/@dellainstore_" target="_blank" aria-label="TikTok @dellainstore_" rel="noopener noreferrer"><i class="fab fa-tiktok"></i></a>
         </div>
       </div>
 
-      {# Coluna 2 — Loja #}
-      <div>
-        <h3 class="footer-col-titulo">Loja</h3>
-        <ul class="footer-links">
-          <li><a href="{% url 'produtos:loja' %}">Todas as peças</a></li>
-          {% for cat in categorias_menu %}
-            <li><a href="{% url 'produtos:loja_categoria' cat.slug %}">{{ cat.nome }}</a></li>
-          {% endfor %}
-        </ul>
-      </div>
-
-      {# Coluna 3 — Ajuda #}
+      <!-- Coluna 2: Ajuda -->
       <div>
         <h3 class="footer-col-titulo">Ajuda</h3>
         <ul class="footer-links">
-          <li><a href="{% url 'produtos:trocas_devolucoes' %}">Trocas e devoluções</a></li>
           <li><a href="{% url 'produtos:contato' %}">Fale conosco</a></li>
           <li><a href="{% url 'pedidos:meus_pedidos' %}">Meus pedidos</a></li>
-          <li><a href="#">Guia de tamanhos</a></li>
-          <li><a href="#">Perguntas frequentes</a></li>
+          <li><a href="{% url 'produtos:trocas_devolucoes' %}">Trocas e devoluções</a></li>
+          <li><a href="{% url 'produtos:guia_tamanhos' %}">Guia de tamanhos</a></li>
+          <li><a href="{% url 'produtos:perguntas_frequentes' %}">Perguntas frequentes</a></li>
         </ul>
       </div>
 
-      {# Coluna 4 — Institucional #}
+      <!-- Coluna 3: D'ELLA Instore -->
       <div>
-        <h3 class="footer-col-titulo">Della Instore</h3>
+        <h3 class="footer-col-titulo">D'ELLA Instore</h3>
         <ul class="footer-links">
           <li><a href="{% url 'produtos:sobre' %}">Nossa história</a></li>
           <li><a href="{% url 'produtos:politica_privacidade' %}">Política de privacidade</a></li>
-          <li><a href="#">Termos de uso</a></li>
-          <li><a href="#">Trabalhe conosco</a></li>
+          <li><a href="{% url 'produtos:termos_uso' %}">Termos de uso</a></li>
         </ul>
+      </div>
+
+      <!-- Coluna 4: Endereços -->
+      <div>
+        <div class="footer-enderecos">
+          <p class="footer-endereco-titulo">Show Room</p>
+          <p class="footer-endereco-linha">Rua Visconde da Luz, 183 — Vila Nova Conceição</p>
+          <p class="footer-endereco-linha">São Paulo/SP — CEP: 04537-070</p>
+          <p class="footer-endereco-linha"><a href="mailto:contato@dellainstore.com.br">contato@dellainstore.com.br</a></p>
+          <p class="footer-endereco-linha">
+            <a href="https://wa.me/5511969168475?text=Olá! Vim pelo site e gostaria de falar com o Show Room." target="_blank" rel="noopener noreferrer">+55 11 96916-8475</a>
+          </p>
+
+          <p class="footer-endereco-titulo" style="margin-top:1.5rem;">Loja</p>
+          <p class="footer-endereco-subtitulo">Studio Anacã</p>
+          <p class="footer-endereco-linha">Av. Brasil, 649 — Jardim Paulista</p>
+          <p class="footer-endereco-linha">São Paulo/SP — CEP: 01431-000</p>
+          <p class="footer-endereco-linha"><a href="mailto:contato@dellainstore.com.br">contato@dellainstore.com.br</a></p>
+          <p class="footer-endereco-linha">
+            <a href="https://wa.me/5511949635073?text=Olá! Vim pelo site e gostaria de falar com a loja Studio Anacã." target="_blank" rel="noopener noreferrer">+55 11 94963-5073</a>
+          </p>
+        </div>
       </div>
 
     </div>
 
     <div class="footer-bottom">
-      <span>© {% now "Y" %} Della Instore. Todos os direitos reservados.</span>
+      <span>© {% now "Y" %} D'ELLA Instore. Todos os direitos reservados.</span>
       <div class="footer-selos">
-        <span class="footer-selo">SSL Seguro</span>
-        <span class="footer-selo">Compra Segura</span>
-        <span class="footer-selo">LGPD</span>
+        <div class="footer-selo-visual">
+          <i class="fas fa-lock"></i>
+          <span>SSL Seguro</span>
+        </div>
+        <div class="footer-selo-visual">
+          <i class="fas fa-shield-halved"></i>
+          <span>Compra Segura</span>
+        </div>
+        <div class="footer-selo-visual">
+          <i class="fas fa-file-shield"></i>
+          <span>LGPD</span>
+        </div>
       </div>
     </div>
   </div>
 </footer>
 {% endblock %}
 
-{# ── Scripts ───────────────────────────────────────────────────────────────── #}
+
 <script src="{% static 'js/della.js' %}"></script>
 {% block js_extra %}{% endblock %}
 

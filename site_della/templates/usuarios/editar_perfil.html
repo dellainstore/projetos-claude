@@ -1,7 +1,108 @@
 {% extends 'base.html' %}
+{% block titulo %}Editar Perfil — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-area">
+  <div class="conta-area-inner">
+
+    <aside class="conta-sidebar">
+      <div class="conta-sidebar-perfil">
+        <div class="conta-avatar">{{ request.user.nome|first|upper }}</div>
+        <div>
+          <p class="conta-sidebar-nome">{{ request.user.get_full_name }}</p>
+          <p class="conta-sidebar-email">{{ request.user.email }}</p>
+        </div>
+      </div>
+      <nav class="conta-sidebar-nav">
+        <a href="{% url 'usuarios:minha_conta' %}" class="conta-nav-link">
+          <i class="fas fa-house"></i> Início
+        </a>
+        <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-nav-link">
+          <i class="fas fa-bag-shopping"></i> Meus pedidos
+        </a>
+        <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
+          <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
+          <i class="far fa-heart"></i> Lista de desejos
+        </a>
+        <a href="{% url 'usuarios:editar_perfil' %}" class="conta-nav-link ativo">
+          <i class="far fa-user"></i> Editar perfil
+        </a>
+        <a href="{% url 'usuarios:logout' %}" class="conta-nav-link conta-nav-link--sair">
+          <i class="fas fa-arrow-right-from-bracket"></i> Sair
+        </a>
+      </nav>
+    </aside>
+
+    <section class="conta-conteudo">
+
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="conta-alerta conta-alerta--{{ msg.tags }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <h2 class="conta-secao-titulo">Editar Perfil</h2>
+
+      <div class="conta-card">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="conta-grid-2">
+            <div class="conta-campo">
+              <label class="conta-label">Nome</label>
+              {{ form.nome }}
+              {% if form.nome.errors %}<span class="conta-erro">{{ form.nome.errors.0 }}</span>{% endif %}
+            </div>
+            <div class="conta-campo">
+              <label class="conta-label">Sobrenome</label>
+              {{ form.sobrenome }}
+            </div>
+          </div>
+
+          <div class="conta-campo">
+            <label class="conta-label">Telefone</label>
+            {{ form.telefone }}
+          </div>
+
+          <div class="conta-grid-2">
+            <div class="conta-campo">
+              <label class="conta-label">Data de nascimento</label>
+              {{ form.data_nascimento }}
+            </div>
+            <div class="conta-campo">
+              <label class="conta-label">Gênero</label>
+              {{ form.genero }}
+            </div>
+          </div>
+
+          <div class="conta-campo">
+            <label class="conta-label">E-mail</label>
+            <input type="email" value="{{ request.user.email }}" class="conta-input" disabled>
+            <span class="conta-hint">Para alterar o e-mail, entre em contato com o suporte.</span>
+          </div>
+
+          <div class="conta-acoes">
+            <button type="submit" class="btn-conta-primario">Salvar alterações</button>
+            <a href="{% url 'usuarios:minha_conta' %}" class="btn-conta-secundario">Cancelar</a>
+          </div>
+        </form>
+      </div>
+
+    </section>
+  </div>
+</main>
+{% endblock %}
+
+{% block js_extra %}
+<script>
+document.querySelector('[name="telefone"]')?.addEventListener('input', function(){
+  let v = this.value.replace(/\D/g,'').slice(0,11);
+  if(v.length > 6) v = v.replace(/(\d{2})(\d{4,5})(\d{4})/,'($1) $2-$3');
+  else if(v.length > 2) v = v.replace(/(\d{2})(\d+)/,'($1) $2');
+  this.value = v;
+});
+</script>
 {% endblock %}

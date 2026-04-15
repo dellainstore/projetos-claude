@@ -14,7 +14,7 @@
 {% block conteudo %}
 <div class="loja-wrapper">
 
-  {# ── Topo da página ─────────────────────────────────────────────────────── #}
+  
   <div class="loja-topo">
     <div class="loja-topo-inner">
       <div>
@@ -29,7 +29,7 @@
 
   <div class="loja-layout">
 
-    {# ── Sidebar de filtros ──────────────────────────────────────────────── #}
+    
     <aside class="loja-sidebar" id="loja-sidebar">
       <div class="sidebar-section">
         <h2 class="sidebar-titulo">Categorias</h2>
@@ -41,12 +41,32 @@
             </a>
           </li>
           {% for cat in categorias %}
+          {% with subs=cat.subcategorias.all %}
           <li>
-            <a href="{% url 'produtos:loja_categoria' cat.slug %}"
-               class="sidebar-link {% if categoria_ativa.slug == cat.slug %}ativo{% endif %}">
-              {{ cat.nome }}
-            </a>
+            {% if subs %}
+              <button class="sidebar-cat-mae {% if categoria_ativa.pk == cat.pk or categoria_ativa.parent_id == cat.pk %}ativo expandida{% endif %}"
+                      type="button">
+                {{ cat.nome }}
+                <i class="fas fa-chevron-down sidebar-cat-seta"></i>
+              </button>
+              <ul class="sidebar-subcats {% if categoria_ativa.pk == cat.pk or categoria_ativa.parent_id == cat.pk %}aberta{% endif %}">
+                {% for sub in subs %}{% if sub.ativa %}
+                <li>
+                  <a href="{% url 'produtos:loja_categoria' sub.slug %}"
+                     class="sidebar-sublink {% if categoria_ativa.slug == sub.slug %}ativo{% endif %}">
+                    {{ sub.nome }}
+                  </a>
+                </li>
+                {% endif %}{% endfor %}
+              </ul>
+            {% else %}
+              <a href="{% url 'produtos:loja_categoria' cat.slug %}"
+                 class="sidebar-link {% if categoria_ativa.slug == cat.slug %}ativo{% endif %}">
+                {{ cat.nome }}
+              </a>
+            {% endif %}
           </li>
+          {% endwith %}
           {% endfor %}
         </ul>
       </div>
@@ -83,10 +103,10 @@
       </div>
     </aside>
 
-    {# ── Área principal ──────────────────────────────────────────────────── #}
+    
     <div class="loja-main">
 
-      {# Barra de ordenação #}
+      
       <div class="loja-barra-ordem">
         <button class="btn-filtros-mobile" id="btn-filtros-mobile"
                 aria-expanded="false" aria-controls="loja-sidebar">
@@ -114,7 +134,7 @@
         </form>
       </div>
 
-      {# Grid de produtos #}
+      
       {% if page_obj.object_list %}
       <div class="loja-grid">
         {% for produto in page_obj %}
@@ -127,7 +147,7 @@
                   <img src="{{ img.imagem.url }}"
                        alt="{{ img.alt|default:produto.nome }}"
                        loading="lazy" class="foto-principal">
-                  {# Segunda imagem para efeito hover #}
+                  
                   {% with imgs=produto.imagens.all %}
                     {% if imgs|length > 1 %}
                       <img src="{{ imgs.1.imagem.url }}"
@@ -151,7 +171,6 @@
 
           <div class="produto-card-info">
             <a href="{{ produto.get_absolute_url }}" class="produto-card-nome">{{ produto.nome }}</a>
-            <p class="produto-card-cat">{{ produto.categoria.nome }}</p>
             <div class="produto-card-preco">
               {% if produto.em_promocao %}
                 <span class="preco-de">R$ {{ produto.preco|floatformat:2 }}</span>
@@ -160,12 +179,15 @@
                 <span class="preco-por">R$ {{ produto.preco|floatformat:2 }}</span>
               {% endif %}
             </div>
+            {% if produto.parcelamento_texto %}
+              <span class="produto-card-parcelamento">{{ produto.parcelamento_texto }}</span>
+            {% endif %}
 
             <div class="produto-card-acoes">
               <button class="btn-add-carrinho"
                       data-produto-id="{{ produto.pk }}"
                       aria-label="Adicionar {{ produto.nome }} ao carrinho">
-                <i class="far fa-shopping-bag"></i>
+                <i class="fas fa-bag-shopping"></i>
               </button>
               <button class="btn-wishlist {% if produto.pk in wishlist_ids %}ativo{% endif %}"
                       data-wishlist-id="{{ produto.pk }}"
@@ -179,7 +201,7 @@
         {% endfor %}
       </div>
 
-      {# Paginação #}
+      
       {% if page_obj.has_other_pages %}
       <nav class="paginacao" aria-label="Páginas">
         {% if page_obj.has_previous %}
@@ -215,9 +237,9 @@
       </div>
       {% endif %}
 
-    </div>{# /loja-main #}
-  </div>{# /loja-layout #}
-</div>{# /loja-wrapper #}
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block js_extra %}

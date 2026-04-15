@@ -226,6 +226,11 @@ def _processar_checkout(request, form, cart):
 
         # Salva número do pedido na sessão (para exibir confirmação)
         request.session['ultimo_pedido'] = pedido.numero
+        pedidos_guest = request.session.get('pedidos_guest', [])
+        if pedido.numero not in pedidos_guest:
+            pedidos_guest.append(pedido.numero)
+            # mantém só os últimos 20 para não crescer indefinidamente
+            request.session['pedidos_guest'] = pedidos_guest[-20:]
 
         # Dispara e-mail de confirmação (falha silenciosa — não bloqueia o fluxo)
         try:
@@ -247,14 +252,18 @@ def confirmacao_pedido(request, numero):
 
     pedido = get_object_or_404(Pedido, numero=numero)
 
-    # Segurança: apenas o dono do pedido ou admin pode ver
-    if pedido.cliente and request.user.is_authenticated:
-        if pedido.cliente != request.user and not request.user.is_staff:
-            return redirect('pedidos:checkout')
-    elif pedido.cliente and not request.user.is_authenticated:
-        # Permite acesso se veio do fluxo desta sessão
-        if request.session.get('ultimo_pedido') != numero:
-            return redirect('produtos:home')
+    # Segurança: staff, dono logado, ou número na sessão do guest checkout.
+    # Qualquer outro caso (inclusive pedido sem cliente acessado por anônimo
+    # desconhecido) é bloqueado — fecha IDOR por força bruta do número.
+    pedidos_guest = request.session.get('pedidos_guest', [])
+    autorizado = (
+        (request.user.is_authenticated and request.user.is_staff)
+        or (request.user.is_authenticated and pedido.cliente_id == request.user.id)
+        or request.session.get('ultimo_pedido') == numero
+        or numero in pedidos_guest
+    )
+    if not autorizado:
+        return redirect('produtos:home')
 
     # Gera QR Code Pix se for forma de pagamento Pix
     pix_qrcode = None

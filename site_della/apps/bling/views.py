@@ -7,6 +7,7 @@ Views da integração Bling:
 
 import json
 import logging
+import secrets
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -19,6 +20,8 @@ from django.shortcuts import render
 
 from . import oauth as bling_oauth
 
+_BLING_STATE_SESSION_KEY = 'bling_oauth_state'
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,20 +32,42 @@ def oauth_autorizar(request):
     """
     Inicia o fluxo OAuth2: redireciona o usuário para o Bling autorizar o app.
     Acessível apenas por staff via /bling/autorizar/.
+
+    Gera um state aleatório e guarda na sessão para validação no callback
+    (proteção contra OAuth CSRF / code injection).
     """
+    state = secrets.token_urlsafe(32)
+    request.session[_BLING_STATE_SESSION_KEY] = state
+
     redirect_uri = settings.BLING_REDIRECT_URI
-    url = bling_oauth.get_authorize_url(redirect_uri)
+    url = bling_oauth.get_authorize_url(redirect_uri, state=state)
     return HttpResponseRedirect(url)
 
 
+@staff_member_required
 @require_GET
 def oauth_callback(request):
     """
     Recebe o callback do Bling com o authorization code.
     Troca o code por access_token e salva no banco.
+
+    Exige que o state da URL bata com o state gerado em oauth_autorizar
+    (guardado na sessão). Sem esse match, rejeita o callback.
     """
     code  = request.GET.get('code')
     error = request.GET.get('error')
+    state_recebido = request.GET.get('state', '')
+    state_esperado = request.session.pop(_BLING_STATE_SESSION_KEY, None)
+
+    if not state_esperado or not secrets.compare_digest(state_recebido, state_esperado):
+        logger.warning(
+            'Bling OAuth callback: state inválido (recebido=%r, esperado=%r)',
+            state_recebido, bool(state_esperado),
+        )
+        return render(request, 'admin/bling_status.html', {
+            'sucesso': False,
+            'mensagem': 'Autorização recusada: state inválido. Refaça o fluxo em /bling/autorizar/.',
+        })
 
     if error or not code:
         descricao = request.GET.get('error_description', error or 'Código não recebido.')
@@ -65,6 +90,41 @@ def oauth_callback(request):
             'sucesso': False,
             'mensagem': f'Erro ao obter token: {exc}',
         })
+
+
+# ── Refresh manual do token ──────────────────────────────────────────────────
+
+@staff_member_required
+def token_refresh_manual(request):
+    """
+    Faz refresh manual do access_token usando o refresh_token salvo.
+    Chamado pelo botão "Atualizar Token" no admin de Tokens Bling.
+
+    O access_token expira em ~1 hora (comportamento normal do Bling).
+    O sistema faz refresh automático ao fazer chamadas à API.
+    Use este botão apenas para verificar se o refresh_token ainda é válido.
+    """
+    from .models import BlingToken
+    token = BlingToken.objects.order_by('-criado_em').first()
+    if not token:
+        messages.error(request, 'Nenhum token encontrado. Autorize a integração primeiro.')
+        return redirect('/painel/bling/blingtoken/')
+
+    try:
+        novo_token = bling_oauth.refresh_token(token)
+        messages.success(
+            request,
+            f'Token atualizado com sucesso! Novo access_token válido até '
+            f'{novo_token.expira_em.strftime("%d/%m/%Y às %H:%M")}.',
+        )
+    except Exception as exc:
+        messages.error(
+            request,
+            f'Falha ao atualizar o token: {exc}. '
+            f'O refresh_token pode ter expirado (válido por 30 dias). '
+            f'Acesse /bling/autorizar/ para re-autorizar.',
+        )
+    return redirect('/painel/bling/blingtoken/')
 
 
 # ── Webhook ───────────────────────────────────────────────────────────────────

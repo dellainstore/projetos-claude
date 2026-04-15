@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block titulo %}Meus Pedidos — Della Instore{% endblock %}
+{% block navbar_class %}solida{% endblock %}
+
+{% block conteudo %}
+<main class="conta-area">
+  <div class="conta-area-inner">
+
+    <aside class="conta-sidebar">
+      <div class="conta-sidebar-perfil">
+        <div class="conta-avatar">{{ request.user.nome|first|upper }}</div>
+        <div>
+          <p class="conta-sidebar-nome">{{ request.user.get_full_name }}</p>
+          <p class="conta-sidebar-email">{{ request.user.email }}</p>
+        </div>
+      </div>
+      <nav class="conta-sidebar-nav">
+        <a href="{% url 'usuarios:minha_conta' %}" class="conta-nav-link">
+          <i class="fas fa-house"></i> Início
+        </a>
+        <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-nav-link ativo">
+          <i class="fas fa-bag-shopping"></i> Meus pedidos
+        </a>
+        <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
+          <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
+          <i class="far fa-heart"></i> Lista de desejos
+        </a>
+        <a href="{% url 'usuarios:editar_perfil' %}" class="conta-nav-link">
+          <i class="far fa-user"></i> Editar perfil
+        </a>
+        <a href="{% url 'usuarios:logout' %}" class="conta-nav-link conta-nav-link--sair">
+          <i class="fas fa-arrow-right-from-bracket"></i> Sair
+        </a>
+      </nav>
+    </aside>
+
+    <section class="conta-conteudo">
+      <h2 class="conta-secao-titulo">Meus Pedidos</h2>
+
+      {% if pedidos %}
+        <div class="conta-pedidos-tabela">
+          {% for pedido in pedidos %}
+            <div class="conta-pedido-row">
+              <div class="conta-pedido-col">
+                <span class="conta-pedido-label">Pedido</span>
+                <span class="conta-pedido-num">{{ pedido.numero }}</span>
+              </div>
+              <div class="conta-pedido-col">
+                <span class="conta-pedido-label">Data</span>
+                <span>{{ pedido.criado_em|date:"d/m/Y" }}</span>
+              </div>
+              <div class="conta-pedido-col">
+                <span class="conta-pedido-label">Total</span>
+                <span>R$ {{ pedido.total|floatformat:2 }}</span>
+              </div>
+              <div class="conta-pedido-col">
+                <span class="conta-pedido-label">Status</span>
+                <span class="conta-status conta-status--{{ pedido.status }}">{{ pedido.get_status_display }}</span>
+              </div>
+              <div class="conta-pedido-col">
+                <a href="{% url 'usuarios:detalhe_pedido' pedido.numero %}" class="btn-conta-secundario btn-conta-secundario--sm">
+                  Ver detalhes
+                </a>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="conta-vazio-bloco">
+          <i class="fas fa-bag-shopping conta-vazio-icon"></i>
+          <p>Você ainda não realizou nenhum pedido.</p>
+          <a href="{% url 'produtos:loja' %}" class="btn-conta-primario">Explorar a loja</a>
+        </div>
+      {% endif %}
+
+    </section>
+  </div>
+</main>
+{% endblock %}

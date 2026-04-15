@@ -5,6 +5,7 @@ After=network.target postgresql.service
 [Service]
 User=neto
 Group=www-data
+SupplementaryGroups=www-data
 WorkingDirectory=/var/www/della-sistemas/projetos-claude/site_della
 
 # Carrega variáveis de ambiente do .env
@@ -15,7 +16,7 @@ Environment="DJANGO_SETTINGS_MODULE=core.settings.production"
 ExecStart=/var/www/della-sistemas/projetos-claude/site_della/venv/bin/gunicorn \
     --workers 2 \
     --worker-class sync \
-    --bind unix:/run/gunicorn_della_site.sock \
+    --bind unix:/run/gunicorn_della_site/gunicorn.sock \
     --timeout 60 \
     --max-requests 1000 \
     --max-requests-jitter 50 \
@@ -32,7 +33,7 @@ RestartSec=5
 
 # Permissão do socket para o Nginx ler
 RuntimeDirectory=gunicorn_della_site
-RuntimeDirectoryMode=0755
+RuntimeDirectoryMode=0775
 
 # Limites de segurança do processo
 NoNewPrivileges=true

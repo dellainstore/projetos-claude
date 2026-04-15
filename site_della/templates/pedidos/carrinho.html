@@ -15,7 +15,7 @@
   {% if itens %}
   <div class="carrinho-layout">
 
-    {# ── Lista de itens ─────────────────────────────────────────────── #}
+    
     <div class="carrinho-itens" id="carrinho-itens-lista">
       {% for item in itens %}
       <div class="carrinho-item" data-chave="{{ item.chave }}" id="item-{{ item.chave }}">
@@ -62,7 +62,7 @@
       {% endfor %}
     </div>
 
-    {# ── Resumo lateral ─────────────────────────────────────────────── #}
+    
     <aside class="carrinho-resumo" aria-label="Resumo do pedido">
       <h2 class="carrinho-resumo-titulo">Resumo do pedido</h2>
 
@@ -98,7 +98,7 @@
   </div>
 
   {% else %}
-  {# Carrinho vazio #}
+  
   <div class="carrinho-vazio">
     <i class="far fa-shopping-bag"></i>
     <h2>Seu carrinho está vazio</h2>

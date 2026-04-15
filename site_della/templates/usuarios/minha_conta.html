@@ -1,7 +1,111 @@
 {% extends 'base.html' %}
+{% block titulo %}Minha Conta — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-area">
+  <div class="conta-area-inner">
+
+    
+    <aside class="conta-sidebar">
+      <div class="conta-sidebar-perfil">
+        <div class="conta-avatar">{{ request.user.nome|first|upper }}</div>
+        <div>
+          <p class="conta-sidebar-nome">{{ request.user.get_full_name }}</p>
+          <p class="conta-sidebar-email">{{ request.user.email }}</p>
+        </div>
+      </div>
+      <nav class="conta-sidebar-nav">
+        <a href="{% url 'usuarios:minha_conta' %}" class="conta-nav-link ativo">
+          <i class="fas fa-house"></i> Início
+        </a>
+        <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-nav-link">
+          <i class="fas fa-bag-shopping"></i> Meus pedidos
+        </a>
+        <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
+          <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
+          <i class="far fa-heart"></i> Lista de desejos
+        </a>
+        <a href="{% url 'usuarios:editar_perfil' %}" class="conta-nav-link">
+          <i class="far fa-user"></i> Editar perfil
+        </a>
+        <a href="{% url 'usuarios:logout' %}" class="conta-nav-link conta-nav-link--sair">
+          <i class="fas fa-arrow-right-from-bracket"></i> Sair
+        </a>
+      </nav>
+    </aside>
+
+    
+    <section class="conta-conteudo">
+
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="conta-alerta conta-alerta--{{ msg.tags }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <h2 class="conta-secao-titulo">Olá, {{ request.user.nome }}!</h2>
+
+      
+      <div class="conta-card">
+        <div class="conta-card-header">
+          <h3 class="conta-card-titulo">Últimos pedidos</h3>
+          <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-link">Ver todos</a>
+        </div>
+        {% if pedidos %}
+          <div class="conta-pedidos-lista">
+            {% for pedido in pedidos %}
+              <div class="conta-pedido-item">
+                <div class="conta-pedido-info">
+                  <span class="conta-pedido-num">{{ pedido.numero }}</span>
+                  <span class="conta-pedido-data">{{ pedido.criado_em|date:"d/m/Y" }}</span>
+                </div>
+                <div class="conta-pedido-centro">
+                  <span class="conta-status conta-status--{{ pedido.status }}">{{ pedido.get_status_display }}</span>
+                </div>
+                <div class="conta-pedido-valor">
+                  R$ {{ pedido.total|floatformat:2 }}
+                  <a href="{% url 'usuarios:detalhe_pedido' pedido.numero %}" class="conta-link">Ver</a>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="conta-vazio">Você ainda não fez nenhum pedido.
+            <a href="{% url 'produtos:loja' %}" class="conta-link">Explorar a loja</a>
+          </p>
+        {% endif %}
+      </div>
+
+      
+      <div class="conta-card">
+        <div class="conta-card-header">
+          <h3 class="conta-card-titulo">Endereços</h3>
+          <a href="{% url 'usuarios:enderecos' %}" class="conta-link">Gerenciar</a>
+        </div>
+        {% if enderecos %}
+          <div class="conta-enderecos-grid">
+            {% for end in enderecos %}
+              <div class="conta-endereco-card{% if end.principal %} principal{% endif %}">
+                {% if end.principal %}<span class="conta-badge-principal">Principal</span>{% endif %}
+                <p class="conta-end-apelido">{{ end.apelido }}</p>
+                <p>{{ end.logradouro }}, {{ end.numero }}{% if end.complemento %}, {{ end.complemento }}{% endif %}</p>
+                <p>{{ end.bairro }} — {{ end.cidade }}/{{ end.estado }}</p>
+                <p>CEP: {{ end.get_cep_formatado }}</p>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="conta-vazio">
+            Nenhum endereço cadastrado.
+            <a href="{% url 'usuarios:novo_endereco' %}" class="conta-link">Adicionar endereço</a>
+          </p>
+        {% endif %}
+      </div>
+
+    </section>
+  </div>
+</main>
 {% endblock %}

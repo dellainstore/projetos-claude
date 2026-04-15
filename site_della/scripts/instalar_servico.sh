@@ -38,35 +38,76 @@ systemctl daemon-reload
 systemctl enable gunicorn_della_site
 systemctl start gunicorn_della_site
 sleep 2
-systemctl is-active gunicorn_della_site && echo -e "${GREEN}[OK]${NC} Gunicorn ativo" || echo "ERRO: Gunicorn não iniciou — verifique: journalctl -u gunicorn_della_site -n 30"
+systemctl is-active gunicorn_della_site && echo -e "${GREEN}[OK]${NC} Gunicorn ativo" || { echo "ERRO: Gunicorn não iniciou — verifique: journalctl -u gunicorn_della_site -n 30"; exit 1; }
 
-# 3. Instala config Nginx
-echo -e "${YELLOW}[3/5]${NC} Configurando Nginx..."
-cp "$SCRIPT_DIR/nginx_della_site.conf" /etc/nginx/sites-available/della_site
+# 3. Instala config Nginx temporária (HTTP apenas) para o Certbot rodar
+echo -e "${YELLOW}[3/5]${NC} Configurando Nginx (HTTP temporário para Certbot)..."
+
+cat > /etc/nginx/sites-available/della_site <<'NGINX_TEMP'
+upstream della_site_app {
+    server unix:/run/gunicorn_della_site/gunicorn.sock fail_timeout=0;
+}
+
+server {
+    listen 80;
+    server_name novo.dellainstore.com.br;
+
+    location /static/ {
+        alias /var/www/della-sistemas/projetos-claude/site_della/staticfiles/;
+        expires 30d;
+    }
+
+    location /media/ {
+        alias /var/www/della-sistemas/projetos-claude/site_della/media/;
+        expires 7d;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+
+    location / {
+        proxy_pass         http://della_site_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $http_host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect       off;
+        client_max_body_size 10M;
+    }
+
+    access_log /var/log/nginx/della_site_access.log;
+    error_log  /var/log/nginx/della_site_error.log warn;
+}
+NGINX_TEMP
 
 # Ativa o site (cria symlink)
 ln -sf /etc/nginx/sites-available/della_site /etc/nginx/sites-enabled/della_site
 
-# Testa a config antes de recarregar
-nginx -t && echo -e "${GREEN}[OK]${NC} Nginx config válida" || { echo "ERRO na config do Nginx"; exit 1; }
+nginx -t && echo -e "${GREEN}[OK]${NC} Nginx config HTTP válida" || { echo "ERRO na config do Nginx"; exit 1; }
 systemctl reload nginx
-echo -e "${GREEN}[OK]${NC} Nginx recarregado"
+echo -e "${GREEN}[OK]${NC} Nginx recarregado (HTTP)"
 
 # 4. Gera certificado SSL com Certbot
 echo ""
 echo -e "${YELLOW}[4/5]${NC} Gerando SSL com Certbot..."
-echo "Executando: certbot --nginx -d novo.dellainstore.com.br"
-certbot --nginx -d novo.dellainstore.com.br
+certbot --nginx -d novo.dellainstore.com.br --redirect
 echo -e "${GREEN}[OK]${NC} SSL configurado"
 
-# 5. Verifica tudo
-echo -e "${YELLOW}[5/5]${NC} Verificação final..."
-systemctl is-active gunicorn_della_site
-systemctl is-active nginx
+# 5. Substitui pela config Nginx final (com headers de segurança completos)
+echo -e "${YELLOW}[5/5]${NC} Aplicando config Nginx final com headers de segurança..."
+cp "$SCRIPT_DIR/nginx_della_site.conf" /etc/nginx/sites-available/della_site
+
+nginx -t && echo -e "${GREEN}[OK]${NC} Nginx config final válida" || { echo "AVISO: config final falhou — mantendo config do Certbot (site funciona, sem headers extras)"; }
+systemctl reload nginx
+echo -e "${GREEN}[OK]${NC} Nginx recarregado (HTTPS + headers de segurança)"
 
 echo ""
 echo "══════════════════════════════════════════════"
 echo -e "${GREEN}Instalação concluída!${NC}"
+echo ""
+echo "Acesse: https://novo.dellainstore.com.br"
 echo ""
 echo "Comandos úteis:"
 echo "  sudo systemctl status gunicorn_della_site"

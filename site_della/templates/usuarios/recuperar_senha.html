@@ -1,7 +1,51 @@
 {% extends 'base.html' %}
+{% block titulo %}Recuperar Senha — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-page">
+  <div class="conta-box">
+
+    <div class="conta-header">
+      <h1 class="conta-titulo">Recuperar Senha</h1>
+    </div>
+
+    {% if enviado %}
+      <div class="conta-alerta conta-alerta--success">
+        <i class="far fa-circle-check"></i>
+        Se esse e-mail estiver cadastrado, você receberá um link para redefinir sua senha em breve.
+        Verifique também sua caixa de spam.
+      </div>
+      <div style="margin-top:1.5rem;text-align:center;">
+        <a href="{% url 'usuarios:login' %}" class="conta-link">Voltar ao login</a>
+      </div>
+    {% else %}
+      <p class="conta-subtitulo">
+        Informe seu e-mail cadastrado e enviaremos um link para criar uma nova senha.
+      </p>
+
+      {% if form.non_field_errors %}
+        <div class="conta-alerta conta-alerta--error">
+          {% for erro in form.non_field_errors %}{{ erro }}{% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <div class="conta-campo">
+          {{ form.email }}
+          {% if form.email.errors %}<span class="conta-erro">{{ form.email.errors.0 }}</span>{% endif %}
+        </div>
+
+        <button type="submit" class="btn-conta-primario">Enviar link</button>
+      </form>
+
+      <p class="conta-texto-centro" style="margin-top:1.5rem;">
+        <a href="{% url 'usuarios:login' %}" class="conta-link">Voltar ao login</a>
+      </p>
+    {% endif %}
+
+  </div>
+</main>
 {% endblock %}

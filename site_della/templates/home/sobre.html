@@ -1,7 +1,37 @@
 {% extends 'base.html' %}
+{% load static %}
+{% block titulo %}{% if pagina %}{{ pagina.titulo }} — D'ELLA Instore{% else %}Nossa história — D'ELLA Instore{% endif %}{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
+<div class="pagina-estatica-wrapper">
+  <div class="pagina-estatica-inner">
+
+    {% if pagina %}
+      <h1 class="pagina-estatica-titulo">{{ pagina.titulo }}</h1>
+
+      {% if pagina.imagem %}
+      <div class="sobre-layout">
+        <div class="sobre-imagem">
+          <img src="{{ pagina.imagem.url }}" alt="{{ pagina.titulo }}" loading="lazy">
+        </div>
+        <div class="sobre-conteudo pagina-conteudo">
+          {{ pagina.conteudo|safe }}
+        </div>
+      </div>
+      {% else %}
+      <div class="pagina-conteudo">
+        {{ pagina.conteudo|safe }}
+      </div>
+      {% endif %}
+
+    {% else %}
+      <h1 class="pagina-estatica-titulo">Nossa história</h1>
+      <div class="pagina-conteudo">
+        <p>Conteúdo em breve. Acesse o painel e cadastre o conteúdo em <strong>Conteúdo do site → Páginas estáticas → Nossa história</strong>.</p>
+      </div>
+    {% endif %}
+
+  </div>
 </div>
 {% endblock %}

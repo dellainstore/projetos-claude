@@ -1,7 +1,91 @@
 {% extends 'base.html' %}
+{% block titulo %}Lista de Desejos — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-area">
+  <div class="conta-area-inner">
+
+    <aside class="conta-sidebar">
+      <div class="conta-sidebar-perfil">
+        <div class="conta-avatar">{{ request.user.nome|first|upper }}</div>
+        <div>
+          <p class="conta-sidebar-nome">{{ request.user.get_full_name }}</p>
+          <p class="conta-sidebar-email">{{ request.user.email }}</p>
+        </div>
+      </div>
+      <nav class="conta-sidebar-nav">
+        <a href="{% url 'usuarios:minha_conta' %}" class="conta-nav-link">
+          <i class="fa-regular fa-house"></i> Início
+        </a>
+        <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-nav-link">
+          <i class="fa-regular fa-bag-shopping"></i> Meus pedidos
+        </a>
+        <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
+          <i class="fa-regular fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link ativo">
+          <i class="fa-regular fa-heart"></i> Lista de desejos
+        </a>
+        <a href="{% url 'usuarios:editar_perfil' %}" class="conta-nav-link">
+          <i class="fa-regular fa-user"></i> Editar perfil
+        </a>
+        <a href="{% url 'usuarios:logout' %}" class="conta-nav-link conta-nav-link--sair">
+          <i class="fa-regular fa-arrow-right-from-bracket"></i> Sair
+        </a>
+      </nav>
+    </aside>
+
+    <section class="conta-conteudo">
+      <h2 class="conta-secao-titulo">Lista de Desejos</h2>
+
+      {% if itens %}
+        <div class="loja-grid">
+          {% for item in itens %}
+            {% with p=item.produto %}
+              <article class="produto-card fade-in">
+                <a href="{% url 'produtos:detalhe' p.slug %}" class="produto-card-link">
+                  <div class="produto-card-foto">
+                    {% if p.imagens.all %}
+                      <img src="{{ p.imagens.first.imagem.url }}" alt="{{ p.nome }}" loading="lazy">
+                    {% else %}
+                      <img src="/static/images/brand/produto-placeholder.jpg" alt="{{ p.nome }}">
+                    {% endif %}
+                    {% if p.preco_promocional %}<span class="produto-badge produto-badge--promo">Promo</span>{% endif %}
+                    {% if p.novo %}<span class="produto-badge produto-badge--novo">Novo</span>{% endif %}
+                  </div>
+                  <div class="produto-card-info">
+                    <p class="produto-card-nome">{{ p.nome }}</p>
+                    <div class="produto-card-preco">
+                      {% if p.preco_promocional %}
+                        <span class="preco-de">R$ {{ p.preco|floatformat:2 }}</span>
+                        <span class="preco-por">R$ {{ p.preco_promocional|floatformat:2 }}</span>
+                      {% else %}
+                        <span class="preco-por">R$ {{ p.preco|floatformat:2 }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                </a>
+                <button class="produto-card-wishlist ativo"
+                        data-produto-id="{{ p.id }}"
+                        data-url="{% url 'produtos:toggle_wishlist' p.id %}"
+                        aria-label="Remover da lista de desejos"
+                        title="Remover dos favoritos">
+                  <i class="fa-solid fa-heart"></i>
+                </button>
+              </article>
+            {% endwith %}
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="conta-vazio-bloco">
+          <i class="fa-regular fa-heart conta-vazio-icon"></i>
+          <p>Sua lista de desejos está vazia.</p>
+          <a href="{% url 'produtos:loja' %}" class="btn-conta-primario">Explorar a loja</a>
+        </div>
+      {% endif %}
+
+    </section>
+  </div>
+</main>
 {% endblock %}

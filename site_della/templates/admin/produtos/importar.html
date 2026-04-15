@@ -1,0 +1,119 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Importar Produtos — Painel D'ELLA{% endblock %}
+
+{% block content %}
+<div style="max-width:760px;">
+  <h1>Importar produtos via planilha</h1>
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:0;margin:1.5rem 0 0;border-bottom:2px solid #c9a96e;">
+    <button onclick="mostrarAba('bling')" id="tab-bling"
+      style="padding:0.6rem 1.5rem;border:none;cursor:pointer;font-weight:600;
+             background:#c9a96e;color:#fff;border-radius:4px 4px 0 0;font-size:0.9rem;">
+      Formato Bling (recomendado)
+    </button>
+    <button onclick="mostrarAba('legado')" id="tab-legado"
+      style="padding:0.6rem 1.5rem;border:none;cursor:pointer;font-weight:400;
+             background:#f5f5f3;color:#666;border-radius:4px 4px 0 0;font-size:0.9rem;">
+      Formato personalizado
+    </button>
+  </div>
+
+  <!-- Aba Bling -->
+  <div id="aba-bling" style="padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;">
+    <div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:6px;padding:1.25rem;margin-bottom:1.5rem;">
+      <strong>Como funciona o formato Bling:</strong>
+      <ol style="margin:0.75rem 0 0 1.2rem;line-height:2;font-size:0.88rem;">
+        <li>No Bling: <strong>Produtos → Exportar → CSV</strong> (ou XLSX)</li>
+        <li>O arquivo exportado tem colunas <strong>ID, Código, Descrição, Preço, Situação</strong></li>
+        <li>A Descrição segue o padrão: <code>MODELO (COR) (TAMANHO)</code> — ex: <em>BODY GIU (AZUL MARINHO) (PP)</em></li>
+        <li>O sistema detecta o formato automaticamente e cria produtos, cores e tamanhos</li>
+        <li>O código HEX das cores é preenchido automaticamente para cores conhecidas</li>
+        <li>Escolha a <strong>categoria</strong> que será usada para todos os produtos importados</li>
+      </ol>
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="formato_hint" value="bling">
+
+      <div style="margin-bottom:1.25rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">
+          Categoria dos produtos <small style="font-weight:300;color:#888;">(obrigatório)</small>
+        </label>
+        <select name="categoria"
+                style="width:100%;padding:0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
+          <option value="">— Selecione ou deixe em branco para criar "Importado" —</option>
+          {% for cat in categorias %}
+            <option value="{{ cat.nome }}">{{ cat.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="margin-bottom:1.25rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">
+          Arquivo CSV ou XLSX exportado do Bling:
+        </label>
+        <input type="file" name="arquivo_csv" accept=".csv,.xlsx,.xls"
+               style="display:block;width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
+      </div>
+
+      <div style="display:flex;gap:1rem;align-items:center;">
+        <button type="submit"
+                style="background:#c9a96e;color:#fff;padding:0.65rem 1.5rem;border:none;
+                       border-radius:4px;font-size:0.9rem;cursor:pointer;font-weight:600;">
+          Importar do Bling
+        </button>
+        <a href="/painel/produtos/produto/" style="color:#666;font-size:0.85rem;">Cancelar</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Aba Legado -->
+  <div id="aba-legado" style="display:none;padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;">
+    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:1.25rem;margin-bottom:1.5rem;">
+      <strong>Formato personalizado (CSV manual):</strong>
+      <ol style="margin:0.75rem 0 0 1.2rem;line-height:2;font-size:0.88rem;">
+        <li>Baixe o <a href="{% url 'admin:produtos_produto_modelo_csv' %}" style="color:#c9a96e;font-weight:600;">modelo CSV</a> e preencha no Excel ou Google Planilhas</li>
+        <li>Para um produto com várias variações: deixe o <strong>nome</strong> apenas na primeira linha</li>
+        <li>Salve como <strong>CSV UTF-8</strong> (Excel: Arquivo → Salvar como → CSV UTF-8)</li>
+        <li>Colunas: nome, categoria, preco, var_cor, var_tamanho, var_estoque, var_sku, var_bling_id</li>
+      </ol>
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div style="margin-bottom:1.25rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">
+          Arquivo CSV (formato personalizado):
+        </label>
+        <input type="file" name="arquivo_csv" accept=".csv"
+               style="display:block;width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
+      </div>
+      <div style="display:flex;gap:1rem;align-items:center;">
+        <button type="submit"
+                style="background:#888;color:#fff;padding:0.65rem 1.5rem;border:none;
+                       border-radius:4px;font-size:0.9rem;cursor:pointer;font-weight:600;">
+          Importar CSV personalizado
+        </button>
+        <a href="{% url 'admin:produtos_produto_modelo_csv' %}" style="color:#c9a96e;font-size:0.85rem;">Baixar modelo</a>
+        <a href="/painel/produtos/produto/" style="color:#666;font-size:0.85rem;">Cancelar</a>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script>
+function mostrarAba(aba) {
+  document.getElementById('aba-bling').style.display  = aba === 'bling'  ? '' : 'none';
+  document.getElementById('aba-legado').style.display = aba === 'legado' ? '' : 'none';
+  document.getElementById('tab-bling').style.background  = aba === 'bling'  ? '#c9a96e' : '#f5f5f3';
+  document.getElementById('tab-bling').style.color       = aba === 'bling'  ? '#fff'    : '#666';
+  document.getElementById('tab-bling').style.fontWeight  = aba === 'bling'  ? '600'     : '400';
+  document.getElementById('tab-legado').style.background = aba === 'legado' ? '#c9a96e' : '#f5f5f3';
+  document.getElementById('tab-legado').style.color      = aba === 'legado' ? '#fff'    : '#666';
+  document.getElementById('tab-legado').style.fontWeight = aba === 'legado' ? '600'     : '400';
+}
+</script>
+{% endblock %}

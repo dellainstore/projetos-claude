@@ -23,7 +23,7 @@ SESSION_COOKIE_SAMESITE = 'Lax'   # proteção CSRF cross-site
 
 # Cookie CSRF só via HTTPS
 CSRF_COOKIE_SECURE = True
-CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # False permite que JS leia o token para chamadas AJAX
 CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Bloqueia conteúdo mixed HTTP/HTTPS

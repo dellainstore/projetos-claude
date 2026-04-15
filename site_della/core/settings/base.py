@@ -36,6 +36,7 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    'apps.conteudo',    # banners, mini banners, look da semana
     'apps.produtos',
     'apps.pedidos',
     'apps.pagamentos',
@@ -133,7 +134,19 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Django 5.x usa STORAGES (dict); STATICFILES_STORAGE sozinho é ignorado.
+# Storage custom (core.storage) = CompressedManifestStaticFilesStorage com
+# manifest_strict=False → gera hashes nos nomes (cache-busting no mobile)
+# sem quebrar a página se algum {% static %} referencia arquivo faltante.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'core.storage.WhiteNoiseManifestStorageLeniente',
+    },
+}
 
 # ─── Media (uploads) ──────────────────────────────────────────────────────────
 
@@ -195,6 +208,7 @@ CONTENT_SECURITY_POLICY = {
             "'self'",
             "fonts.gstatic.com",
             "fonts.googleapis.com",
+            "cdnjs.cloudflare.com",
         ),
         'img-src': (
             "'self'",

@@ -17,21 +17,9 @@
 {% block conteudo %}
 <div class="produto-detalhe-wrapper">
 
-  {# Breadcrumb #}
-  <nav class="breadcrumb" aria-label="Navegação estrutural">
-    <a href="{% url 'produtos:home' %}">Início</a>
-    <span class="breadcrumb-sep">/</span>
-    <a href="{% url 'produtos:loja' %}">Loja</a>
-    <span class="breadcrumb-sep">/</span>
-    <a href="{% url 'produtos:loja_categoria' produto.categoria.slug %}">{{ produto.categoria.nome }}</a>
-    <span class="breadcrumb-sep">/</span>
-    <span aria-current="page">{{ produto.nome }}</span>
-  </nav>
-
-  {# ── Bloco principal: galeria + info ─────────────────────────────────── #}
   <div class="produto-detalhe-inner">
 
-    {# Galeria #}
+    
     <div class="produto-galeria" id="produto-galeria">
       <div class="galeria-principal">
         {% with img=produto.imagem_principal %}
@@ -45,6 +33,15 @@
           <span class="produto-badge promo galeria-badge">-{{ produto.percentual_desconto }}%</span>
         {% elif produto.novo %}
           <span class="produto-badge novo galeria-badge">Novo</span>
+        {% endif %}
+
+        {% if imagens|length > 1 %}
+        <button class="galeria-nav galeria-nav-prev" aria-label="Foto anterior">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <button class="galeria-nav galeria-nav-next" aria-label="Próxima foto">
+          <i class="fas fa-chevron-right"></i>
+        </button>
         {% endif %}
       </div>
 
@@ -63,13 +60,12 @@
       {% endif %}
     </div>
 
-    {# Info do produto #}
+    
     <div class="produto-info" id="produto-info">
 
-      <p class="produto-info-cat">{{ produto.categoria.nome }}</p>
       <h1 class="produto-info-nome">{{ produto.nome }}</h1>
 
-      {# Avaliações resumo #}
+      
       {% if total_aval > 0 %}
       <div class="produto-info-stars" aria-label="{{ media_notas }} de 5 estrelas">
         {% for i in "12345" %}
@@ -83,60 +79,67 @@
       </div>
       {% endif %}
 
-      {# Preço #}
+      
       <div class="produto-info-preco">
         {% if produto.em_promocao %}
           <span class="preco-de">R$ {{ produto.preco|floatformat:2 }}</span>
           <span class="preco-por destaque">R$ {{ produto.preco_promocional|floatformat:2 }}</span>
-          <span class="preco-economia">Você economiza R$ {{ produto.preco|floatformat:2|add:"-0" }}</span>
         {% else %}
           <span class="preco-por destaque">R$ {{ produto.preco|floatformat:2 }}</span>
         {% endif %}
-        <span class="preco-parcelamento">ou 3x de R$ {% widthratio produto.preco_atual 3 1 %} sem juros</span>
+        {% if produto.parcelamento_texto %}
+          <span class="preco-parcelamento">{{ produto.parcelamento_texto }}</span>
+        {% endif %}
       </div>
 
-      {# Variações — COR #}
+      {% if config_loja and config_loja.frete_gratis_acima and produto.preco_atual >= config_loja.frete_gratis_acima %}
+      <div class="frete-gratis-aviso">
+        <i class="fas fa-truck"></i>
+        Frete grátis neste produto!
+      </div>
+      {% endif %}
+
+      
       {% if variacoes_cor %}
       <div class="produto-variacoes" id="variacoes-cor">
         <p class="variacao-label">Cor: <strong id="label-cor-selecionada">Selecione</strong></p>
         <div class="variacoes-cores">
-          {% for var in variacoes_cor %}
-          <button class="variacao-cor {% if not var.disponivel %}esgotado{% endif %}"
-                  data-variacao-id="{{ var.pk }}"
-                  data-tipo="cor"
-                  data-nome="{{ var.nome }}"
-                  style="background:{% if var.codigo_hex %}{{ var.codigo_hex }}{% else %}#ccc{% endif %};"
-                  title="{{ var.nome }}{% if not var.disponivel %} — Esgotado{% endif %}"
-                  {% if not var.disponivel %}aria-disabled="true"{% endif %}>
-            {% if not var.disponivel %}<span class="var-risco"></span>{% endif %}
+          {% for vcor in variacoes_cor %}
+          <button class="variacao-cor {% if vcor.cor__codigo_hex_secundario %}bicolor{% endif %}"
+                  data-cor="{{ vcor.cor__nome }}"
+                  data-cor-id="{{ vcor.cor__id }}"
+                  {% if vcor.cor__codigo_hex_secundario %}
+                  style="background: conic-gradient({{ vcor.cor__codigo_hex|default:'#ccc' }} 0deg 180deg, {{ vcor.cor__codigo_hex_secundario }} 180deg 360deg);"
+                  {% else %}
+                  style="background:{% if vcor.cor__codigo_hex %}{{ vcor.cor__codigo_hex }}{% else %}#ccc{% endif %};"
+                  {% endif %}
+                  title="{{ vcor.cor__nome }}"
+                  aria-label="{{ vcor.cor__nome }}">
           </button>
           {% endfor %}
         </div>
       </div>
       {% endif %}
 
-      {# Variações — TAMANHO #}
       {% if variacoes_tamanho %}
       <div class="produto-variacoes" id="variacoes-tamanho">
         <p class="variacao-label">Tamanho: <strong id="label-tamanho-selecionado">Selecione</strong></p>
         <div class="variacoes-tamanhos">
-          {% for var in variacoes_tamanho %}
-          <button class="variacao-tamanho {% if not var.disponivel %}esgotado{% endif %}"
-                  data-variacao-id="{{ var.pk }}"
-                  data-tipo="tamanho"
-                  data-nome="{{ var.nome }}"
-                  {% if not var.disponivel %}aria-disabled="true"{% endif %}>
-            {{ var.nome }}
+          {% for tam in variacoes_tamanho %}
+          <button class="variacao-tamanho"
+                  data-tamanho-id="{{ tam.tamanho__id }}"
+                  data-tamanho="{{ tam.tamanho__nome }}">
+            {{ tam.tamanho__nome }}
           </button>
           {% endfor %}
         </div>
-        <a href="#guia-tamanhos" class="link-guia-tamanhos">
-          <i class="far fa-ruler-horizontal"></i> Guia de tamanhos
+        <a href="#" id="link-guia-tamanhos" class="link-guia-tamanhos">
+          <i class="fas fa-ruler-horizontal"></i> Guia de tamanhos
         </a>
       </div>
       {% endif %}
 
-      {# Quantidade + Adicionar ao carrinho #}
+      
       <div class="produto-comprar">
         <div class="quantidade-selector">
           <button class="qty-btn" id="qty-menos" aria-label="Diminuir quantidade">−</button>
@@ -161,7 +164,7 @@
         {% if na_wishlist %}Salvo na wishlist{% else %}Salvar na wishlist{% endif %}
       </button>
 
-      {# Descrição #}
+      
       <div class="produto-info-desc">
         <button class="acordeao-btn" aria-expanded="true" data-acordeao="desc">
           Descrição <i class="fas fa-chevron-up"></i>
@@ -188,17 +191,17 @@
         </button>
         <div class="acordeao-conteudo" id="acordeao-entrega">
           <ul class="info-lista">
-            <li><i class="fas fa-shipping-fast"></i> Frete calculado no checkout via Melhor Envio</li>
+            <li><i class="fas fa-truck"></i> Frete calculado no checkout</li>
             <li><i class="fas fa-undo-alt"></i> Trocas em até 7 dias após o recebimento</li>
             <li><i class="fas fa-lock"></i> Compra 100% segura e protegida</li>
           </ul>
         </div>
       </div>
 
-    </div>{# /produto-info #}
-  </div>{# /produto-detalhe-inner #}
+    </div>
+  </div>
 
-  {# ── Avaliações ──────────────────────────────────────────────────────── #}
+  
   {% if avaliacoes %}
   <section class="produto-avaliacoes" aria-labelledby="titulo-avaliacoes">
     <div class="avaliacoes-inner">
@@ -237,7 +240,7 @@
   </section>
   {% endif %}
 
-  {# ── Produtos relacionados ───────────────────────────────────────────── #}
+  
   {% if relacionados %}
   <section class="relacionados-secao" aria-labelledby="titulo-relacionados">
     <div class="relacionados-inner">
@@ -274,7 +277,34 @@
   </section>
   {% endif %}
 
-</div>{# /produto-detalhe-wrapper #}
+</div>
+
+{% if tabela_medidas %}
+<div id="modal-guia-tamanhos" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-guia-titulo">
+  <div class="modal-box">
+    <button id="btn-fechar-modal-guia" class="modal-fechar" aria-label="Fechar">
+      <i class="fas fa-times"></i>
+    </button>
+    <h2 class="modal-titulo" id="modal-guia-titulo">Guia de tamanhos</h2>
+    <div class="modal-conteudo">{{ tabela_medidas.conteudo|linebreaksbr }}</div>
+  </div>
+</div>
+{% else %}
+<div id="modal-guia-tamanhos" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-guia-titulo">
+  <div class="modal-box">
+    <button id="btn-fechar-modal-guia" class="modal-fechar" aria-label="Fechar">
+      <i class="fas fa-times"></i>
+    </button>
+    <h2 class="modal-titulo" id="modal-guia-titulo">Guia de tamanhos</h2>
+    <div class="modal-conteudo">
+      <p style="color:var(--cinza-texto);font-size:0.9rem;">
+        Cadastre a tabela de medidas no painel: <strong>Produtos → Tabelas de medidas</strong>.
+      </p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block js_extra %}
@@ -285,36 +315,128 @@ document.addEventListener('DOMContentLoaded', () => {
   const fotoPrincipal = document.getElementById('foto-principal');
   const thumbs = document.querySelectorAll('.galeria-thumb');
 
-  thumbs.forEach(thumb => {
-    thumb.addEventListener('click', () => {
-      fotoPrincipal.src = thumb.dataset.src;
-      fotoPrincipal.alt = thumb.dataset.alt;
-      thumbs.forEach(t => t.classList.remove('ativa'));
-      thumb.classList.add('ativa');
+  function ativarThumb(idx) {
+    const thumb = thumbs[idx];
+    if (!thumb) return;
+    fotoPrincipal.src = thumb.dataset.src;
+    fotoPrincipal.alt = thumb.dataset.alt;
+    thumbs.forEach(t => t.classList.remove('ativa'));
+    thumb.classList.add('ativa');
+  }
+
+  thumbs.forEach((thumb, idx) => {
+    thumb.addEventListener('click', () => ativarThumb(idx));
+  });
+
+  // ── Variações: seleção de cor e tamanho ───────────────────────────────
+  const variacoesMap  = {{ variacoes_json|safe }};
+  const fotosPorCorMap = {{ fotos_cor_json|safe }};  // cor_id → índice na galeria
+  const labelCorSel = document.getElementById('label-cor-selecionada');
+  const labelTamSel = document.getElementById('label-tamanho-selecionado');
+  let corSelecionadaId  = null;
+  let tamSelecionadoId  = null;
+  let variacaoSelecionadaId = null;
+
+  const temCores    = document.querySelectorAll('.variacao-cor').length > 0;
+  const temTamanhos = document.querySelectorAll('.variacao-tamanho').length > 0;
+
+  // Atualiza o ID da variação selecionada a partir da combinação cor+tam atual
+  function resolverVariacao() {
+    const corKey = corSelecionadaId  || 'null';
+    const tamKey = tamSelecionadoId  || 'null';
+    const entry  = variacoesMap[`${corKey}_${tamKey}`];
+    variacaoSelecionadaId = entry ? entry.id : null;
+  }
+
+  // Habilita/desabilita botões de tamanho conforme a cor selecionada
+  function atualizarDisponibilidadeTamanhos() {
+    document.querySelectorAll('.variacao-tamanho').forEach(btn => {
+      const tamId = btn.dataset.tamanhoId;
+      const corKey = corSelecionadaId || 'null';
+      const entry  = variacoesMap[`${corKey}_${tamId}`];
+
+      if (entry === undefined) {
+        // Combinação não existe para esta cor
+        btn.classList.add('esgotado');
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+        btn.title = 'Indisponível nesta cor';
+      } else if (!entry.disponivel) {
+        btn.classList.add('esgotado');
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+        btn.title = 'Esgotado';
+      } else {
+        btn.classList.remove('esgotado');
+        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
+        btn.title = '';
+      }
+    });
+  }
+
+  // Se cor selecionada não cobre o tamanho já escolhido, deseleciona tamanho
+  function validarTamanhoAposCorMudar() {
+    if (!tamSelecionadoId) return;
+    const corKey = corSelecionadaId || 'null';
+    const entry  = variacoesMap[`${corKey}_${tamSelecionadoId}`];
+    if (!entry || !entry.disponivel) {
+      const btnTam = document.querySelector(`.variacao-tamanho.selecionado`);
+      if (btnTam) btnTam.classList.remove('selecionado');
+      tamSelecionadoId = null;
+      if (labelTamSel) labelTamSel.textContent = 'Selecione';
+    }
+  }
+
+  // Inicializa estado de disponibilidade
+  if (temCores) {
+    // Com cor não selecionada, mostra todos os tamanhos habilitados
+    // (o mapa pode ter entradas "null_tamId" para produtos sem cor)
+    atualizarDisponibilidadeTamanhos();
+  }
+
+  // ── Cores ─────────────────────────────────────────────────────────────
+  document.querySelectorAll('.variacao-cor').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const jaSelecionado = btn.classList.contains('selecionado');
+      document.querySelectorAll('.variacao-cor').forEach(b => b.classList.remove('selecionado'));
+
+      if (jaSelecionado) {
+        corSelecionadaId = null;
+        if (labelCorSel) labelCorSel.textContent = 'Selecione';
+      } else {
+        btn.classList.add('selecionado');
+        corSelecionadaId = btn.dataset.corId;
+        if (labelCorSel) labelCorSel.textContent = btn.dataset.cor;
+        // Troca a foto da galeria para a foto vinculada a esta cor
+        const idxFoto = fotosPorCorMap[corSelecionadaId];
+        if (idxFoto !== undefined) ativarThumb(idxFoto);
+      }
+
+      atualizarDisponibilidadeTamanhos();
+      validarTamanhoAposCorMudar();
+      resolverVariacao();
     });
   });
 
-  // ── Variações: seleção de cor ──────────────────────────────────────────
-  const botoesVariacao = document.querySelectorAll('.variacao-cor, .variacao-tamanho');
-  const labelCorSel     = document.getElementById('label-cor-selecionada');
-  const labelTamSel     = document.getElementById('label-tamanho-selecionado');
-  let variacaoSelecionadaId = null;
-
-  botoesVariacao.forEach(btn => {
-    if (btn.getAttribute('aria-disabled') === 'true') return;
-
+  // ── Tamanhos ──────────────────────────────────────────────────────────
+  document.querySelectorAll('.variacao-tamanho').forEach(btn => {
     btn.addEventListener('click', () => {
-      const tipo = btn.dataset.tipo;
-      const nome = btn.dataset.nome;
+      if (btn.disabled) return;
 
-      // Desseleciona outros do mesmo tipo
-      document.querySelectorAll(`.variacao-${tipo}`).forEach(b => b.classList.remove('selecionado'));
-      btn.classList.add('selecionado');
+      const jaSelecionado = btn.classList.contains('selecionado');
+      document.querySelectorAll('.variacao-tamanho').forEach(b => b.classList.remove('selecionado'));
 
-      if (tipo === 'cor' && labelCorSel) labelCorSel.textContent = nome;
-      if (tipo === 'tamanho' && labelTamSel) labelTamSel.textContent = nome;
+      if (jaSelecionado) {
+        tamSelecionadoId = null;
+        if (labelTamSel) labelTamSel.textContent = 'Selecione';
+      } else {
+        btn.classList.add('selecionado');
+        tamSelecionadoId = btn.dataset.tamanhoId;
+        if (labelTamSel) labelTamSel.textContent = btn.dataset.tamanho;
+      }
 
-      variacaoSelecionadaId = btn.dataset.variacaoId;
+      resolverVariacao();
     });
   });
 

@@ -1,36 +1,63 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from django.urls import path
+from django.http import HttpResponseRedirect
 from .models import BlingToken, BlingLog
 
 
 @admin.register(BlingToken)
 class BlingTokenAdmin(admin.ModelAdmin):
-    list_display = ('expira_em', 'badge_valido', 'criado_em', 'atualizado_em', 'btn_autorizar')
+    list_display = ('expira_em', 'badge_valido', 'info_autorefresh', 'criado_em', 'atualizado_em', 'acoes')
     readonly_fields = ('access_token', 'refresh_token', 'expira_em', 'criado_em', 'atualizado_em')
     ordering = ('-criado_em',)
-    change_list_template = 'admin/bling_token_changelist.html'
 
     def badge_valido(self, obj):
         if obj.valido:
             return format_html(
                 '<span style="background:#27ae60;color:#fff;padding:2px 8px;'
-                'border-radius:3px;font-size:11px;">Válido</span>'
+                'border-radius:3px;font-size:11px;">✓ Válido</span>'
             )
         return format_html(
             '<span style="background:#e74c3c;color:#fff;padding:2px 8px;'
-            'border-radius:3px;font-size:11px;">Expirado</span>'
+            'border-radius:3px;font-size:11px;">⏰ Expirado (normal — será renovado automático)</span>'
         )
-    badge_valido.short_description = 'Token'
+    badge_valido.short_description = 'Status'
 
-    def btn_autorizar(self, obj):
+    def info_autorefresh(self, obj):
         return format_html(
-            '<a href="/bling/autorizar/" style="background:#c9a96e;color:#fff;padding:3px 10px;'
-            'border-radius:3px;font-size:11px;text-decoration:none;">Renovar</a>'
+            '<span style="font-size:11px;color:#666;">'
+            'O sistema renova o token automaticamente ao usar a API.<br>'
+            'Access token dura ~1h (padrão Bling). Refresh token dura 30 dias.'
+            '</span>'
         )
-    btn_autorizar.short_description = 'Ação'
+    info_autorefresh.short_description = 'Como funciona'
+    info_autorefresh.allow_tags = True
+
+    def acoes(self, obj):
+        return format_html(
+            '<a href="/bling/refresh-token/" '
+            'style="background:#27ae60;color:#fff;padding:3px 10px;'
+            'border-radius:3px;font-size:11px;text-decoration:none;margin-right:6px;" '
+            'title="Força renovação do access_token agora">Atualizar Token</a>'
+            '<a href="/bling/autorizar/" '
+            'style="background:#c9a96e;color:#fff;padding:3px 10px;'
+            'border-radius:3px;font-size:11px;text-decoration:none;" '
+            'title="Re-autoriza do zero (use se Atualizar Token falhar)">Re-autorizar</a>'
+        )
+    acoes.short_description = 'Ações'
 
     def has_add_permission(self, request):
         return False
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['info_token'] = (
+            'O access_token expira em ~1 hora — comportamento normal do Bling. '
+            'O sistema renova automaticamente sempre que faz uma chamada à API (pedidos, estoque, etc.). '
+            'Clique em "Atualizar Token" se quiser forçar a renovação agora. '
+            'Se falhar, use "Re-autorizar" para refazer o fluxo OAuth completo.'
+        )
+        return super().changelist_view(request, extra_context)
 
 
 @admin.register(BlingLog)

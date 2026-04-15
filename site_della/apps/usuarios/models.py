@@ -116,3 +116,19 @@ class Endereco(models.Model):
 
     def get_cep_formatado(self):
         return f'{self.cep[:5]}-{self.cep[5:]}'
+
+
+class Wishlist(models.Model):
+    """Produtos salvos na lista de desejos do cliente."""
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='wishlist_set')
+    produto = models.ForeignKey('produtos.Produto', on_delete=models.CASCADE, related_name='wishlist_set')
+    adicionado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Lista de desejos (produto salvo)'
+        verbose_name_plural = 'Listas de desejos (produtos salvos)'
+        unique_together = [['cliente', 'produto']]
+        ordering = ['-adicionado_em']
+
+    def __str__(self):
+        return f'{self.cliente.email} ♥ {self.produto.nome}'

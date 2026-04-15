@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block titulo %}Guia de tamanhos — D'ELLA Instore{% endblock %}
+{% block navbar_class %}solida{% endblock %}
+
+{% block conteudo %}
+<div class="pagina-estatica-wrapper">
+  <div class="pagina-estatica-inner">
+    <h1 class="pagina-estatica-titulo">Guia de Tamanhos</h1>
+    {% if tabelas %}
+      {% for tabela in tabelas %}
+      <div style="margin-bottom:2.5rem;">
+        <h2 style="font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:600;margin-bottom:1rem;">
+          {{ tabela.nome }}{% if tabela.categoria %} — {{ tabela.categoria.nome }}{% endif %}
+        </h2>
+        <div class="pagina-conteudo">{{ tabela.conteudo|safe }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="pagina-conteudo">
+        <p>Cadastre as tabelas de medidas no painel em <strong>Produtos → Tabelas de medidas</strong>.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

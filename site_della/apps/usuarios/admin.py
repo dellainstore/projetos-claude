@@ -1,7 +1,16 @@
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.admin import UserAdmin, GroupAdmin
+from django.contrib.auth.models import Group
 from django.utils.html import format_html
 from .models import Cliente, Endereco, Wishlist
+
+# Remove "Grupos" da seção Autenticação e Autorização padrão do Django
+# e move para cá com nome em português
+admin.site.unregister(Group)
+
+@admin.register(Group)
+class GrupoAdmin(GroupAdmin):
+    pass
 
 
 class EnderecoInline(admin.TabularInline):

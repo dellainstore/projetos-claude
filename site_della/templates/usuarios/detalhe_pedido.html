@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block titulo %}Pedido {{ pedido.numero }} — Della Instore{% endblock %}
+{% block navbar_class %}solida{% endblock %}
+
+{% block conteudo %}
+<main class="conta-area">
+  <div class="conta-area-inner">
+
+    <aside class="conta-sidebar">
+      <div class="conta-sidebar-perfil">
+        <div class="conta-avatar">{{ request.user.nome|first|upper }}</div>
+        <div>
+          <p class="conta-sidebar-nome">{{ request.user.get_full_name }}</p>
+          <p class="conta-sidebar-email">{{ request.user.email }}</p>
+        </div>
+      </div>
+      <nav class="conta-sidebar-nav">
+        <a href="{% url 'usuarios:minha_conta' %}" class="conta-nav-link">
+          <i class="fas fa-house"></i> Início
+        </a>
+        <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-nav-link ativo">
+          <i class="fas fa-bag-shopping"></i> Meus pedidos
+        </a>
+        <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
+          <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
+          <i class="far fa-heart"></i> Lista de desejos
+        </a>
+        <a href="{% url 'usuarios:editar_perfil' %}" class="conta-nav-link">
+          <i class="far fa-user"></i> Editar perfil
+        </a>
+        <a href="{% url 'usuarios:logout' %}" class="conta-nav-link conta-nav-link--sair">
+          <i class="fas fa-arrow-right-from-bracket"></i> Sair
+        </a>
+      </nav>
+    </aside>
+
+    <section class="conta-conteudo">
+
+      <div class="conta-detalhe-header">
+        <div>
+          <h2 class="conta-secao-titulo">Pedido {{ pedido.numero }}</h2>
+          <p class="conta-pedido-data">Realizado em {{ pedido.criado_em|date:"d \d\e F \d\e Y" }}</p>
+        </div>
+        <span class="conta-status conta-status--{{ pedido.status }}">{{ pedido.get_status_display }}</span>
+      </div>
+
+      
+      {% if pedido.codigo_rastreio %}
+        <div class="conta-card conta-rastreio">
+          <p><i class="fas fa-truck"></i> <strong>Código de rastreio:</strong>
+            {{ pedido.transportadora }} — <strong>{{ pedido.codigo_rastreio }}</strong>
+          </p>
+        </div>
+      {% endif %}
+
+      
+      <div class="conta-card">
+        <h3 class="conta-card-titulo">Itens do pedido</h3>
+        {% for item in pedido.itens.all %}
+          <div class="conta-item-row">
+            {% if item.produto and item.produto.imagem_principal %}
+              <img src="{{ item.produto.imagem_principal.imagem.url }}" alt="{{ item.nome_produto }}" class="conta-item-foto">
+            {% else %}
+              <div class="conta-item-foto conta-item-foto--placeholder"></div>
+            {% endif %}
+            <div class="conta-item-info">
+              <p class="conta-item-nome">{{ item.nome_produto }}</p>
+              {% if item.variacao %}
+                <p class="conta-item-var">{{ item.variacao.get_tipo_display }}: {{ item.variacao.nome }}</p>
+              {% endif %}
+              <p class="conta-item-qty">Qtd: {{ item.quantidade }}</p>
+            </div>
+            <div class="conta-item-preco">
+              R$ {{ item.preco_unitario|floatformat:2 }}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      
+      <div class="conta-card">
+        <h3 class="conta-card-titulo">Resumo</h3>
+        <div class="conta-resumo-lista">
+          <div class="conta-resumo-linha">
+            <span>Subtotal</span>
+            <span>R$ {{ pedido.subtotal|floatformat:2 }}</span>
+          </div>
+          {% if pedido.desconto %}
+            <div class="conta-resumo-linha">
+              <span>Desconto</span>
+              <span class="cor-verde">− R$ {{ pedido.desconto|floatformat:2 }}</span>
+            </div>
+          {% endif %}
+          <div class="conta-resumo-linha">
+            <span>Frete</span>
+            <span>{% if pedido.frete %}R$ {{ pedido.frete|floatformat:2 }}{% else %}Grátis{% endif %}</span>
+          </div>
+          <div class="conta-resumo-linha conta-resumo-linha--total">
+            <span>Total</span>
+            <span>R$ {{ pedido.total|floatformat:2 }}</span>
+          </div>
+          <div class="conta-resumo-linha">
+            <span>Pagamento</span>
+            <span>{{ pedido.get_forma_pagamento_display }}{% if pedido.parcelas > 1 %} em {{ pedido.parcelas }}x{% endif %}</span>
+          </div>
+        </div>
+      </div>
+
+      
+      <div class="conta-card">
+        <h3 class="conta-card-titulo">Endereço de entrega</h3>
+        <p>{{ pedido.nome_completo }}</p>
+        <p>{{ pedido.logradouro }}, {{ pedido.numero_entrega }}{% if pedido.complemento %}, {{ pedido.complemento }}{% endif %}</p>
+        <p>{{ pedido.bairro }} — {{ pedido.cidade }}/{{ pedido.estado }}</p>
+        <p>CEP: {{ pedido.cep_entrega|slice:":5" }}-{{ pedido.cep_entrega|slice:"5:" }}</p>
+      </div>
+
+      <a href="{% url 'usuarios:meus_pedidos' %}" class="btn-conta-secundario">
+        <i class="fas fa-arrow-left"></i> Voltar aos pedidos
+      </a>
+
+    </section>
+  </div>
+</main>
+{% endblock %}

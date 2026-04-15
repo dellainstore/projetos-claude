@@ -1,7 +1,106 @@
 {% extends 'base.html' %}
+{% block titulo %}Criar Conta — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-page">
+  <div class="conta-box conta-box--largo">
+
+    <div class="conta-header">
+      <h1 class="conta-titulo">Criar Conta</h1>
+      <p class="conta-subtitulo">Preencha os dados para se cadastrar</p>
+    </div>
+
+    {% if form.non_field_errors %}
+      <div class="conta-alerta conta-alerta--error">
+        {% for erro in form.non_field_errors %}{{ erro }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="conta-grid-2">
+        <div class="conta-campo">
+          <label class="conta-label">Nome *</label>
+          {{ form.nome }}
+          {% if form.nome.errors %}<span class="conta-erro">{{ form.nome.errors.0 }}</span>{% endif %}
+        </div>
+        <div class="conta-campo">
+          <label class="conta-label">Sobrenome</label>
+          {{ form.sobrenome }}
+        </div>
+      </div>
+
+      <div class="conta-campo">
+        <label class="conta-label">E-mail *</label>
+        {{ form.email }}
+        {% if form.email.errors %}<span class="conta-erro">{{ form.email.errors.0 }}</span>{% endif %}
+      </div>
+
+      <div class="conta-grid-2">
+        <div class="conta-campo">
+          <label class="conta-label">CPF</label>
+          {{ form.cpf }}
+          {% if form.cpf.errors %}<span class="conta-erro">{{ form.cpf.errors.0 }}</span>{% endif %}
+        </div>
+        <div class="conta-campo">
+          <label class="conta-label">Telefone</label>
+          {{ form.telefone }}
+        </div>
+      </div>
+
+      <div class="conta-grid-2">
+        <div class="conta-campo">
+          <label class="conta-label">Senha *</label>
+          {{ form.senha }}
+          {% if form.senha.errors %}
+            {% for e in form.senha.errors %}<span class="conta-erro">{{ e }}</span>{% endfor %}
+          {% endif %}
+        </div>
+        <div class="conta-campo">
+          <label class="conta-label">Confirmar senha *</label>
+          {{ form.confirmar_senha }}
+          {% if form.confirmar_senha.errors %}<span class="conta-erro">{{ form.confirmar_senha.errors.0 }}</span>{% endif %}
+        </div>
+      </div>
+
+      <div class="conta-campo">
+        <label class="conta-lembrar conta-lembrar--termos">
+          {{ form.aceitar_termos }}
+          <span>Concordo com os <a href="#" class="conta-link">Termos de Uso</a> e a <a href="#" class="conta-link">Política de Privacidade</a></span>
+        </label>
+        {% if form.aceitar_termos.errors %}<span class="conta-erro">{{ form.aceitar_termos.errors.0 }}</span>{% endif %}
+      </div>
+
+      <button type="submit" class="btn-conta-primario">Criar conta</button>
+    </form>
+
+    <div class="conta-divisor"><span>ou</span></div>
+
+    <p class="conta-texto-centro">
+      Já tem conta?
+      <a href="{% url 'usuarios:login' %}" class="conta-link">Entrar</a>
+    </p>
+
+  </div>
+</main>
+{% endblock %}
+
+{% block js_extra %}
+<script>
+document.getElementById('id_cadastro_cpf')?.addEventListener('input', function(){
+  let v = this.value.replace(/\D/g,'').slice(0,11);
+  if(v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/,'$1.$2.$3-$4');
+  else if(v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/,'$1.$2.$3');
+  else if(v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/,'$1.$2');
+  this.value = v;
+});
+document.querySelector('[name="telefone"]')?.addEventListener('input', function(){
+  let v = this.value.replace(/\D/g,'').slice(0,11);
+  if(v.length > 6) v = v.replace(/(\d{2})(\d{4,5})(\d{4})/,'($1) $2-$3');
+  else if(v.length > 2) v = v.replace(/(\d{2})(\d+)/,'($1) $2');
+  this.value = v;
+});
+</script>
 {% endblock %}

@@ -7,6 +7,28 @@ from django.views.decorators.http import require_GET
 logger = logging.getLogger(__name__)
 
 
+def _pode_acessar_pedido(request, pedido) -> bool:
+    """
+    Autoriza acesso ao pedido em três cenários:
+      1. staff (admin)
+      2. cliente logado = dono do pedido
+      3. número está na sessão do visitante (guest checkout) ou é o último pedido
+    Em qualquer outro caso, nega.
+    """
+    if request.user.is_authenticated:
+        if request.user.is_staff:
+            return True
+        if pedido.cliente_id and pedido.cliente_id == request.user.id:
+            return True
+
+    numero = pedido.numero
+    if numero == request.session.get('ultimo_pedido'):
+        return True
+    if numero in request.session.get('pedidos_guest', []):
+        return True
+    return False
+
+
 # ─── PagSeguro ────────────────────────────────────────────────────────────────
 
 @csrf_exempt
@@ -72,10 +94,8 @@ def pix_gerar(request, pedido_numero):
     except Pedido.DoesNotExist:
         return JsonResponse({'status': 'erro', 'erro': 'Pedido não encontrado.'}, status=404)
 
-    # Verifica acesso: só o dono, ou quem tem o número na sessão
-    if pedido.cliente and request.user.is_authenticated:
-        if pedido.cliente != request.user and not request.user.is_staff:
-            return JsonResponse({'status': 'erro', 'erro': 'Não autorizado.'}, status=403)
+    if not _pode_acessar_pedido(request, pedido):
+        return JsonResponse({'status': 'erro', 'erro': 'Não autorizado.'}, status=403)
 
     chave_pix = getattr(settings, 'PIX_CHAVE', '')
     if not chave_pix:
@@ -121,6 +141,9 @@ def pix_status(request, pedido_numero):
         pedido = Pedido.objects.get(numero=pedido_numero)
     except Pedido.DoesNotExist:
         return JsonResponse({'status': 'erro'}, status=404)
+
+    if not _pode_acessar_pedido(request, pedido):
+        return JsonResponse({'status': 'erro', 'erro': 'Não autorizado.'}, status=403)
 
     pago = pedido.status == 'pagamento_confirmado'
     return JsonResponse({

@@ -1,7 +1,65 @@
 {% extends 'base.html' %}
+{% block titulo %}Entrar — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
-</div>
+<main class="conta-page">
+  <div class="conta-box">
+
+    <div class="conta-header">
+      <h1 class="conta-titulo">Minha Conta</h1>
+      <p class="conta-subtitulo">Entre com seu e-mail e senha</p>
+    </div>
+
+    {% if messages %}
+      {% for msg in messages %}
+        <div class="conta-alerta conta-alerta--{{ msg.tags }}">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+
+    {% if form.non_field_errors %}
+      <div class="conta-alerta conta-alerta--error">
+        {% for erro in form.non_field_errors %}{{ erro }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="conta-campo">
+        {{ form.email }}
+        {% if form.email.errors %}
+          <span class="conta-erro">{{ form.email.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="conta-campo">
+        {{ form.senha }}
+        {% if form.senha.errors %}
+          <span class="conta-erro">{{ form.senha.errors.0 }}</span>
+        {% endif %}
+      </div>
+
+      <div class="conta-linha-opcoes">
+        <label class="conta-lembrar">
+          {{ form.lembrar }}
+          <span>Lembrar de mim</span>
+        </label>
+        <a href="{% url 'usuarios:recuperar_senha' %}" class="conta-link">Esqueci minha senha</a>
+      </div>
+
+      <button type="submit" class="btn-conta-primario">Entrar</button>
+    </form>
+
+    <div class="conta-divisor">
+      <span>ou</span>
+    </div>
+
+    <p class="conta-texto-centro">
+      Ainda não tem conta?
+      <a href="{% url 'usuarios:cadastro' %}" class="conta-link">Criar conta grátis</a>
+    </p>
+
+  </div>
+</main>
 {% endblock %}
