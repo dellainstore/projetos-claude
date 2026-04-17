@@ -611,12 +611,46 @@ SITE_URL=https://novo.dellainstore.com.br
 
 ## Funcionalidades recentes (2026-04-17)
 
-- **Meus Pedidos** (`/carrinho/meus-pedidos/`): lista os pedidos do cliente autenticado com status badges e link para detalhe. Pedidos Pix aguardando pagamento exibem aviso de ação.
-- **Detalhe do Pedido** (`/carrinho/pedido/<numero>/`): exibe itens, resumo de valores (subtotal, desconto, frete, total), endereço de entrega e — se `status=aguardando_pagamento` e `forma_pagamento=pix` — o QR Code Pix para repagamento.
-- **Cupom + Código de Vendedor** no checkout: campos recolhíveis com validação AJAX em tempo real. Admin: `Pedidos → Cupons` e `Pedidos → Códigos de vendedor`.
-- **Auto-cancelamento de pedidos**: management command `python manage.py cancelar_pedidos_expirados --dias 2` — cancela pedidos `aguardando_pagamento` com mais de N dias. Agendar via cron diário.
+- **Meus Pedidos** (`/conta/pedidos/`): lista pedidos do cliente com status badges e link para detalhe.
+- **Detalhe do Pedido** (`/conta/pedido/<numero>/`): exibe itens, resumo (subtotal, desconto, frete, total), endereço e — se `status=aguardando_pagamento` — seção de repagamento com QR Code Pix + botão copiar + aba "Cartão" (Em breve). Template: `templates/usuarios/detalhe_pedido.html`. View: `apps/usuarios/views.py → detalhe_pedido`.
+- **Cupom + Código de Vendedor** no checkout: campos recolhíveis (`<details>`) com validação AJAX. Desconto aparece no resumo em tempo real. Admin: `Pedidos → Cupons` e `Pedidos → Códigos de vendedor`. Models: `Cupom` e `CodigoVendedor` em `apps/pedidos/models.py`. Migration: `0004`.
+- **Auto-cancelamento de pedidos**: `python manage.py cancelar_pedidos_expirados --dias 2` — cancela `aguardando_pagamento` com mais de N dias. Agendar via cron.
 - **E-mail**: `EMAIL_TIMEOUT = 10` evita 504 quando SMTP (porta 465) está bloqueado pela Digital Ocean.
-- **Admin**: todas as listagens têm botões ✎ e ✕ por linha, linhas clicáveis (`admin_linhas.js`), dropdown de ações removido.
+- **Admin — padrão unificado em TODOS os menus**:
+  - `get_actions` retorna apenas `delete_selected` → checkboxes para exclusão em massa, sem dropdown desnecessário
+  - `admin_linhas.js` injetado via `class Media` → clique na linha navega para edição
+  - `acoes_linha` com botões ✎ (dourado) e ✕ (vermelho) por linha
+  - Arquivos atualizados: `bling/admin.py`, `conteudo/admin.py`, `pagamentos/admin.py`, `pedidos/admin.py`, `produtos/admin.py`, `usuarios/admin.py`
+- **Admin — menu lateral não sobe mais**: `admin_linhas.js` usa `sessionStorage` para persistir o scroll do `#nav-sidebar` entre navegações.
+- **Admin — Bling tokens**: botões "Atualizar Token" e "Re-autorizar" empilhados verticalmente (`flex-direction:column`) para não cortar em colunas estreitas.
+- **Homepage**: "Destaques da Semana" com S maiúsculo.
+
+### Padrão admin_linhas.js (como aplicar em novos admins)
+
+```python
+class Media:
+    js = ('admin/js/admin_linhas.js',)
+
+def get_actions(self, request):
+    actions = super().get_actions(request)
+    return {k: v for k, v in actions.items() if k == 'delete_selected'}
+
+def acoes_linha(self, obj):
+    from django.urls import reverse
+    edit_url   = reverse('admin:APP_MODEL_change', args=[obj.pk])
+    delete_url = reverse('admin:APP_MODEL_delete', args=[obj.pk])
+    return format_html(
+        '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+        'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+        'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+        '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+        'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+        'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir?\')">✕</a>',
+        edit_url, delete_url,
+    )
+acoes_linha.short_description = 'Ações'
+# Adicionar 'acoes_linha' em list_display e list_display_links = ('<campo_link>',)
+```
 
 ## Pendências
 
@@ -624,7 +658,7 @@ SITE_URL=https://novo.dellainstore.com.br
 |---|---|
 | E-mail SMTP (porta 465) — aguardando liberação Digital Ocean | Média |
 | **Migrar para `www.dellainstore.com`** — apontar DNS `.com` e `.com.br` na UOL para `159.203.101.232`, configurar Nginx + certbot, atualizar `.env`. Ver checklist em "Migração" acima | Quando aprovado |
-| **C2 — HMAC webhook Bling** — aguardando renovação dos tokens; precisará de `BLING_WEBHOOK_SECRET` no `.env` e no painel Bling | Alta (antes de ir ao ar) |
+| **C2 — HMAC webhook Bling** — precisará de `BLING_WEBHOOK_SECRET` no `.env` e no painel Bling | Alta (antes de ir ao ar) |
 | **C3 — Webhooks PagSeguro/Stone** — validar HMAC quando ligar pagamento real | Quando ativar pagamentos |
 | **M3 — Compilar Tailwind local** — remove `unsafe-inline` do CSP | Fase posterior |
 | Instagram API (feed real de fotos) | Opcional |
