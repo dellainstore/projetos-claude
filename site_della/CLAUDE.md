@@ -479,9 +479,9 @@ Segunda rodada de correções. Todos os itens abaixo foram implementados, valida
 > **Ação necessária:** gerar um segredo forte, adicionar em `.env` como `BLING_WEBHOOK_SECRET=<valor>` e cadastrar o mesmo no painel Bling → Integrações → Webhooks → Chave de assinatura.
 
 **S3 — Dados de cartão transitando pelo backend (`templates/checkout/index.html`)** (CRÍTICO/PCI)
-- Antes: campos `cartao_numero`, `cartao_nome`, `cartao_validade`, `cartao_cvv` com atributo `name=` eram submetidos ao backend sem gateway tokenizado; o aviso "nunca armazenados em nossos servidores" era falso.
-- Depois: aba "Cartão de crédito" desabilitada (`disabled`) com badge "Em breve". Todos os campos PAN/CVV removidos do HTML. Apenas Pix disponível até integração client-side tokenizada.
-- Para reativar cartão: implementar tokenização via JS SDK (PagSeguro/Stone) onde o PAN nunca toca o backend próprio. Remover `disabled` e recriar os campos usando o token da operadora.
+- Antes: campos PAN/CVV com `name=` eram submetidos ao backend diretamente.
+- Depois (2026-04-16): aba desabilitada temporariamente. Campos PAN/CVV removidos.
+- Depois (2026-04-17): **cartão reativado** com tokenização correta. O `templates/checkout/index.html` carrega o SDK `direct-checkout.js` do PagBank, chama `PagSeguro.encryptCard()` no frontend e envia apenas o `encryptedCard` ao backend. PAN nunca chega ao servidor.
 
 **S4 — Tokens Bling em texto claro no admin (`apps/bling/admin.py`)** (MÉDIO)
 - Antes: `readonly_fields` exibia `access_token` e `refresh_token` completos na tela de detalhes.
@@ -521,8 +521,7 @@ Segunda rodada de correções. Todos os itens abaixo foram implementados, valida
 - Cadastrar o mesmo valor no painel Bling → Integrações → Webhooks → Chave de assinatura
 - Reiniciar Gunicorn após alterar o `.env`
 
-**C3 — Webhooks PagSeguro e Stone sem assinatura** — quando ativar pagamento real
-- PagSeguro: reconsultar `notificationCode` via API autenticada.
+**C3 — Webhooks Stone sem assinatura** — quando ativar Stone
 - Stone: validar header `X-Stone-Signature` (HMAC) antes de processar.
 
 **M3 — CSP com `'unsafe-inline'`** — médio prazo
@@ -609,6 +608,17 @@ SITE_URL=https://novo.dellainstore.com.br
 
 ---
 
+## PagSeguro (PagBank) — Integração ativa
+
+- **Token:** produção, configurado em `.env` como `PAGSEGURO_TOKEN`
+- **Sandbox:** `PAGSEGURO_SANDBOX=False` (produção ativa)
+- **Endpoint público-key correto:** `GET /public-keys/card` (não `/public-keys/CREDIT_CARD` — legado, retorna 404)
+- **Fluxo cartão:** frontend carrega `direct-checkout.js` → `PagSeguro.encryptCard()` → envia `encrypted_card` → backend chama `criar_ordem_cartao()` — PAN nunca toca o servidor
+- **Webhook seguro (C3 implementado):** `pagseguro_notificacao` recebe o `order_id` do payload, reconsulta `GET /orders/{id}` na API PagBank de forma autenticada e só então atualiza o pedido — payloads forjados são descartados porque a reconsulta falha
+- **Chave pública cacheada:** 1 hora (`pagseguro_public_key` no cache Django). Limpar com `cache.delete('pagseguro_public_key')` se precisar forçar renovação
+
+---
+
 ## Funcionalidades recentes (2026-04-17)
 
 - **Meus Pedidos** (`/conta/pedidos/`): lista pedidos do cliente com status badges e link para detalhe.
@@ -659,7 +669,8 @@ acoes_linha.short_description = 'Ações'
 | E-mail SMTP (porta 465) — aguardando liberação Digital Ocean | Média |
 | **Migrar para `www.dellainstore.com`** — apontar DNS `.com` e `.com.br` na UOL para `159.203.101.232`, configurar Nginx + certbot, atualizar `.env`. Ver checklist em "Migração" acima | Quando aprovado |
 | **C2 — HMAC webhook Bling** — precisará de `BLING_WEBHOOK_SECRET` no `.env` e no painel Bling | Alta (antes de ir ao ar) |
-| **C3 — Webhooks PagSeguro/Stone** — validar HMAC quando ligar pagamento real | Quando ativar pagamentos |
+| **C3 — Webhook PagSeguro** ✅ implementado — reconsulta `/orders/{id}` autenticada antes de atualizar pedido | Concluído |
+| **C3 — Webhook Stone** — validar `X-Stone-Signature` (HMAC) antes de processar | Quando ativar Stone |
 | **M3 — Compilar Tailwind local** — remove `unsafe-inline` do CSP | Fase posterior |
 | Instagram API (feed real de fotos) | Opcional |
 

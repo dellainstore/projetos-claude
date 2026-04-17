@@ -52,7 +52,7 @@ def obter_chave_publica() -> str:
     if chave:
         return chave
 
-    url = f'{_base_url()}/public-keys/CREDIT_CARD'
+    url = f'{_base_url()}/public-keys/card'
     try:
         r = requests.get(url, headers=_headers(), timeout=8)
         r.raise_for_status()
@@ -201,6 +201,23 @@ _DECLINE_MESSAGES: dict[str, str] = {
     '20008': 'Número de tentativas excedido. Aguarde e tente novamente.',
     '20009': 'Transação suspeita de fraude.',
 }
+
+
+def consultar_ordem(order_id: str) -> dict | None:
+    """
+    Reconsulta uma ordem diretamente na API PagBank via GET /orders/{id}.
+    Usado pelo webhook para verificar o status real antes de atualizar o pedido,
+    evitando que payloads forjados alterem status indevidamente.
+    Retorna o dict da resposta ou None em caso de falha.
+    """
+    url = f'{_base_url()}/orders/{order_id}'
+    try:
+        r = requests.get(url, headers=_headers(), timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        logger.error('PagSeguro: erro ao consultar ordem %s: %s', order_id, exc)
+        return None
 
 
 def mensagem_recusa(charge: dict) -> str:

@@ -41,9 +41,12 @@ def pagseguro_retorno(request):
 def pagseguro_notificacao(request):
     """
     Webhook de notificação do PagSeguro (API v4).
-    Recebe o objeto Order completo em JSON e atualiza o status do pedido.
+    Segurança: o payload recebido indica apenas qual order_id verificar.
+    O status real é obtido reconsultando a API PagBank de forma autenticada,
+    evitando que POSTs forjados alterem o status de pedidos.
     """
     from apps.pedidos.models import Pedido, HistoricoPedido
+    from apps.pagamentos.services.pagseguro import consultar_ordem, status_interno
 
     if request.method != 'POST':
         return HttpResponse('OK')
@@ -54,12 +57,13 @@ def pagseguro_notificacao(request):
         logger.warning('PagSeguro webhook: body não é JSON válido')
         return HttpResponse(status=400)
 
+    # O webhook informa o ID da order — usamos apenas para saber o que reconsutar
+    order_id     = payload.get('id', '')
     reference_id = payload.get('reference_id', '')
-    charges      = payload.get('charges', [])
 
-    logger.info('PagSeguro webhook recebido: reference_id=%s charges=%d', reference_id, len(charges))
+    logger.info('PagSeguro webhook recebido: order_id=%s reference_id=%s', order_id, reference_id)
 
-    if not reference_id or not charges:
+    if not reference_id:
         return HttpResponse('OK')
 
     try:
@@ -68,17 +72,28 @@ def pagseguro_notificacao(request):
         logger.warning('PagSeguro webhook: pedido %s não encontrado', reference_id)
         return HttpResponse('OK')
 
-    from apps.pagamentos.services.pagseguro import status_interno
+    # Reconsulta a ordem na API PagBank para obter o status real (não confia no payload)
+    if order_id:
+        ordem_verificada = consultar_ordem(order_id)
+    else:
+        ordem_verificada = None
 
-    charge       = charges[0]
+    if not ordem_verificada:
+        logger.warning('PagSeguro webhook: não foi possível verificar order_id=%s — ignorando', order_id)
+        return HttpResponse('OK')
+
+    charges = ordem_verificada.get('charges', [])
+    if not charges:
+        return HttpResponse('OK')
+
+    charge        = charges[0]
     charge_status = (charge.get('status') or '').upper()
-    novo_status  = status_interno(charge_status)
+    novo_status   = status_interno(charge_status)
 
     if novo_status and pedido.status != novo_status:
         status_anterior = pedido.status
         pedido.status   = novo_status
 
-        # Guarda o ID da charge para referência
         charge_id = charge.get('id', '')
         if charge_id and not pedido.gateway_id:
             pedido.gateway_id = charge_id
@@ -89,10 +104,10 @@ def pagseguro_notificacao(request):
             pedido          = pedido,
             status_anterior = status_anterior,
             status_novo     = novo_status,
-            observacao      = f'PagSeguro webhook: charge {charge_id} → {charge_status}',
+            observacao      = f'PagSeguro webhook verificado: charge {charge_id} → {charge_status}',
         )
         logger.info(
-            'PagSeguro: pedido %s atualizado %s → %s',
+            'PagSeguro: pedido %s atualizado %s → %s (verificado via API)',
             reference_id, status_anterior, novo_status,
         )
 
