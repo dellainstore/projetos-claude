@@ -243,6 +243,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnAbrirCarrinho.forEach(btn => btn.addEventListener('click', abrirCarrinho));
   btnFecharCarrinho?.addEventListener('click', fecharCarrinho);
+
+  // Sincroniza badge ao restaurar página do bfcache (navegar de volta após checkout)
+  window.addEventListener('pageshow', async (e) => {
+    if (!e.persisted) return;
+    try {
+      const res  = await fetch('/carrinho/status/', { cache: 'no-store' });
+      const dados = await res.json();
+      window.atualizarDrawerConteudo(dados);
+    } catch (_) {}
+  });
   drawerOverlay?.addEventListener('click', fecharCarrinho);
 
   document.addEventListener('keydown', (e) => {
