@@ -183,10 +183,19 @@ def detalhe_pedido(request, numero):
         except Exception as e:
             logger.error('Erro ao gerar QR Code Pix no detalhe do usuário: %s', e)
 
+    pagseguro_public_key = ''
+    if pedido.status == 'aguardando_pagamento':
+        try:
+            from apps.pagamentos.services.pagseguro import obter_chave_publica
+            pagseguro_public_key = obter_chave_publica()
+        except Exception:
+            pass
+
     return render(request, 'usuarios/detalhe_pedido.html', {
-        'pedido':      pedido,
-        'pix_qrcode':  pix_qrcode,
-        'pix_payload': pix_payload,
+        'pedido':               pedido,
+        'pix_qrcode':           pix_qrcode,
+        'pix_payload':          pix_payload,
+        'pagseguro_public_key': pagseguro_public_key,
     })
 
 

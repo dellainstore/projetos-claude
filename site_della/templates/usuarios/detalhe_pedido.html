@@ -112,14 +112,56 @@
         </div>
 
         <div id="painel-cartao" style="display:none;">
+          {% if pagseguro_public_key %}
+          <div class="cartao-form">
+            <div class="checkout-campo">
+              <label for="det-card-number">Número do cartão</label>
+              <input type="text" id="det-card-number" placeholder="0000 0000 0000 0000"
+                     maxlength="19" inputmode="numeric" autocomplete="cc-number" class="checkout-input checkout-input--card">
+            </div>
+            <div class="checkout-campo">
+              <label for="det-card-holder">Nome impresso no cartão</label>
+              <input type="text" id="det-card-holder" placeholder="NOME COMO NO CARTÃO"
+                     autocomplete="cc-name" style="text-transform:uppercase" class="checkout-input">
+            </div>
+            <div class="checkout-grid-2">
+              <div class="checkout-campo">
+                <label for="det-card-expiry">Validade</label>
+                <input type="text" id="det-card-expiry" placeholder="MM/AA"
+                       maxlength="5" inputmode="numeric" autocomplete="cc-exp" class="checkout-input">
+              </div>
+              <div class="checkout-campo">
+                <label for="det-card-cvv">CVV</label>
+                <input type="text" id="det-card-cvv" placeholder="123"
+                       maxlength="4" inputmode="numeric" autocomplete="cc-csc" class="checkout-input">
+              </div>
+            </div>
+            <div class="checkout-campo">
+              <label for="det-parcelas">Parcelas</label>
+              <select id="det-parcelas" class="checkout-input">
+                <option value="1">1x sem juros</option>
+                <option value="2">2x sem juros</option>
+                <option value="3">3x sem juros</option>
+                <option value="6">6x sem juros</option>
+                <option value="12">12x sem juros</option>
+              </select>
+            </div>
+            <div id="det-cartao-erro" class="cartao-erro hidden" style="margin-top:.75rem;"></div>
+            <button type="button" id="btn-pagar-cartao"
+                    style="margin-top:1rem;width:100%;padding:.8rem;background:#c9a96e;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.95rem;cursor:pointer;font-weight:500;">
+              <i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:2 }}
+            </button>
+            <p class="cartao-seguranca" style="margin-top:.75rem;font-size:.78rem;color:#888;text-align:center;">
+              <i class="fas fa-lock"></i> Dados encriptados pelo PagSeguro — nunca chegam ao nosso servidor.
+            </p>
+          </div>
+          {% else %}
           <div style="text-align:center;padding:1.5rem 0;color:#888;">
             <i class="far fa-credit-card" style="font-size:2rem;display:block;margin-bottom:.75rem;color:#c9a96e;"></i>
             <p style="font-size:.9rem;font-weight:500;color:#333;">Cartão de crédito</p>
-            <p style="font-size:.82rem;margin-top:.4rem;">
-              Pagamento por cartão estará disponível em breve.<br>
-              Por enquanto, utilize o Pix para finalizar este pedido.
-            </p>
+            <p style="font-size:.82rem;margin-top:.4rem;">Temporariamente indisponível. Use o Pix.</p>
           </div>
+          {% endif %}
         </div>
       </div>
       {% endif %}
@@ -219,4 +261,106 @@ function mostrarPainel(painel, btn) {
   });
 }
 </script>
+
+{% if pagseguro_public_key %}
+<script src="https://assets.pagseguro.com.br/checkout-sdk/js/direct-checkout.js"></script>
+<script>
+(function() {
+  // Máscaras
+  const numEl = document.getElementById('det-card-number');
+  numEl?.addEventListener('input', () => {
+    let v = numEl.value.replace(/\D/g,'').slice(0,16);
+    v = v.replace(/(.{4})/g,'$1 ').trim();
+    numEl.value = v;
+  });
+  document.getElementById('det-card-holder')?.addEventListener('input', function() {
+    this.value = this.value.toUpperCase();
+  });
+  const expEl = document.getElementById('det-card-expiry');
+  expEl?.addEventListener('input', () => {
+    let v = expEl.value.replace(/\D/g,'').slice(0,4);
+    if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
+    expEl.value = v;
+  });
+
+  document.getElementById('btn-pagar-cartao')?.addEventListener('click', async function() {
+    const btn   = this;
+    const erroEl = document.getElementById('det-cartao-erro');
+    erroEl.classList.add('hidden');
+
+    const holder = (document.getElementById('det-card-holder')?.value || '').trim().toUpperCase();
+    const number = (document.getElementById('det-card-number')?.value || '').replace(/\s/g,'');
+    const expiry = (document.getElementById('det-card-expiry')?.value || '');
+    const cvv    = (document.getElementById('det-card-cvv')?.value || '').trim();
+    const parc   = document.getElementById('det-parcelas')?.value || '1';
+
+    if (!holder || !number || !expiry || !cvv) {
+      erroEl.textContent = 'Preencha todos os dados do cartão.';
+      erroEl.classList.remove('hidden');
+      return;
+    }
+
+    const partes   = expiry.split('/');
+    const expMonth = (partes[0] || '').trim();
+    const expYear  = '20' + (partes[1] || '').trim();
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando…';
+
+    try {
+      const { hasErrors, errors, encryptedCard } = PagSeguro.encryptCard({
+        publicKey: '{{ pagseguro_public_key|escapejs }}',
+        holder, number, expMonth, expYear, securityCode: cvv,
+      });
+
+      if (hasErrors) {
+        const msgs = {
+          'INVALID_NUMBER': 'Número do cartão inválido.',
+          'INVALID_SECURITY_CODE': 'CVV inválido.',
+          'INVALID_EXPIRATION_MONTH': 'Mês de validade inválido.',
+          'INVALID_EXPIRATION_YEAR': 'Ano de validade inválido.',
+          'INVALID_PUBLIC_KEY': 'Erro de configuração. Tente mais tarde.',
+        };
+        erroEl.textContent = (errors||[]).map(c => msgs[c]||c).join(' ') || 'Dados inválidos.';
+        erroEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:2 }}';
+        return;
+      }
+
+      const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+      const form = new FormData();
+      form.append('pagseguro_card_encrypted', encryptedCard);
+      form.append('parcelas', parc);
+
+      const res  = await fetch('/pagamento/cartao/pagar/{{ pedido.numero }}/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+        body: form,
+      });
+      const data = await res.json();
+
+      if (data.status === 'ok') {
+        window.location.href = data.redirect || window.location.pathname;
+      } else if (data.status === 'analise') {
+        btn.innerHTML = '<i class="fas fa-check"></i> Em análise — aguarde';
+        erroEl.textContent = data.mensagem || 'Pagamento em análise.';
+        erroEl.classList.remove('hidden');
+        erroEl.style.color = '#c9a96e';
+      } else {
+        erroEl.textContent = data.erro || 'Erro ao processar. Tente novamente.';
+        erroEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:2 }}';
+      }
+    } catch(e) {
+      erroEl.textContent = 'Erro de comunicação. Tente novamente.';
+      erroEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:2 }}';
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -139,6 +139,74 @@ def stone_webhook(request):
 
 # ─── Pix ──────────────────────────────────────────────────────────────────────
 
+def cartao_pagar_pedido(request, pedido_numero):
+    """
+    Processa pagamento com cartão de crédito para um pedido já existente
+    (repagamento via página de detalhe do pedido).
+    Recebe encrypted_card via POST e chama criar_ordem_cartao().
+    """
+    from apps.pedidos.models import Pedido, HistoricoPedido
+    from apps.pagamentos.services.pagseguro import criar_ordem_cartao, status_interno, mensagem_recusa
+
+    if request.method != 'POST':
+        return JsonResponse({'status': 'erro', 'erro': 'Método não permitido.'}, status=405)
+
+    try:
+        pedido = Pedido.objects.get(numero=pedido_numero)
+    except Pedido.DoesNotExist:
+        return JsonResponse({'status': 'erro', 'erro': 'Pedido não encontrado.'}, status=404)
+
+    if not _pode_acessar_pedido(request, pedido):
+        return JsonResponse({'status': 'erro', 'erro': 'Não autorizado.'}, status=403)
+
+    if pedido.status != 'aguardando_pagamento':
+        return JsonResponse({'status': 'erro', 'erro': 'Este pedido não está aguardando pagamento.'})
+
+    encrypted_card = request.POST.get('pagseguro_card_encrypted', '').strip()
+    parcelas = int(request.POST.get('parcelas', 1) or 1)
+
+    if not encrypted_card:
+        return JsonResponse({'status': 'erro', 'erro': 'Dados do cartão não recebidos.'})
+
+    try:
+        resultado = criar_ordem_cartao(pedido, encrypted_card, parcelas)
+    except Exception as exc:
+        logger.error('cartao_pagar_pedido: erro ao criar ordem %s: %s', pedido_numero, exc)
+        return JsonResponse({'status': 'erro', 'erro': 'Erro ao processar pagamento. Tente novamente.'})
+
+    charges = resultado.get('charges', [])
+    if not charges:
+        return JsonResponse({'status': 'erro', 'erro': 'Resposta inválida do gateway.'})
+
+    charge        = charges[0]
+    charge_status = (charge.get('status') or '').upper()
+    novo_status   = status_interno(charge_status)
+
+    if novo_status and pedido.status != novo_status:
+        status_anterior = pedido.status
+        pedido.status   = novo_status
+        pedido.gateway  = 'pagseguro'
+        charge_id = charge.get('id', '')
+        if charge_id and not pedido.gateway_id:
+            pedido.gateway_id = charge_id
+        pedido.save(update_fields=['status', 'gateway', 'gateway_id'])
+        HistoricoPedido.objects.create(
+            pedido=pedido,
+            status_anterior=status_anterior,
+            status_novo=novo_status,
+            observacao=f'Cartão PagSeguro: charge {charge_id} → {charge_status}',
+        )
+
+    if charge_status in ('PAID', 'AUTHORIZED'):
+        return JsonResponse({'status': 'ok', 'redirect': f'/conta/pedido/{pedido_numero}/'})
+
+    if charge_status == 'DECLINED':
+        return JsonResponse({'status': 'recusado', 'erro': mensagem_recusa(charge)})
+
+    # IN_ANALYSIS ou WAITING — aguarda webhook
+    return JsonResponse({'status': 'analise', 'mensagem': 'Pagamento em análise. Você será notificado por e-mail.'})
+
+
 @require_GET
 def pix_gerar(request, pedido_numero):
     """
