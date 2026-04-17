@@ -255,6 +255,7 @@
               <div class="checkout-campo">
                 <label for="{{ form.parcelas.id_for_label }}">Parcelas</label>
                 {{ form.parcelas }}
+                {# Opções geradas dinamicamente por parcelas.js após carregar o total #}
               </div>
 
               <div id="cartao-erro" class="cartao-erro hidden"></div>
@@ -386,7 +387,9 @@
   'use strict';
 
   const SUBTOTAL = parseFloat('{{ subtotal|floatformat:2 }}'.replace(',', '.'));
+  window.SUBTOTAL = SUBTOTAL;  // exposto para parcelas.js
   let descontoAtual = 0;
+  window._descontoAtualCheckout = 0;
 
   // ── Elementos ────────────────────────────────────────────────────────────
   const secoes  = document.querySelectorAll('.checkout-secao');
@@ -608,6 +611,8 @@
 
       if (data.status === 'ok') {
         descontoAtual = parseFloat(data.desconto);
+        window._descontoAtualCheckout = descontoAtual;
+        if (window._atualizarParcelasCheckout) window._atualizarParcelasCheckout();
         feedback.textContent = '✓ ' + data.descricao + ' aplicado!';
         feedback.classList.add('cupom-ok');
         // Mostrar linha de desconto no resumo
@@ -798,7 +803,39 @@
 })();
 </script>
 
+{% load static %}
 {% if pagseguro_public_key %}
+<script src="{% static 'js/parcelas.js' %}"></script>
+<script>
+// Popula o select de parcelas assim que o total (com frete) for conhecido
+(function() {
+  var selectParcelas = document.getElementById('id_parcelas');
+
+  function atualizarParcelas() {
+    var total = parseFloat(document.getElementById('id_valor_frete')?.value || '0') || 0;
+    total = Math.max(0, SUBTOTAL - (window._descontoAtualCheckout || 0) + total);
+    DellaParcelas.gerarParcelas(selectParcelas, total, selectParcelas?.value || '1');
+  }
+
+  // Quando o frete for selecionado, recalcula as parcelas
+  var freteInput = document.getElementById('id_valor_frete');
+  if (freteInput) {
+    var obs = new MutationObserver(atualizarParcelas);
+    obs.observe(freteInput, { attributes: true, attributeFilter: ['value'] });
+    freteInput.addEventListener('change', atualizarParcelas);
+  }
+
+  // Quando a aba cartão abrir, garante que as parcelas estão corretas
+  document.querySelectorAll('.pagamento-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      if (tab.dataset.tab === 'cartao') setTimeout(atualizarParcelas, 50);
+    });
+  });
+
+  // Expõe para o código de cupom atualizar o total das parcelas
+  window._atualizarParcelasCheckout = atualizarParcelas;
+})();
+</script>
 {# SDK PagSeguro para encriptação do cartão no frontend #}
 <script src="https://assets.pagseguro.com.br/checkout-sdk/js/direct-checkout.js"></script>
 {% endif %}

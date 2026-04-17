@@ -139,11 +139,7 @@
             <div class="checkout-campo">
               <label for="det-parcelas">Parcelas</label>
               <select id="det-parcelas" class="checkout-input">
-                <option value="1">1x sem juros</option>
-                <option value="2">2x sem juros</option>
-                <option value="3">3x sem juros</option>
-                <option value="6">6x sem juros</option>
-                <option value="12">12x sem juros</option>
+                <option value="1">1x</option>
               </select>
             </div>
             <div id="det-cartao-erro" class="cartao-erro hidden" style="margin-top:.75rem;"></div>
@@ -262,8 +258,23 @@ function mostrarPainel(painel, btn) {
 }
 </script>
 
+{% load static %}
 {% if pagseguro_public_key %}
+<script src="{% static 'js/parcelas.js' %}"></script>
 <script src="https://assets.pagseguro.com.br/checkout-sdk/js/direct-checkout.js"></script>
+<script>
+// Popula parcelas ao abrir a aba cartão
+(function() {
+  var total = parseFloat('{{ pedido.total|floatformat:2 }}'.replace(',', '.'));
+  var sel   = document.getElementById('det-parcelas');
+  DellaParcelas.gerarParcelas(sel, total, 1);
+  document.querySelectorAll('.pagar-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (btn.dataset.painel === 'cartao') DellaParcelas.gerarParcelas(sel, total, sel.value);
+    });
+  });
+})();
+</script>
 <script>
 (function() {
   // Máscaras
