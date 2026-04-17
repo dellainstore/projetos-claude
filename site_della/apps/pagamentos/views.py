@@ -40,19 +40,62 @@ def pagseguro_retorno(request):
 @csrf_exempt
 def pagseguro_notificacao(request):
     """
-    Webhook de notificação do PagSeguro.
-    Atualiza o status do pedido conforme o status do pagamento.
+    Webhook de notificação do PagSeguro (API v4).
+    Recebe o objeto Order completo em JSON e atualiza o status do pedido.
     """
     from apps.pedidos.models import Pedido, HistoricoPedido
 
-    notif_code = request.POST.get('notificationCode', '')
-    notif_type = request.POST.get('notificationType', '')
-
-    if not notif_code or notif_type != 'transaction':
+    if request.method != 'POST':
         return HttpResponse('OK')
 
-    # TODO: consultar a transação na API PagSeguro e atualizar o pedido
-    logger.info('Notificação PagSeguro recebida: %s', notif_code)
+    try:
+        payload = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        logger.warning('PagSeguro webhook: body não é JSON válido')
+        return HttpResponse(status=400)
+
+    reference_id = payload.get('reference_id', '')
+    charges      = payload.get('charges', [])
+
+    logger.info('PagSeguro webhook recebido: reference_id=%s charges=%d', reference_id, len(charges))
+
+    if not reference_id or not charges:
+        return HttpResponse('OK')
+
+    try:
+        pedido = Pedido.objects.get(numero=reference_id)
+    except Pedido.DoesNotExist:
+        logger.warning('PagSeguro webhook: pedido %s não encontrado', reference_id)
+        return HttpResponse('OK')
+
+    from apps.pagamentos.services.pagseguro import status_interno
+
+    charge       = charges[0]
+    charge_status = (charge.get('status') or '').upper()
+    novo_status  = status_interno(charge_status)
+
+    if novo_status and pedido.status != novo_status:
+        status_anterior = pedido.status
+        pedido.status   = novo_status
+
+        # Guarda o ID da charge para referência
+        charge_id = charge.get('id', '')
+        if charge_id and not pedido.gateway_id:
+            pedido.gateway_id = charge_id
+
+        pedido.save(update_fields=['status', 'gateway_id'])
+
+        HistoricoPedido.objects.create(
+            pedido          = pedido,
+            status_anterior = status_anterior,
+            status_novo     = novo_status,
+            observacao      = f'PagSeguro webhook: charge {charge_id} → {charge_status}',
+        )
+        logger.info(
+            'PagSeguro: pedido %s atualizado %s → %s',
+            reference_id, status_anterior, novo_status,
+        )
+
     return HttpResponse('OK')
 
 
@@ -63,6 +106,7 @@ def stone_webhook(request):
     """
     Webhook de eventos Stone.
     Atualiza o pedido conforme charge status.
+    TODO: validar header X-Stone-Signature (HMAC) antes de processar.
     """
     from apps.pedidos.models import Pedido, HistoricoPedido
 
@@ -100,7 +144,7 @@ def pix_gerar(request, pedido_numero):
     chave_pix = getattr(settings, 'PIX_CHAVE', '')
     if not chave_pix:
         return JsonResponse({
-            'status':  'sem_chave',
+            'status':   'sem_chave',
             'mensagem': 'Chave Pix não configurada. Configure PIX_CHAVE no .env.',
         })
 
@@ -117,11 +161,11 @@ def pix_gerar(request, pedido_numero):
         qrcode_b64 = gerar_qrcode_base64(payload)
 
         return JsonResponse({
-            'status':   'ok',
-            'payload':  payload,
-            'qrcode':   qrcode_b64,
-            'valor':    str(pedido.total),
-            'numero':   pedido.numero,
+            'status':  'ok',
+            'payload': payload,
+            'qrcode':  qrcode_b64,
+            'valor':   str(pedido.total),
+            'numero':  pedido.numero,
         })
     except Exception as e:
         logger.error('Erro ao gerar Pix %s: %s', pedido_numero, e, exc_info=True)
@@ -132,8 +176,7 @@ def pix_gerar(request, pedido_numero):
 def pix_status(request, pedido_numero):
     """
     Consulta se o pagamento Pix foi confirmado.
-    Por enquanto consulta o status do Pedido no banco.
-    Na integração real, consultaria o gateway.
+    Consulta o status do Pedido no banco (atualizado manualmente ou via webhook).
     """
     from apps.pedidos.models import Pedido
 

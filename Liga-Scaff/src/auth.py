@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+_LOGO_PATH = Path(__file__).parent.parent / "Logo_Liga_Scaff.jpeg"
+
 from src import database as db
 
 ROLES = ["admin", "organizer", "viewer"]
@@ -77,6 +79,49 @@ def require_admin() -> None:
         st.stop()
 
 
+_ACESSO_INFO = {
+    "admin": {
+        "label": "🔑 Administrador",
+        "itens": [
+            "✅ Acesso total ao sistema",
+            "✅ Jogadores, temporadas e usuários",
+            "✅ Sorteio completo + entrada manual",
+            "✅ Resultados (editar jogos e nomes)",
+            "✅ Ranking, histórico e final",
+        ],
+    },
+    "organizer": {
+        "label": "📋 Operador",
+        "itens": [
+            "✅ Gerar sorteio e auditoria",
+            "✅ Lançar resultados (placar)",
+            "✅ Enviar PDFs por e-mail",
+            "✅ Ranking, histórico",
+            "❌ Criar rodadas ou editar jogadores",
+            "❌ Gerenciar usuários",
+        ],
+    },
+    "viewer": {
+        "label": "👁️ Visualizador",
+        "itens": [
+            "✅ Ver ranking",
+            "✅ Ver histórico",
+            "❌ Sorteio, resultados ou qualquer edição",
+        ],
+    },
+}
+
+
+def _render_acesso_info() -> None:
+    role = get_role()
+    info = _ACESSO_INFO.get(role)
+    if not info:
+        return
+    with st.expander(info["label"], expanded=False):
+        for item in info["itens"]:
+            st.caption(item)
+
+
 def render_sidebar_user() -> None:
     # Renomeia o item "app" para "Inicial" no menu lateral via JS (aplicado em todas as páginas)
     components.html("""
@@ -97,9 +142,13 @@ def render_sidebar_user() -> None:
     """, height=0)
 
     with st.sidebar:
+        if _LOGO_PATH.exists():
+            st.image(str(_LOGO_PATH), width=140)
         if esta_logado():
             st.markdown(f"**{st.session_state['username']}**")
             st.caption(ROLE_LABELS.get(get_role(), get_role()))
+            _render_acesso_info()
+            st.divider()
             if st.button("Sair", use_container_width=True):
                 fazer_logout()
                 st.rerun()

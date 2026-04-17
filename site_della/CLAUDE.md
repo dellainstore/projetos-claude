@@ -81,6 +81,7 @@ source venv/bin/activate
 - **Migrations aplicadas até:**
   - `produtos.0008_corpadrao_codigo_hex_secundario_produtocorfoto` (CorPadrao.codigo_hex_secundario + ProdutoCorFoto)
   - `conteudo.0007_paginaestatica_imagem_slugs` (PaginaEstatica.imagem + slug choices: perguntas_frequentes, meios_pagamento)
+  - `pedidos.0004_codigovendedor_cupom_pedido_codigo_vendedor_str_and_more` (Cupom, CodigoVendedor, FK em Pedido)
 
 ```bash
 source venv/bin/activate
@@ -209,9 +210,18 @@ sudo nginx -t && sudo systemctl reload nginx
 ### `apps/pedidos/`
 | Model | Campos principais |
 |---|---|
-| `Pedido` | numero (DI-XXXX), cliente, dados copiados, endereço copiado, subtotal, frete, total, status, gateway, codigo_rastreio, bling_pedido_id |
+| `Pedido` | numero (DI-XXXX), cliente, dados copiados, endereço copiado, subtotal, desconto, frete, total, status, gateway, codigo_rastreio, bling_pedido_id, **cupom** (FK→Cupom, null), **cupom_codigo** (cópia), **codigo_vendedor** (FK→CodigoVendedor, null), **codigo_vendedor_str** (cópia) |
 | `ItemPedido` | pedido, produto, variacao, nome/preco copiados, quantidade |
 | `HistoricoPedido` | log de mudanças de status |
+| `Cupom` | codigo (único), tipo (percentual/fixo), valor, quantidade_total (null=ilimitado), vezes_usado, um_por_cliente (bool), valido_de, valido_ate, ativo. `esta_valido(cpf)` → (bool, motivo). `calcular_desconto(subtotal)` → Decimal |
+| `CodigoVendedor` | codigo (auto-gerado 8 chars aleatórios, único), nome, ativo — vincula venda ao vendedor sem desconto |
+
+**Cupom no checkout:**
+- Campo `Cupom de desconto` + botão "Aplicar" — AJAX para `/carrinho/validar-cupom/`
+- Campo `Código do vendedor` + botão "Aplicar" — AJAX para `/carrinho/validar-vendedor/`
+- Ambos ficam dentro de um `<details>` recolhível "Tem um cupom ou código de vendedor?"
+- Desconto aparece no resumo lateral em tempo real
+- `_processar_checkout` aplica o desconto no `total` e incrementa `Cupom.vezes_usado` fora do bloco atômico (após commit)
 
 ### `apps/bling/`
 | Model | Campos |
@@ -223,7 +233,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## Navbar (base.html)
 
-**Logo D'ELLA Instore:** duas linhas empilhadas — `.navbar-logo-della` (Playfair Display, **1.7rem**, letra-spacing 0.18em) e `.navbar-logo-instore` (Jost, **0.68rem**, letra-spacing 0.48em, `text-align: center`). `.navbar-logo` usa `align-items: stretch` para que o Instore ocupe exatamente a largura da D'ELLA. Mesma estrutura no footer: `.footer-logo-della` (1.6rem) e `.footer-logo-instore` (**0.72rem**, centralizado).
+**Logo D'ELLA Instore:** duas linhas empilhadas — `.navbar-logo-della` (Playfair Display, **2.1rem**, letra-spacing 0.18em) e `.navbar-logo-instore` (Jost, **0.82rem**, letra-spacing 0.48em, `text-align: center`). `.navbar-logo` usa `align-items: stretch` para que o Instore ocupe exatamente a largura da D'ELLA. Mesma estrutura no footer: `.footer-logo-della` (1.6rem) e `.footer-logo-instore` (**0.72rem**, centralizado).
 
 Estrutura em 2 linhas:
 ```
@@ -249,7 +259,9 @@ Estrutura atual (da esquerda para direita):
 3. **D'ELLA Instore** — Nossa história, Política de privacidade, Termos de uso
 4. **Endereços** — Show Room + Studio Anacã com WhatsApp
 
-**Selos visuais** (`.footer-selo-visual`): SSL Seguro, Compra Segura, LGPD — com ícone dourado + borda fina. Substituem os antigos `.footer-selo` (só texto).
+**Selos visuais** (`.footer-selo-visual`): SSL Seguro, Compra Segura, LGPD — com ícone dourado + borda fina.
+**Bandeiras de pagamento** (`.footer-pagamentos`): Pix (`fab fa-pix`), Visa (`fab fa-cc-visa`), Mastercard (`fab fa-cc-mastercard`), Amex (`fab fa-cc-amex`), Elo (texto). Classes de cor: `.pix`, `.visa`, `.mc`, `.amex`, `.elo`. Ficam no centro do `footer-bottom` entre copyright e selos.
+**CNPJ** do Show Room exibido no endereço: `29.049.870/0001-37` — linha entre CEP e e-mail.
 
 **Nota:** A coluna "Loja" foi removida. "Trocas" foi movida para Ajuda. Não restaurar a coluna "Loja".
 
@@ -258,14 +270,14 @@ Estrutura atual (da esquerda para direita):
 ## Homepage (home/index.html)
 
 Seções em ordem:
-1. **Hero slider** — banners do admin (BannerPrincipal), fallback estático. Dots no canto inferior direito. Botão mute no canto inferior **esquerdo**. Hero aparece ABAIXO do menu (`margin-top: var(--navbar-total)`)
-2. **Destaques da semana** — produtos com `destaque=True`
-3. **Mini banners** — MiniBanner do admin (2 colunas lado a lado, **retrato 3:4**, foto de fundo). Layout mantém 2 colunas no mobile também (cards mais estreitos, texto/botão reduzidos). Ver CSS em `static/css/della.css` — `.mini-banner { aspect-ratio: 3 / 4 }`.
-4. **Look da semana** — foto + pontos "+" posicionados em % configuráveis pelo admin (editor visual). Cada ponto é um FK direto para o produto (`produto_ponto1/2/3`)
+1. **Hero slider** — banners do admin (BannerPrincipal), fallback estático. Dots (7×7px) no canto inferior direito. Botão mute no canto inferior **esquerdo**. Hero aparece ABAIXO do menu. **Altura: `calc(98svh - var(--navbar-total))`** (quase tela cheia).
+2. **Destaques da semana** — carrossel horizontal de produtos com `destaque=True`. Mostra 4 por vez (3 em ≤1024px, 2 em ≤640px). Setas prev/next **absolutas nas laterais** das fotos (`left/right: -1.5rem`, `top: 38%`), não abaixo. Swipe mobile. HTML: `.destaques-carousel` > setas absolutas + `.destaques-viewport` > `.destaques-track`. JS: `#destaques-carousel`, `#destaques-track`, `#destaques-prev`, `#destaques-next`.
+3. **Mini banners** — MiniBanner do admin (2 colunas, gap 1.5rem, max-width 1200px, **altura `clamp(540px, 82vh, 960px)`** — retrato, não preenche tela toda). Padding `2rem`. Mobile: `clamp(280px, 52vw, 420px)`.
+4. **Look da semana** — foto + pontos "+". Grid `0.75fr 1.25fr`, max-width `1100px`, padding reduzido `4rem`. No breakpoint 1024px: single-col, max-width da foto `420px`.
 5. **Manifesto** — texto fixo da marca
 6. **Depoimentos** — Avaliacao aprovadas
 7. **Instagram** — banner CTA estático (@dellainstore)
-8. **Newsletter** — AJAX
+8. **Newsletter** — AJAX na página + **popup automático** após 5s (aparece 1x por sessão via `sessionStorage`). HTML: `#popup-newsletter` em `base.html`. JS: `della.js`.
 
 **Seções removidas:** "Nossas Categorias" (grid de categorias abaixo do hero)
 
@@ -374,7 +386,9 @@ curl -s https://novo.dellainstore.com.br/ | grep -oE 'della\.[a-z0-9]+\.(js|css)
 - `.hero-mute-btn { bottom: 2rem; left: 2rem; }` — botão mute no canto inferior esquerdo (longe dos dots)
 - `.produto-acoes` usa `visibility: hidden/visible` (não `display:none`) para transição suave + pointer-events corretos
 - `.variacao-cor { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }` — torna bolinhas brancas visíveis
-- **Hero slider:** timer = 6 segundos (`SLIDE_DURACAO = 6000` em `della.js`). Swipe horizontal (touchstart/touchend) na seção `#hero-slider` troca slides no mobile; threshold 40px e ignora gesto vertical. Dots com `z-index: 10` e `touch-action: manipulation`. `touchstart` nos dots é **não-passivo** (`{ passive: false }`) e chama `e.stopPropagation()` + `e.preventDefault()` — impede swipe do hero E cancela o ghost-click/atraso de 300ms do iOS. `.hero-slides` tem `pointer-events: none` (container não absorve eventos; slides individuais gerenciam o próprio `pointer-events`). `.hero` tem `touch-action: manipulation`. IDs dos `<video>` foram removidos (eram duplicados, causavam comportamento inconsistente).
+- **WhatsApp FAB:** `.whatsapp-fab` tem `pointer-events: none` — o container não bloqueia cliques na área ao redor. Apenas `.whatsapp-btn-principal` tem `pointer-events: auto`. Ao abrir o menu, `.whatsapp-opcoes.aberto` também recebe `pointer-events: auto`.
+- **Hero slider:** altura `calc(98svh - var(--navbar-total))` (quase tela cheia). Dots `7×7px` (mais delicados). Timer = 6s. Swipe horizontal na seção `#hero-slider`; threshold 40px; ignora gesto vertical. `touchstart` nos dots é **não-passivo** e chama `e.stopPropagation()` + `e.preventDefault()`. `.hero-slides` tem `pointer-events: none`. IDs dos `<video>` removidos (eram duplicados).
+- **Destaques carrossel:** setas `position: absolute` nas laterais do `.destaques-carousel` (`left/right: -1.5rem`, `top: 38%`). `.destaques-viewport` tem `overflow: hidden` (clipa o track). `.destaques-carousel` tem overflow padrão para as setas ficarem visíveis. No mobile ≤768px setas ficam em `left/right: 0.25rem` para não sair da tela.
 - **Hero vídeo autoplay:** além de `autoplay muted playsinline`, o `della.js` força `.play()` em `loadeddata`/`canplay` — alguns navegadores cancelam autoplay após `v.load()` (que acontece no swap do vídeo mobile).
 - **Look da semana — pontos "+" (fix definitivo):** estrutura de dois divs: `.look-foto-outer` (`position:relative; aspect-ratio:3/4`) é o containing block dos pontos; dentro dele `.look-foto` (`position:absolute; inset:0; overflow:hidden`) só clipa a imagem. Os `.look-ponto` são filhos diretos do `.look-foto-outer` (irmãos do `.look-foto`), nunca dentro dele — assim não são clipeados pelo `overflow:hidden` da imagem.
 - **Look da semana — valores decimais em CSS inline (BUG de localização):** `LANGUAGE_CODE=pt-br + USE_I18N=True` faz `DecimalField` renderizar `56.4` como `56,4` → vírgula quebra parsing CSS em `style="top:56,4%"` e empilha todos os pontos em 0,0. Solução: `{% load l10n %}` + filtro `|unlocalize` em todas as saídas de `ponto1_top/esq`, `ponto2_top/esq`, `ponto3_top/esq` (`templates/home/index.html`).
@@ -445,60 +459,97 @@ Colunas: `nome, categoria, descricao, composicao, genero, preco, preco_promocion
 
 Auditoria completa rodada nesta data. Resultado detalhado abaixo — usar como baseline antes de migrar o domínio definitivo.
 
-### ✅ Correções já aplicadas
+---
+
+## Revisão de Segurança/LGPD — 2026-04-16
+
+Segunda rodada de correções. Todos os itens abaixo foram implementados, validados com `py_compile` e commitados.
+
+### ✅ Correções aplicadas nesta sessão
+
+**S1 — IDOR em `detalhe_pedido` (`apps/pedidos/views.py`)** (ALTO)
+- Antes: `if pedido.cliente and request.user.is_authenticated:` — se `cliente=None` (guest checkout), o bloco era ignorado e qualquer pessoa com o número acessava nome, e-mail, CPF, endereço e itens.
+- Depois: usa `_pode_acessar_pedido` (mesmo pattern de `confirmacao_pedido`) — apenas staff, dono logado ou número na sessão do guest.
+
+**S2 — Webhook Bling sem validação de origem (`apps/bling/views.py:webhook`)** (ALTO)
+- Antes: `@csrf_exempt` + sem verificação → POST anônimo podia alterar status/rastreio de qualquer pedido.
+- Depois: se `BLING_WEBHOOK_SECRET` estiver no `.env`, valida `X-Bling-Signature` via HMAC-SHA256 do body. Se vazio, loga `WARNING` e processa (retrocompat). **Estrutura pronta — ativar configurando o segredo.**
+- Setting adicionado em `core/settings/base.py`: `BLING_WEBHOOK_SECRET = config('BLING_WEBHOOK_SECRET', default='')`.
+
+> **Ação necessária:** gerar um segredo forte, adicionar em `.env` como `BLING_WEBHOOK_SECRET=<valor>` e cadastrar o mesmo no painel Bling → Integrações → Webhooks → Chave de assinatura.
+
+**S3 — Dados de cartão transitando pelo backend (`templates/checkout/index.html`)** (CRÍTICO/PCI)
+- Antes: campos `cartao_numero`, `cartao_nome`, `cartao_validade`, `cartao_cvv` com atributo `name=` eram submetidos ao backend sem gateway tokenizado; o aviso "nunca armazenados em nossos servidores" era falso.
+- Depois: aba "Cartão de crédito" desabilitada (`disabled`) com badge "Em breve". Todos os campos PAN/CVV removidos do HTML. Apenas Pix disponível até integração client-side tokenizada.
+- Para reativar cartão: implementar tokenização via JS SDK (PagSeguro/Stone) onde o PAN nunca toca o backend próprio. Remover `disabled` e recriar os campos usando o token da operadora.
+
+**S4 — Tokens Bling em texto claro no admin (`apps/bling/admin.py`)** (MÉDIO)
+- Antes: `readonly_fields` exibia `access_token` e `refresh_token` completos na tela de detalhes.
+- Depois: substituído por `access_token_mascarado` e `refresh_token_mascarado` — exibem apenas os 8 primeiros chars + `••••••••••••••••••••` + últimos 4. Fluxo OAuth/refresh inalterado.
+
+**S5 — PII nos logs Bling (`apps/bling/services.py` + `apps/bling/admin.py`)** (MÉDIO/LGPD)
+- Antes: `BlingLog.payload_enviado` armazenava CPF, e-mail, telefone, nome e endereço completo do cliente.
+- Depois: `_redact_payload_pii(payload)` em `services.py` aplica `[REDACTED]` nos campos `cpfCnpj`, `email`, `telefone`, `enderecos`, `nome` do bloco `contato` antes de gravar. Diagnóstico preservado (número do pedido, itens, totais).
+- Admin `BlingLogAdmin`: `payload_enviado` removido de `readonly_fields`; substituído por `payload_resumo` que exibe apenas campos não-sensíveis (`numero`, `itens`, `total`, `situacao`).
+
+---
+
+### ✅ Correções já aplicadas (sessão 2026-04-14)
 
 **C1 — IDOR em `pix_gerar`, `pix_status` e `confirmacao_pedido`** (CRÍTICO)
-- Antes: qualquer um que adivinhasse `DI-XXXX` acessava QR Pix (com valor) + status; `confirmacao_pedido` também passava quando `pedido.cliente=None`.
 - Depois: nova helper `_pode_acessar_pedido(request, pedido)` em `apps/pagamentos/views.py` — autoriza apenas staff, dono logado, ou número presente em `session['pedidos_guest']` / `session['ultimo_pedido']`. `confirmacao_pedido` usa a mesma regra unificada.
-- `apps/pedidos/views.py → _processar_checkout` agora registra cada pedido criado em `session['pedidos_guest']` (limite: últimos 20), garantindo que guest checkout consiga abrir a confirmação no mesmo dispositivo.
+- `apps/pedidos/views.py → _processar_checkout` registra cada pedido em `session['pedidos_guest']` (limite: últimos 20).
 
 **C4 — OAuth Bling validando `state`** (CRÍTICO)
-- `apps/bling/views.py`: `oauth_autorizar` gera `secrets.token_urlsafe(32)` e guarda em `session['bling_oauth_state']`. `oauth_callback` (agora também `@staff_member_required`) compara com `secrets.compare_digest`. Sem match → recusa antes de trocar o code. Fecha OAuth CSRF / code injection.
+- `apps/bling/views.py`: `oauth_autorizar` gera `secrets.token_urlsafe(32)`. `oauth_callback` compara com `secrets.compare_digest`.
 
-**M1 — `.env` com permissão 600** — antes 664 (world-readable). `chmod 600 /var/www/della-sistemas/projetos-claude/site_della/.env`.
+**M1 — `.env` com permissão 600** ✅
 
-### ⏳ Pendências críticas antes de ir ao domínio definitivo
+**A1 — Upload sem validação (magic bytes)** ✅
 
-**C2 — Webhook Bling sem assinatura** (`apps/bling/views.py:webhook`)
-- `@csrf_exempt` aceita POST anônimo → atacante que conheça `bling_pedido_id` altera status (entregue/cancelado) ou injeta rastreio falso.
-- Fix: validar HMAC do header `X-Bling-Signature` com segredo do `.env` (`BLING_WEBHOOK_SECRET`). Rejeitar com 401 se não bater.
+**A2 — Vídeos de banner sem validação** ✅
 
-**C3 — Webhooks PagSeguro e Stone sem assinatura** (`apps/pagamentos/views.py`)
-- PagSeguro (`pagseguro_notificacao`) e Stone (`stone_webhook`) hoje só logam e retornam OK. Quando o `TODO:` for implementado, **nunca confiar no corpo**:
-  - PagSeguro: reconsultar `notificationCode` via API autenticada com credenciais.
-  - Stone: validar header `X-Stone-Signature` (HMAC) antes de processar.
+**M2 — `CSRF_TRUSTED_ORIGINS` explícito** ✅
 
-**A1 — Upload sem validação em conteúdo** ✅ RESOLVIDO
-- `validate_image_upload` (magic bytes) adicionado em `BannerPrincipal.clean()`, `MiniBanner.clean()`, `LookDaSemana.clean()` e `Categoria.clean()`.
+---
 
-**A2 — Vídeos de banner sem validação** ✅ RESOLVIDO
-- `FileExtensionValidator(['mp4', 'webm'])` adicionado em `BannerPrincipal.video` e `video_mobile`.
+### ⏳ Pendências — ordenadas por prioridade
 
-**M2 — `CSRF_TRUSTED_ORIGINS` explícito em `production.py`** ✅ RESOLVIDO
-- Inclui `novo.dellainstore.com.br`, `www.dellainstore.com.br`, `dellainstore.com.br`, `www.dellainstore.com`, `dellainstore.com`.
+**C2 — Webhook Bling (HMAC)** — estrutura implementada (S2), falta **ativar**
+- Gerar segredo: `python3 -c "import secrets; print(secrets.token_hex(32))"`
+- Adicionar ao `.env`: `BLING_WEBHOOK_SECRET=<valor_gerado>`
+- Cadastrar o mesmo valor no painel Bling → Integrações → Webhooks → Chave de assinatura
+- Reiniciar Gunicorn após alterar o `.env`
 
-**M3 — CSP com `'unsafe-inline'` em script/style** (médio prazo)
-- Necessário hoje pela CDN do Tailwind. Compilar Tailwind localmente (`npm run build`) para remover `'unsafe-inline'` de `script-src` e fortalecer proteção XSS.
+**C3 — Webhooks PagSeguro e Stone sem assinatura** — quando ativar pagamento real
+- PagSeguro: reconsultar `notificationCode` via API autenticada.
+- Stone: validar header `X-Stone-Signature` (HMAC) antes de processar.
 
-### ✅ Pontos já bons (não regredir)
+**M3 — CSP com `'unsafe-inline'`** — médio prazo
+- Compilar Tailwind localmente para remover `'unsafe-inline'` de `script-src`.
 
-- `.env` fora do git (`.gitignore` + `.env.example`); só `.gitkeep` em `logs/cache/media`
-- `SECRET_KEY` via `config()`; `ALLOWED_HOSTS` explícito (sem `*`)
-- HSTS 1 ano + preload, `SECURE_SSL_REDIRECT`, cookies `Secure` + `SameSite=Lax`
+**LGPD — Retenção de `BlingLog`** — ação operacional
+- Logs nunca são deletados automaticamente. Implementar rotina de limpeza periódica (ex: cron que apaga registros com mais de 180 dias).
+
+**LGPD — Retenção de dados de pedidos antigos** — revisão futura
+- Pedidos guardam CPF, e-mail, endereço indefinidamente. Avaliar política de anonimização após prazo fiscal (5 anos).
+
+---
+
+### ✅ Pontos bons — não regredir
+
+- `.env` fora do git; `SECRET_KEY` via `config()`; `ALLOWED_HOSTS` explícito
+- HSTS 1 ano + preload, `SECURE_SSL_REDIRECT`, cookies `Secure + SameSite=Lax`
 - `X-Frame-Options: DENY` (Django + Nginx)
 - django-axes 5 tentativas → 1h lockout por IP+user
 - auto-escape template ON, ORM-only (zero SQL raw)
-- recuperação de senha não enumera e-mails (`enviado=True` sempre + `except: pass` no SMTP)
+- recuperação de senha não enumera e-mails
 - `next_url` validado (`startswith('/')`) no login
 - Nginx bloqueia `.env`, `.git`, `.sql`, scripts em `/media/`
-
-### Pendências de segurança para próximas sessões
-1. **C2** (HMAC webhook Bling) — aguardando discussão sobre renovação dos tokens. Precisa: definir `BLING_WEBHOOK_SECRET` no `.env` + cadastrar mesmo segredo no painel Bling → Webhooks.
-2. **C3** quando ligar pagamento real — reconsulta PagSeguro + HMAC Stone.
-3. **M3** (compilar Tailwind local) — em fase posterior, remove `unsafe-inline` do CSP.
+- CSRF em todos os forms; `CSRF_TRUSTED_ORIGINS` configurado
 
 ### Helper reutilizável: `_pode_acessar_pedido`
-Se surgir nova view que expõe dados de `Pedido`, usar o mesmo pattern (definido em `apps/pagamentos/views.py`):
+Toda nova view que expõe dados de `Pedido` deve usar este pattern (em `apps/pagamentos/views.py`):
 ```python
 def _pode_acessar_pedido(request, pedido) -> bool:
     if request.user.is_authenticated:
@@ -557,6 +608,15 @@ SITE_URL=https://novo.dellainstore.com.br
 ```
 
 ---
+
+## Funcionalidades recentes (2026-04-17)
+
+- **Meus Pedidos** (`/carrinho/meus-pedidos/`): lista os pedidos do cliente autenticado com status badges e link para detalhe. Pedidos Pix aguardando pagamento exibem aviso de ação.
+- **Detalhe do Pedido** (`/carrinho/pedido/<numero>/`): exibe itens, resumo de valores (subtotal, desconto, frete, total), endereço de entrega e — se `status=aguardando_pagamento` e `forma_pagamento=pix` — o QR Code Pix para repagamento.
+- **Cupom + Código de Vendedor** no checkout: campos recolhíveis com validação AJAX em tempo real. Admin: `Pedidos → Cupons` e `Pedidos → Códigos de vendedor`.
+- **Auto-cancelamento de pedidos**: management command `python manage.py cancelar_pedidos_expirados --dias 2` — cancela pedidos `aguardando_pagamento` com mais de N dias. Agendar via cron diário.
+- **E-mail**: `EMAIL_TIMEOUT = 10` evita 504 quando SMTP (porta 465) está bloqueado pela Digital Ocean.
+- **Admin**: todas as listagens têm botões ✎ e ✕ por linha, linhas clicáveis (`admin_linhas.js`), dropdown de ações removido.
 
 ## Pendências
 

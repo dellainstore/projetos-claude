@@ -553,4 +553,127 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target === modalGuia) fecharModal();
   });
 
+  // ─── Carrossel de Destaques da Semana ─────────────────────────────────────
+  const destaquesCarousel  = document.getElementById('destaques-carousel');
+  const destaquesViewport  = destaquesCarousel?.querySelector('.destaques-viewport');
+  const destaquesTrack     = document.getElementById('destaques-track');
+  const destaquesPrev      = document.getElementById('destaques-prev');
+  const destaquesNext      = document.getElementById('destaques-next');
+
+  if (destaquesTrack && destaquesViewport) {
+    const cards = [...destaquesTrack.querySelectorAll('.produto-card')];
+    let destaqIdx = 0;
+
+    function destaqPerPage() {
+      if (window.innerWidth < 641)  return 2;
+      if (window.innerWidth < 1025) return 3;
+      return 4;
+    }
+
+    function destaqMaxIdx() {
+      // Garante >= 0: se cards.length <= pp não há como deslizar
+      return Math.max(0, cards.length - destaqPerPage());
+    }
+
+    function destaqAtualizar() {
+      const pp    = destaqPerPage();
+      const max   = destaqMaxIdx();
+      // Clamp defensivo: garante que idx nunca sai do intervalo válido
+      destaqIdx   = Math.min(Math.max(0, destaqIdx), max);
+
+      const gap   = 16; // 1rem em px
+      const vw    = destaquesViewport.offsetWidth;
+      const cardW = (vw - gap * (pp - 1)) / pp;
+      const offset = destaqIdx * (cardW + gap);
+      destaquesTrack.style.transform = `translateX(-${offset}px)`;
+
+      // Desabilita setas quando não há itens suficientes para deslizar
+      const podeNavegar = cards.length > pp;
+      if (destaquesPrev) destaquesPrev.disabled = !podeNavegar || destaqIdx <= 0;
+      if (destaquesNext) destaquesNext.disabled = !podeNavegar || destaqIdx >= max;
+    }
+
+    destaquesPrev?.addEventListener('click', () => {
+      destaqIdx = Math.max(0, destaqIdx - 1);
+      destaqAtualizar();
+    });
+
+    destaquesNext?.addEventListener('click', () => {
+      destaqIdx = Math.min(destaqMaxIdx(), destaqIdx + 1);
+      destaqAtualizar();
+    });
+
+    // Swipe mobile
+    let dStartX = 0;
+    destaquesViewport.addEventListener('touchstart', e => {
+      dStartX = e.touches[0].clientX;
+    }, { passive: true });
+    destaquesViewport.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - dStartX;
+      if (Math.abs(dx) < 40) return;
+      if (dx < 0) destaqIdx = Math.min(destaqMaxIdx(), destaqIdx + 1);
+      else        destaqIdx = Math.max(0, destaqIdx - 1);
+      destaqAtualizar();
+    }, { passive: true });
+
+    window.addEventListener('resize', destaqAtualizar);
+    destaqAtualizar();
+  }
+
+  // ─── Newsletter Popup ─────────────────────────────────────────────────────
+  const popupNewsletter = document.getElementById('popup-newsletter');
+  const popupFechar     = document.getElementById('popup-newsletter-fechar');
+  const formPopup       = document.getElementById('form-popup-newsletter');
+
+  if (popupNewsletter) {
+    const POPUP_KEY = 'della_newsletter_popup';
+
+    if (!sessionStorage.getItem(POPUP_KEY)) {
+      setTimeout(() => {
+        popupNewsletter.style.display = 'flex';
+        sessionStorage.setItem(POPUP_KEY, '1');
+      }, 5000);
+    }
+
+    function fecharPopup() { popupNewsletter.style.display = 'none'; }
+
+    popupFechar?.addEventListener('click', fecharPopup);
+    popupNewsletter.addEventListener('click', e => {
+      if (e.target === popupNewsletter) fecharPopup();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') fecharPopup();
+    });
+
+    if (formPopup) {
+      formPopup.addEventListener('submit', async e => {
+        e.preventDefault();
+        const email = formPopup.querySelector('input[type="email"]').value.trim();
+        const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+        const btn = formPopup.querySelector('button[type="submit"]');
+        if (!email) return;
+        btn.disabled = true;
+        btn.textContent = 'Aguarde...';
+        try {
+          const res   = await fetch('/newsletter/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ email }),
+          });
+          const dados = await res.json();
+          if (dados.status === 'ok') {
+            formPopup.innerHTML = '<p style="color:var(--dourado);font-family:var(--fonte-titulo);font-style:italic;font-size:1.1rem;padding:1rem 0;">Obrigada por se inscrever ✦</p>';
+            setTimeout(fecharPopup, 2500);
+          } else {
+            btn.disabled = false;
+            btn.innerHTML = 'Assinar Newsletter <i class="fas fa-chevron-right"></i>';
+          }
+        } catch {
+          btn.disabled = false;
+          btn.innerHTML = 'Assinar Newsletter <i class="fas fa-chevron-right"></i>';
+        }
+      });
+    }
+  }
+
 });

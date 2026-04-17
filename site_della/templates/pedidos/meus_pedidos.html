@@ -1,7 +1,72 @@
 {% extends 'base.html' %}
+{% load static %}
+{% block titulo %}Meus Pedidos — D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
+<div class="conta-wrapper">
+  <div class="conta-inner">
+
+    <h1 class="conta-titulo">Meus Pedidos</h1>
+
+    {% if not pedidos %}
+    <div class="conta-vazio">
+      <i class="fas fa-box-open" style="font-size:3rem;color:#ccc;display:block;margin-bottom:1rem;"></i>
+      <p>Você ainda não fez nenhum pedido.</p>
+      <a href="{% url 'produtos:loja' %}" class="btn-primario" style="margin-top:1.5rem;display:inline-block;">
+        Explorar a loja
+      </a>
+    </div>
+    {% else %}
+
+    <div class="pedidos-lista">
+      {% for pedido in pedidos %}
+      <a href="{% url 'pedidos:detalhe_pedido' pedido.numero %}" class="pedido-card-link">
+        <div class="pedido-card">
+
+          <div class="pedido-card-topo">
+            <div>
+              <span class="pedido-numero">{{ pedido.numero }}</span>
+              <span class="pedido-data">{{ pedido.criado_em|date:"d/m/Y" }}</span>
+            </div>
+            <span class="pedido-status-badge status-{{ pedido.status }}">
+              {{ pedido.get_status_display }}
+            </span>
+          </div>
+
+          <div class="pedido-card-itens">
+            {% for item in pedido.itens.all|slice:":3" %}
+            <span class="pedido-item-nome">{{ item.nome_produto }}{% if item.variacao_desc %} ({{ item.variacao_desc }}){% endif %}</span>
+            {% endfor %}
+            {% if pedido.itens.count > 3 %}
+            <span class="pedido-item-mais">+ {{ pedido.itens.count|add:"-3" }} item(ns)</span>
+            {% endif %}
+          </div>
+
+          <div class="pedido-card-rodape">
+            <span class="pedido-total">R$ {{ pedido.total|floatformat:2 }}</span>
+            <span class="pedido-ver">Ver detalhes <i class="fas fa-arrow-right"></i></span>
+          </div>
+
+          {% if pedido.status == 'aguardando_pagamento' and pedido.forma_pagamento == 'pix' %}
+          <div class="pedido-pagar-aviso">
+            <i class="fas fa-clock"></i> Aguardando Pagamento — clique para pagar via Pix
+          </div>
+          {% endif %}
+
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+
+    {% endif %}
+
+    <div style="margin-top:2.5rem;">
+      <a href="{% url 'usuarios:minha_conta' %}" class="btn-secundario">
+        <i class="fas fa-arrow-left"></i> Minha conta
+      </a>
+    </div>
+
+  </div>
 </div>
 {% endblock %}

@@ -85,7 +85,8 @@ class Carrinho:
 
     def __iter__(self):
         for chave, item in self.carrinho.items():
-            item['chave'] = chave
-            item['preco_decimal'] = Decimal(item['preco'])
-            item['subtotal'] = item['preco_decimal'] * item['quantidade']
-            yield item
+            item_copy = item.copy()
+            item_copy['chave'] = chave
+            item_copy['preco_decimal'] = Decimal(item['preco'])
+            item_copy['subtotal'] = item_copy['preco_decimal'] * item_copy['quantidade']
+            yield item_copy

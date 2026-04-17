@@ -12,8 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src import database as db, auth
 from src.utils import fmt_data
 
-st.set_page_config(page_title="Histórico — Liga Scaff", page_icon="📊", layout="wide")
-auth.render_sidebar_user()
 auth.require_login()
 
 st.title("📊 Histórico")

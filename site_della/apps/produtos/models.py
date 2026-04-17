@@ -413,3 +413,17 @@ class Avaliacao(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class NewsletterInscricao(models.Model):
+    email = models.EmailField('E-mail', max_length=254, unique=True)
+    inscrito_em = models.DateTimeField('Inscrito em', auto_now_add=True)
+    ativo = models.BooleanField('Ativo', default=True)
+
+    class Meta:
+        verbose_name = 'Inscrição Newsletter'
+        verbose_name_plural = 'Inscrições Newsletter'
+        ordering = ['-inscrito_em']
+
+    def __str__(self):
+        return self.email

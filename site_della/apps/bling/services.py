@@ -45,7 +45,7 @@ def enviar_pedido_bling(pedido) -> bool:
             tipo='pedido',
             pedido=pedido,
             sucesso=False,
-            payload_enviado=payload,
+            payload_enviado=_redact_payload_pii(payload),
             resposta={},
             erro=str(exc),
         )
@@ -56,7 +56,7 @@ def enviar_pedido_bling(pedido) -> bool:
             tipo='pedido',
             pedido=pedido,
             sucesso=False,
-            payload_enviado=payload,
+            payload_enviado=_redact_payload_pii(payload),
             resposta={},
             erro=f'Erro inesperado: {exc}',
         )
@@ -71,7 +71,7 @@ def enviar_pedido_bling(pedido) -> bool:
         tipo='pedido',
         pedido=pedido,
         sucesso=True,
-        payload_enviado=payload,
+        payload_enviado=_redact_payload_pii(payload),
         resposta=resposta,
     )
 
@@ -143,6 +143,26 @@ def emitir_nfe_bling(pedido) -> bool:
         logger.info('NF-e emitida para pedido %s: nfe_id=%s', pedido.numero, nfe_id)
 
     return True
+
+
+# ── Redação de PII para logs ──────────────────────────────────────────────────
+
+def _redact_payload_pii(payload: dict) -> dict:
+    """
+    Remove campos de PII do payload antes de armazenar em BlingLog (LGPD).
+
+    Campos redactados dentro de 'contato': cpfCnpj, email, telefone, enderecos.
+    O restante do payload (itens, totais, número do pedido) é mantido para
+    diagnóstico. O payload original nunca é modificado (deepcopy).
+    """
+    import copy
+    redacted = copy.deepcopy(payload)
+    contato = redacted.get('contato')
+    if isinstance(contato, dict):
+        for campo in ('cpfCnpj', 'email', 'telefone', 'enderecos', 'nome'):
+            if campo in contato:
+                contato[campo] = '[REDACTED]'
+    return redacted
 
 
 # ── Payload ───────────────────────────────────────────────────────────────────

@@ -260,6 +260,9 @@ class ProdutoAdmin(admin.ModelAdmin):
     class Media:
         js = ('admin/js/admin_linhas.js',)
 
+    def get_actions(self, request):
+        return {}  # remove dropdown de ações — use os botões ✎ e ✕ por linha
+
     fieldsets = (
         ('Identificação', {
             'fields': ('nome', 'slug', 'categoria', 'genero'),

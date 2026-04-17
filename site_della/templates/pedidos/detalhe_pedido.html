@@ -1,7 +1,162 @@
 {% extends 'base.html' %}
+{% load static %}
+{% block titulo %}Pedido {{ pedido.numero }} — D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
+<div class="conta-wrapper">
+  <div class="conta-inner">
+
+    <div class="detalhe-ped-topo">
+      <div>
+        <h1 class="conta-titulo" style="margin-bottom:.25rem;">Pedido {{ pedido.numero }}</h1>
+        <p class="pedido-data" style="font-size:.9rem;color:#888;">
+          Realizado em {{ pedido.criado_em|date:"d \d\e F \d\e Y" }}
+        </p>
+      </div>
+      <span class="pedido-status-badge status-{{ pedido.status }} detalhe">
+        {{ pedido.get_status_display }}
+      </span>
+    </div>
+
+    {% comment %} ── Re-pagamento Pix ─────────────────────────────────────────── {% endcomment %}
+    {% if pedido.status == 'aguardando_pagamento' and pedido.forma_pagamento == 'pix' %}
+    <section class="detalhe-pix-repagar">
+      <h2 class="detalhe-secao-titulo">
+        <i class="fas fa-qrcode"></i> Pague agora com Pix
+      </h2>
+
+      {% if pix_qrcode %}
+      <p class="pix-instrucao" style="margin-bottom:1.25rem;">
+        Escaneie o QR Code abaixo ou copie o código para finalizar o pagamento.
+      </p>
+
+      <div class="pix-qrcode-bloco" style="text-align:center;margin-bottom:1.5rem;">
+        <img src="data:image/png;base64,{{ pix_qrcode }}"
+             alt="QR Code Pix — {{ pedido.numero }}"
+             class="pix-qrcode-img">
+        <div class="pix-valor">R$ {{ pedido.total|floatformat:2 }}</div>
+      </div>
+
+      {% if pix_payload %}
+      <div class="pix-copiar-bloco">
+        <p class="pix-copiar-label">Ou copie o código Pix:</p>
+        <div class="pix-copiar-input-wrapper">
+          <input type="text" id="pix-payload-input" value="{{ pix_payload }}"
+                 readonly class="pix-copiar-input">
+          <button type="button" id="btn-copiar-pix" class="btn-copiar-pix" onclick="copiarPix()">
+            <i class="far fa-copy"></i> Copiar
+          </button>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="pix-aviso" style="margin-top:1rem;">
+        <i class="fas fa-info-circle"></i>
+        Após pagar, aguarde alguns instantes e recarregue esta página para ver a confirmação.
+      </div>
+
+      {% else %}
+      <div class="pix-sem-chave">
+        <p>Realize o pagamento via Pix para nossa chave e informe o número do pedido
+           <strong>{{ pedido.numero }}</strong> na descrição.</p>
+        <p>Valor: <strong>R$ {{ pedido.total|floatformat:2 }}</strong></p>
+        <p>Entre em contato pelo WhatsApp para receber a chave Pix.</p>
+      </div>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% comment %} ── Itens ────────────────────────────────────────────────────── {% endcomment %}
+    <section class="detalhe-secao">
+      <h2 class="detalhe-secao-titulo"><i class="fas fa-box"></i> Itens do Pedido</h2>
+      <div class="detalhe-itens">
+        {% for item in itens %}
+        <div class="detalhe-item">
+          {% with img=item.produto.imagem_principal %}
+          {% if img %}
+          <img src="{{ img.imagem.url }}" alt="{{ item.nome_produto }}"
+               class="detalhe-item-foto">
+          {% else %}
+          <div class="detalhe-item-foto detalhe-item-sem-foto"></div>
+          {% endif %}
+          {% endwith %}
+          <div class="detalhe-item-info">
+            <p class="detalhe-item-nome">{{ item.nome_produto }}</p>
+            {% if item.variacao_desc %}
+            <p class="detalhe-item-var">{{ item.variacao_desc }}</p>
+            {% endif %}
+            <p class="detalhe-item-qty">Qtd: {{ item.quantidade }}</p>
+          </div>
+          <p class="detalhe-item-preco">R$ {{ item.subtotal|floatformat:2 }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    {% comment %} ── Resumo + Endereço ─────────────────────────────────────────── {% endcomment %}
+    <div class="detalhe-grid">
+
+      <section class="detalhe-secao">
+        <h2 class="detalhe-secao-titulo"><i class="fas fa-receipt"></i> Resumo</h2>
+        <div class="detalhe-linha"><span>Subtotal</span><span>R$ {{ pedido.subtotal|floatformat:2 }}</span></div>
+        <div class="detalhe-linha"><span>Frete</span><span>R$ {{ pedido.frete|floatformat:2 }}</span></div>
+        {% if pedido.desconto %}
+        <div class="detalhe-linha" style="color:#27ae60;"><span>Desconto</span><span>− R$ {{ pedido.desconto|floatformat:2 }}</span></div>
+        {% endif %}
+        <div class="detalhe-linha detalhe-total"><span>Total</span><span>R$ {{ pedido.total|floatformat:2 }}</span></div>
+        <div class="detalhe-linha" style="margin-top:.75rem;"><span>Pagamento</span><span>{{ pedido.get_forma_pagamento_display }}</span></div>
+        {% if pedido.codigo_rastreio %}
+        <div class="detalhe-linha" style="margin-top:.75rem;">
+          <span>Rastreio</span>
+          <span>
+            <a href="https://www.correios.com.br/rastreamento" target="_blank" rel="noopener">
+              {{ pedido.codigo_rastreio }}
+            </a>
+          </span>
+        </div>
+        {% endif %}
+      </section>
+
+      <section class="detalhe-secao">
+        <h2 class="detalhe-secao-titulo"><i class="fas fa-map-marker-alt"></i> Endereço de Entrega</h2>
+        <p>{{ pedido.nome_completo }}</p>
+        <p>{{ pedido.logradouro }}, {{ pedido.numero_entrega }}{% if pedido.complemento %} — {{ pedido.complemento }}{% endif %}</p>
+        <p>{{ pedido.bairro }}</p>
+        <p>{{ pedido.cidade }} — {{ pedido.estado }}</p>
+        <p>CEP: {{ pedido.cep_entrega|slice:":5" }}-{{ pedido.cep_entrega|slice:"5:" }}</p>
+        {% if pedido.transportadora %}
+        <p style="margin-top:.75rem;font-weight:500;">{{ pedido.transportadora }}</p>
+        {% endif %}
+      </section>
+
+    </div>
+
+    <div style="margin-top:2.5rem;display:flex;gap:1rem;flex-wrap:wrap;">
+      <a href="{% url 'pedidos:meus_pedidos' %}" class="btn-secundario">
+        <i class="fas fa-arrow-left"></i> Meus Pedidos
+      </a>
+      <a href="{% url 'produtos:loja' %}" class="btn-primario">
+        <i class="fas fa-shopping-bag"></i> Continuar Comprando
+      </a>
+    </div>
+
+  </div>
 </div>
+{% endblock %}
+
+{% block js_extra %}
+{% if pix_qrcode %}
+<script>
+function copiarPix() {
+  const input = document.getElementById('pix-payload-input');
+  navigator.clipboard?.writeText(input.value).then(() => {
+    const btn = document.getElementById('btn-copiar-pix');
+    btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+    setTimeout(() => { btn.innerHTML = '<i class="far fa-copy"></i> Copiar'; }, 2500);
+  }).catch(() => { input.select(); document.execCommand('copy'); });
+}
+</script>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,40 @@
+<svg width="780" height="500" viewBox="0 0 780 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fundo branco (padrão flat) -->
+  <rect width="780" height="500" fill="#FFFFFF"/>
+
+  <!-- ── Símbolo Pix: 4 losangos arredondados ── -->
+  <!-- Cada pétala = rect 88x88 rx=22 rotacionado 45° em torno do próprio centro -->
+  <!-- Distância entre centros = 110px → gap visual ≈ 6px -->
+
+  <!-- NW (superior-esquerdo) centro: (155, 195) -->
+  <rect x="111" y="151" width="88" height="88" rx="22" fill="#32BCAD"
+        transform="rotate(45 155 195)"/>
+
+  <!-- NE (superior-direito) centro: (265, 195) -->
+  <rect x="221" y="151" width="88" height="88" rx="22" fill="#32BCAD"
+        transform="rotate(45 265 195)"/>
+
+  <!-- SW (inferior-esquerdo) centro: (155, 305) -->
+  <rect x="111" y="261" width="88" height="88" rx="22" fill="#32BCAD"
+        transform="rotate(45 155 305)"/>
+
+  <!-- SE (inferior-direito) centro: (265, 305) -->
+  <rect x="221" y="261" width="88" height="88" rx="22" fill="#32BCAD"
+        transform="rotate(45 265 305)"/>
+
+  <!-- ── Texto "pix" ── -->
+  <text x="358" y="278"
+        font-family="'Helvetica Neue', Arial, sans-serif"
+        font-size="172" font-weight="300"
+        fill="#707070" letter-spacing="-4">pix</text>
+
+  <!-- ── "powered by Banco Central" ── -->
+  <text x="362" y="330"
+        font-family="'Helvetica Neue', Arial, sans-serif"
+        font-size="36" font-weight="400"
+        fill="#AAAAAA">powered by </text>
+  <text x="565" y="330"
+        font-family="'Helvetica Neue', Arial, sans-serif"
+        font-size="36" font-weight="700"
+        fill="#AAAAAA">Banco Central</text>
+</svg>

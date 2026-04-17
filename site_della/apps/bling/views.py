@@ -5,6 +5,8 @@ Views da integração Bling:
   /bling/webhook/    → recebe notificações do Bling (pedidos, NF-e)
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import secrets
@@ -136,7 +138,32 @@ def webhook(request):
     Recebe notificações de eventos do Bling (pedidos, NF-e).
     Configurar no painel Bling → Integrações → Webhooks.
     URL: https://seudominio.com.br/bling/webhook/
+
+    Validação de origem: se BLING_WEBHOOK_SECRET estiver configurado no .env,
+    o header X-Bling-Signature é verificado como HMAC-SHA256 do body em hex.
+    Configure o mesmo valor no painel Bling → Webhooks → Chave de assinatura.
+    Enquanto BLING_WEBHOOK_SECRET estiver vazio, a validação é ignorada com
+    aviso no log — isso é um risco (C2) até a chave ser configurada.
     """
+    secret = getattr(settings, 'BLING_WEBHOOK_SECRET', '')
+    if secret:
+        assinatura_recebida = request.headers.get('X-Bling-Signature', '')
+        mac_esperado = hmac.new(
+            secret.encode('utf-8'), request.body, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(assinatura_recebida, mac_esperado):
+            logger.warning(
+                'Bling webhook: assinatura inválida — request rejeitado '
+                '(recebida=%r)',
+                assinatura_recebida[:16] + '…' if assinatura_recebida else '(vazia)',
+            )
+            return HttpResponse(status=401)
+    else:
+        logger.warning(
+            'Bling webhook: BLING_WEBHOOK_SECRET não configurado — '
+            'validação de origem desativada. Configure no .env e no painel Bling.'
+        )
+
     try:
         payload = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):

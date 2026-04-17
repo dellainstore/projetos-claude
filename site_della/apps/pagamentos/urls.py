@@ -11,7 +11,7 @@ urlpatterns = [
     # Stone
     path('stone/webhook/', views.stone_webhook, name='stone_webhook'),
 
-    # Pix (geração de QR Code)
+    # Pix (geração de QR Code e polling de status)
     path('pix/gerar/<str:pedido_numero>/', views.pix_gerar, name='pix_gerar'),
     path('pix/status/<str:pedido_numero>/', views.pix_status, name='pix_status'),
 ]

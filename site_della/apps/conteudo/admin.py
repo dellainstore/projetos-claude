@@ -13,6 +13,9 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
     class Media:
         js = ('admin/js/admin_linhas.js',)
 
+    def get_actions(self, request):
+        return {}
+
     fieldsets = (
         ('Ordem e tipo', {
             'fields': ('ordem', 'tipo', 'ativo'),
@@ -96,6 +99,9 @@ class MiniBannerAdmin(admin.ModelAdmin):
     class Media:
         js = ('admin/js/admin_linhas.js',)
 
+    def get_actions(self, request):
+        return {}
+
     fieldsets = (
         ('Posição e visibilidade', {
             'fields': ('posicao', 'ativo'),
@@ -157,6 +163,9 @@ class PaginaEstaticaAdmin(admin.ModelAdmin):
 
     class Media:
         js = ('admin/js/pagina_editor.js', 'admin/js/admin_linhas.js')
+
+    def get_actions(self, request):
+        return {}
 
     def acoes_linha(self, obj):
         from django.urls import reverse
@@ -224,6 +233,9 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
 
     class Media:
         js = ('admin/js/look_editor.js', 'admin/js/admin_linhas.js')
+
+    def get_actions(self, request):
+        return {}
 
     fieldsets = (
         ('Look', {

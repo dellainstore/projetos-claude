@@ -3,7 +3,7 @@ import logging
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Pedido, ItemPedido, HistoricoPedido
+from .models import Pedido, ItemPedido, HistoricoPedido, Cupom, CodigoVendedor
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +70,16 @@ class PedidoAdmin(admin.ModelAdmin):
     class Media:
         js = ('admin/js/admin_linhas.js',)
 
+    def get_actions(self, request):
+        return {}  # dropdown removido — status é alterado direto no formulário de edição
+
     readonly_fields = (
         'numero', 'nome_completo', 'email', 'cpf', 'telefone',
         'cep_entrega', 'logradouro', 'numero_entrega', 'complemento',
         'bairro', 'cidade', 'estado',
         'subtotal', 'desconto', 'frete', 'total',
         'gateway', 'gateway_id', 'parcelas', 'forma_pagamento',
+        'cupom_codigo', 'codigo_vendedor_str',
         'bling_pedido_id', 'bling_nfe_id', 'nfe_chave',
         'criado_em', 'atualizado_em',
     )
@@ -99,6 +103,10 @@ class PedidoAdmin(admin.ModelAdmin):
         }),
         ('Pagamento', {
             'fields': ('forma_pagamento', 'gateway', 'gateway_id', 'parcelas'),
+        }),
+        ('Cupom / Vendedor', {
+            'fields': ('cupom', 'cupom_codigo', 'codigo_vendedor', 'codigo_vendedor_str'),
+            'classes': ('collapse',),
         }),
         ('Entrega', {
             'fields': ('codigo_rastreio', 'transportadora'),
@@ -312,3 +320,115 @@ class PedidoAdmin(admin.ModelAdmin):
                 f'{fail_count} NF-e(s) com falha. Verifique a configuração fiscal no Bling e os Logs Bling.',
                 level='ERROR',
             )
+
+
+# ---------------------------------------------------------------------------
+# Cupom
+# ---------------------------------------------------------------------------
+
+@admin.register(Cupom)
+class CupomAdmin(admin.ModelAdmin):
+    list_display  = ('codigo', 'tipo', 'valor_formatado', 'vezes_usado', 'quantidade_total',
+                     'um_por_cliente', 'valido_ate', 'ativo', 'acoes_linha')
+    list_editable = ('ativo',)
+    list_display_links = ('codigo',)
+    search_fields = ('codigo',)
+    list_filter   = ('tipo', 'ativo', 'um_por_cliente')
+    ordering      = ('-id',)
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    def get_actions(self, request):
+        return {}
+
+    fieldsets = (
+        ('Código e desconto', {
+            'fields': ('codigo', 'tipo', 'valor', 'ativo'),
+            'description': (
+                'Tipo <b>Percentual</b>: informe o % de desconto (ex: 10 = 10%). '
+                'Tipo <b>Valor fixo</b>: informe o valor em reais (ex: 30.00).'
+            ),
+        }),
+        ('Limites de uso', {
+            'fields': ('quantidade_total', 'um_por_cliente'),
+            'description': (
+                'Quantidade total em branco = ilimitado. '
+                '"1 uso por cliente" controla pelo CPF.'
+            ),
+        }),
+        ('Validade', {
+            'fields': ('valido_de', 'valido_ate'),
+            'description': 'Deixe em branco para não limitar por data.',
+        }),
+    )
+
+    def valor_formatado(self, obj):
+        if obj.tipo == 'percentual':
+            return format_html('<span style="color:#2980b9;">{} %</span>', obj.valor)
+        v = f'{obj.valor:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return format_html('<span style="color:#27ae60;">R$ {}</span>', v)
+    valor_formatado.short_description = 'Desconto'
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:pedidos_cupom_change', args=[obj.pk])
+        delete_url = reverse('admin:pedidos_cupom_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este cupom?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
+
+
+# ---------------------------------------------------------------------------
+# CodigoVendedor
+# ---------------------------------------------------------------------------
+
+@admin.register(CodigoVendedor)
+class CodigoVendedorAdmin(admin.ModelAdmin):
+    list_display  = ('codigo', 'nome', 'total_pedidos', 'ativo', 'acoes_linha')
+    list_editable = ('ativo',)
+    list_display_links = ('codigo', 'nome')
+    search_fields = ('codigo', 'nome')
+    list_filter   = ('ativo',)
+    ordering      = ('nome',)
+    readonly_fields = ('codigo',)
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    def get_actions(self, request):
+        return {}
+
+    fieldsets = (
+        (None, {
+            'fields': ('codigo', 'nome', 'ativo'),
+            'description': 'O código é gerado automaticamente e não pode ser alterado.',
+        }),
+    )
+
+    def total_pedidos(self, obj):
+        count = obj.pedidos.exclude(status='cancelado').count()
+        return count
+    total_pedidos.short_description = 'Pedidos vinculados'
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:pedidos_codigovendedor_change', args=[obj.pk])
+        delete_url = reverse('admin:pedidos_codigovendedor_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este código de vendedor?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'

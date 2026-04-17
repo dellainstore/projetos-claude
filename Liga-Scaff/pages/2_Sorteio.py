@@ -16,8 +16,6 @@ from src.pdf_generator import gerar_planilha_pdf
 from src.scoring import calcular_pontuacao_rodada, get_beer_list, validar_placar
 from src.utils import parse_lista_whatsapp, validar_nome_jogador, fmt_data
 
-st.set_page_config(page_title="Sorteio — Liga Scaff", page_icon="🎲", layout="wide")
-auth.render_sidebar_user()
 auth.require_organizer()
 
 st.title("🎲 Sorteio")
@@ -45,68 +43,117 @@ def nome_jogo(jogo: dict, slot: str, nomes_map: dict) -> str:
     return v if v else "?"
 
 
-tab_criar, tab_sorteio, tab_manual, tab_auditoria = st.tabs(
-    ["Criar / Gerenciar Rodadas", "Gerar Sorteio", "Entrada Manual", "Auditoria"]
-)
+if auth.is_admin():
+    tab_criar, tab_sorteio, tab_manual, tab_auditoria = st.tabs(
+        ["Criar / Gerenciar Rodadas", "Gerar Sorteio", "Entrada Manual", "Auditoria"]
+    )
+else:
+    tab_sorteio, tab_auditoria = st.tabs(["Gerar Sorteio", "Auditoria"])
+    tab_criar = None
+    tab_manual = None
 
 
 # ── ABA 1: Criar / Gerenciar Rodadas ─────────────────────────────────────────
-with tab_criar:
-    rodadas = db.list_rodadas(tid)
+if tab_criar is not None:
+    with tab_criar:
+        rodadas = db.list_rodadas(tid)
 
-    col_lista, col_form = st.columns([2, 1])
+        col_lista, col_form = st.columns([2, 1])
 
-    with col_lista:
-        st.subheader("Rodadas da Temporada")
-        if rodadas:
-            for r in rodadas:
-                status_icon = {"pendente": "⏳", "sorteio_feito": "🎲", "concluida": "✅"}.get(r["status"], "?")
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns([3, 3, 1])
-                    with c1:
-                        st.write(f"{status_icon} **Rodada {r['numero']}** — {fmt_data(r['data'])}")
-                        st.caption(f"{r['n_jogadores']} jogadores · {r['status']}")
-                    with c2:
-                        sorteio_ativo = db.get_sorteio_ativo(r["id"])
-                        if sorteio_ativo:
-                            n_sorteios = len(db.list_sorteios(r["id"]))
-                            st.caption(f"Sorteio #{sorteio_ativo['numero']} oficial · {n_sorteios} gerado(s)")
-                    with c3:
-                        if auth.is_admin():
-                            if st.button("🗑️", key=f"del_rodada_{r['id']}", help="Excluir rodada"):
-                                st.session_state["confirmar_del_rodada"] = r["id"]
+        with col_lista:
+            st.subheader("Rodadas da Temporada")
+            if rodadas:
+                for r in rodadas:
+                    status_icon = {"pendente": "⏳", "sorteio_feito": "🎲", "concluida": "✅"}.get(r["status"], "?")
+                    with st.container(border=True):
+                        c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
+                        with c1:
+                            st.write(f"{status_icon} **Rodada {r['numero']}** — {fmt_data(r['data'])}")
+                            st.caption(f"{r['n_jogadores']} jogadores · {r['status']}")
+                        with c2:
+                            sorteio_ativo = db.get_sorteio_ativo(r["id"])
+                            if sorteio_ativo:
+                                n_sorteios = len(db.list_sorteios(r["id"]))
+                                st.caption(f"Sorteio #{sorteio_ativo['numero']} oficial · {n_sorteios} gerado(s)")
+                        with c3:
+                            if auth.is_admin():
+                                if st.button("✏️", key=f"edit_rodada_{r['id']}", help="Editar rodada"):
+                                    st.session_state["editar_rodada"] = r["id"]
+                                    st.session_state.pop("confirmar_del_rodada", None)
+                                    st.rerun()
+                        with c4:
+                            if auth.is_admin():
+                                if st.button("🗑️", key=f"del_rodada_{r['id']}", help="Excluir rodada"):
+                                    st.session_state["confirmar_del_rodada"] = r["id"]
+                                    st.session_state.pop("editar_rodada", None)
+                                    st.rerun()
+
+                # Modal de edição
+                edit_id = st.session_state.get("editar_rodada")
+                if edit_id and auth.is_admin():
+                    r_edit = db.get_rodada(edit_id)
+                    if r_edit:
+                        st.info(f"✏️ Editando **Rodada {r_edit['numero']}**")
+                        with st.form(key="form_edit_rodada"):
+                            ea, eb, ec = st.columns(3)
+                            with ea:
+                                novo_num = st.number_input("Número", min_value=1, max_value=20, value=int(r_edit["numero"]))
+                            with eb:
+                                from datetime import datetime as _dt
+                                data_atual = _dt.strptime(str(r_edit["data"]), "%Y-%m-%d").date()
+                                nova_data = st.date_input("Data", value=data_atual)
+                            with ec:
+                                novo_n = st.selectbox(
+                                    "Nº de Jogadores",
+                                    options=[16, 20, 24, 28, 32],
+                                    index=[16, 20, 24, 28, 32].index(int(r_edit["n_jogadores"])) if r_edit["n_jogadores"] in [16, 20, 24, 28, 32] else 0,
+                                )
+                            fa, fb = st.columns(2)
+                            with fa:
+                                salvar_edit = st.form_submit_button("💾 Salvar", use_container_width=True, type="primary")
+                            with fb:
+                                cancelar_edit = st.form_submit_button("✕ Cancelar", use_container_width=True)
+
+                        if salvar_edit:
+                            db.update_rodada(edit_id, int(novo_num), str(nova_data), int(novo_n))
+                            st.session_state.pop("editar_rodada", None)
+                            st.success("Rodada atualizada!")
+                            st.rerun()
+                        if cancelar_edit:
+                            st.session_state.pop("editar_rodada", None)
+                            st.rerun()
+
+                # Confirmação de exclusão
+                conf_id = st.session_state.get("confirmar_del_rodada")
+                if conf_id and auth.is_admin():
+                    r_conf = db.get_rodada(conf_id)
+                    if r_conf:
+                        st.warning(f"⚠️ Excluir **Rodada {r_conf['numero']} — {fmt_data(r_conf['data'])}** e todos os dados? Esta ação não pode ser desfeita.")
+                        ca, cb = st.columns(2)
+                        with ca:
+                            if st.button("Sim, excluir rodada", type="primary", use_container_width=True):
+                                db.delete_rodada(conf_id)
+                                st.session_state.pop("confirmar_del_rodada", None)
+                                st.success("Rodada excluída.")
                                 st.rerun()
+                        with cb:
+                            if st.button("Cancelar", use_container_width=True):
+                                st.session_state.pop("confirmar_del_rodada", None)
+                                st.rerun()
+            else:
+                st.info("Nenhuma rodada criada ainda.")
 
-            conf_id = st.session_state.get("confirmar_del_rodada")
-            if conf_id and auth.is_admin():
-                r_conf = db.get_rodada(conf_id)
-                if r_conf:
-                    st.warning(f"⚠️ Excluir **Rodada {r_conf['numero']} — {fmt_data(r_conf['data'])}** e todos os dados? Esta ação não pode ser desfeita.")
-                    ca, cb = st.columns(2)
-                    with ca:
-                        if st.button("Sim, excluir rodada", type="primary", use_container_width=True):
-                            db.delete_rodada(conf_id)
-                            st.session_state.pop("confirmar_del_rodada", None)
-                            st.success("Rodada excluída.")
-                            st.rerun()
-                    with cb:
-                        if st.button("Cancelar", use_container_width=True):
-                            st.session_state.pop("confirmar_del_rodada", None)
-                            st.rerun()
-        else:
-            st.info("Nenhuma rodada criada ainda.")
-
-    with col_form:
-        st.subheader("Nova Rodada")
-        with st.form("form_nova_rodada", clear_on_submit=True):
-            proximo_num = max([r["numero"] for r in rodadas], default=0) + 1
-            numero = st.number_input("Número", min_value=1, max_value=20, value=proximo_num)
-            data_rodada = st.date_input("Data", value=date.today())
-            n_jogadores = st.selectbox("Nº de Jogadores", options=[16, 20, 24, 28, 32])
-            if st.form_submit_button("Criar Rodada", use_container_width=True, type="primary"):
-                db.create_rodada(tid, int(numero), str(data_rodada), int(n_jogadores))
-                st.success(f"Rodada {numero} criada!")
-                st.rerun()
+        with col_form:
+            st.subheader("Nova Rodada")
+            with st.form("form_nova_rodada", clear_on_submit=True):
+                proximo_num = max([r["numero"] for r in rodadas], default=0) + 1
+                numero = st.number_input("Número", min_value=1, max_value=20, value=proximo_num)
+                data_rodada = st.date_input("Data", value=date.today())
+                n_jogadores = st.selectbox("Nº de Jogadores", options=[16, 20, 24, 28, 32])
+                if st.form_submit_button("Criar Rodada", use_container_width=True, type="primary"):
+                    db.create_rodada(tid, int(numero), str(data_rodada), int(n_jogadores))
+                    st.success(f"Rodada {numero} criada!")
+                    st.rerun()
 
 
 # ── ABA 2: Gerar Sorteio ─────────────────────────────────────────────────────
@@ -313,7 +360,8 @@ with tab_sorteio:
 
 
 # ── ABA 3: Entrada Manual ────────────────────────────────────────────────────
-with tab_manual:
+if tab_manual is not None:
+  with tab_manual:
     rodadas = db.list_rodadas(tid)
     if not rodadas:
         st.info("Crie uma rodada na aba **Criar / Gerenciar Rodadas** primeiro.")
@@ -534,10 +582,14 @@ with tab_auditoria:
         st.info("Nenhuma rodada criada.")
         rodada_audit = None
     else:
+        # Prioridade: rodada aberta (pendente/sorteio_feito) → última concluída
+        _aberta = next((r for r in reversed(rodadas) if r["status"] != "concluida"), None)
+        _default_idx = rodadas.index(_aberta) if _aberta else len(rodadas) - 1
         rodada_audit = st.selectbox(
             "Rodada",
             options=rodadas,
             format_func=lambda r: f"Rodada {r['numero']} — {fmt_data(r['data'])}",
+            index=_default_idx,
             key="audit_rodada",
         )
 

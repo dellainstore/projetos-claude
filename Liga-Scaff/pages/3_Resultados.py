@@ -10,14 +10,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src import database as db, auth
-from src.utils import fmt_data
+from src.utils import fmt_data, _normalizar
 from src.scoring import calcular_pontuacao_rodada, get_beer_list, validar_placar, calcular_detalhe_por_jogo
 from src.ranking import calcular_ranking
 from src.pdf_generator import gerar_email_rodada_pdf, gerar_ranking_pdf, gerar_ranking_sem_desconto_pdf
 from src.email_sender import enviar_ranking, smtp_configurado
 
-st.set_page_config(page_title="Resultados — Liga Scaff", page_icon="📋", layout="wide")
-auth.render_sidebar_user()
 auth.require_organizer()
 
 st.title("📋 Lançamento de Resultados")
@@ -71,7 +69,11 @@ if not jogos:
     st.stop()
 
 # ── Lançamento de resultados ──────────────────────────────────────────────────
+_bloqueado = rodada_sel["status"] == "concluida" and not auth.is_admin()
+
 st.subheader(f"Jogos da Rodada {rodada_sel['numero']} — {fmt_data(rodada_sel['data'])}")
+if _bloqueado:
+    st.info("🔒 Rodada concluída. Apenas administradores podem alterar os resultados.", icon="🔒")
 
 rodadas_internas = sorted({j["rodada_interna"] for j in jogos})
 quadras = sorted({j["quadra"] for j in jogos})
@@ -92,7 +94,7 @@ for ri in rodadas_internas:
     ]
 
     for grupo in quadras_grupo:
-        cols = st.columns(len(grupo))
+        cols = st.columns(MAX_COLS)
         for ci, q in enumerate(grupo):
             jogo = lookup.get((ri, q))
             if not jogo:
@@ -113,10 +115,10 @@ for ri in rodadas_internas:
                     edit_key = f"edit_{jid}"
                     em_edicao = st.session_state.get(edit_key, False)
 
-                    if em_edicao and (auth.is_admin() or auth.is_organizer()):
+                    if em_edicao and auth.is_admin():
                         st.markdown(f"**Quadra {q} ✏️**")
                         todos_j_edit = db.list_jogadores(apenas_ativos=False)
-                        nomes_cad_edit = {j["nome"].lower(): j for j in todos_j_edit}
+                        nomes_cad_edit = {_normalizar(j["nome"]): j for j in todos_j_edit}
 
                         # st.form garante que os valores são lidos no submit, sem interferência de rerun
                         with st.form(key=f"form_edit_{jid}"):
@@ -157,7 +159,7 @@ for ri in rodadas_internas:
                                 st.error(f"Placar inválido: {eg1}×{eg2}. Válidos: 6-0 a 6-4 ou 7-6.")
                             else:
                                 def _resolve(nome_str):
-                                    j_r = nomes_cad_edit.get(nome_str.lower())
+                                    j_r = nomes_cad_edit.get(_normalizar(nome_str))
                                     return (j_r["id"], None) if j_r else (None, nome_str)
                                 id1e, nv1e = _resolve(ej1.strip())
                                 id2e, nv2e = _resolve(ej2.strip())
@@ -177,7 +179,7 @@ for ri in rodadas_internas:
                         with hdr_col:
                             st.markdown(f"**Quadra {q}**")
                         with btn_col:
-                            if auth.is_admin() or auth.is_organizer():
+                            if auth.is_admin():
                                 if st.button("✏️", key=f"btn_edit_{jid}", help="Editar jogadores e placar"):
                                     st.session_state[edit_key] = True
                                     st.rerun()
@@ -188,7 +190,8 @@ for ri in rodadas_internas:
                         with cb:
                             g1 = st.selectbox(
                                 "g1", options=list(range(8)), index=g1_default,
-                                key=f"g1_{jogo['id']}", label_visibility="collapsed"
+                                key=f"g1_{jogo['id']}", label_visibility="collapsed",
+                                disabled=_bloqueado,
                             )
 
                         st.markdown("<div style='text-align:center;font-weight:bold;line-height:1'>×</div>",
@@ -200,7 +203,8 @@ for ri in rodadas_internas:
                         with cd:
                             g2 = st.selectbox(
                                 "g2", options=list(range(8)), index=g2_default,
-                                key=f"g2_{jogo['id']}", label_visibility="collapsed"
+                                key=f"g2_{jogo['id']}", label_visibility="collapsed",
+                                disabled=_bloqueado,
                             )
 
                         valido, erro = validar_placar(g1, g2)
@@ -214,27 +218,35 @@ for ri in rodadas_internas:
 st.divider()
 
 # ── Botões de ação ────────────────────────────────────────────────────────────
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    salvar_rascunho = st.button("💾 Salvar Rascunho", use_container_width=True)
-
-with col2:
-    publicar = st.button(
-        "✅ Calcular e Publicar Rodada",
-        use_container_width=True,
-        type="primary",
-        help="Calcula pontos e marca a rodada como concluída",
-    )
-
-with col3:
-    jogos_validos = len(alteracoes) == len(jogos)
+if _bloqueado:
+    salvar_rascunho = False
+    publicar = False
     enviar = st.button(
         "📧 Enviar Ranking por E-mail",
         use_container_width=True,
-        disabled=rodada_sel["status"] != "concluida",
-        help="Disponível após publicar a rodada",
+        help="Enviar PDFs da rodada por e-mail",
     )
+else:
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        salvar_rascunho = st.button("💾 Salvar Rascunho", use_container_width=True)
+
+    with col2:
+        publicar = st.button(
+            "✅ Calcular e Publicar Rodada",
+            use_container_width=True,
+            type="primary",
+            help="Calcula pontos e marca a rodada como concluída",
+        )
+
+    with col3:
+        enviar = st.button(
+            "📧 Enviar Ranking por E-mail",
+            use_container_width=True,
+            disabled=rodada_sel["status"] != "concluida",
+            help="Disponível após publicar a rodada",
+        )
 
 if salvar_rascunho:
     salvos = 0
@@ -324,24 +336,26 @@ if pdf_key in st.session_state:
     st.markdown("**📥 Downloads**")
     dc1, dc2, dc3 = st.columns(3)
     with dc1:
-        st.download_button("📋 Detalhe da Rodada", data=dados["pdf1"],
-                           file_name=f"Detalhe_R{rn}.pdf", mime="application/pdf",
+        st.download_button(f"📋 Detalhe da Rodada {rn}", data=dados["pdf1"],
+                           file_name=f"Detalhe_Rodada_{rn}.pdf", mime="application/pdf",
                            use_container_width=True)
     with dc2:
         st.download_button("📊 Ranking c/ Descarte", data=dados["pdf2"],
-                           file_name=f"Ranking_Descarte.pdf", mime="application/pdf",
-                           use_container_width=True)
+                           file_name="Ranking_com_Descarte.pdf", mime="application/pdf",
+                           use_container_width=True,
+                           help="Com todas as rodadas concluídas e dois descartes a partir da 3ª rodada")
     with dc3:
         st.download_button("📊 Ranking Geral", data=dados["pdf3"],
-                           file_name=f"Ranking_Geral.pdf", mime="application/pdf",
-                           use_container_width=True)
+                           file_name="Ranking_Geral.pdf", mime="application/pdf",
+                           use_container_width=True,
+                           help="Com todas as rodadas concluídas, sem descarte")
 
     if smtp_configurado():
         if st.button("📧 Enviar os 3 PDFs por E-mail", type="primary", use_container_width=True):
             with st.spinner("Enviando..."):
                 pdfs = [
-                    (dados["pdf1"], f"Detalhe_R{rn}.pdf"),
-                    (dados["pdf2"], "Ranking_Descarte.pdf"),
+                    (dados["pdf1"], f"Detalhe_Rodada_{rn}.pdf"),
+                    (dados["pdf2"], "Ranking_com_Descarte.pdf"),
                     (dados["pdf3"], "Ranking_Geral.pdf"),
                 ]
                 sucesso, msg_erro = enviar_ranking(pdfs, rn, dados["temporada_nome"], dados["beer"])

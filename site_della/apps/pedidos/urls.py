@@ -17,4 +17,6 @@ urlpatterns = [
     path('pedido/<str:numero>/', views.detalhe_pedido, name='detalhe_pedido'),
     path('cep/<str:cep>/', views.consultar_cep, name='consultar_cep'),
     path('frete/', views.calcular_frete, name='calcular_frete'),
+    path('validar-cupom/', views.validar_cupom, name='validar_cupom'),
+    path('validar-vendedor/', views.validar_vendedor, name='validar_vendedor'),
 ]

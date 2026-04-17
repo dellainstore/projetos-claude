@@ -14,9 +14,7 @@ from src import database as db, auth
 from src.ranking import calcular_ranking
 from src.scoring import validar_placar
 
-st.set_page_config(page_title="Final — Liga Scaff", page_icon="🏆", layout="wide")
-auth.render_sidebar_user()
-auth.require_login()
+auth.require_organizer()
 
 st.title("🏆 Final da Temporada")
 

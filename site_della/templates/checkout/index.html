@@ -276,8 +276,38 @@
             {% endif %}
           </div>
 
-          
-          <div class="checkout-campo" style="margin-top:1.5rem;">
+
+          <div class="checkout-cupom-bloco" style="margin-top:1.5rem;">
+            <details class="cupom-details">
+              <summary class="cupom-summary">
+                <i class="fas fa-tag"></i> Tem um cupom ou código de vendedor?
+              </summary>
+              <div class="cupom-campos">
+                <div class="checkout-campo cupom-linha">
+                  <label for="{{ form.cupom_codigo.id_for_label }}">Cupom de desconto</label>
+                  <div class="cupom-input-wrapper">
+                    {{ form.cupom_codigo }}
+                    <button type="button" id="btn-aplicar-cupom" class="btn-cupom">
+                      Aplicar
+                    </button>
+                  </div>
+                  <p id="cupom-feedback" class="cupom-feedback hidden"></p>
+                </div>
+                <div class="checkout-campo">
+                  <label for="{{ form.codigo_vendedor_codigo.id_for_label }}">Código do vendedor</label>
+                  <div class="cupom-input-wrapper">
+                    {{ form.codigo_vendedor_codigo }}
+                    <button type="button" id="btn-aplicar-vendedor" class="btn-cupom">
+                      Aplicar
+                    </button>
+                  </div>
+                  <p id="vendedor-feedback" class="cupom-feedback hidden"></p>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="checkout-campo" style="margin-top:1rem;">
             <label for="{{ form.observacao.id_for_label }}">Observações (opcional)</label>
             {{ form.observacao }}
           </div>
@@ -324,6 +354,10 @@
           <span>Subtotal</span>
           <span>R$ {{ subtotal|floatformat:2 }}</span>
         </div>
+        <div class="checkout-resumo-linha hidden" id="resumo-desconto-linha" style="color:#27ae60;">
+          <span>Desconto</span>
+          <span id="resumo-desconto-valor">−R$ 0,00</span>
+        </div>
         <div class="checkout-resumo-linha" id="resumo-frete-linha">
           <span>Frete</span>
           <span id="resumo-frete-valor" class="text-gray-400 text-sm">A calcular</span>
@@ -352,6 +386,7 @@
   'use strict';
 
   const SUBTOTAL = parseFloat('{{ subtotal|floatformat:2 }}'.replace(',', '.'));
+  let descontoAtual = 0;
 
   // ── Elementos ────────────────────────────────────────────────────────────
   const secoes  = document.querySelectorAll('.checkout-secao');
@@ -535,6 +570,18 @@
     }
   }
 
+  function fmtBRL(v) {
+    return 'R$ ' + v.toFixed(2).replace('.', ',');
+  }
+
+  function atualizarResumoTotal() {
+    const freteVal = parseFloat(document.getElementById('id_valor_frete')?.value || '0') || 0;
+    const freteEl  = document.getElementById('resumo-frete-valor');
+    if (freteEl && freteVal > 0) freteEl.textContent = fmtBRL(freteVal);
+    const total = Math.max(0, SUBTOTAL - descontoAtual + freteVal);
+    document.getElementById('resumo-total').textContent = fmtBRL(total);
+  }
+
   window.selecionarFrete = function(radio) {
     document.getElementById('id_opcao_frete').value = radio.value;
     document.getElementById('id_servico_frete_nome').value = radio.dataset.nome;
@@ -542,13 +589,80 @@
     document.getElementById('id_prazo_frete').value = radio.dataset.prazo;
 
     const frete = parseFloat(radio.dataset.preco);
-    const total = SUBTOTAL + frete;
-
-    document.getElementById('resumo-frete-valor').textContent =
-      'R$ ' + frete.toFixed(2).replace('.', ',');
-    document.getElementById('resumo-total').textContent =
-      'R$ ' + total.toFixed(2).replace('.', ',');
+    document.getElementById('resumo-frete-valor').textContent = fmtBRL(frete);
+    atualizarResumoTotal();
   };
+
+  // ── Cupom ────────────────────────────────────────────────────────────────
+  async function aplicarCupom() {
+    const input    = document.getElementById('id_cupom_codigo');
+    const feedback = document.getElementById('cupom-feedback');
+    const codigo   = (input?.value || '').trim().toUpperCase();
+    if (!codigo) return;
+    input.value = codigo;
+
+    try {
+      const res  = await fetch(`/carrinho/validar-cupom/?codigo=${encodeURIComponent(codigo)}&subtotal=${SUBTOTAL}`);
+      const data = await res.json();
+      feedback.classList.remove('hidden', 'cupom-ok', 'cupom-erro');
+
+      if (data.status === 'ok') {
+        descontoAtual = parseFloat(data.desconto);
+        feedback.textContent = '✓ ' + data.descricao + ' aplicado!';
+        feedback.classList.add('cupom-ok');
+        // Mostrar linha de desconto no resumo
+        const linhaDesc = document.getElementById('resumo-desconto-linha');
+        document.getElementById('resumo-desconto-valor').textContent = '−' + fmtBRL(descontoAtual);
+        linhaDesc?.classList.remove('hidden');
+        atualizarResumoTotal();
+      } else {
+        descontoAtual = 0;
+        feedback.textContent = '✗ ' + data.erro;
+        feedback.classList.add('cupom-erro');
+        document.getElementById('resumo-desconto-linha')?.classList.add('hidden');
+        atualizarResumoTotal();
+      }
+    } catch (e) {
+      feedback.classList.remove('hidden');
+      feedback.textContent = 'Erro ao validar cupom.';
+      feedback.classList.add('cupom-erro');
+    }
+  }
+
+  document.getElementById('btn-aplicar-cupom')?.addEventListener('click', aplicarCupom);
+  document.getElementById('id_cupom_codigo')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); aplicarCupom(); }
+  });
+
+  // ── Código do vendedor ───────────────────────────────────────────────────
+  async function aplicarVendedor() {
+    const input    = document.getElementById('id_codigo_vendedor_codigo');
+    const feedback = document.getElementById('vendedor-feedback');
+    const codigo   = (input?.value || '').trim().toUpperCase();
+    if (!codigo) return;
+    input.value = codigo;
+    feedback.classList.remove('hidden', 'cupom-ok', 'cupom-erro');
+
+    try {
+      const res  = await fetch(`/carrinho/validar-vendedor/?codigo=${encodeURIComponent(codigo)}`);
+      const data = await res.json();
+      if (data.status === 'ok') {
+        feedback.textContent = '✓ Vendedor ' + data.nome + ' vinculado ao pedido.';
+        feedback.classList.add('cupom-ok');
+      } else {
+        feedback.textContent = '✗ ' + data.erro;
+        feedback.classList.add('cupom-erro');
+      }
+    } catch (e) {
+      feedback.textContent = 'Erro ao validar código.';
+      feedback.classList.add('cupom-erro');
+    }
+  }
+
+  document.getElementById('btn-aplicar-vendedor')?.addEventListener('click', aplicarVendedor);
+  document.getElementById('id_codigo_vendedor_codigo')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); aplicarVendedor(); }
+  });
 
   // ── Tabs pagamento ───────────────────────────────────────────────────────
   document.querySelectorAll('.pagamento-tab').forEach(tab => {

@@ -1,15 +1,100 @@
 import uuid
+import random
+import string
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from apps.core_utils.sanitize import sanitize_text, sanitize_address, sanitize_phone
 
 
 def gerar_numero_pedido():
     """Gera número legível: DI-2024-XXXX"""
-    from django.utils import timezone
     ano = timezone.now().year
     aleatorio = uuid.uuid4().hex[:6].upper()
     return f'DI-{ano}-{aleatorio}'
+
+
+def gerar_codigo_vendedor():
+    """Gera código aleatório de 8 caracteres maiúsculos para CodigoVendedor."""
+    chars = string.ascii_uppercase + string.digits
+    while True:
+        codigo = ''.join(random.choices(chars, k=8))
+        if not CodigoVendedor.objects.filter(codigo=codigo).exists():
+            return codigo
+
+
+class Cupom(models.Model):
+    TIPO_CHOICES = [
+        ('percentual', 'Percentual (%)'),
+        ('fixo',       'Valor fixo (R$)'),
+    ]
+
+    codigo = models.CharField('Código', max_length=50, unique=True,
+                              help_text='Código que o cliente digita no checkout. Ex: DELLA10')
+    tipo   = models.CharField('Tipo de desconto', max_length=10, choices=TIPO_CHOICES, default='percentual')
+    valor  = models.DecimalField('Valor do desconto', max_digits=10, decimal_places=2,
+                                  help_text='Percentual (ex: 10 = 10%) ou valor fixo em reais (ex: 30.00)')
+
+    quantidade_total = models.PositiveIntegerField(
+        'Quantidade total disponível', null=True, blank=True,
+        help_text='Deixe em branco para uso ilimitado',
+    )
+    vezes_usado = models.PositiveIntegerField('Vezes usado', default=0, editable=False)
+
+    um_por_cliente = models.BooleanField(
+        'Apenas 1 uso por cliente', default=True,
+        help_text='Se marcado, o mesmo CPF só pode usar este cupom uma vez',
+    )
+
+    valido_de  = models.DateField('Válido a partir de', null=True, blank=True)
+    valido_ate = models.DateField('Válido até', null=True, blank=True)
+
+    ativo = models.BooleanField('Ativo', default=True)
+
+    class Meta:
+        verbose_name = 'Cupom'
+        verbose_name_plural = 'Cupons'
+        ordering = ['-id']
+
+    def __str__(self):
+        return self.codigo
+
+    def esta_valido(self, cpf=None):
+        """Retorna (ok: bool, motivo: str)."""
+        if not self.ativo:
+            return False, 'Cupom inativo.'
+        hoje = timezone.now().date()
+        if self.valido_de and hoje < self.valido_de:
+            return False, 'Cupom ainda não está vigente.'
+        if self.valido_ate and hoje > self.valido_ate:
+            return False, 'Cupom expirado.'
+        if self.quantidade_total is not None and self.vezes_usado >= self.quantidade_total:
+            return False, 'Cupom esgotado.'
+        if cpf and self.um_por_cliente:
+            if Pedido.objects.filter(cpf=cpf, cupom=self).exclude(status='cancelado').exists():
+                return False, 'Você já utilizou este cupom.'
+        return True, ''
+
+    def calcular_desconto(self, subtotal):
+        """Retorna o valor de desconto a ser aplicado sobre o subtotal."""
+        from decimal import Decimal
+        if self.tipo == 'percentual':
+            return (Decimal(str(self.valor)) / 100 * subtotal).quantize(Decimal('0.01'))
+        return min(Decimal(str(self.valor)), subtotal)
+
+
+class CodigoVendedor(models.Model):
+    codigo = models.CharField('Código', max_length=20, unique=True, default=gerar_codigo_vendedor)
+    nome   = models.CharField('Nome do vendedor', max_length=120)
+    ativo  = models.BooleanField('Ativo', default=True)
+
+    class Meta:
+        verbose_name = 'Código de vendedor'
+        verbose_name_plural = 'Códigos de vendedor'
+        ordering = ['nome']
+
+    def __str__(self):
+        return f'{self.nome} ({self.codigo})'
 
 
 class Pedido(models.Model):
@@ -53,6 +138,20 @@ class Pedido(models.Model):
     bairro = models.CharField('Bairro', max_length=100)
     cidade = models.CharField('Cidade', max_length=100)
     estado = models.CharField('Estado', max_length=2)
+
+    # Cupom / vendedor
+    cupom = models.ForeignKey(
+        'Cupom', on_delete=models.SET_NULL, null=True, blank=True, related_name='pedidos',
+        verbose_name='Cupom',
+    )
+    cupom_codigo = models.CharField('Código do cupom', max_length=50, blank=True,
+                                     help_text='Copiado no momento da compra')
+    codigo_vendedor = models.ForeignKey(
+        'CodigoVendedor', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='pedidos', verbose_name='Código do vendedor',
+    )
+    codigo_vendedor_str = models.CharField('Código do vendedor', max_length=20, blank=True,
+                                            help_text='Copiado no momento da compra')
 
     # Valores
     subtotal = models.DecimalField('Subtotal', max_digits=10, decimal_places=2, default=0)

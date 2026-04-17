@@ -143,7 +143,7 @@ def init_db() -> None:
 def get_user(username: str) -> dict | None:
     with get_conn() as conn:
         return conn.execute(
-            "SELECT * FROM users WHERE username = ?", (username,)
+            "SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (username,)
         ).fetchone()
 
 
@@ -303,6 +303,14 @@ def create_rodada(temporada_id: int, numero: int, data: str, n_jogadores: int) -
             (temporada_id, numero, data, n_jogadores),
         )
         return cur.lastrowid
+
+
+def update_rodada(rodada_id: int, numero: int, data: str, n_jogadores: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE rodadas_liga SET numero=?, data=?, n_jogadores=? WHERE id=?",
+            (numero, data, n_jogadores, rodada_id),
+        )
 
 
 def update_rodada_status(rodada_id: int, status: str) -> None:

@@ -11,10 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src import database as db, auth
 from src.utils import fmt_data
-from src.ranking import calcular_ranking, formatar_variacao
+from src.ranking import calcular_ranking, formatar_variacao, _n_descartes_efetivo
 
-st.set_page_config(page_title="Ranking — Liga Scaff", page_icon="🏆", layout="wide")
-auth.render_sidebar_user()
 auth.require_login()
 
 st.title("🏆 Ranking")
@@ -92,9 +90,11 @@ with col_p:
 # ── Tabela completa ───────────────────────────────────────────────────────────
 st.divider()
 st.subheader("Classificação Completa")
+n_desc_efetivo = _n_descartes_efetivo(len(rodadas_concluidas))
 st.caption(
     f"Temporada {temporada['nome']} · "
-    f"Descartando {temporada['n_descartadas']} piores rodadas por jogador"
+    + (f"Descartando {n_desc_efetivo} piores rodadas por jogador"
+       if n_desc_efetivo > 0 else "Sem descartes ainda")
 )
 
 # Monta dados para a tabela
@@ -119,34 +119,56 @@ for entry in ranking:
         "Pos": pos,
         "▲▼": cor_variacao(entry["variacao"]),
         "Jogador": entry["nome"],
+        "Total": entry["total"],
     }
     for rn in rodadas_numeros:
         pts = entry["pontos_por_rodada"].get(rn)
-        if pts is None:
-            linha[f"R{rn}"] = "—"
-        elif rn in entry["rodadas_descartadas"]:
-            linha[f"R{rn}"] = f"({pts})"  # descartada
+        if rn in entry["rodadas_descartadas"]:
+            # descartada: mostra valor (0 se ausente) entre parênteses
+            valor = pts if pts is not None else 0
+            linha[f"R{rn}"] = f"({valor})"
+        elif pts is None:
+            linha[f"R{rn}"] = "—"  # ausente, não descartada
         else:
             linha[f"R{rn}"] = str(pts)
-    linha["Total"] = entry["total"]
     linhas.append(linha)
 
 df = pd.DataFrame(linhas)
 
-# Estilização: destaca top 3, mostra descartadas em cinza
-def highlight_row(row):
-    pos = row["Pos"]
-    if pos <= 8:
-        return ["background-color: #3a2e00; color: #ffd700"] * len(row)
-    if pos <= 16:
-        return ["background-color: #1a1e2a; color: #b0b8c8"] * len(row)
-    return [""] * len(row)
+# Mapa de células descartadas para estilização por célula
+descartadas_map: dict[tuple, bool] = {}
+for i, entry in enumerate(ranking):
+    for rn in rodadas_numeros:
+        if rn in entry["rodadas_descartadas"]:
+            descartadas_map[(i, f"R{rn}")] = True
 
 
-styled = df.style.apply(highlight_row, axis=1)
+# Estilização: série Ouro/Prata por linha + células de descarte destacadas
+def style_all(df):
+    styles = pd.DataFrame("", index=df.index, columns=df.columns)
+    for i, row in df.iterrows():
+        pos = row["Pos"]
+        if pos <= 8:
+            base = "background-color: #3a2e00; color: #ffd700"
+            desc_style = "background-color: #8b4500; color: #ffcc66; font-weight: bold"
+        elif pos <= 16:
+            base = "background-color: #1a1e2a; color: #b0b8c8"
+            desc_style = "background-color: #4a1030; color: #ff9999; font-weight: bold"
+        else:
+            base = ""
+            desc_style = "background-color: #5a0000; color: #ffaaaa; font-weight: bold"
+        for col in df.columns:
+            if descartadas_map.get((i, col)):
+                styles.at[i, col] = desc_style
+            else:
+                styles.at[i, col] = base
+    return styles
+
+
+styled = df.style.apply(style_all, axis=None)
 st.dataframe(styled, use_container_width=True, hide_index=True)
 
-st.caption("Valores entre parênteses = rodadas descartadas do ranking.")
+st.caption("Valores entre parênteses = rodadas descartadas do ranking. Células destacadas = descarte ativo.")
 
 # ── Detalhes por rodada ───────────────────────────────────────────────────────
 st.divider()
@@ -208,6 +230,8 @@ if auth.is_admin():
                         if st.form_submit_button("🔑 Alterar", use_container_width=True):
                             if not nova.strip():
                                 st.error("Digite a nova senha.")
+                            elif len(nova.strip()) < 8:
+                                st.error("A senha deve ter pelo menos 8 caracteres.")
                             elif nova != conf:
                                 st.error("As senhas não coincidem.")
                             else:
@@ -224,6 +248,8 @@ if auth.is_admin():
             if st.form_submit_button("Criar", use_container_width=True):
                 if not nu.strip() or not np.strip():
                     st.error("Usuário e senha são obrigatórios.")
+                elif len(np.strip()) < 8:
+                    st.error("A senha deve ter pelo menos 8 caracteres.")
                 elif np != nc:
                     st.error("As senhas não coincidem.")
                 else:

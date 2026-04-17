@@ -9,3 +9,5 @@ dist/
 build/
 .idea/
 .vscode/
+# Credenciais Google Cloud
+*-[a-f0-9]*.json

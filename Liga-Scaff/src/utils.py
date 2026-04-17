@@ -3,7 +3,15 @@ Utilitários gerais da Liga Quarta Scaff.
 """
 
 import re
+import unicodedata
 from datetime import datetime
+
+
+def _normalizar(texto: str) -> str:
+    """Remove acentos e converte para minúsculas para comparação tolerante."""
+    sem_acento = unicodedata.normalize("NFD", texto)
+    sem_acento = "".join(c for c in sem_acento if unicodedata.category(c) != "Mn")
+    return sem_acento.lower().strip()
 
 
 def fmt_data(data_str: str) -> str:
@@ -34,8 +42,8 @@ def parse_lista_whatsapp(texto: str, jogadores: list[dict]) -> tuple[list[dict],
         - encontrados: lista de dicts de jogadores que bateram
         - nao_encontrados: lista de nomes que não tiveram match
     """
-    # Mapa nome_lower -> jogador para busca rápida
-    mapa_nomes = {j["nome"].lower().strip(): j for j in jogadores}
+    # Mapa nome_normalizado -> jogador para busca tolerante a acentos e maiúsculas
+    mapa_nomes = {_normalizar(j["nome"]): j for j in jogadores}
 
     encontrados: list[dict] = []
     nao_encontrados: list[str] = []
@@ -53,7 +61,7 @@ def parse_lista_whatsapp(texto: str, jogadores: list[dict]) -> tuple[list[dict],
         if not nome or len(nome) < 2:
             continue
 
-        match = mapa_nomes.get(nome.lower())
+        match = mapa_nomes.get(_normalizar(nome))
         if match:
             if match["id"] not in ids_ja_adicionados:
                 encontrados.append(match)
@@ -66,11 +74,11 @@ def parse_lista_whatsapp(texto: str, jogadores: list[dict]) -> tuple[list[dict],
 
 def validar_nome_jogador(nome: str, jogadores: list[dict]) -> dict | None:
     """
-    Retorna o jogador cadastrado cujo nome bate (case-insensitive).
+    Retorna o jogador cadastrado cujo nome bate (sem acento, case-insensitive).
     Retorna None se não encontrado.
     """
-    nome_lower = nome.strip().lower()
+    nome_norm = _normalizar(nome)
     for j in jogadores:
-        if j["nome"].lower().strip() == nome_lower:
+        if _normalizar(j["nome"]) == nome_norm:
             return j
     return None

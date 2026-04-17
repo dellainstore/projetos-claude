@@ -153,6 +153,30 @@ class CheckoutForm(forms.Form):
         widget=forms.Select(attrs={'class': 'checkout-input checkout-select', 'id': 'id_parcelas'}),
     )
 
+    # ── Cupom / Vendedor ──────────────────────────────────────────────────────
+    cupom_codigo = forms.CharField(
+        max_length=50,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Código do cupom (opcional)',
+            'autocomplete': 'off',
+            'class': 'checkout-input checkout-input--cupom',
+            'id': 'id_cupom_codigo',
+            'style': 'text-transform:uppercase',
+        }),
+    )
+    codigo_vendedor_codigo = forms.CharField(
+        max_length=20,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Código do vendedor (opcional)',
+            'autocomplete': 'off',
+            'class': 'checkout-input checkout-input--vendedor',
+            'id': 'id_codigo_vendedor_codigo',
+            'style': 'text-transform:uppercase',
+        }),
+    )
+
     # ── Observação ────────────────────────────────────────────────────────────
     observacao = forms.CharField(
         max_length=300,

@@ -100,7 +100,15 @@
       <p>Peças exclusivas que unem conforto, estilo e sofisticação.</p>
     </header>
 
-    <div class="produtos-grid">
+    <div class="destaques-carousel" id="destaques-carousel">
+      <button class="destaques-nav destaques-nav-prev" id="destaques-prev" aria-label="Destaques anteriores" disabled>
+        <i class="fas fa-chevron-left"></i>
+      </button>
+      <button class="destaques-nav destaques-nav-next" id="destaques-next" aria-label="Próximos destaques">
+        <i class="fas fa-chevron-right"></i>
+      </button>
+    <div class="destaques-viewport">
+    <div class="produtos-grid destaques-track" id="destaques-track">
       {% for produto in produtos_destaque %}
         <article class="produto-card fade-in fade-in-delay-{{ forloop.counter }}" aria-labelledby="produto-{{ produto.id }}">
           <div class="produto-imagem-wrapper">
@@ -161,13 +169,14 @@
           </div>
         </article>
       {% empty %}
-        
         <div class="col-span-4 text-center py-16 text-gray-400">
           <i class="far fa-shopping-bag text-4xl mb-4 block"></i>
           <p class="font-light">Produtos em breve</p>
         </div>
       {% endfor %}
-    </div>
+    </div><!-- /destaques-track -->
+    </div><!-- /destaques-viewport -->
+    </div><!-- /destaques-carousel -->
 
     <div class="btn-centro fade-in">
       <a href="{% url 'produtos:loja' %}" class="btn-secundario">

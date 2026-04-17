@@ -36,8 +36,8 @@ class BlingLog(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = 'Log Bling'
-        verbose_name_plural = 'Logs Bling'
+        verbose_name = 'Histórico Bling'
+        verbose_name_plural = 'Histórico Bling'
         ordering = ['-criado_em']
 
     def __str__(self):

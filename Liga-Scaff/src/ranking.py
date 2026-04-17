@@ -1,11 +1,13 @@
 """
 Cálculo de ranking da Liga Quarta Scaff.
 
-Regras:
-- 8 rodadas por temporada
-- Descarta as N piores rodadas de cada jogador (apenas das que participou)
-- Jogadores ausentes na rodada ficam com 0 pontos
-- Ranking ordenado por total de pontos
+Regras de descarte (dinâmicas por número de rodadas concluídas):
+- até 2 rodadas: sem descarte — exibe soma total
+- 3 rodadas    : 1 descarte — o menor valor de cada jogador
+- 4+ rodadas   : 2 descartes — os 2 menores valores de cada jogador
+
+Ausências (rodadas não disputadas) valem 0 ponto e entram no cálculo de descarte.
+Todos os jogadores exibem suas rodadas descartadas na tabela.
 """
 
 import sys
@@ -15,6 +17,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src import database as db
 
 
+def _n_descartes_efetivo(n_rodadas_concluidas: int) -> int:
+    """Retorna quantos descartes aplicar baseado nas rodadas concluídas."""
+    if n_rodadas_concluidas <= 2:
+        return 0
+    if n_rodadas_concluidas == 3:
+        return 1
+    return 2
+
+
 def calcular_ranking(temporada_id: int) -> list[dict]:
     """
     Calcula o ranking completo de uma temporada.
@@ -22,25 +33,23 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
     Retorna lista ordenada de dicts:
     {
         jogador_id, nome,
-        pontos_por_rodada: {rodada_num: pontos},
+        pontos_por_rodada: {rodada_num: pontos},  # apenas rodadas disputadas
         rodadas_descartadas: set de numeros de rodadas descartadas,
         total: pontos somados (sem as descartadas),
         posicao: int,
         variacao: int (positivo = subiu, negativo = caiu, 0 = igual, None = estreante)
     }
     """
-    temporada = db.get_temporada(temporada_id)
-    if not temporada:
-        return []
-
-    n_descartadas = temporada["n_descartadas"]
     rodadas = db.list_rodadas(temporada_id)
     rodadas_concluidas = [r for r in rodadas if r["status"] == "concluida"]
 
     if not rodadas_concluidas:
         return []
 
-    # Coleta todas as pontuações
+    n_desc = _n_descartes_efetivo(len(rodadas_concluidas))
+    nums_concluidas = {r["numero"] for r in rodadas_concluidas}
+
+    # Coleta todas as pontuações (apenas rodadas disputadas)
     todas_pontuacoes = db.get_pontuacoes_temporada(temporada_id)
 
     # Agrupa por jogador
@@ -54,27 +63,25 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
             }
         pontuacoes_por_jogador[jid]["pontos_por_rodada"][p["rodada_numero"]] = p["pontos"]
 
-    # Apenas jogadores que participaram de pelo menos 1 rodada aparecem no ranking
     ranking: list[dict] = []
     for jid, dados in pontuacoes_por_jogador.items():
-        pts_rodadas = dados["pontos_por_rodada"]
-        rodadas_jogadas = list(pts_rodadas.keys())
+        pts_disputadas = dados["pontos_por_rodada"]
 
-        # Descarta as N piores rodadas que o jogador PARTICIPOU
+        # Mapa completo incluindo 0 para ausências (usado no cálculo de descarte)
+        pts_completo = {rn: pts_disputadas.get(rn, 0) for rn in nums_concluidas}
+
+        # Descarta os N piores (incluindo zeros de ausência)
         descartadas: set[int] = set()
-        if n_descartadas > 0 and len(rodadas_jogadas) > n_descartadas:
-            ordenadas_por_pts = sorted(rodadas_jogadas, key=lambda r: pts_rodadas[r])
-            descartadas = set(ordenadas_por_pts[:n_descartadas])
+        if n_desc > 0:
+            ordenadas = sorted(pts_completo.keys(), key=lambda r: pts_completo[r])
+            descartadas = set(ordenadas[:n_desc])
 
-        total = sum(
-            pts for r, pts in pts_rodadas.items()
-            if r not in descartadas
-        )
+        total = sum(pts for r, pts in pts_completo.items() if r not in descartadas)
 
         ranking.append({
             "jogador_id": jid,
             "nome": dados["nome"],
-            "pontos_por_rodada": pts_rodadas,
+            "pontos_por_rodada": pts_disputadas,   # apenas rodadas disputadas (para exibir —)
             "rodadas_descartadas": descartadas,
             "total": total,
             "posicao": 0,
@@ -88,7 +95,7 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
 
     # Calcula variação: compara com ranking sem a última rodada concluída
     if len(rodadas_concluidas) >= 2:
-        ranking_anterior = _calcular_ranking_sem_ultima(temporada_id, rodadas_concluidas, n_descartadas)
+        ranking_anterior = _calcular_ranking_sem_ultima(temporada_id, rodadas_concluidas)
         pos_anterior = {r["jogador_id"]: r["posicao"] for r in ranking_anterior}
         for entry in ranking:
             pos_ant = pos_anterior.get(entry["jogador_id"])
@@ -103,7 +110,6 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
 def _calcular_ranking_sem_ultima(
     temporada_id: int,
     rodadas_concluidas: list,
-    n_descartadas: int,
 ) -> list[dict]:
     """Calcula ranking sem a última rodada (para calcular variação)."""
     if len(rodadas_concluidas) < 2:
@@ -111,6 +117,7 @@ def _calcular_ranking_sem_ultima(
 
     rodadas_anteriores = rodadas_concluidas[:-1]
     nums_anteriores = {r["numero"] for r in rodadas_anteriores}
+    n_desc = _n_descartes_efetivo(len(rodadas_anteriores))
 
     todas = db.get_pontuacoes_temporada(temporada_id)
     por_jogador: dict[int, dict] = {}
@@ -124,13 +131,16 @@ def _calcular_ranking_sem_ultima(
 
     resultado = []
     for jid, dados in por_jogador.items():
-        pts = dados["pts"]
-        rodadas_jogadas = list(pts.keys())
+        pts_disputadas = dados["pts"]
+        # Inclui 0 para ausências nas rodadas anteriores
+        pts_completo = {rn: pts_disputadas.get(rn, 0) for rn in nums_anteriores}
+
         descartadas: set[int] = set()
-        if n_descartadas > 0 and len(rodadas_jogadas) > n_descartadas:
-            ordenadas = sorted(rodadas_jogadas, key=lambda r: pts[r])
-            descartadas = set(ordenadas[:n_descartadas])
-        total = sum(v for r, v in pts.items() if r not in descartadas)
+        if n_desc > 0:
+            ordenadas = sorted(pts_completo.keys(), key=lambda r: pts_completo[r])
+            descartadas = set(ordenadas[:n_desc])
+
+        total = sum(v for r, v in pts_completo.items() if r not in descartadas)
         resultado.append({"jogador_id": jid, "total": total, "posicao": 0})
 
     resultado.sort(key=lambda x: -x["total"])

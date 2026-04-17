@@ -56,6 +56,41 @@ start.sh            — script para iniciar o app
 ## Download de PDF (Sorteio)
 - O botão "Baixar Planilha PDF" na aba Sorteio é um `st.download_button` com o PDF pré-gerado — um clique já baixa sem precisar rolar a página.
 
+## Segurança (app.py + pages/4_Ranking.py)
+- **Brute-force login:** bloqueio após 5 tentativas incorretas via `st.session_state["login_tentativas"]`; atualizando a página o contador é zerado
+- **Senha padrão:** banner de aviso exibido no dashboard quando o usuário logado é `admin` com role `admin`
+- **Validação de senha:** mínimo de 8 caracteres tanto na criação quanto na troca de senha (em `4_Ranking.py`)
+- **Injeção ReportLab:** todos os nomes de jogadores passados para `Paragraph()` são escapados com `html.escape()` do módulo `html` para evitar interpretação de tags XML
+- **SQL:** todas as queries usam parâmetros `?` (sem interpolação de strings) — sem risco de SQL injection
+
+## Geração de PDFs (src/pdf_generator.py)
+
+### PDF — Planilha de Resultados (landscape A4)
+- Gerado em `gerar_planilha_pdf()`, baixado via `st.download_button` na aba Sorteio
+- **Os 4 jogos SEMPRE na mesma folha:** `KeepTogether` + `splitByRow=0` na `Table` impedem separação entre páginas
+- **Colunas de tamanho fixo em todas as páginas:** `col_q_fixo` calculado uma vez com base em `max_q_pag`; grupos com menos quadras ficam centralizados via `t.hAlign = "CENTER"`
+- **5 quadras por página** (`MIN_COL_Q = 5.0 * cm`) — evita nomes cortados que ocorreriam com 6
+- Grupos com menos quadras na última página mantêm o mesmo tamanho de coluna (não se expandem para preencher a folha)
+- Título e subtítulo de cada folha centralizados e gerados dentro do `KeepTogether` junto com a tabela
+- **Célula de jogo (`_celula_jogo`):** layout em 3 linhas — Nome1 / × / Nome2; o "×" fica centralizado na coluna de nomes (sem SPAN); caixa de placar afastada do nome via `RIGHTPADDING=8pt`
+- Espessura das linhas: grade 0.5pt, separadores 1.5pt, borda externa 1.2pt
+- Margens: 0.8 cm
+
+### PDFs de E-mail (retrato A4) — 3 arquivos
+Gerados em `gerar_email_rodada_pdf()`, `gerar_ranking_pdf()` e `gerar_ranking_sem_desconto_pdf()`.
+
+- **Sempre 1 página:** margens mínimas (`_MARGEM_EMAIL = 0.4 * cm`); fonte e altura de linha calculadas dinamicamente para preencher a página inteira
+- **Cálculo dinâmico de fonte:** `row_h_ideal = disponivel / n_linhas`; `fs = round(row_h_mm * 1.64)`, limitado entre 8pt e 14pt
+- **Centralização vertical nas células:** `VALIGN MIDDLE` + `TOPPADDING`/`BOTTOMPADDING` proporcionais ao espaço sobrando em cada linha (`pad_v = (row_h - fs*1.2) / 2`); `ROWHEIGHT` no `TableStyle` define a altura mínima sem causar overflow de página
+- **Ordem das colunas:** Pos | Nome | Total | R1 | R2 | … (Total logo após o nome, não no final)
+- **Rodadas descartadas** aparecem entre parênteses com fundo vermelho claro (`COR_DESCARTE_BG`)
+- Nome do jogador sempre alinhado à esquerda; demais colunas centralizadas
+
+## Ranking (pages/4_Ranking.py + src/ranking.py)
+- Tabela na tela: coluna "Total" logo após "Jogador" (antes das colunas de rodadas)
+- Rodadas descartadas exibidas entre parênteses `(valor)` com célula destacada
+- Seção "Gerenciar Usuários" visível apenas para `admin` (no mesmo arquivo, ao final da página)
+
 ## Como rodar
 ```bash
 cd /var/www/della-sistemas/projetos-claude/Liga-Scaff
@@ -78,3 +113,5 @@ streamlit run app.py
 - Não commitar `data/liga_scaff.db` com dados reais de jogadores
 - Não instalar dependências globalmente — usar `pip install -r requirements.txt` no ambiente correto
 - Não quebrar a navegação multi-page do Streamlit (não remover numeração dos arquivos em `pages/`)
+- Não usar `rowHeights` no construtor de `Table` nos PDFs de e-mail — causa overflow para 2 páginas; usar `ROWHEIGHT` no `TableStyle`
+- Não adicionar `elements.append(tabela)` após `elements.append(KeepTogether([..., tabela]))` — duplica a tabela no PDF

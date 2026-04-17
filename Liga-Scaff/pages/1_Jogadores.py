@@ -12,9 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src import database as db, auth
 from src.utils import parse_lista_whatsapp
 
-st.set_page_config(page_title="Jogadores — Liga Scaff", page_icon="👤", layout="wide")
-auth.render_sidebar_user()
-auth.require_login()
+auth.require_admin()
 
 st.title("👤 Jogadores")
 
