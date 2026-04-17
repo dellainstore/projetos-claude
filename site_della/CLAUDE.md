@@ -272,7 +272,7 @@ Estrutura atual (da esquerda para direita):
 Seções em ordem:
 1. **Hero slider** — banners do admin (BannerPrincipal), fallback estático. Dots (7×7px) no canto inferior direito. Botão mute no canto inferior **esquerdo**. Hero aparece ABAIXO do menu. **Altura: `calc(98svh - var(--navbar-total))`** (quase tela cheia).
 2. **Destaques da semana** — carrossel horizontal de produtos com `destaque=True`. Mostra 4 por vez (3 em ≤1024px, 2 em ≤640px). Setas prev/next **absolutas nas laterais** das fotos (`left/right: -1.5rem`, `top: 38%`), não abaixo. Swipe mobile. HTML: `.destaques-carousel` > setas absolutas + `.destaques-viewport` > `.destaques-track`. JS: `#destaques-carousel`, `#destaques-track`, `#destaques-prev`, `#destaques-next`.
-3. **Mini banners** — MiniBanner do admin (2 colunas, gap 1.5rem, max-width 1200px, **altura `clamp(540px, 82vh, 960px)`** — retrato, não preenche tela toda). Padding `2rem`. Mobile: `clamp(280px, 52vw, 420px)`.
+3. **Mini banners** — MiniBanner do admin (2 colunas, gap 1.5rem, max-width 1200px). **`aspect-ratio: 3/4` + `max-height: 80vh` + `width: 100%`** — proporcionais à largura, nunca cortam o topo, nunca ultrapassam 80% da tela. `background-position: center top` ancora a imagem pelo topo. Padding `2rem`.
 4. **Look da semana** — foto + pontos "+". Grid `0.75fr 1.25fr`, max-width `1100px`, padding reduzido `4rem`. No breakpoint 1024px: single-col, max-width da foto `420px`.
 5. **Manifesto** — texto fixo da marca
 6. **Depoimentos** — Avaliacao aprovadas
@@ -318,7 +318,8 @@ Cadastre aqui todos os tamanhos (nome + ordem). A ordem controla a exibição no
 
 ### Conteúdo do Site → Mini banners
 - Posições: Esquerda e Direita (máximo 1 ativo por posição)
-- Foto em **retrato 3:4** (ex: 900×1200px). O card ocupa metade da largura em 2 colunas e tem altura proporcional via `aspect-ratio: 3/4` — nunca deforma a imagem
+- Foto em **retrato 3:4** (ex: 900×1200px). O card usa `aspect-ratio: 3/4` + `max-height: 80vh` + `width: 100%` — proporcional, responsivo, nunca corta o topo
+- `background-position: center top` — âncora pelo topo; o **assunto principal deve ficar na parte superior** da foto
 - Texto (pretítulo/título) fica alinhado ao rodapé do card com gradiente escuro para contraste
 
 ### Conteúdo do Site → Look da semana
@@ -432,7 +433,7 @@ Colunas: `nome, categoria, descricao, composicao, genero, preco, preco_promocion
 | **Foto do banner — Desktop** | 1920×1080px | 16:9 | JPG, foco no centro |
 | **Foto do banner — Mobile** | 1080×1920px | 9:16 | JPG — campo `foto_mobile` (opcional, usa `<picture>`) |
 | **Poster do vídeo** | 1920×1080px | 16:9 | JPG, comprimido |
-| **Mini banners** | 900×1200px | 3:4 (retrato) | JPG — o card é retrato, texto no rodapé |
+| **Mini banners** | 900×1200px | 3:4 (retrato) | JPG — card usa `aspect-ratio:3/4`, âncora pelo topo (`center top`). Foco principal no **topo** da imagem (não no rodapé). Texto do overlay fica na parte inferior. |
 | **Look da semana** | 800×1100px | 3:4 | JPG, foto de corpo inteiro |
 | **Produto (retrato)** | 800×1067px | 3:4 | JPG/PNG — preferido |
 | **Produto (quadrado)** | 800×800px | 1:1 | JPG/PNG |
@@ -589,12 +590,7 @@ DB_USER=della_user
 DB_PASSWORD=...
 DB_HOST=localhost
 DB_PORT=5432
-EMAIL_HOST=smtps.uhserver.com
-EMAIL_PORT=465
-EMAIL_USE_SSL=True
-EMAIL_USE_TLS=False
-EMAIL_HOST_USER=contato@dellainstore.com.br
-EMAIL_HOST_PASSWORD=...
+BREVO_API_KEY=...   ← e-mail via Brevo API (Digital Ocean bloqueia SMTP)
 BLING_CLIENT_ID=23672393b3c0bdb7090fec018f92efe0d6f86027
 BLING_CLIENT_SECRET=...
 BLING_REDIRECT_URI=https://novo.dellainstore.com.br/bling/callback/
@@ -619,13 +615,13 @@ SITE_URL=https://novo.dellainstore.com.br
 
 ---
 
-## Funcionalidades recentes (2026-04-17)
+## Funcionalidades recentes (2026-04-17 — atualizado)
 
 - **Meus Pedidos** (`/conta/pedidos/`): lista pedidos do cliente com status badges e link para detalhe.
 - **Detalhe do Pedido** (`/conta/pedido/<numero>/`): exibe itens, resumo (subtotal, desconto, frete, total), endereço e — se `status=aguardando_pagamento` — seção de repagamento com QR Code Pix + botão copiar + aba "Cartão" (Em breve). Template: `templates/usuarios/detalhe_pedido.html`. View: `apps/usuarios/views.py → detalhe_pedido`.
 - **Cupom + Código de Vendedor** no checkout: campos recolhíveis (`<details>`) com validação AJAX. Desconto aparece no resumo em tempo real. Admin: `Pedidos → Cupons` e `Pedidos → Códigos de vendedor`. Models: `Cupom` e `CodigoVendedor` em `apps/pedidos/models.py`. Migration: `0004`.
 - **Auto-cancelamento de pedidos**: `python manage.py cancelar_pedidos_expirados --dias 2` — cancela `aguardando_pagamento` com mais de N dias. Agendar via cron.
-- **E-mail**: `EMAIL_TIMEOUT = 10` evita 504 quando SMTP (porta 465) está bloqueado pela Digital Ocean.
+- **E-mail via Brevo API** (`django-anymail[brevo]`): Digital Ocean bloqueia todas as portas SMTP (25/465/587). Solução: Brevo API HTTP (porta 443). Backend: `anymail.backends.brevo.EmailBackend`. Configurar `BREVO_API_KEY` no `.env`. Domínio `dellainstore.com.br` autenticado no Brevo (DKIM1, DKIM2, DMARC, Código Brevo — registros DNS na UOL). Plano Free: 300 e-mails/dia.
 - **Admin — padrão unificado em TODOS os menus**:
   - `get_actions` retorna apenas `delete_selected` → checkboxes para exclusão em massa, sem dropdown desnecessário
   - `admin_linhas.js` injetado via `class Media` → clique na linha navega para edição
@@ -634,6 +630,20 @@ SITE_URL=https://novo.dellainstore.com.br
 - **Admin — menu lateral não sobe mais**: `admin_linhas.js` usa `sessionStorage` para persistir o scroll do `#nav-sidebar` entre navegações.
 - **Admin — Bling tokens**: botões "Atualizar Token" e "Re-autorizar" empilhados verticalmente (`flex-direction:column`) para não cortar em colunas estreitas.
 - **Homepage**: "Destaques da Semana" com S maiúsculo.
+
+### Feed do Instagram (2026-04-17)
+
+- **Model `InstagramPost`** (`apps/conteudo/models.py`): armazena posts importados localmente — `instagram_id`, `media_type`, `imagem_local` (ImageField `upload_to='instagram/'`), `permalink`, `caption`, `timestamp`, `ativo`, `ordem`. Property `imagem_url` retorna URL da imagem local.
+- **Importação manual** via admin (Conteúdo do Site → Posts Instagram):
+  - **"↻ Atualizar (últimos 30)"** — busca 1 página (30 posts recentes), para se tudo já foi importado. Para uso semanal, rápido.
+  - **"↓ Importar histórico completo"** — busca todos os posts **desde 01/01/2025** (`since=1735689600`) sem limite de páginas. Para uso inicial.
+  - Imagens são **baixadas e salvas localmente** (`media/instagram/`) — sem dependência de URLs expiráveis do CDN do Instagram.
+  - Vídeos usam `thumbnail_url` (não `media_url` que é .mp4). Posts já importados são ignorados.
+  - Após importar, marcar "Exibir no site" (ativo=True) nos posts desejados.
+- **Token**: System User token do Meta Business (nunca expira, `expires_at=0`). Endpoint: `graph.facebook.com/v19.0/{INSTAGRAM_ACCOUNT_ID}/media`.
+- **Homepage**: grid `repeat(6, 1fr)`, **sem gap (`gap:0`)**, ocupa 100% da largura (edge-to-edge, igual ao banner hero). Header "@dellainstore" centralizado acima. Vídeos exibem thumbnail estático — ao clicar abre o post no Instagram. **Site exibe máx. 12 posts** (2 linhas × 6 colunas).
+- **Admin**: contador "📸 X de Y exibindo no site" no topo da listagem. Aviso em vermelho se > 12 marcados. `list_per_page=200` (sem paginação). Posts ativos aparecem no topo (`ordering = '-ativo', 'ordem', '-timestamp'`).
+- **Fallback**: se nenhum post estiver ativo, exibe banner estático CTA "@dellainstore".
 
 ### Padrão admin_linhas.js (como aplicar em novos admins)
 
@@ -666,13 +676,13 @@ acoes_linha.short_description = 'Ações'
 
 | Item | Prioridade |
 |---|---|
-| E-mail SMTP (porta 465) — aguardando liberação Digital Ocean | Média |
+| E-mail via Brevo API | ✅ implementado |
 | **Migrar para `www.dellainstore.com`** — apontar DNS `.com` e `.com.br` na UOL para `159.203.101.232`, configurar Nginx + certbot, atualizar `.env`. Ver checklist em "Migração" acima | Quando aprovado |
 | **C2 — HMAC webhook Bling** — precisará de `BLING_WEBHOOK_SECRET` no `.env` e no painel Bling | Alta (antes de ir ao ar) |
 | **C3 — Webhook PagSeguro** ✅ implementado — reconsulta `/orders/{id}` autenticada antes de atualizar pedido | Concluído |
 | **C3 — Webhook Stone** — validar `X-Stone-Signature` (HMAC) antes de processar | Quando ativar Stone |
 | **M3 — Compilar Tailwind local** — remove `unsafe-inline` do CSP | Fase posterior |
-| Instagram API (feed real de fotos) | Opcional |
+| Instagram feed | ✅ implementado |
 
 ---
 

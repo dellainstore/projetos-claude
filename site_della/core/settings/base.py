@@ -33,6 +33,7 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     'axes',        # bloqueio de brute force em login
     'csp',         # Content-Security-Policy headers
+    'anymail',     # e-mail transacional via API (Brevo)
 ]
 
 LOCAL_APPS = [
@@ -157,18 +158,14 @@ MEDIA_ROOT = BASE_DIR / 'media'
 ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp']
 MAX_UPLOAD_SIZE_MB = 5  # máximo 5MB por imagem
 
-# ─── E-mail ───────────────────────────────────────────────────────────────────
+# ─── E-mail (Brevo via API HTTP — porta 443, não bloqueada pela Digital Ocean) ──
 
-EMAIL_BACKEND     = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST        = config('EMAIL_HOST', default='smtps.uhserver.com')
-EMAIL_PORT        = config('EMAIL_PORT', default=465, cast=int)
-EMAIL_USE_SSL     = config('EMAIL_USE_SSL', default=True, cast=bool)
-EMAIL_USE_TLS     = config('EMAIL_USE_TLS', default=False, cast=bool)
-EMAIL_HOST_USER   = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_BACKEND  = 'anymail.backends.brevo.EmailBackend'
+ANYMAIL = {
+    'BREVO_API_KEY': config('BREVO_API_KEY', default=''),
+}
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Della Instore <contato@dellainstore.com.br>')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
-EMAIL_TIMEOUT = 10  # segundos — evita 504 quando SMTP está bloqueado (ex: porta 465 na Digital Ocean)
 
 # ─── django-axes: bloqueio de brute force ─────────────────────────────────────
 

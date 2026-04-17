@@ -44,6 +44,10 @@
 
 <nav id="navbar" class="navbar {% block navbar_class %}transparente{% endblock %}" role="navigation" aria-label="Menu principal">
 
+  <a href="{% url 'produtos:home' %}" class="navbar-logo" aria-label="D'ELLA Instore — Página inicial">
+    <span class="navbar-logo-della">D'ELLA</span>
+    <span class="navbar-logo-instore">Instore</span>
+  </a>
 
   <div class="navbar-topo">
     <div class="navbar-topo-esq">
@@ -51,10 +55,6 @@
         <i class="fas fa-bars"></i>
       </button>
     </div>
-    <a href="{% url 'produtos:home' %}" class="navbar-logo" aria-label="D'ELLA Instore — Página inicial">
-      <span class="navbar-logo-della">D'ELLA</span>
-      <span class="navbar-logo-instore">Instore</span>
-    </a>
     <div class="navbar-acoes">
       <a href="{% url 'produtos:busca' %}" aria-label="Buscar">
         <i class="fas fa-magnifying-glass"></i>
@@ -255,7 +255,6 @@
           <li><a href="{% url 'pedidos:meus_pedidos' %}">Meus Pedidos</a></li>
           <li><a href="{% url 'produtos:trocas_devolucoes' %}">Trocas e Devoluções</a></li>
           <li><a href="{% url 'produtos:guia_tamanhos' %}">Guia de Tamanhos</a></li>
-          <li><a href="{% url 'produtos:perguntas_frequentes' %}">Perguntas Frequentes</a></li>
         </ul>
       </div>
 

@@ -261,7 +261,7 @@
     <div class="look-info fade-in fade-in-delay-2">
       <p class="subtitulo-secao">Inspiração</p>
       <h2 class="titulo-secao" id="titulo-look" style="margin-top:0.75rem;margin-bottom:1.25rem;">
-        Look da semana
+        Look da Semana
       </h2>
       <p style="color:var(--cinza-texto);font-size:0.95rem;font-weight:300;line-height:1.8;max-width:420px;">
         {% if look_obj and look_obj.descricao %}{{ look_obj.descricao }}{% else %}Sofisticação no detalhe. Este look combina sensualidade e elegância para uma noite especial ou uma ocasião que pede presença marcante.{% endif %}
@@ -364,8 +364,7 @@
 
 
 <section style="padding: 0 0 6rem;" aria-labelledby="titulo-instagram">
-  <div style="max-width:1400px;margin:0 auto;padding:0 2rem;">
-    <header class="instagram-header fade-in">
+    <header class="instagram-header fade-in" style="max-width:1400px;margin:0 auto;padding:0 2rem 2rem;">
       <p class="subtitulo-secao">Siga-nos</p>
       <a href="https://instagram.com/dellainstore" target="_blank" rel="noopener noreferrer"
          class="instagram-handle" aria-label="Seguir @dellainstore no Instagram">
@@ -387,6 +386,7 @@
       {% endfor %}
     </div>
     {% else %}
+    <div style="max-width:1400px;margin:0 auto;padding:0 2rem;">
     <a href="https://instagram.com/dellainstore" target="_blank" rel="noopener noreferrer"
        class="instagram-cta-banner fade-in" aria-label="Seguir @dellainstore no Instagram">
       <div class="instagram-cta-icon">
@@ -400,8 +400,8 @@
         Seguir <i class="fas fa-arrow-right"></i>
       </div>
     </a>
+    </div>
     {% endif %}
-  </div>
 </section>
 
 
