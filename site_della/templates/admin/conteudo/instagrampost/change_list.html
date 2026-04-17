@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+{% block object-tools-items %}
+  <li>
+    <a href="{{ importar_url }}"
+       class="button"
+       style="background:#c9a96e;color:#fff;padding:6px 14px;border-radius:4px;text-decoration:none;font-size:13px;">
+      ↓ Importar do Instagram
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}

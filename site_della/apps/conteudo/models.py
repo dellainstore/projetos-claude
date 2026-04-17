@@ -230,6 +230,36 @@ class ConfiguracaoLoja(models.Model):
         verbose_name = 'Configuração da loja'
         verbose_name_plural = 'Configurações da loja'
 
+
+class InstagramPost(models.Model):
+    """
+    Post do Instagram para exibição na homepage.
+    Sincronizado manualmente pelo admin via botão "Importar do Instagram".
+    O admin escolhe quais ficam ativos (visíveis no site).
+    """
+    instagram_id = models.CharField('ID do post', max_length=50, unique=True)
+    media_type   = models.CharField('Tipo', max_length=20, default='IMAGE')
+    media_url    = models.URLField('URL da imagem', max_length=1000)
+    permalink    = models.URLField('Link do post', max_length=500)
+    caption      = models.TextField('Legenda', blank=True)
+    timestamp    = models.DateTimeField('Data do post', null=True, blank=True)
+    ativo        = models.BooleanField(
+        'Exibir no site', default=False,
+        help_text='Marque os posts que devem aparecer na seção Instagram da homepage.',
+    )
+    ordem        = models.PositiveIntegerField(
+        'Ordem', default=0,
+        help_text='Menor número = aparece primeiro. Posts com a mesma ordem ficam por data.',
+    )
+
+    class Meta:
+        verbose_name        = 'Post Instagram'
+        verbose_name_plural = 'Posts Instagram'
+        ordering            = ['ordem', '-timestamp']
+
+    def __str__(self):
+        return f'Post {self.instagram_id} ({self.media_type})'
+
     def __str__(self):
         return 'Configurações da loja'
 

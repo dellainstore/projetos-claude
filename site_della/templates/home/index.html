@@ -379,7 +379,7 @@
       {% for post in instagram_posts %}
         <a href="{{ post.permalink }}" target="_blank" rel="noopener noreferrer"
            class="instagram-item" aria-label="Ver post no Instagram">
-          <img src="{{ post.thumbnail_url|default:post.media_url }}" alt="Post Della Instore no Instagram" loading="lazy">
+          <img src="{{ post.media_url }}" alt="Post Della Instore no Instagram" loading="lazy">
           <div class="instagram-overlay" aria-hidden="true">
             <i class="fab fa-instagram"></i>
           </div>

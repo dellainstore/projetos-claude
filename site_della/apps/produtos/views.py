@@ -8,10 +8,10 @@ from django.conf import settings
 
 
 def _get_instagram_posts() -> list:
-    """Busca posts do Instagram com tratamento de falha silenciosa."""
+    """Retorna posts do Instagram marcados como ativos no admin."""
     try:
-        from .instagram import buscar_posts_instagram
-        return buscar_posts_instagram(limit=9)
+        from apps.conteudo.models import InstagramPost
+        return list(InstagramPost.objects.filter(ativo=True).order_by('ordem', '-timestamp')[:9])
     except Exception:
         return []
 

@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, ConfiguracaoLoja
+from django.urls import path
+from django.shortcuts import redirect
+from django.contrib import messages
+from .models import BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, ConfiguracaoLoja, InstagramPost
 
 
 @admin.register(BannerPrincipal)
@@ -300,3 +303,105 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
             return '—'
         return format_html('<br>'.join(nomes))
     lista_produtos.short_description = 'Produtos'
+
+
+
+@admin.register(InstagramPost)
+class InstagramPostAdmin(admin.ModelAdmin):
+    list_display  = ('preview', 'instagram_id', 'media_type', 'timestamp', 'ativo', 'ordem', 'acoes_linha')
+    list_editable = ('ativo', 'ordem')
+    list_display_links = ('instagram_id',)
+    list_filter   = ('ativo', 'media_type')
+    ordering      = ('ordem', '-timestamp')
+    readonly_fields = ('instagram_id', 'media_type', 'media_url', 'permalink', 'timestamp', 'preview_grande')
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        extra = [path('importar-instagram/', self.admin_site.admin_view(self.importar_instagram), name='importar_instagram')]
+        return extra + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['importar_url'] = 'importar-instagram/'
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def importar_instagram(self, request):
+        from django.conf import settings
+        import requests as req
+        from dateutil.parser import parse as parse_dt
+
+        token      = getattr(settings, 'INSTAGRAM_ACCESS_TOKEN', '')
+        account_id = getattr(settings, 'INSTAGRAM_ACCOUNT_ID', '')
+
+        if not token or not account_id:
+            self.message_user(request, 'Configure INSTAGRAM_ACCESS_TOKEN e INSTAGRAM_ACCOUNT_ID no .env', messages.ERROR)
+            return redirect('..')
+
+        url = (
+            f'https://graph.facebook.com/v19.0/{account_id}/media'
+            f'?fields=id,media_type,media_url,thumbnail_url,permalink,caption,timestamp'
+            f'&limit=30&access_token={token}'
+        )
+        try:
+            r = req.get(url, timeout=10)
+            r.raise_for_status()
+            data = r.json().get('data', [])
+        except Exception as e:
+            self.message_user(request, f'Erro ao buscar posts: {e}', messages.ERROR)
+            return redirect('..')
+
+        novos = 0
+        for item in data:
+            media_url = item.get('media_url') or item.get('thumbnail_url') or ''
+            if not media_url:
+                continue
+            _, created = InstagramPost.objects.get_or_create(
+                instagram_id=item['id'],
+                defaults={
+                    'media_type': item.get('media_type', 'IMAGE'),
+                    'media_url':  media_url,
+                    'permalink':  item.get('permalink', ''),
+                    'caption':    (item.get('caption') or '')[:1000],
+                    'timestamp':  parse_dt(item['timestamp']) if item.get('timestamp') else None,
+                    'ativo':      False,
+                }
+            )
+            if created:
+                novos += 1
+
+        self.message_user(request, f'{novos} post(s) novo(s) importado(s). Marque "Exibir no site" nos que deseja mostrar.')
+        return redirect('..')
+
+    def preview(self, obj):
+        if obj.media_url:
+            return format_html(
+                '<a href="{}" target="_blank">'
+                '<img src="{}" style="height:60px;width:60px;object-fit:cover;border-radius:4px;" />'
+                '</a>', obj.permalink, obj.media_url
+            )
+        return '—'
+    preview.short_description = 'Foto'
+
+    def preview_grande(self, obj):
+        if obj.media_url:
+            return format_html('<img src="{}" style="max-width:300px;border-radius:6px;" />', obj.media_url)
+        return '—'
+    preview_grande.short_description = 'Preview'
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:conteudo_instagrampost_change', args=[obj.pk])
+        delete_url = reverse('admin:conteudo_instagrampost_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'

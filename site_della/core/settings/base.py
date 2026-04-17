@@ -253,6 +253,7 @@ WHATSAPP_NUMBER_1 = config('WHATSAPP_NUMBER_1', default='')
 WHATSAPP_NUMBER_2 = config('WHATSAPP_NUMBER_2', default='')
 
 INSTAGRAM_ACCESS_TOKEN = config('INSTAGRAM_ACCESS_TOKEN', default='')
+INSTAGRAM_ACCOUNT_ID   = config('INSTAGRAM_ACCOUNT_ID', default='')
 INSTAGRAM_APP_ID       = config('INSTAGRAM_APP_ID', default='')
 INSTAGRAM_APP_SECRET   = config('INSTAGRAM_APP_SECRET', default='')
 
