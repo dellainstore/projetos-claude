@@ -239,7 +239,7 @@ class InstagramPost(models.Model):
     """
     instagram_id = models.CharField('ID do post', max_length=50, unique=True)
     media_type   = models.CharField('Tipo', max_length=20, default='IMAGE')
-    media_url    = models.URLField('URL da imagem', max_length=1000)
+    media_url    = models.URLField('URL da imagem', max_length=2000)
     permalink    = models.URLField('Link do post', max_length=500)
     caption      = models.TextField('Legenda', blank=True)
     timestamp    = models.DateTimeField('Data do post', null=True, blank=True)
