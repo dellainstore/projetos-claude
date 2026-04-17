@@ -71,7 +71,8 @@ class PedidoAdmin(admin.ModelAdmin):
         js = ('admin/js/admin_linhas.js',)
 
     def get_actions(self, request):
-        return {}  # dropdown removido — status é alterado direto no formulário de edição
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     readonly_fields = (
         'numero', 'nome_completo', 'email', 'cpf', 'telefone',

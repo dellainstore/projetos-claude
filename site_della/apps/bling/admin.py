@@ -51,14 +51,16 @@ class BlingTokenAdmin(admin.ModelAdmin):
 
     def acoes(self, obj):
         return format_html(
+            '<div style="display:flex;flex-direction:column;gap:4px;min-width:130px;">'
             '<a href="/bling/refresh-token/" '
             'style="background:#27ae60;color:#fff;padding:3px 10px;'
-            'border-radius:3px;font-size:11px;text-decoration:none;margin-right:6px;" '
+            'border-radius:3px;font-size:11px;text-decoration:none;white-space:nowrap;text-align:center;" '
             'title="Força renovação do access_token agora">Atualizar Token</a>'
             '<a href="/bling/autorizar/" '
             'style="background:#c9a96e;color:#fff;padding:3px 10px;'
-            'border-radius:3px;font-size:11px;text-decoration:none;" '
+            'border-radius:3px;font-size:11px;text-decoration:none;white-space:nowrap;text-align:center;" '
             'title="Re-autoriza do zero (use se Atualizar Token falhar)">Re-autorizar</a>'
+            '</div>'
         )
     acoes.short_description = 'Ações'
 
@@ -96,6 +98,13 @@ class BlingLogAdmin(admin.ModelAdmin):
     # redactados na escrita (services.py), mas a resposta da API ainda pode
     # conter IDs internos. Usar o campo 'erro' para diagnóstico operacional.
     readonly_fields = ('tipo', 'pedido', 'sucesso', 'payload_resumo', 'erro', 'criado_em')
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     def payload_resumo(self, obj):
         """Exibe apenas campos não-sensíveis do payload para diagnóstico."""

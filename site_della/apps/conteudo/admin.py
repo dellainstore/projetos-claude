@@ -14,7 +14,8 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
         js = ('admin/js/admin_linhas.js',)
 
     def get_actions(self, request):
-        return {}
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     fieldsets = (
         ('Ordem e tipo', {
@@ -100,7 +101,8 @@ class MiniBannerAdmin(admin.ModelAdmin):
         js = ('admin/js/admin_linhas.js',)
 
     def get_actions(self, request):
-        return {}
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     fieldsets = (
         ('Posição e visibilidade', {
@@ -165,7 +167,8 @@ class PaginaEstaticaAdmin(admin.ModelAdmin):
         js = ('admin/js/pagina_editor.js', 'admin/js/admin_linhas.js')
 
     def get_actions(self, request):
-        return {}
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     def acoes_linha(self, obj):
         from django.urls import reverse
@@ -235,7 +238,8 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
         js = ('admin/js/look_editor.js', 'admin/js/admin_linhas.js')
 
     def get_actions(self, request):
-        return {}
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     fieldsets = (
         ('Look', {

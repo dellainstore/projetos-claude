@@ -55,7 +55,75 @@
         </div>
       {% endif %}
 
-      
+      {% if pedido.status == 'aguardando_pagamento' %}
+      <div class="conta-card" style="border:2px solid #c9a96e;background:#fffbf0;">
+        <h3 class="conta-card-titulo" style="color:#8a6200;">
+          <i class="fas fa-clock" style="color:#c9a96e;margin-right:.4rem;"></i>
+          Pagamento pendente — R$ {{ pedido.total|floatformat:2 }}
+        </h3>
+
+        <div class="pagar-tabs" style="display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap;">
+          <button type="button" class="pagar-tab pagar-tab--ativa" data-painel="pix"
+                  onclick="mostrarPainel('pix',this)"
+                  style="padding:.5rem 1rem;border:2px solid #c9a96e;background:#c9a96e;color:#fff;border-radius:6px;font-family:inherit;font-size:.85rem;cursor:pointer;">
+            <i class="fas fa-qrcode"></i> Pix
+          </button>
+          <button type="button" class="pagar-tab" data-painel="cartao"
+                  onclick="mostrarPainel('cartao',this)"
+                  style="padding:.5rem 1rem;border:2px solid #ddd;background:#fff;color:#555;border-radius:6px;font-family:inherit;font-size:.85rem;cursor:pointer;">
+            <i class="far fa-credit-card"></i> Cartão de crédito
+          </button>
+        </div>
+
+        <div id="painel-pix">
+          {% if pix_qrcode %}
+          <p style="font-size:.88rem;color:#666;margin-bottom:1rem;">
+            Escaneie o QR Code ou copie o código Pix abaixo.
+          </p>
+          <div style="text-align:center;margin-bottom:1.25rem;">
+            <img src="data:image/png;base64,{{ pix_qrcode }}"
+                 alt="QR Code Pix" class="pix-qrcode-img" style="max-width:220px;">
+            <div class="pix-valor">R$ {{ pedido.total|floatformat:2 }}</div>
+          </div>
+          {% if pix_payload %}
+          <div class="pix-copiar-bloco">
+            <p class="pix-copiar-label">Copie o código Pix:</p>
+            <div class="pix-copiar-input-wrapper">
+              <input type="text" id="pix-payload-detalhe" value="{{ pix_payload }}"
+                     readonly class="pix-copiar-input">
+              <button type="button" id="btn-copiar-pix-det" class="btn-copiar-pix"
+                      onclick="copiarPixDetalhe()">
+                <i class="far fa-copy"></i> Copiar
+              </button>
+            </div>
+          </div>
+          {% endif %}
+          <div class="pix-aviso" style="margin-top:1rem;">
+            <i class="fas fa-info-circle"></i>
+            Após pagar, aguarde alguns instantes e recarregue a página para ver a confirmação.
+          </div>
+          {% else %}
+          <p style="font-size:.88rem;color:#666;line-height:1.7;">
+            Pague via Pix para nossa chave CNPJ e informe o número do pedido
+            <strong>{{ pedido.numero }}</strong> na descrição.<br>
+            Entre em contato pelo WhatsApp para receber os dados de pagamento.
+          </p>
+          {% endif %}
+        </div>
+
+        <div id="painel-cartao" style="display:none;">
+          <div style="text-align:center;padding:1.5rem 0;color:#888;">
+            <i class="far fa-credit-card" style="font-size:2rem;display:block;margin-bottom:.75rem;color:#c9a96e;"></i>
+            <p style="font-size:.9rem;font-weight:500;color:#333;">Cartão de crédito</p>
+            <p style="font-size:.82rem;margin-top:.4rem;">
+              Pagamento por cartão estará disponível em breve.<br>
+              Por enquanto, utilize o Pix para finalizar este pedido.
+            </p>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
       <div class="conta-card">
         <h3 class="conta-card-titulo">Itens do pedido</h3>
         {% for item in pedido.itens.all %}
@@ -124,4 +192,31 @@
     </section>
   </div>
 </main>
+{% endblock %}
+
+{% block js_extra %}
+{% if pix_qrcode %}
+<script>
+function copiarPixDetalhe() {
+  const input = document.getElementById('pix-payload-detalhe');
+  navigator.clipboard?.writeText(input.value).then(() => {
+    const btn = document.getElementById('btn-copiar-pix-det');
+    btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+    setTimeout(() => { btn.innerHTML = '<i class="far fa-copy"></i> Copiar'; }, 2500);
+  }).catch(() => { input.select(); document.execCommand('copy'); });
+}
+</script>
+{% endif %}
+<script>
+function mostrarPainel(painel, btn) {
+  document.getElementById('painel-pix').style.display    = painel === 'pix'    ? '' : 'none';
+  document.getElementById('painel-cartao').style.display = painel === 'cartao' ? '' : 'none';
+  document.querySelectorAll('.pagar-tab').forEach(b => {
+    const ativa = b.dataset.painel === painel;
+    b.style.background   = ativa ? '#c9a96e' : '#fff';
+    b.style.color        = ativa ? '#fff'     : '#555';
+    b.style.borderColor  = ativa ? '#c9a96e'  : '#ddd';
+  });
+}
+</script>
 {% endblock %}

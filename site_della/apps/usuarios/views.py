@@ -154,11 +154,40 @@ def meus_pedidos(request):
 
 @login_required
 def detalhe_pedido(request, numero):
+    import logging
+    from django.conf import settings as _settings
+    logger = logging.getLogger(__name__)
+
     pedido = get_object_or_404(
         request.user.pedidos.prefetch_related('itens__produto'),
         numero=numero,
     )
-    return render(request, 'usuarios/detalhe_pedido.html', {'pedido': pedido})
+
+    # Gera QR Code Pix para pedidos aguardando pagamento
+    pix_qrcode = None
+    pix_payload = None
+    if pedido.status == 'aguardando_pagamento':
+        try:
+            from apps.pagamentos.pix import gerar_payload_pix, gerar_qrcode_base64
+            chave_pix = getattr(_settings, 'PIX_CHAVE', '')
+            if chave_pix:
+                pix_payload = gerar_payload_pix(
+                    chave=chave_pix,
+                    valor=float(pedido.total),
+                    nome_recebedor='DELLA INSTORE',
+                    cidade='SAO PAULO',
+                    txid=pedido.numero.replace('-', ''),
+                    descricao=f'Pedido {pedido.numero}',
+                )
+                pix_qrcode = gerar_qrcode_base64(pix_payload)
+        except Exception as e:
+            logger.error('Erro ao gerar QR Code Pix no detalhe do usuário: %s', e)
+
+    return render(request, 'usuarios/detalhe_pedido.html', {
+        'pedido':      pedido,
+        'pix_qrcode':  pix_qrcode,
+        'pix_payload': pix_payload,
+    })
 
 
 # ─── Recuperação de senha ─────────────────────────────────────────────────────

@@ -4607,3 +4607,268 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 @media (max-width: 640px) {
   .destaques-track .produto-card { flex: 0 0 calc(50% - 0.5rem); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ─── Meus Pedidos + Detalhe do Pedido ───────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.conta-wrapper {
+  padding: var(--navbar-total) 1.5rem 5rem;
+  min-height: 80vh;
+}
+
+.conta-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding-top: 2.5rem;
+}
+
+/* Status badges (pedido-status-badge) */
+.pedido-status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pedido-status-badge.status-aguardando_pagamento { background: #fff8e1; color: #b8860b; }
+.pedido-status-badge.status-pagamento_confirmado { background: #e8f5e9; color: #2e7d32; }
+.pedido-status-badge.status-em_separacao         { background: #e3f2fd; color: #1565c0; }
+.pedido-status-badge.status-enviado              { background: #f3e5f5; color: #6a1b9a; }
+.pedido-status-badge.status-entregue             { background: #e8f5e9; color: #1b5e20; }
+.pedido-status-badge.status-cancelado            { background: #ffebee; color: #c62828; }
+.pedido-status-badge.status-estornado            { background: #fce4ec; color: #880e4f; }
+.pedido-status-badge.detalhe                     { font-size: 0.8rem; padding: 0.35rem 1rem; }
+
+/* ── Lista de pedidos ────────────────────────────────────────────────────── */
+.pedidos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pedido-card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.pedido-card {
+  background: #fff;
+  border: 1px solid #ebebeb;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.pedido-card:hover {
+  box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+  border-color: var(--dourado);
+}
+
+.pedido-card-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.85rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pedido-numero {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--preto);
+  margin-right: 0.75rem;
+}
+
+.pedido-data {
+  font-size: 0.8rem;
+  color: #999;
+}
+
+.pedido-card-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.pedido-item-nome {
+  font-size: 0.85rem;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pedido-item-mais {
+  font-size: 0.78rem;
+  color: #999;
+}
+
+.pedido-card-rodape {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pedido-total {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--preto);
+}
+
+.pedido-ver {
+  font-size: 0.82rem;
+  color: var(--dourado);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: gap 0.2s;
+}
+
+.pedido-card:hover .pedido-ver { gap: 0.65rem; }
+
+.pedido-pagar-aviso {
+  margin-top: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  background: #fff8e1;
+  border-left: 3px solid #f39c12;
+  font-size: 0.8rem;
+  color: #b8860b;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0 4px 4px 0;
+}
+
+/* ── Detalhe do pedido ───────────────────────────────────────────────────── */
+.detalhe-ped-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.detalhe-secao {
+  background: #fff;
+  border: 1px solid #ebebeb;
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.detalhe-secao-titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 1.05rem;
+  font-weight: 400;
+  color: var(--preto);
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.detalhe-secao-titulo i { color: var(--dourado); }
+
+/* Itens */
+.detalhe-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.detalhe-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.detalhe-item:last-child { border-bottom: none; }
+
+.detalhe-item-foto {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.detalhe-item-sem-foto {
+  background: #f0f0f0;
+}
+
+.detalhe-item-info { flex: 1; min-width: 0; }
+.detalhe-item-nome { font-weight: 500; font-size: 0.9rem; color: var(--preto); }
+.detalhe-item-var  { font-size: 0.78rem; color: #888; margin-top: 0.2rem; }
+.detalhe-item-qty  { font-size: 0.78rem; color: #999; margin-top: 0.1rem; }
+.detalhe-item-preco { font-weight: 600; font-size: 0.92rem; flex-shrink: 0; white-space: nowrap; }
+
+/* Grid resumo + endereço */
+.detalhe-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.detalhe-linha {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #555;
+  padding: 0.3rem 0;
+}
+
+.detalhe-total {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--preto);
+  padding-top: 0.6rem;
+  margin-top: 0.3rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* Seção de repagamento Pix */
+.detalhe-pix-repagar {
+  background: #fffbf0;
+  border: 1px solid #f0d580;
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.detalhe-pix-repagar .detalhe-secao-titulo {
+  border-bottom-color: #f0d580;
+  color: #8a6200;
+}
+
+.detalhe-pix-repagar .detalhe-secao-titulo i { color: #c9a96e; }
+
+.pix-instrucao {
+  font-size: 0.9rem;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* Responsivo */
+@media (max-width: 640px) {
+  .conta-wrapper { padding-left: 1rem; padding-right: 1rem; }
+  .detalhe-grid  { grid-template-columns: 1fr; }
+  .detalhe-ped-topo { flex-direction: column; }
+}

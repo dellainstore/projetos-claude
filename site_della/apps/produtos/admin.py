@@ -261,7 +261,8 @@ class ProdutoAdmin(admin.ModelAdmin):
         js = ('admin/js/admin_linhas.js',)
 
     def get_actions(self, request):
-        return {}  # remove dropdown de ações — use os botões ✎ e ✕ por linha
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     fieldsets = (
         ('Identificação', {
