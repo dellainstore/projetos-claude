@@ -4277,18 +4277,17 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 }
 
 /* Layout Sobre: imagem + texto lado a lado */
-.sobre-layout {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 3rem;
-  align-items: start;
+.sobre-foto-topo {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto 2.5rem;
 }
 
-.sobre-imagem img {
+.sobre-foto-topo img {
   width: 100%;
-  border-radius: 4px;
-  object-fit: cover;
+  border-radius: 6px;
   display: block;
+  object-fit: cover;
 }
 
 /* Conteúdo HTML da página estática */
@@ -4395,8 +4394,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 
 @media (max-width: 640px) {
   .pagina-estatica-titulo { font-size: 1.6rem; }
-  .sobre-layout { grid-template-columns: 1fr; gap: 1.5rem; }
-  .sobre-imagem img { max-height: 300px; width: auto; margin: 0 auto; }
+  .sobre-foto-topo { max-width: 100%; }
 }
 
 /* ─── Newsletter Popup ───────────────────────────────────────────────────────*/

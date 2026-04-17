@@ -5,6 +5,7 @@ app_name = 'pedidos'
 
 urlpatterns = [
     path('', views.carrinho, name='carrinho'),
+    path('status/', views.carrinho_status, name='carrinho_status'),
     path('adicionar/<int:produto_id>/', views.adicionar_ao_carrinho, name='adicionar'),
     path('remover/<str:item_id>/', views.remover_do_carrinho, name='remover'),
     path('atualizar/', views.atualizar_carrinho, name='atualizar'),

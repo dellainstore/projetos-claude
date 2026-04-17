@@ -11,19 +11,13 @@
       <h1 class="pagina-estatica-titulo">{{ pagina.titulo }}</h1>
 
       {% if pagina.imagem %}
-      <div class="sobre-layout">
-        <div class="sobre-imagem">
-          <img src="{{ pagina.imagem.url }}" alt="{{ pagina.titulo }}" loading="lazy">
-        </div>
-        <div class="sobre-conteudo pagina-conteudo">
-          {{ pagina.conteudo|safe }}
-        </div>
+      <div class="sobre-foto-topo">
+        <img src="{{ pagina.imagem.url }}" alt="{{ pagina.titulo }}" loading="lazy">
       </div>
-      {% else %}
+      {% endif %}
       <div class="pagina-conteudo">
         {{ pagina.conteudo|safe }}
       </div>
-      {% endif %}
 
     {% else %}
       <h1 class="pagina-estatica-titulo">Nossa história</h1>

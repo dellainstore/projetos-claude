@@ -31,6 +31,16 @@ def carrinho(request):
     return render(request, 'pedidos/carrinho.html', context)
 
 
+def carrinho_status(request):
+    """Retorna o estado atual do carrinho em JSON — usado pelo drawer para sincronizar badge."""
+    cart = Carrinho(request)
+    return JsonResponse({
+        'total_itens': len(cart),
+        'itens': _itens_para_drawer(cart),
+        'total_valor': str(cart.get_total()),
+    })
+
+
 @require_POST
 def adicionar_ao_carrinho(request, produto_id):
     from apps.produtos.models import Produto, Variacao

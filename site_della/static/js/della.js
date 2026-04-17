@@ -223,10 +223,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnAbrirCarrinho = document.querySelectorAll('[data-abrir-carrinho]');
   const btnFecharCarrinho = document.getElementById('btn-fechar-carrinho');
 
-  function abrirCarrinho() {
+  async function abrirCarrinho() {
     drawerOverlay?.classList.add('aberto');
     drawerCarrinho?.classList.add('aberto');
     document.body.style.overflow = 'hidden';
+    // Sincroniza badge e itens com o estado real da sessão (corrige páginas em bfcache)
+    try {
+      const res  = await fetch('/carrinho/status/', { cache: 'no-store' });
+      const dados = await res.json();
+      window.atualizarDrawerConteudo(dados);
+    } catch (_) {}
   }
 
   function fecharCarrinho() {
