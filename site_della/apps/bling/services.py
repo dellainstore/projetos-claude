@@ -225,9 +225,9 @@ def _resolver_vendedor_id(pedido) -> int:
 
 def _montar_parcelas(pedido) -> list:
     """
-    Monta a lista de parcelas conforme a forma de pagamento do pedido.
-    - Pix: 1 parcela à vista com forma TED/DOC/TRANSF./PIX
-    - Cartão: N parcelas mensais com forma PAG SEGURO Via Link correta por parcelas
+    Sempre 1 parcela (antecipação — recebimento à vista independente do parcelamento).
+    - Pix: forma TED/DOC/TRANSF./PIX
+    - Cartão: forma PAG SEGURO Via Link pelo nº de parcelas; autorização PagSeguro na observação
     """
     hoje      = date.today()
     total     = float(pedido.total)
@@ -242,33 +242,21 @@ def _montar_parcelas(pedido) -> list:
             'formaPagamento': {'id': FORMA_PAG_PIX},
         }]
 
-    # Cartão — seleciona a forma de pagamento pelo número de parcelas (máx. 5)
+    # Cartão — forma de pagamento pelo nº de parcelas (máx. 5)
     n_clamped = min(n, 5)
     forma_id  = FORMA_PAG_CARTAO.get(n_clamped, FORMA_PAG_CARTAO[1])
 
-    if n == 1:
-        return [{
-            'dataVencimento': hoje.isoformat(),
-            'valor':          round(total, 2),
-            'observacoes':    'Cartão de Crédito À Vista',
-            'formaPagamento': {'id': forma_id},
-        }]
+    label = 'À Vista' if n == 1 else f'{n}x'
+    obs   = f'Cartão de Crédito {label}'
+    if pedido.gateway_id:
+        obs += f' — Autorização: {pedido.gateway_id}'
 
-    # Parcelado: divide igualmente, última parcela absorve o centavo restante
-    valor_parcela = round(total / n, 2)
-    parcelas = []
-    acumulado = 0.0
-    for i in range(n):
-        vencimento = (hoje + timedelta(days=30 * i)).isoformat()
-        valor = round(total - acumulado, 2) if i == n - 1 else valor_parcela
-        acumulado += valor_parcela
-        parcelas.append({
-            'dataVencimento': vencimento,
-            'valor':          valor,
-            'observacoes':    f'Cartão de Crédito {n}x — parcela {i+1}/{n}',
-            'formaPagamento': {'id': forma_id},
-        })
-    return parcelas
+    return [{
+        'dataVencimento': hoje.isoformat(),
+        'valor':          round(total, 2),
+        'observacoes':    obs,
+        'formaPagamento': {'id': forma_id},
+    }]
 
 
 def _montar_payload_pedido(pedido) -> dict:
