@@ -35,9 +35,17 @@ VENDEDORES_BLING = {
     'SARA OLIVEIRA':                 15596882226,
 }
 
-# ── Formas de pagamento ───────────────────────────────────────────────────────
-FORMA_PAG_PIX    = 1194065
-FORMA_PAG_CARTAO = 917629
+# ── Formas de pagamento (PAG SEGURO Via Link + PIX) ──────────────────────────
+FORMA_PAG_PIX = 1194065        # TED/DOC/TRANSF./PIX (À Vista)
+
+# PAG SEGURO Cartão de Crédito Via Link por número de parcelas
+FORMA_PAG_CARTAO = {
+    1: 929656,    # À Vista
+    2: 2103282,   # 2x
+    3: 7128327,   # 3x
+    4: 7128329,   # 4x
+    5: 7128331,   # 5x
+}
 
 
 # ── Envio de pedido ───────────────────────────────────────────────────────────
@@ -218,40 +226,46 @@ def _resolver_vendedor_id(pedido) -> int:
 def _montar_parcelas(pedido) -> list:
     """
     Monta a lista de parcelas conforme a forma de pagamento do pedido.
-    - Pix: 1 parcela à vista
-    - Cartão: N parcelas mensais
+    - Pix: 1 parcela à vista com forma TED/DOC/TRANSF./PIX
+    - Cartão: N parcelas mensais com forma PAG SEGURO Via Link correta por parcelas
     """
     hoje      = date.today()
     total     = float(pedido.total)
     n         = max(1, int(pedido.parcelas or 1))
     forma_pag = pedido.forma_pagamento
 
-    forma_id  = FORMA_PAG_PIX if forma_pag == 'pix' else FORMA_PAG_CARTAO
-    obs       = 'Pix' if forma_pag == 'pix' else f'Cartão de Crédito {n}x'
+    if forma_pag == 'pix':
+        return [{
+            'dataVencimento': hoje.isoformat(),
+            'valor':          round(total, 2),
+            'observacoes':    'Pix',
+            'formaPagamento': {'id': FORMA_PAG_PIX},
+        }]
+
+    # Cartão — seleciona a forma de pagamento pelo número de parcelas (máx. 5)
+    n_clamped = min(n, 5)
+    forma_id  = FORMA_PAG_CARTAO.get(n_clamped, FORMA_PAG_CARTAO[1])
 
     if n == 1:
         return [{
             'dataVencimento': hoje.isoformat(),
             'valor':          round(total, 2),
-            'observacoes':    obs,
+            'observacoes':    'Cartão de Crédito À Vista',
             'formaPagamento': {'id': forma_id},
         }]
 
-    # Parcelado: divide igualmente, a última parcela absorve o centavo restante
+    # Parcelado: divide igualmente, última parcela absorve o centavo restante
     valor_parcela = round(total / n, 2)
     parcelas = []
     acumulado = 0.0
     for i in range(n):
         vencimento = (hoje + timedelta(days=30 * i)).isoformat()
-        if i == n - 1:
-            valor = round(total - acumulado, 2)
-        else:
-            valor = valor_parcela
-            acumulado += valor
+        valor = round(total - acumulado, 2) if i == n - 1 else valor_parcela
+        acumulado += valor_parcela
         parcelas.append({
             'dataVencimento': vencimento,
             'valor':          valor,
-            'observacoes':    f'{obs} — parcela {i+1}/{n}',
+            'observacoes':    f'Cartão de Crédito {n}x — parcela {i+1}/{n}',
             'formaPagamento': {'id': forma_id},
         })
     return parcelas
@@ -273,10 +287,6 @@ def _montar_payload_pedido(pedido) -> dict:
             'unidade':   'PC',
         })
 
-    obs_vendedor = ''
-    if pedido.codigo_vendedor_id:
-        obs_vendedor = f'Vendedora: {pedido.codigo_vendedor.nome}'
-
     payload = {
         'numero':            pedido.numero,
         'numeroLoja':        pedido.numero,
@@ -286,7 +296,6 @@ def _montar_payload_pedido(pedido) -> dict:
         'total':             float(pedido.total),
         'desconto':          float(pedido.desconto),
         'observacoes':       pedido.observacao_cliente or '',
-        'observacaoInterna': obs_vendedor,
         'situacao':          {'id': SITUACAO_EM_ANDAMENTO_SITE},
         'loja': {
             'id': LOJA_ID,
