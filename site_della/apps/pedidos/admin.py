@@ -59,11 +59,16 @@ class PedidoAdmin(admin.ModelAdmin):
     list_display = (
         'numero', 'nome_completo', 'email', 'badge_status', 'forma_pagamento',
         'total_formatado', 'badge_bling', 'codigo_rastreio', 'criado_em',
+        'acoes_linha',
     )
+    list_display_links = ('numero', 'nome_completo')
     list_filter = ('status', 'forma_pagamento', 'gateway', 'estado')
     search_fields = ('numero', 'nome_completo', 'email', 'cpf', 'codigo_rastreio', 'bling_pedido_id')
     date_hierarchy = 'criado_em'
     ordering = ('-criado_em',)
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
 
     readonly_fields = (
         'numero', 'nome_completo', 'email', 'cpf', 'telefone',
@@ -117,6 +122,21 @@ class PedidoAdmin(admin.ModelAdmin):
         'enviar_ao_bling',
         'emitir_nfe',
     ]
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:pedidos_pedido_change', args=[obj.pk])
+        delete_url = reverse('admin:pedidos_pedido_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este pedido?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
 
     def badge_status(self, obj):
         cor = STATUS_CORES.get(obj.status, '#999')

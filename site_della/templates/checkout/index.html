@@ -165,7 +165,7 @@
             <span class="secao-num">3</span> Pagamento
           </h2>
 
-          
+
           <div class="pagamento-tabs" role="tablist" aria-label="Forma de pagamento">
             <button type="button" role="tab" class="pagamento-tab ativa" data-tab="pix"
                     aria-selected="true" aria-controls="tab-pix">
@@ -177,7 +177,7 @@
             </button>
           </div>
 
-          
+
           <div id="tab-pix" role="tabpanel" class="pagamento-tabpanel ativo">
             <input type="radio" name="forma_pagamento" value="pix" id="radio_pix"
                    checked class="sr-only">
@@ -200,50 +200,80 @@
             </div>
           </div>
 
-          
+          {# Cartão — Checkout Transparente PagSeguro (tokenização JS SDK, PAN nunca chega ao backend) #}
           <div id="tab-cartao" role="tabpanel" class="pagamento-tabpanel">
             <input type="radio" name="forma_pagamento" value="cartao_credito" id="radio_cartao"
                    class="sr-only">
 
+            {% if pagseguro_public_key %}
+            {# Campo hidden preenchido pelo JS SDK antes do submit #}
+            <input type="hidden" name="pagseguro_card_encrypted" id="pagseguro-card-encrypted">
+
             <div class="cartao-form">
-              <p class="cartao-aviso">
-                <i class="fas fa-lock"></i>
-                Seus dados são criptografados e nunca armazenados em nossos servidores.
-              </p>
+
+              <div class="checkout-campo">
+                <label for="card-number">Número do cartão</label>
+                <input type="text" id="card-number"
+                       placeholder="0000 0000 0000 0000"
+                       maxlength="19"
+                       inputmode="numeric"
+                       autocomplete="cc-number"
+                       class="checkout-input checkout-input--card">
+                <span id="card-flag" class="card-flag"></span>
+              </div>
+
+              <div class="checkout-campo">
+                <label for="card-holder">Nome impresso no cartão</label>
+                <input type="text" id="card-holder"
+                       placeholder="NOME COMO NO CARTÃO"
+                       autocomplete="cc-name"
+                       style="text-transform:uppercase"
+                       class="checkout-input">
+              </div>
+
               <div class="checkout-grid-2">
-                <div class="checkout-campo col-span-2">
-                  <label for="cartao_numero">Número do cartão</label>
-                  <input type="text" id="cartao_numero" name="cartao_numero"
-                         placeholder="0000 0000 0000 0000" maxlength="19"
-                         inputmode="numeric" autocomplete="cc-number"
-                         class="checkout-input" data-cartao>
-                </div>
-                <div class="checkout-campo col-span-2">
-                  <label for="cartao_nome">Nome no cartão</label>
-                  <input type="text" id="cartao_nome" name="cartao_nome"
-                         placeholder="Como está impresso no cartão"
-                         autocomplete="cc-name" class="checkout-input" data-cartao>
+                <div class="checkout-campo">
+                  <label for="card-expiry">Validade</label>
+                  <input type="text" id="card-expiry"
+                         placeholder="MM/AA"
+                         maxlength="5"
+                         inputmode="numeric"
+                         autocomplete="cc-exp"
+                         class="checkout-input">
                 </div>
                 <div class="checkout-campo">
-                  <label for="cartao_validade">Validade</label>
-                  <input type="text" id="cartao_validade" name="cartao_validade"
-                         placeholder="MM/AA" maxlength="5"
-                         inputmode="numeric" autocomplete="cc-exp"
-                         class="checkout-input" data-cartao>
-                </div>
-                <div class="checkout-campo">
-                  <label for="cartao_cvv">CVV</label>
-                  <input type="text" id="cartao_cvv" name="cartao_cvv"
-                         placeholder="000" maxlength="4"
-                         inputmode="numeric" autocomplete="cc-csc"
-                         class="checkout-input" data-cartao>
-                </div>
-                <div class="checkout-campo col-span-2">
-                  <label for="{{ form.parcelas.id_for_label }}">Parcelas</label>
-                  {{ form.parcelas }}
+                  <label for="card-cvv">CVV</label>
+                  <input type="text" id="card-cvv"
+                         placeholder="123"
+                         maxlength="4"
+                         inputmode="numeric"
+                         autocomplete="cc-csc"
+                         class="checkout-input">
                 </div>
               </div>
+
+              <div class="checkout-campo">
+                <label for="{{ form.parcelas.id_for_label }}">Parcelas</label>
+                {{ form.parcelas }}
+              </div>
+
+              <div id="cartao-erro" class="cartao-erro hidden"></div>
+
+              <div class="cartao-seguranca">
+                <i class="fas fa-lock"></i>
+                Dados encriptados pelo PagSeguro — nunca chegam ao nosso servidor.
+              </div>
+
             </div>
+            {% else %}
+            <div class="pagamento-em-breve">
+              <i class="far fa-credit-card" style="font-size:2rem;color:var(--dourado);display:block;margin-bottom:0.75rem;"></i>
+              <p class="pix-titulo">Cartão de crédito</p>
+              <p style="color:#888;font-size:0.9rem;margin-top:0.5rem;">
+                Pagamento por cartão temporariamente indisponível. Por favor, use o Pix.
+              </p>
+            </div>
+            {% endif %}
           </div>
 
           
@@ -339,7 +369,12 @@
       s.classList.toggle('ativo', i + 1 === n);
       s.classList.toggle('concluido', i + 1 < n);
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Rola até a seção ativa (não para o topo)
+    const secaoAtiva = document.getElementById('secao-' + n);
+    if (secaoAtiva) {
+      const offsetTopo = secaoAtiva.getBoundingClientRect().top + window.scrollY - 110;
+      window.scrollTo({ top: offsetTopo, behavior: 'smooth' });
+    }
   }
 
   document.getElementById('btn-ir-frete')?.addEventListener('click', () => {
@@ -454,18 +489,6 @@
     telInput.value = v;
   });
 
-  // Máscara cartão
-  document.getElementById('cartao_numero')?.addEventListener('input', function() {
-    let v = this.value.replace(/\D/g, '').slice(0, 16);
-    this.value = v.replace(/(.{4})/g, '$1 ').trim();
-  });
-
-  document.getElementById('cartao_validade')?.addEventListener('input', function() {
-    let v = this.value.replace(/\D/g, '').slice(0, 4);
-    if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
-    this.value = v;
-  });
-
   // ── Calcular frete ───────────────────────────────────────────────────────
   async function carregarFrete() {
     const cep = document.getElementById('id_cep').value.replace(/\D/g, '');
@@ -542,25 +565,127 @@
       const tabId = tab.dataset.tab;
       document.getElementById(`tab-${tabId}`)?.classList.add('ativo');
 
-      // Marca o radio correspondente
-      if (tabId === 'pix') document.getElementById('radio_pix').checked = true;
-      else document.getElementById('radio_cartao').checked = true;
+      // Atualiza o radio oculto conforme a aba selecionada
+      if (tabId === 'pix') {
+        document.getElementById('radio_pix').checked = true;
+      } else if (tabId === 'cartao') {
+        const radioCartao = document.getElementById('radio_cartao');
+        if (radioCartao) radioCartao.checked = true;
+      }
     });
   });
 
-  // ── Confirmar pedido ─────────────────────────────────────────────────────
-  document.getElementById('form-checkout')?.addEventListener('submit', function(e) {
-    const btn = document.getElementById('btn-confirmar');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando…';
+  // ── Máscaras do cartão ───────────────────────────────────────────────────
+  const cardNumberInput = document.getElementById('card-number');
+  cardNumberInput?.addEventListener('input', () => {
+    let v = cardNumberInput.value.replace(/\D/g, '').slice(0, 16);
+    v = v.replace(/(.{4})/g, '$1 ').trim();
+    cardNumberInput.value = v;
   });
 
-  // Se houver erros do servidor, mostrar etapa com erro
+  const cardHolderInput = document.getElementById('card-holder');
+  cardHolderInput?.addEventListener('input', () => {
+    cardHolderInput.value = cardHolderInput.value.toUpperCase();
+  });
+
+  const cardExpiryInput = document.getElementById('card-expiry');
+  cardExpiryInput?.addEventListener('input', () => {
+    let v = cardExpiryInput.value.replace(/\D/g, '').slice(0, 4);
+    if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
+    cardExpiryInput.value = v;
+  });
+
+  // ── Confirmar pedido ─────────────────────────────────────────────────────
+  document.getElementById('form-checkout')?.addEventListener('submit', async function(e) {
+    const formaAtual = document.querySelector('[name="forma_pagamento"]:checked')?.value;
+
+    if (formaAtual !== 'cartao_credito') {
+      // Pix: submit normal
+      const btn = document.getElementById('btn-confirmar');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando…';
+      return;
+    }
+
+    // ── Cartão: encripta antes de submeter ───────────────────────────────
+    e.preventDefault();
+
+    const btn    = document.getElementById('btn-confirmar');
+    const erroEl = document.getElementById('cartao-erro');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando…';
+    if (erroEl) erroEl.classList.add('hidden');
+
+    function mostrarErroCartao(msg) {
+      if (erroEl) {
+        erroEl.textContent = msg;
+        erroEl.classList.remove('hidden');
+        erroEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-lock"></i> Confirmar pedido';
+    }
+
+    const holder = (document.getElementById('card-holder')?.value || '').trim().toUpperCase();
+    const number = (document.getElementById('card-number')?.value || '').replace(/\s/g, '');
+    const expiry = (document.getElementById('card-expiry')?.value || '');
+    const cvv    = (document.getElementById('card-cvv')?.value || '').trim();
+
+    if (!holder || !number || !expiry || !cvv) {
+      mostrarErroCartao('Preencha todos os dados do cartão.');
+      return;
+    }
+
+    const partes   = expiry.split('/');
+    const expMonth = (partes[0] || '').trim();
+    const expYear  = '20' + (partes[1] || '').trim();
+
+    try {
+      const { hasErrors, errors, encryptedCard } = PagSeguro.encryptCard({
+        publicKey:    '{{ pagseguro_public_key|escapejs }}',
+        holder,
+        number,
+        expMonth,
+        expYear,
+        securityCode: cvv,
+      });
+
+      if (hasErrors) {
+        const msgs = {
+          'INVALID_NUMBER':           'Número do cartão inválido.',
+          'INVALID_SECURITY_CODE':    'CVV inválido.',
+          'INVALID_EXPIRATION_MONTH': 'Mês de validade inválido.',
+          'INVALID_EXPIRATION_YEAR':  'Ano de validade inválido.',
+          'INVALID_PUBLIC_KEY':       'Erro de configuração do gateway. Tente mais tarde.',
+        };
+        const msg = (errors || []).map(c => msgs[c] || c).join(' ');
+        mostrarErroCartao(msg || 'Dados do cartão inválidos.');
+        return;
+      }
+
+      document.getElementById('pagseguro-card-encrypted').value = encryptedCard;
+      this.submit();  // submit real, não dispara este listener novamente
+
+    } catch (err) {
+      mostrarErroCartao('Erro ao processar cartão. Tente novamente ou use o Pix.');
+    }
+  });
+
+  // Se houver erros do servidor, reabrir na etapa 1
   {% if form.errors %}
-    // Re-abre na etapa 1 se há erro nos dados pessoais/endereço
     irParaEtapa(1);
+  {% endif %}
+
+  // Mensagens de erro do servidor no topo visível
+  {% if messages %}
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   {% endif %}
 
 })();
 </script>
+
+{% if pagseguro_public_key %}
+{# SDK PagSeguro para encriptação do cartão no frontend #}
+<script src="https://assets.pagseguro.com.br/checkout-sdk/js/direct-checkout.js"></script>
+{% endif %}
 {% endblock %}

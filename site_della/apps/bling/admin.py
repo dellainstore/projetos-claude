@@ -8,8 +8,24 @@ from .models import BlingToken, BlingLog
 @admin.register(BlingToken)
 class BlingTokenAdmin(admin.ModelAdmin):
     list_display = ('expira_em', 'badge_valido', 'info_autorefresh', 'criado_em', 'atualizado_em', 'acoes')
-    readonly_fields = ('access_token', 'refresh_token', 'expira_em', 'criado_em', 'atualizado_em')
+    # Tokens NÃO são exibidos em texto claro — apenas versão mascarada (8 chars + ••• + últimos 4).
+    # O fluxo de refresh/OAuth continua funcionando normalmente; o admin não precisa ver o valor completo.
+    readonly_fields = ('access_token_mascarado', 'refresh_token_mascarado', 'expira_em', 'criado_em', 'atualizado_em')
     ordering = ('-criado_em',)
+
+    def access_token_mascarado(self, obj):
+        t = obj.access_token or ''
+        if not t:
+            return '—'
+        return f'{t[:8]}{"•" * 20}  (…{t[-4:]})'
+    access_token_mascarado.short_description = 'Access Token'
+
+    def refresh_token_mascarado(self, obj):
+        t = obj.refresh_token or ''
+        if not t:
+            return '—'
+        return f'{t[:8]}{"•" * 20}  (…{t[-4:]})'
+    refresh_token_mascarado.short_description = 'Refresh Token'
 
     def badge_valido(self, obj):
         if obj.valido:
@@ -50,12 +66,21 @@ class BlingTokenAdmin(admin.ModelAdmin):
         return False
 
     def changelist_view(self, request, extra_context=None):
+        from django.utils.html import format_html
         extra_context = extra_context or {}
-        extra_context['info_token'] = (
-            'O access_token expira em ~1 hora — comportamento normal do Bling. '
-            'O sistema renova automaticamente sempre que faz uma chamada à API (pedidos, estoque, etc.). '
-            'Clique em "Atualizar Token" se quiser forçar a renovação agora. '
-            'Se falhar, use "Re-autorizar" para refazer o fluxo OAuth completo.'
+        extra_context['info_token'] = format_html(
+            '<div style="background:#fffbe6;border:1px solid #f0c040;border-radius:6px;'
+            'padding:12px 16px;margin-bottom:16px;font-size:13px;line-height:1.6;">'
+            '<strong>ℹ️ Como funciona o token Bling</strong><br>'
+            '• O <em>access_token</em> expira em ~1 hora — isso é normal, é o padrão do Bling.<br>'
+            '• O sistema renova automaticamente ao fazer chamadas à API (ex: enviar pedido ao Bling).<br>'
+            '• Se quiser forçar a renovação agora, clique em <strong>"Atualizar Token"</strong> (verde).<br>'
+            '• Se "Atualizar Token" falhar, o <em>refresh_token</em> expirou (validade: 30 dias). '
+            'Clique em <strong>"Re-autorizar"</strong> (dourado) para refazer o OAuth do zero.<br>'
+            '• O pedido no campo <em>Aguardando Pagamento</em> que você viu existe no banco — '
+            'para cancelá-lo vá em <a href="/painel/pedidos/pedido/">Pedidos</a>, filtre por status '
+            'e use as ações ou o botão ✕ na linha.'
+            '</div>'
         )
         return super().changelist_view(request, extra_context)
 
@@ -67,7 +92,21 @@ class BlingLogAdmin(admin.ModelAdmin):
     search_fields = ('pedido__numero', 'erro')
     date_hierarchy = 'criado_em'
     ordering = ('-criado_em',)
-    readonly_fields = ('tipo', 'pedido', 'sucesso', 'payload_enviado', 'resposta', 'erro', 'criado_em')
+    # payload_enviado e resposta omitidos da view — dados de cliente já são
+    # redactados na escrita (services.py), mas a resposta da API ainda pode
+    # conter IDs internos. Usar o campo 'erro' para diagnóstico operacional.
+    readonly_fields = ('tipo', 'pedido', 'sucesso', 'payload_resumo', 'erro', 'criado_em')
+
+    def payload_resumo(self, obj):
+        """Exibe apenas campos não-sensíveis do payload para diagnóstico."""
+        p = obj.payload_enviado or {}
+        safe_keys = ('numero', 'numeroLoja', 'data', 'total', 'situacao', 'itens')
+        resumo = {k: p[k] for k in safe_keys if k in p}
+        if not resumo:
+            return '—'
+        import json as _json
+        return _json.dumps(resumo, ensure_ascii=False, indent=2)[:800]
+    payload_resumo.short_description = 'Payload (resumo)'
 
     def badge_sucesso(self, obj):
         if obj.sucesso:

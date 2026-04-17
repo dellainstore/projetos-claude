@@ -5,10 +5,13 @@ from .models import BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, C
 
 @admin.register(BannerPrincipal)
 class BannerPrincipalAdmin(admin.ModelAdmin):
-    list_display = ('ordem', 'tipo_badge', 'titulo', 'preview_midia', 'ativo')
+    list_display = ('ordem', 'tipo_badge', 'titulo', 'preview_midia', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('titulo',)
     ordering = ('ordem',)
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
 
     fieldsets = (
         ('Ordem e tipo', {
@@ -37,6 +40,21 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
             'fields': ('texto_botao', 'url_botao'),
         }),
     )
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:conteudo_bannerprincipal_change', args=[obj.pk])
+        delete_url = reverse('admin:conteudo_bannerprincipal_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este banner?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
 
     def tipo_badge(self, obj):
         if obj.tipo == 'video':
@@ -70,10 +88,13 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
 
 @admin.register(MiniBanner)
 class MiniBannerAdmin(admin.ModelAdmin):
-    list_display = ('posicao_label', 'titulo', 'preview_foto', 'url', 'ativo')
+    list_display = ('posicao_label', 'titulo', 'preview_foto', 'url', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('titulo',)
     ordering = ('posicao',)
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
 
     fieldsets = (
         ('Posição e visibilidade', {
@@ -92,6 +113,21 @@ class MiniBannerAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:conteudo_minibanner_change', args=[obj.pk])
+        delete_url = reverse('admin:conteudo_minibanner_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este mini banner?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
 
     def posicao_label(self, obj):
         cores = {'esq': '#c9a96e', 'dir': '#6e8dc9'}
@@ -115,12 +151,27 @@ class MiniBannerAdmin(admin.ModelAdmin):
 
 @admin.register(PaginaEstatica)
 class PaginaEstaticaAdmin(admin.ModelAdmin):
-    list_display = ('get_slug_display', 'titulo', 'ativo')
+    list_display = ('get_slug_display', 'titulo', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('get_slug_display',)
 
     class Media:
-        js = ('admin/js/pagina_editor.js',)
+        js = ('admin/js/pagina_editor.js', 'admin/js/admin_linhas.js')
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:conteudo_paginaestatica_change', args=[obj.pk])
+        delete_url = reverse('admin:conteudo_paginaestatica_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir esta página?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
 
     fieldsets = (
         (None, {
@@ -165,14 +216,14 @@ class ConfiguracaoLojaAdmin(admin.ModelAdmin):
 
 @admin.register(LookDaSemana)
 class LookDaSemanaAdmin(admin.ModelAdmin):
-    list_display = ('titulo', 'preview_foto', 'lista_produtos', 'ativo', 'criado_em')
+    list_display = ('titulo', 'preview_foto', 'lista_produtos', 'ativo', 'criado_em', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('titulo',)
     ordering = ('-criado_em',)
     readonly_fields = ('criado_em',)
 
     class Media:
-        js = ('admin/js/look_editor.js',)
+        js = ('admin/js/look_editor.js', 'admin/js/admin_linhas.js')
 
     fieldsets = (
         ('Look', {
@@ -202,6 +253,21 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:conteudo_lookdasemana_change', args=[obj.pk])
+        delete_url = reverse('admin:conteudo_lookdasemana_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este look?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
 
     def preview_foto(self, obj):
         if obj.foto:

@@ -18,6 +18,7 @@ urlpatterns = [
     path('trocas-e-devolucoes/', views.trocas_devolucoes, name='trocas_devolucoes'),
     path('termos-de-uso/', views.termos_uso, name='termos_uso'),
     path('perguntas-frequentes/', views.perguntas_frequentes, name='perguntas_frequentes'),
+    path('meios-de-pagamento/', views.meios_pagamento, name='meios_pagamento'),
     path('guia-de-tamanhos/', views.guia_tamanhos, name='guia_tamanhos'),
     # Outros
     path('newsletter/', views.newsletter_signup, name='newsletter'),

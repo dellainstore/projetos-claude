@@ -9,7 +9,7 @@ from django.urls import path
 from django.http import HttpResponseRedirect, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.contrib.admin.views.decorators import staff_member_required
-from .models import Categoria, Produto, ProdutoImagem, Variacao, Avaliacao, CorPadrao, TamanhoPadrao, TabelaMedidas, ProdutoCorFoto
+from .models import Categoria, Produto, ProdutoImagem, Variacao, Avaliacao, CorPadrao, TamanhoPadrao, TabelaMedidas, ProdutoCorFoto, NewsletterInscricao
 
 
 # ---------------------------------------------------------------------------
@@ -62,12 +62,14 @@ class VariacaoInline(admin.TabularInline):
 
     def clonar_btn(self, obj):
         if obj.pk:
+            from django.urls import reverse
+            url = reverse('admin:produtos_variacao_clonar', args=[obj.pk])
             return format_html(
-                '<a href="/painel/produtos/variacao/{}/clonar/" '
+                '<a href="{}" '
                 'style="background:#c9a96e;color:#fff;padding:3px 10px;'
                 'border-radius:3px;font-size:11px;text-decoration:none;white-space:nowrap;" '
                 'title="Duplica esta variação para editar">Clonar</a>',
-                obj.pk,
+                url,
             )
         return '—'
     clonar_btn.short_description = 'Clonar'
@@ -244,7 +246,9 @@ class ProdutoAdmin(admin.ModelAdmin):
     list_display = (
         'thumb_principal', 'nome', 'categoria', 'preco_fmt', 'preco_promo_fmt',
         'badge_promocao', 'total_estoque', 'media_avaliacao', 'ativo', 'destaque', 'novo',
+        'acoes_linha',
     )
+    list_display_links = ('thumb_principal', 'nome')
     list_editable = ('ativo', 'destaque', 'novo')
     list_filter = ('ativo', 'destaque', 'novo', 'categoria', 'genero')
     search_fields = ('nome', 'slug', 'sku', 'bling_id')
@@ -252,6 +256,9 @@ class ProdutoAdmin(admin.ModelAdmin):
     date_hierarchy = 'criado_em'
     readonly_fields = ('criado_em', 'atualizado_em', 'slug')
     change_list_template = 'admin/produtos/produto_changelist.html'
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
 
     fieldsets = (
         ('Identificação', {
@@ -673,6 +680,21 @@ class ProdutoAdmin(admin.ModelAdmin):
             f'/painel/produtos/produto/{var.produto_id}/change/#variacoes'
         )
 
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:produtos_produto_change', args=[obj.pk])
+        delete_url = reverse('admin:produtos_produto_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
+            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
+            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
+            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este produto?\')">✕</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
+
     def thumb_principal(self, obj):
         img = obj.imagem_principal
         if img:
@@ -846,3 +868,12 @@ class AvaliacaoAdmin(admin.ModelAdmin):
     def reprovar(self, request, queryset):
         n = queryset.update(aprovada=False)
         self.message_user(request, f'{n} avaliação(ões) reprovada(s).')
+
+
+@admin.register(NewsletterInscricao)
+class NewsletterInscricaoAdmin(admin.ModelAdmin):
+    list_display  = ('email', 'inscrito_em', 'ativo')
+    list_filter   = ('ativo',)
+    search_fields = ('email',)
+    readonly_fields = ('email', 'inscrito_em')
+    ordering = ('-inscrito_em',)

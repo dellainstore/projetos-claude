@@ -265,7 +265,7 @@
         <ul class="footer-links">
           <li><a href="{% url 'produtos:sobre' %}">Nossa história</a></li>
           <li><a href="{% url 'produtos:politica_privacidade' %}">Política de privacidade</a></li>
-          <li><a href="{% url 'produtos:termos_uso' %}">Termos de uso</a></li>
+          <li><a href="{% url 'produtos:meios_pagamento' %}">Meios de pagamento e frete</a></li>
         </ul>
       </div>
 
@@ -275,6 +275,7 @@
           <p class="footer-endereco-titulo">Show Room</p>
           <p class="footer-endereco-linha">Rua Visconde da Luz, 183 — Vila Nova Conceição</p>
           <p class="footer-endereco-linha">São Paulo/SP — CEP: 04537-070</p>
+          <p class="footer-endereco-linha">CNPJ 29.049.870/0001-37</p>
           <p class="footer-endereco-linha"><a href="mailto:contato@dellainstore.com.br">contato@dellainstore.com.br</a></p>
           <p class="footer-endereco-linha">
             <a href="https://wa.me/5511969168475?text=Olá! Vim pelo site e gostaria de falar com o Show Room." target="_blank" rel="noopener noreferrer">+55 11 96916-8475</a>
@@ -295,6 +296,13 @@
 
     <div class="footer-bottom">
       <span>© {% now "Y" %} D'ELLA Instore. Todos os direitos reservados.</span>
+      <div class="footer-pagamentos">
+        <img src="{% static 'images/pagamentos/pix.svg' %}"        alt="Pix"        class="footer-bandeira" title="Pix">
+        <img src="{% static 'images/pagamentos/visa.svg' %}"       alt="Visa"       class="footer-bandeira" title="Visa">
+        <img src="{% static 'images/pagamentos/mastercard.svg' %}" alt="Mastercard" class="footer-bandeira" title="Mastercard">
+        <img src="{% static 'images/pagamentos/amex.svg' %}"       alt="Amex"       class="footer-bandeira" title="American Express">
+        <img src="{% static 'images/pagamentos/elo.svg' %}"        alt="Elo"        class="footer-bandeira" title="Elo">
+      </div>
       <div class="footer-selos">
         <div class="footer-selo-visual">
           <i class="fas fa-lock"></i>
@@ -314,6 +322,29 @@
 </footer>
 {% endblock %}
 
+
+<!-- Newsletter Popup -->
+<div id="popup-newsletter" class="popup-overlay" role="dialog" aria-modal="true"
+     aria-labelledby="popup-newsletter-titulo" style="display:none;">
+  <div class="popup-box">
+    <button class="popup-fechar" id="popup-newsletter-fechar" aria-label="Fechar">&times;</button>
+    <div class="popup-icone"><i class="far fa-envelope"></i></div>
+    <h2 class="popup-titulo" id="popup-newsletter-titulo">Newsletter</h2>
+    <p class="popup-subtitulo">Receba nossas ofertas por e-mail</p>
+    <form id="form-popup-newsletter" class="popup-form" novalidate>
+      {% csrf_token %}
+      <input type="email" name="email" placeholder="Digite seu email"
+             required maxlength="254" autocomplete="email" class="popup-input">
+      <button type="submit" class="popup-btn">
+        Assinar Newsletter <i class="fas fa-chevron-right"></i>
+      </button>
+    </form>
+    <p class="popup-aviso">
+      Ao se inscrever você concorda com nossa
+      <a href="{% url 'produtos:politica_privacidade' %}">política de privacidade</a>.
+    </p>
+  </div>
+</div>
 
 <script src="{% static 'js/della.js' %}"></script>
 {% block js_extra %}{% endblock %}

@@ -168,6 +168,7 @@ EMAIL_HOST_USER   = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Della Instore <contato@dellainstore.com.br>')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+EMAIL_TIMEOUT = 10  # segundos — evita 504 quando SMTP está bloqueado (ex: porta 465 na Digital Ocean)
 
 # ─── django-axes: bloqueio de brute force ─────────────────────────────────────
 
@@ -197,6 +198,7 @@ CONTENT_SECURITY_POLICY = {
             "cdnjs.cloudflare.com",
             "www.instagram.com",
             "connect.facebook.net",
+            "assets.pagseguro.com.br",  # SDK de encriptação de cartão
         ),
         'style-src': (
             "'self'",
@@ -239,9 +241,13 @@ STONE_SANDBOX = config('STONE_SANDBOX', default=True, cast=bool)
 
 SITE_URL = config('SITE_URL', default='http://159.203.101.232:8000')
 
-BLING_CLIENT_ID     = config('BLING_CLIENT_ID', default='')
-BLING_CLIENT_SECRET = config('BLING_CLIENT_SECRET', default='')
-BLING_REDIRECT_URI  = config('BLING_REDIRECT_URI', default='http://localhost:8000/bling/callback/')
+BLING_CLIENT_ID      = config('BLING_CLIENT_ID', default='')
+BLING_CLIENT_SECRET  = config('BLING_CLIENT_SECRET', default='')
+BLING_REDIRECT_URI   = config('BLING_REDIRECT_URI', default='http://localhost:8000/bling/callback/')
+# Segredo HMAC para validar assinatura dos webhooks do Bling.
+# Configure também no painel Bling → Integrações → Webhooks → Chave de assinatura.
+# Enquanto vazio, o webhook é processado com aviso no log (compatibilidade retroativa).
+BLING_WEBHOOK_SECRET = config('BLING_WEBHOOK_SECRET', default='')
 
 WHATSAPP_NUMBER_1 = config('WHATSAPP_NUMBER_1', default='')
 WHATSAPP_NUMBER_2 = config('WHATSAPP_NUMBER_2', default='')

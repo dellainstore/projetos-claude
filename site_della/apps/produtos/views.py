@@ -401,6 +401,10 @@ def perguntas_frequentes(request):
     return _pagina_estatica(request, 'perguntas_frequentes', 'home/perguntas_frequentes.html')
 
 
+def meios_pagamento(request):
+    return _pagina_estatica(request, 'meios_pagamento', 'home/meios_pagamento.html')
+
+
 def guia_tamanhos(request):
     """Redireciona para o modal de guia de tamanhos ou exibe página dedicada."""
     from apps.produtos.models import TabelaMedidas
@@ -411,16 +415,33 @@ def guia_tamanhos(request):
 @require_POST
 def newsletter_signup(request):
     import json
+    from django.core.validators import validate_email
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    from django.db import IntegrityError
     from apps.core_utils.sanitize import sanitize_text
+    from apps.produtos.models import NewsletterInscricao
 
     try:
         data  = json.loads(request.body)
-        email = sanitize_text(data.get('email', ''), max_length=254).lower()
+        email = sanitize_text(data.get('email', ''), max_length=254).lower().strip()
 
-        if not email or '@' not in email or '.' not in email:
+        if not email:
             return JsonResponse({'status': 'erro', 'erro': 'E-mail inválido.'})
 
-        # TODO: salvar no banco e enviar e-mail de confirmação
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            return JsonResponse({'status': 'erro', 'erro': 'E-mail inválido.'})
+
+        try:
+            NewsletterInscricao.objects.create(email=email)
+        except IntegrityError:
+            # e-mail já inscrito — retorna ok silencioso (não revela existência)
+            return JsonResponse({'status': 'ok'})
+
         return JsonResponse({'status': 'ok'})
+
+    except (json.JSONDecodeError, KeyError):
+        return JsonResponse({'status': 'erro', 'erro': 'Requisição inválida.'}, status=400)
     except Exception:
-        return JsonResponse({'status': 'erro', 'erro': 'Tente novamente.'}, status=400)
+        return JsonResponse({'status': 'erro', 'erro': 'Tente novamente.'}, status=500)
