@@ -111,6 +111,22 @@ def pagseguro_notificacao(request):
             reference_id, status_anterior, novo_status,
         )
 
+        # Sincroniza situação com o Bling
+        try:
+            from apps.bling.services import (
+                atualizar_situacao_bling,
+                SITUACAO_ATENDIDO_SITE,
+                SITUACAO_CANCELADO,
+            )
+            if novo_status == 'pagamento_confirmado':
+                atualizar_situacao_bling(pedido, SITUACAO_ATENDIDO_SITE)
+            elif novo_status == 'cancelado':
+                from apps.bling.services import restaurar_estoque_pedido
+                restaurar_estoque_pedido(pedido)
+                atualizar_situacao_bling(pedido, SITUACAO_CANCELADO)
+        except Exception as exc:
+            logger.warning('Bling: não foi possível atualizar situação do pedido %s: %s', reference_id, exc)
+
     return HttpResponse('OK')
 
 

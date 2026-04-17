@@ -260,6 +260,13 @@ def _processar_checkout(request, form, cart):
                 preco_unitario = Decimal(item['preco']),
                 quantidade     = item['quantidade'],
             )
+            # Diminui estoque imediatamente (dentro do atomic — revertido se cartão recusado)
+            if variacao_obj:
+                from django.db.models import F
+                from django.db.models.functions import Greatest
+                Variacao.objects.filter(pk=variacao_obj.pk).update(
+                    estoque=Greatest(F('estoque') - item['quantidade'], models.Value(0))
+                )
 
     try:
         with transaction.atomic():
@@ -342,6 +349,16 @@ def _processar_checkout(request, form, cart):
         enviar_confirmacao_pedido(pedido)
     except Exception as exc:
         logger.warning('Não foi possível enviar e-mail de confirmação: %s', exc)
+
+    # Envio ao Bling — fora do atomic para não afetar o checkout se o Bling falhar
+    try:
+        from apps.bling.services import enviar_pedido_bling, atualizar_situacao_bling, SITUACAO_ATENDIDO_SITE
+        enviar_pedido_bling(pedido)
+        # Se pagamento já confirmado (cartão aprovado na hora), passa direto para Atendido
+        if pedido.status == 'pagamento_confirmado':
+            atualizar_situacao_bling(pedido, SITUACAO_ATENDIDO_SITE)
+    except Exception as exc:
+        logger.warning('Bling: não foi possível enviar pedido %s: %s', pedido.numero, exc)
 
     return redirect('pedidos:confirmacao', numero=pedido.numero)
 

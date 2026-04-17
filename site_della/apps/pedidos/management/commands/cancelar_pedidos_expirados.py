@@ -71,6 +71,21 @@ class Command(BaseCommand):
                 pedido.save(update_fields=['status', 'atualizado_em'])
                 cancelados += 1
                 logger.info('Pedido %s cancelado automaticamente.', pedido.numero)
+
+                # Restaura estoque no site
+                try:
+                    from apps.bling.services import restaurar_estoque_pedido
+                    restaurar_estoque_pedido(pedido)
+                except Exception as exc_e:
+                    logger.error('Erro ao restaurar estoque do pedido %s: %s', pedido.numero, exc_e)
+
+                # Cancela no Bling (libera reserva de estoque)
+                try:
+                    from apps.bling.services import atualizar_situacao_bling, SITUACAO_CANCELADO
+                    atualizar_situacao_bling(pedido, SITUACAO_CANCELADO)
+                except Exception as exc_b:
+                    logger.error('Bling: erro ao cancelar pedido %s: %s', pedido.numero, exc_b)
+
             except Exception as exc:
                 logger.error('Erro ao cancelar pedido %s: %s', pedido.numero, exc)
 
