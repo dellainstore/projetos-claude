@@ -313,7 +313,7 @@ class InstagramPostAdmin(admin.ModelAdmin):
     list_display_links = ('instagram_id',)
     list_filter   = ('ativo', 'media_type')
     ordering      = ('ordem', '-timestamp')
-    readonly_fields = ('instagram_id', 'media_type', 'media_url', 'permalink', 'timestamp', 'preview_grande')
+    readonly_fields = ('instagram_id', 'media_type', 'permalink', 'timestamp', 'preview_grande')
 
     class Media:
         js = ('admin/js/admin_linhas.js',)
@@ -330,8 +330,10 @@ class InstagramPostAdmin(admin.ModelAdmin):
 
     def importar_instagram(self, request):
         from django.conf import settings
+        from django.core.files.base import ContentFile
         import requests as req
         from dateutil.parser import parse as parse_dt
+        import os
 
         token      = getattr(settings, 'INSTAGRAM_ACCESS_TOKEN', '')
         account_id = getattr(settings, 'INSTAGRAM_ACCOUNT_ID', '')
@@ -354,40 +356,66 @@ class InstagramPostAdmin(admin.ModelAdmin):
             return redirect('..')
 
         novos = 0
+        erros = 0
         for item in data:
-            media_url = item.get('media_url') or item.get('thumbnail_url') or ''
-            if not media_url:
-                continue
-            _, created = InstagramPost.objects.get_or_create(
-                instagram_id=item['id'],
-                defaults={
-                    'media_type': item.get('media_type', 'IMAGE'),
-                    'media_url':  media_url,
-                    'permalink':  item.get('permalink', ''),
-                    'caption':    (item.get('caption') or '')[:1000],
-                    'timestamp':  parse_dt(item['timestamp']) if item.get('timestamp') else None,
-                    'ativo':      False,
-                }
-            )
-            if created:
-                novos += 1
+            # Vídeos usam thumbnail_url; fotos e carrosséis usam media_url
+            media_type = item.get('media_type', 'IMAGE')
+            if media_type == 'VIDEO':
+                img_url = item.get('thumbnail_url') or ''
+            else:
+                img_url = item.get('media_url') or item.get('thumbnail_url') or ''
 
-        self.message_user(request, f'{novos} post(s) novo(s) importado(s). Marque "Exibir no site" nos que deseja mostrar.')
+            if not img_url:
+                continue
+
+            if InstagramPost.objects.filter(instagram_id=item['id']).exists():
+                continue
+
+            # Baixa a imagem localmente para não depender de URLs temporárias do Instagram
+            try:
+                img_resp = req.get(img_url, timeout=15)
+                img_resp.raise_for_status()
+                ext      = '.jpg'
+                filename = f"{item['id']}{ext}"
+                img_file = ContentFile(img_resp.content, name=filename)
+            except Exception:
+                img_file = None
+                erros += 1
+
+            post = InstagramPost(
+                instagram_id = item['id'],
+                media_type   = media_type,
+                permalink    = item.get('permalink', ''),
+                caption      = (item.get('caption') or '')[:1000],
+                timestamp    = parse_dt(item['timestamp']) if item.get('timestamp') else None,
+                ativo        = False,
+            )
+            post.save()
+            if img_file:
+                post.imagem_local.save(filename, img_file, save=True)
+            novos += 1
+
+        msg = f'{novos} post(s) importado(s).'
+        if erros:
+            msg += f' {erros} imagem(ns) não puderam ser baixadas (vídeos sem thumbnail).'
+        self.message_user(request, msg)
         return redirect('..')
 
     def preview(self, obj):
-        if obj.media_url:
+        url = obj.imagem_url
+        if url:
             return format_html(
                 '<a href="{}" target="_blank">'
                 '<img src="{}" style="height:60px;width:60px;object-fit:cover;border-radius:4px;" />'
-                '</a>', obj.permalink, obj.media_url
+                '</a>', obj.permalink, url
             )
         return '—'
     preview.short_description = 'Foto'
 
     def preview_grande(self, obj):
-        if obj.media_url:
-            return format_html('<img src="{}" style="max-width:300px;border-radius:6px;" />', obj.media_url)
+        url = obj.imagem_url
+        if url:
+            return format_html('<img src="{}" style="max-width:300px;border-radius:6px;" />', url)
         return '—'
     preview_grande.short_description = 'Preview'
 

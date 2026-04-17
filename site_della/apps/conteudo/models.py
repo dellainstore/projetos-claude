@@ -237,17 +237,20 @@ class InstagramPost(models.Model):
     Sincronizado manualmente pelo admin via botão "Importar do Instagram".
     O admin escolhe quais ficam ativos (visíveis no site).
     """
-    instagram_id = models.CharField('ID do post', max_length=50, unique=True)
-    media_type   = models.CharField('Tipo', max_length=20, default='IMAGE')
-    media_url    = models.URLField('URL da imagem', max_length=2000)
-    permalink    = models.URLField('Link do post', max_length=500)
-    caption      = models.TextField('Legenda', blank=True)
-    timestamp    = models.DateTimeField('Data do post', null=True, blank=True)
-    ativo        = models.BooleanField(
+    instagram_id  = models.CharField('ID do post', max_length=50, unique=True)
+    media_type    = models.CharField('Tipo', max_length=20, default='IMAGE')
+    imagem_local  = models.ImageField(
+        'Imagem', upload_to='instagram/', blank=True, null=True,
+        help_text='Baixada automaticamente na importação.',
+    )
+    permalink     = models.URLField('Link do post', max_length=500)
+    caption       = models.TextField('Legenda', blank=True)
+    timestamp     = models.DateTimeField('Data do post', null=True, blank=True)
+    ativo         = models.BooleanField(
         'Exibir no site', default=False,
         help_text='Marque os posts que devem aparecer na seção Instagram da homepage.',
     )
-    ordem        = models.PositiveIntegerField(
+    ordem         = models.PositiveIntegerField(
         'Ordem', default=0,
         help_text='Menor número = aparece primeiro. Posts com a mesma ordem ficam por data.',
     )
@@ -260,10 +263,8 @@ class InstagramPost(models.Model):
     def __str__(self):
         return f'Post {self.instagram_id} ({self.media_type})'
 
-    def __str__(self):
-        return 'Configurações da loja'
-
-    @classmethod
-    def get_config(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
-        return obj
+    @property
+    def imagem_url(self):
+        if self.imagem_local:
+            return self.imagem_local.url
+        return ''
