@@ -198,6 +198,18 @@ class CategoriaAdmin(admin.ModelAdmin):
         return obj.produtos.filter(ativo=True).count()
     total_produtos.short_description = 'Ativos'
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_categorias, invalidar_categoria_produtos
+        invalidar_categorias()
+        invalidar_categoria_produtos(obj.pk)
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import invalidar_categorias, invalidar_categoria_produtos
+        invalidar_categorias()
+        invalidar_categoria_produtos(obj.pk)
+
     def get_queryset(self, request):
         qs = super().get_queryset(request).select_related('parent')
         return qs
@@ -303,6 +315,22 @@ class ProdutoAdmin(admin.ModelAdmin):
 
     inlines = [ProdutoImagemInline, ProdutoCorFotoInline, VariacaoInline, AvaliacaoInline]
     actions = ['marcar_ativo', 'marcar_inativo', 'marcar_destaque', 'remover_destaque']
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import HOME_DESTAQUES, invalidar_categoria_produtos
+        from django.core.cache import cache
+        cache.delete(HOME_DESTAQUES)
+        if obj.categoria_id:
+            invalidar_categoria_produtos(obj.categoria_id)
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import HOME_DESTAQUES, invalidar_categoria_produtos
+        from django.core.cache import cache
+        cache.delete(HOME_DESTAQUES)
+        if obj.categoria_id:
+            invalidar_categoria_produtos(obj.categoria_id)
 
     def get_urls(self):
         urls = super().get_urls()

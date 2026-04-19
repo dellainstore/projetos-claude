@@ -1,10 +1,28 @@
 {% extends "admin/change_list.html" %}
 {% block object-tools-items %}
   <li>
+    <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:#f8f8f8;border:1px solid #ddd;border-radius:4px;font-size:13px;color:#333;">
+      📸 <strong>{{ total_ativos }}</strong> de {{ total_posts }} exibindo no site
+      {% if total_ativos > 12 %}
+        <span style="color:#c0392b;font-size:11px;">(site mostra máx. 12)</span>
+      {% endif %}
+    </span>
+  </li>
+  <li>
+    <a href="{{ atualizar_url }}"
+       class="button"
+       style="background:#c9a96e;color:#fff;padding:6px 14px;border-radius:4px;text-decoration:none;font-size:13px;"
+       title="Busca os 30 posts mais recentes (rápido)">
+      ↻ Atualizar (últimos 30)
+    </a>
+  </li>
+  <li>
     <a href="{{ importar_url }}"
        class="button"
-       style="background:#c9a96e;color:#fff;padding:6px 14px;border-radius:4px;text-decoration:none;font-size:13px;">
-      ↓ Importar do Instagram
+       onclick="return confirm('Isso vai buscar todos os seus posts do Instagram desde jan/2025. Continuar?')"
+       style="background:#6e8dc9;color:#fff;padding:6px 14px;border-radius:4px;text-decoration:none;font-size:13px;"
+       title="Busca histórico desde jan/2025 (use na primeira vez)">
+      ↓ Importar histórico completo
     </a>
   </li>
   {{ block.super }}

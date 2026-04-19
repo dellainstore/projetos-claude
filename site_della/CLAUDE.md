@@ -231,9 +231,71 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
+## Bling — Integração Bidirecional (apps/bling/services.py)
+
+### Fluxo de situações
+
+| Evento | situacao_id | Nome no Bling |
+|---|---|---|
+| Pedido criado no checkout | `6` | Em andamento - Site |
+| Pagamento confirmado (cartão/pix) | `18723` | Atendido - Site |
+| Pedido cancelado | `12` | Cancelado |
+
+### IDs fixos
+```python
+LOJA_ID            = 204582763   # Show Room - D'ella
+UNIDADE_NEGOCIO_ID = 1484433     # Matriz
+VENDEDOR_PADRAO_ID = 7616577942  # CRISLAINY SILVERIO GIACOMELLI
+```
+
+### Mapeamento de vendedores (nome maiúsculas → bling_vendedor_id)
+```python
+VENDEDORES_BLING = {
+    'TINA DIAS':                     7613793453,
+    'CRISLAINY SILVERIO GIACOMELLI': 7616577942,
+    'MICHELLE ALVES FERNANDES':      15205612892,
+    'SARA OLIVEIRA':                 15596882226,
+}
+```
+O sistema lê `pedido.codigo_vendedor.nome` e busca no dicionário; se não achar, usa Crislainy como padrão.
+
+### Formas de pagamento
+```python
+FORMA_PAG_PIX = 1194065  # TED/DOC/TRANSF./PIX (À Vista)
+
+FORMA_PAG_CARTAO = {
+    1: 929656,    # PAG SEGURO À Vista
+    2: 2103282,   # PAG SEGURO 2x
+    3: 7128327,   # PAG SEGURO 3x
+    4: 7128329,   # PAG SEGURO 4x
+    5: 7128331,   # PAG SEGURO 5x
+}
+```
+
+### Parcelas — sempre 1 (antecipação)
+Mesmo que o cliente parcele em 2–5x, lança **apenas 1 parcela** no Bling (valor total), pois a loja usa antecipação e recebe tudo à vista. A observação da parcela inclui o código de autorização PagSeguro (`pedido.gateway_id`):
+```
+Cartão de Crédito 3x — Autorização: CHARGE_ID_DO_PAGSEGURO
+```
+
+### Estoque no site (apps/produtos/models.Variacao.estoque)
+- **Diminui** no checkout, dentro de `transaction.atomic()` via `Greatest(F('estoque') - qty, Value(0))` — nunca vai negativo
+- **Restaura** ao cancelar (webhook PagSeguro + cron `cancelar_pedidos_expirados`) via `F('estoque') + item.quantidade`
+
+### Pontos de integração no código
+| Arquivo | Evento |
+|---|---|
+| `apps/pedidos/views.py` | Checkout → `enviar_pedido_bling()` + `atualizar_situacao_bling(ATENDIDO)` se pix confirmado |
+| `apps/pagamentos/views.py` | Webhook PagSeguro → `atualizar_situacao_bling(ATENDIDO ou CANCELADO)` + `restaurar_estoque_pedido()` |
+| `apps/pedidos/management/commands/cancelar_pedidos_expirados.py` | Cron → `restaurar_estoque_pedido()` + `atualizar_situacao_bling(CANCELADO)` |
+
+---
+
 ## Navbar (base.html)
 
-**Logo D'ELLA Instore:** duas linhas empilhadas — `.navbar-logo-della` (Playfair Display, **2.1rem**, letra-spacing 0.18em) e `.navbar-logo-instore` (Jost, **0.82rem**, letra-spacing 0.48em, `text-align: center`). `.navbar-logo` usa `align-items: stretch` para que o Instore ocupe exatamente a largura da D'ELLA. Mesma estrutura no footer: `.footer-logo-della` (1.6rem) e `.footer-logo-instore` (**0.72rem**, centralizado).
+**Logo D'ELLA Instore:** duas linhas empilhadas — `.navbar-logo-della` (Playfair Display, **2.4rem**, letra-spacing 0.18em) e `.navbar-logo-instore` (Jost, **0.94rem**, letra-spacing 0.48em, `text-align: center`). `.navbar-logo` usa `align-items: stretch` para que o Instore ocupe exatamente a largura da D'ELLA. Mesma estrutura no footer: `.footer-logo-della` (1.6rem) e `.footer-logo-instore` (**0.72rem**, centralizado).
+
+**Posicionamento absoluto da logo:** `.navbar-logo` é filho direto de `<nav>` (fora do `.navbar-topo`), com `position: absolute; left: 3.5rem; top: 0; height: var(--navbar-total); display: flex; flex-direction: column; justify-content: center; z-index: 2` — assim a logo fica verticalmente centralizada em relação a toda a altura da navbar (topo + categorias) e não empurra os outros elementos do grid.
 
 Estrutura em 2 linhas:
 ```
@@ -383,6 +445,11 @@ curl -s https://novo.dellainstore.com.br/ | grep -oE 'della\.[a-z0-9]+\.(js|css)
 ```
 
 ### Decisões de CSS relevantes
+- **Logo navbar — posicionamento absoluto:** `.navbar-logo` é filho direto de `<nav>` (fora do `.navbar-topo`). `position: absolute; left: 3.5rem; top: 0; height: var(--navbar-total); display: flex; flex-direction: column; justify-content: center; z-index: 2`. Isso faz ela cobrir verticalmente as duas barras da navbar sem afetar o grid do `.navbar-topo` (que usa `1fr auto`).
+- **Itens do menu** — `font-weight: 400` (antes era 500 — mais delicado)
+- **Ícones de ação** (busca/login/whatsapp/carrinho) — `font-size: 1.15rem` (antes era 0.82rem)
+- **Manifesto** — padding: `5rem 2rem` (antes 8rem), título: `clamp(1.6rem, 3vw, 2.6rem)` (antes 3.5rem)
+- **`.conta-wrapper`** — `padding: calc(var(--navbar-total) + 2rem) 1.5rem 5rem` — o `+ 2rem` extra evita que o "Olá, Nome" apareça colado na navbar
 - `.hero { margin-top: var(--navbar-total); }` — hero abaixo do menu (não atrás)
 - `.hero-mute-btn { bottom: 2rem; left: 2rem; }` — botão mute no canto inferior esquerdo (longe dos dots)
 - `.produto-acoes` usa `visibility: hidden/visible` (não `display:none`) para transição suave + pointer-events corretos
@@ -453,6 +520,24 @@ Colunas: `nome, categoria, descricao, composicao, genero, preco, preco_promocion
 | Nginx | Bloqueia .env, .git, .sql; scripts em /media/; headers de segurança |
 | `production.py` | HTTPS obrigatório, HSTS, cookies seguros. **`CSRF_COOKIE_HTTPONLY = False`** (necessário para AJAX ler o csrftoken) |
 | ORM Django | Zero SQL raw |
+
+---
+
+## Revisão de Segurança — 2026-04-18 (Cache Layer)
+
+Revisão focada nas mudanças da camada de cache (`apps/core_utils/cache_utils.py`, `verificar_cache.py`, invalidações nos admins, caching em `views.py` e `context_processors.py`).
+
+**Resultado: nenhuma vulnerabilidade identificada.** Aprovado para produção.
+
+### Pontos inspecionados sem findings
+
+| Aspecto | Resultado |
+|---|---|
+| Chaves de cache | Constantes hardcoded — sem interpolação de input externo |
+| Dados cacheados | Apenas conteúdo público (banners, produtos, categorias) — nenhum dado de usuário autenticado |
+| Importação Instagram | Restrita a staff (`admin_view()`); URL da imagem vem de API autenticada do Facebook |
+| FileBasedCache + Pickle | Exploit exige escrita prévia no filesystem — acesso já comprometido |
+| CSRF nos endpoints GET do admin Instagram | Impacto seria apenas importar posts públicos; abaixo do limiar de risco |
 
 ---
 
@@ -629,7 +714,11 @@ SITE_URL=https://novo.dellainstore.com.br
   - Arquivos atualizados: `bling/admin.py`, `conteudo/admin.py`, `pagamentos/admin.py`, `pedidos/admin.py`, `produtos/admin.py`, `usuarios/admin.py`
 - **Admin — menu lateral não sobe mais**: `admin_linhas.js` usa `sessionStorage` para persistir o scroll do `#nav-sidebar` entre navegações.
 - **Admin — Bling tokens**: botões "Atualizar Token" e "Re-autorizar" empilhados verticalmente (`flex-direction:column`) para não cortar em colunas estreitas.
-- **Homepage**: "Destaques da Semana" com S maiúsculo.
+- **Homepage**: "Destaques da Semana" com S maiúsculo. "Look da **Semana**" também com S maiúsculo.
+- **Footer**: item "Perguntas frequentes" removido da coluna "Ajuda" (continua acessível via URL direta).
+- **Páginas estáticas indisponíveis**: fallback mostra "Esta página está temporariamente indisponível." (guia de tamanhos, perguntas frequentes, modal de tamanhos no detalhe do produto).
+- **Bling — integração bidirecional** (2026-04-17): pedido criado → `Em andamento - Site`; pagamento confirmado → `Atendido - Site`; cancelamento → `Cancelado` + restaura estoque. Ver seção "Bling — Integração Bidirecional" acima.
+- **Estoque site**: diminui no checkout dentro de `transaction.atomic()` com `Greatest(F('estoque') - qty, Value(0))`; restaura no cancelamento.
 
 ### Feed do Instagram (2026-04-17)
 
@@ -672,11 +761,73 @@ acoes_linha.short_description = 'Ações'
 # Adicionar 'acoes_linha' em list_display e list_display_links = ('<campo_link>',)
 ```
 
+## Estratégia de Cache (2026-04-18)
+
+### Configuração base
+- **Backend:** `FileBasedCache` em `BASE_DIR/cache/` — compatível com múltiplos workers Gunicorn
+- **Timeout padrão:** 1 hora (configurado em `CACHES` em `core/settings/base.py`)
+- **`apps.core_utils` adicionado ao `INSTALLED_APPS`** — necessário para os management commands
+
+### Helper centralizado: `apps/core_utils/cache_utils.py`
+Todas as chaves de cache e funções de invalidação ficam aqui. **Sempre usar este módulo** ao adicionar novo cache — nunca hardcodar chaves espalhadas pelo código.
+
+```python
+from apps.core_utils.cache_utils import (
+    MENU_CATEGORIAS, HOME_BANNERS, HOME_MINI_BANNERS, HOME_LOOK,
+    HOME_DEPOIMENTOS, HOME_DESTAQUES, LOJA_CONFIG, GUIA_TABELAS,
+    _key_pagina, _key_relacionados, _key_tabela_medidas,
+    invalidar_categorias, invalidar_banners, invalidar_look,
+    invalidar_pagina, invalidar_config_loja, invalidar_categoria_produtos,
+    invalidar_home_completa,
+)
+```
+
+### O que está cacheado e por quanto tempo
+
+| Chave | TTL | Onde é preenchido | Onde é invalidado |
+|---|---|---|---|
+| `menu_categorias_ativas` | 4h | `context_processors.py` + `views.loja` | `CategoriaAdmin.save_model/delete_model` |
+| `home_banners` | 1h | `views.homepage` | `BannerPrincipalAdmin.save_model/delete_model` |
+| `home_mini_banners` | 1h | `views.homepage` | `MiniBannerAdmin.save_model/delete_model` |
+| `home_look_semana` | 1h | `views.homepage` | `LookDaSemanaAdmin.save_model/delete_model` |
+| `home_depoimentos` | 6h | `views.homepage` | (expira sozinho — moderação manual é rara) |
+| `home_produtos_destaque` | 2h | `views.homepage` | `ProdutoAdmin.save_model/delete_model` |
+| `loja_config` | 24h | `views.detalhe_produto` | `ConfiguracaoLojaAdmin.save_model` |
+| `guia_tabelas_medidas` | 24h | `views.guia_tamanhos` | (expira sozinho) |
+| `pagina_estatica_{slug}` | 6h | `views._pagina_estatica` | `PaginaEstaticaAdmin.save_model/delete_model` |
+| `produtos_relacionados_{cat_id}` | 3h | `views.detalhe_produto` | `ProdutoAdmin` + `CategoriaAdmin` |
+| `tabela_medidas_{cat_id}` | 12h | `views.detalhe_produto` | `CategoriaAdmin.save_model/delete_model` |
+| `pagseguro_public_key` | 1h | `pagamentos/services/pagseguro.py` | `cache.delete('pagseguro_public_key')` manual |
+
+### Invalidação no admin — padrão implementado
+Todo `ModelAdmin` que afeta conteúdo cacheado implementa `save_model` e `delete_model` chamando a função correspondente do `cache_utils`. Ao salvar/deletar no painel, o cache é limpo imediatamente — sem risco de exibir conteúdo desatualizado.
+
+### Cron de verificação de cache — a cada 6 horas
+```
+0 */6 * * * cd /var/www/.../site_della && source venv/bin/activate && python manage.py verificar_cache --settings=core.settings.production >> logs/verificar_cache.log 2>&1
+```
+- **O que faz:** compara IDs dos objetos cacheados com o banco; remove entradas com objetos deletados
+- **Log:** `logs/verificar_cache.log`
+- **Modo leitura:** `python manage.py verificar_cache --so-relatorio` (não altera nada)
+- **Arquivo:** `apps/core_utils/management/commands/verificar_cache.py`
+
+### Ambiente de produção vs sandbox
+
+| Serviço | Status |
+|---|---|
+| PagSeguro | **PRODUÇÃO** (`PAGSEGURO_SANDBOX=False`) |
+| Melhor Envio | **PRODUÇÃO** (`MELHOR_ENVIO_SANDBOX=False`) |
+| Stone | Sandbox (`STONE_SANDBOX=True`) — Stone ainda não ativo |
+| Bling | Sem sandbox — conectado direto à conta real |
+
+---
+
 ## Pendências
 
 | Item | Prioridade |
 |---|---|
 | E-mail via Brevo API | ✅ implementado |
+| Cache de performance | ✅ implementado (2026-04-18) |
 | **Migrar para `www.dellainstore.com`** — apontar DNS `.com` e `.com.br` na UOL para `159.203.101.232`, configurar Nginx + certbot, atualizar `.env`. Ver checklist em "Migração" acima | Quando aprovado |
 | **C2 — HMAC webhook Bling** — precisará de `BLING_WEBHOOK_SECRET` no `.env` e no painel Bling | Alta (antes de ir ao ar) |
 | **C3 — Webhook PagSeguro** ✅ implementado — reconsulta `/orders/{id}` autenticada antes de atualizar pedido | Concluído |
@@ -704,6 +855,7 @@ django-storages==1.14.6
 boto3==1.42.88
 openpyxl==3.1.5
 qrcode[pil]
+django-anymail[brevo]==14.0
 ```
 
 ---
