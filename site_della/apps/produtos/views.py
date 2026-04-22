@@ -3,15 +3,22 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.core.cache import cache
 from django.db.models import Q, Avg, Count
 from django.conf import settings
+
+from apps.core_utils.cache_utils import (
+    MENU_CATEGORIAS, HOME_BANNERS, HOME_MINI_BANNERS, HOME_LOOK,
+    HOME_DEPOIMENTOS, HOME_DESTAQUES, LOJA_CONFIG, GUIA_TABELAS,
+    _key_pagina, _key_relacionados, _key_tabela_medidas,
+)
 
 
 def _get_instagram_posts() -> list:
     """Retorna posts do Instagram marcados como ativos no admin."""
     try:
         from apps.conteudo.models import InstagramPost
-        return list(InstagramPost.objects.filter(ativo=True).order_by('ordem', '-timestamp')[:9])
+        return list(InstagramPost.objects.filter(ativo=True).order_by('ordem', '-timestamp')[:12])
     except Exception:
         return []
 
@@ -20,35 +27,68 @@ def homepage(request):
     from apps.produtos.models import Categoria, Produto, Avaliacao
     from apps.conteudo.models import BannerPrincipal, MiniBanner, LookDaSemana
 
-    try:
-        categorias_destaque = Categoria.objects.filter(ativa=True).order_by('ordem')[:8]
-        produtos_destaque   = Produto.objects.filter(ativo=True, destaque=True).prefetch_related('imagens')[:8]
-        depoimentos         = Avaliacao.objects.filter(aprovada=True).order_by('-criada_em')[:3]
-    except Exception:
-        categorias_destaque = []
-        produtos_destaque   = []
-        depoimentos         = []
+    # Produtos em destaque (cache 2h — muda ao cadastrar/editar produto)
+    produtos_destaque = cache.get(HOME_DESTAQUES)
+    if produtos_destaque is None:
+        try:
+            produtos_destaque = list(
+                Produto.objects.filter(ativo=True, destaque=True).prefetch_related('imagens')[:8]
+            )
+        except Exception:
+            produtos_destaque = []
+        cache.set(HOME_DESTAQUES, produtos_destaque, 60 * 60 * 2)
 
-    # Banners do painel
-    try:
-        banners      = list(BannerPrincipal.objects.filter(ativo=True).order_by('ordem'))
-        mini_banners = list(MiniBanner.objects.filter(ativo=True).order_by('posicao'))
-        look_obj = LookDaSemana.objects.filter(ativo=True).select_related(
-            'produto_ponto1', 'produto_ponto2', 'produto_ponto3'
-        ).prefetch_related(
-            'produto_ponto1__imagens', 'produto_ponto2__imagens', 'produto_ponto3__imagens'
-        ).first()
-        # Lista apenas os produtos que foram associados a um ponto (sem None)
+    # Depoimentos (cache 6h — moderação manual; select_related evita N+1 no template)
+    depoimentos = cache.get(HOME_DEPOIMENTOS)
+    if depoimentos is None:
+        try:
+            depoimentos = list(
+                Avaliacao.objects.filter(aprovada=True)
+                .select_related('produto')
+                .order_by('-criada_em')[:3]
+            )
+        except Exception:
+            depoimentos = []
+        cache.set(HOME_DEPOIMENTOS, depoimentos, 60 * 60 * 6)
+
+    # Banners do hero (cache 1h — invalidado ao salvar no admin)
+    banners = cache.get(HOME_BANNERS)
+    if banners is None:
+        try:
+            banners = list(BannerPrincipal.objects.filter(ativo=True).order_by('ordem'))
+        except Exception:
+            banners = []
+        cache.set(HOME_BANNERS, banners, 60 * 60)
+
+    # Mini-banners (cache 1h — invalidado ao salvar no admin)
+    mini_banners = cache.get(HOME_MINI_BANNERS)
+    if mini_banners is None:
+        try:
+            mini_banners = list(MiniBanner.objects.filter(ativo=True).order_by('posicao'))
+        except Exception:
+            mini_banners = []
+        cache.set(HOME_MINI_BANNERS, mini_banners, 60 * 60)
+
+    # Look da semana (cache 1h — invalidado ao salvar no admin)
+    look_obj = cache.get(HOME_LOOK)
+    if look_obj is None:
+        try:
+            look_obj = LookDaSemana.objects.filter(ativo=True).select_related(
+                'produto_ponto1', 'produto_ponto2', 'produto_ponto3'
+            ).prefetch_related(
+                'produto_ponto1__imagens', 'produto_ponto2__imagens', 'produto_ponto3__imagens'
+            ).first()
+        except Exception:
+            look_obj = None
+        cache.set(HOME_LOOK, look_obj, 60 * 60)
+
+    look_produtos = []
+    if look_obj:
         look_produtos = [p for p in [
-            look_obj.produto_ponto1 if look_obj else None,
-            look_obj.produto_ponto2 if look_obj else None,
-            look_obj.produto_ponto3 if look_obj else None,
-        ] if p and p.ativo] if look_obj else []
-    except Exception:
-        banners      = []
-        mini_banners = []
-        look_obj     = None
-        look_produtos = []
+            look_obj.produto_ponto1,
+            look_obj.produto_ponto2,
+            look_obj.produto_ponto3,
+        ] if p and p.ativo]
 
     wishlist_ids = set()
     if request.user.is_authenticated:
@@ -58,7 +98,6 @@ def homepage(request):
             pass
 
     context = {
-        'categorias_destaque':    categorias_destaque,
         'produtos_destaque':      produtos_destaque,
         'depoimentos':            depoimentos,
         'banners':                banners,
@@ -76,13 +115,16 @@ def homepage(request):
 def loja(request, categoria_slug=None):
     from apps.produtos.models import Categoria, Produto
 
-    # Apenas categorias mãe com suas subcategorias (para a sidebar em árvore)
-    categorias = (
-        Categoria.objects
-        .filter(ativa=True, parent__isnull=True)
-        .prefetch_related('subcategorias')
-        .order_by('ordem', 'nome')
-    )
+    # Sidebar — reutiliza o mesmo cache do menu principal (invalidado junto)
+    categorias = cache.get(MENU_CATEGORIAS)
+    if categorias is None:
+        categorias = list(
+            Categoria.objects
+            .filter(ativa=True, parent__isnull=True)
+            .prefetch_related('subcategorias')
+            .order_by('ordem', 'nome')
+        )
+        cache.set(MENU_CATEGORIAS, categorias, 60 * 60 * 4)
     categoria_ativa = None
 
     produtos_qs = Produto.objects.filter(ativo=True).prefetch_related('imagens', 'variacoes')
@@ -221,14 +263,18 @@ def detalhe_produto(request, slug):
     media_notas  = avaliacoes.aggregate(media=Avg('nota'))['media'] or 0
     total_aval   = produto.avaliacoes.filter(aprovada=True).count()
 
-    # Produtos relacionados (mesma categoria, exceto o atual)
-    relacionados = (
-        Produto.objects
-        .filter(ativo=True, categoria=produto.categoria)
-        .exclude(pk=produto.pk)
-        .prefetch_related('imagens')
-        .order_by('-destaque', '-criado_em')[:4]
-    )
+    # Produtos relacionados — cache por categoria (3h)
+    _cache_rel = _key_relacionados(produto.categoria_id)
+    relacionados = cache.get(_cache_rel)
+    if relacionados is None:
+        relacionados = list(
+            Produto.objects
+            .filter(ativo=True, categoria=produto.categoria)
+            .exclude(pk=produto.pk)
+            .prefetch_related('imagens')
+            .order_by('-destaque', '-criado_em')[:4]
+        )
+        cache.set(_cache_rel, relacionados, 60 * 60 * 3)
 
     na_wishlist = False
     if request.user.is_authenticated:
@@ -237,24 +283,29 @@ def detalhe_produto(request, slug):
         except Exception:
             pass
 
-    # Tabela de medidas: específica da categoria, ou geral
-    tabela_medidas = None
-    try:
-        from apps.produtos.models import TabelaMedidas
-        tabela_medidas = (
-            TabelaMedidas.objects.filter(ativo=True, categoria=produto.categoria).first()
-            or TabelaMedidas.objects.filter(ativo=True, categoria__isnull=True).first()
-        )
-    except Exception:
-        pass
+    # Tabela de medidas — cache 12h por categoria
+    _cache_med = _key_tabela_medidas(produto.categoria_id)
+    tabela_medidas = cache.get(_cache_med)
+    if tabela_medidas is None:
+        try:
+            from apps.produtos.models import TabelaMedidas
+            tabela_medidas = (
+                TabelaMedidas.objects.filter(ativo=True, categoria=produto.categoria).first()
+                or TabelaMedidas.objects.filter(ativo=True, categoria__isnull=True).first()
+            )
+        except Exception:
+            tabela_medidas = None
+        cache.set(_cache_med, tabela_medidas, 60 * 60 * 12)
 
-    # Configuração da loja (frete grátis)
-    config_loja = None
-    try:
-        from apps.conteudo.models import ConfiguracaoLoja
-        config_loja = ConfiguracaoLoja.get_config()
-    except Exception:
-        pass
+    # Configuração da loja (frete grátis) — cache 24h
+    config_loja = cache.get(LOJA_CONFIG)
+    if config_loja is None:
+        try:
+            from apps.conteudo.models import ConfiguracaoLoja
+            config_loja = ConfiguracaoLoja.get_config()
+        except Exception:
+            config_loja = None
+        cache.set(LOJA_CONFIG, config_loja, 60 * 60 * 24)
 
     # Mapa cor_id → índice da imagem na galeria (para troca de foto ao clicar na bolinha)
     fotos_cor_map = {}
@@ -335,13 +386,16 @@ def wishlist(request):
 
 
 def _pagina_estatica(request, slug, template):
-    """Helper: carrega PaginaEstatica do banco; fallback para template estático."""
-    pagina = None
-    try:
-        from apps.conteudo.models import PaginaEstatica
-        pagina = PaginaEstatica.objects.filter(slug=slug, ativo=True).first()
-    except Exception:
-        pass
+    """Helper: carrega PaginaEstatica do banco; fallback para template estático. Cache 6h."""
+    _cache_key = _key_pagina(slug)
+    pagina = cache.get(_cache_key)
+    if pagina is None:
+        try:
+            from apps.conteudo.models import PaginaEstatica
+            pagina = PaginaEstatica.objects.filter(slug=slug, ativo=True).first()
+        except Exception:
+            pagina = None
+        cache.set(_cache_key, pagina, 60 * 60 * 6)
     return render(request, template, {'pagina': pagina})
 
 
@@ -406,9 +460,12 @@ def meios_pagamento(request):
 
 
 def guia_tamanhos(request):
-    """Redireciona para o modal de guia de tamanhos ou exibe página dedicada."""
-    from apps.produtos.models import TabelaMedidas
-    tabelas = TabelaMedidas.objects.filter(ativo=True).order_by('nome')
+    """Exibe o guia de tamanhos. Cache 24h — raramente muda."""
+    tabelas = cache.get(GUIA_TABELAS)
+    if tabelas is None:
+        from apps.produtos.models import TabelaMedidas
+        tabelas = list(TabelaMedidas.objects.filter(ativo=True).order_by('nome'))
+        cache.set(GUIA_TABELAS, tabelas, 60 * 60 * 24)
     return render(request, 'home/guia_tamanhos.html', {'tabelas': tabelas})
 
 

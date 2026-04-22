@@ -4619,7 +4619,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 .conta-wrapper {
-  padding: var(--navbar-total) 1.5rem 5rem;
+  padding: calc(var(--navbar-total) + 2rem) 1.5rem 5rem;
   min-height: 80vh;
 }
 

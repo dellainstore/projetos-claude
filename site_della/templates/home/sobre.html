@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static safe_html %}
 {% block titulo %}{% if pagina %}{{ pagina.titulo }} — D'ELLA Instore{% else %}Nossa história — D'ELLA Instore{% endif %}{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
@@ -16,7 +16,7 @@
       </div>
       {% endif %}
       <div class="pagina-conteudo">
-        {{ pagina.conteudo|safe }}
+        {{ pagina.conteudo|clean_html }}
       </div>
 
     {% else %}

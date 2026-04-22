@@ -36,7 +36,7 @@
         <img src="data:image/png;base64,{{ pix_qrcode }}"
              alt="QR Code Pix — {{ pedido.numero }}"
              class="pix-qrcode-img">
-        <div class="pix-valor">R$ {{ pedido.total|floatformat:2 }}</div>
+        <div class="pix-valor">R$ {{ pedido.total|floatformat:"2g" }}</div>
       </div>
 
       {% if pix_payload %}
@@ -61,7 +61,7 @@
       <div class="pix-sem-chave">
         <p>Realize o pagamento via Pix para nossa chave e informe o número do pedido
            <strong>{{ pedido.numero }}</strong> na descrição.</p>
-        <p>Valor: <strong>R$ {{ pedido.total|floatformat:2 }}</strong></p>
+        <p>Valor: <strong>R$ {{ pedido.total|floatformat:"2g" }}</strong></p>
         <p>Entre em contato pelo WhatsApp para receber a chave Pix.</p>
       </div>
       {% endif %}
@@ -89,7 +89,7 @@
             {% endif %}
             <p class="detalhe-item-qty">Qtd: {{ item.quantidade }}</p>
           </div>
-          <p class="detalhe-item-preco">R$ {{ item.subtotal|floatformat:2 }}</p>
+          <p class="detalhe-item-preco">R$ {{ item.subtotal|floatformat:"2g" }}</p>
         </div>
         {% endfor %}
       </div>
@@ -100,12 +100,12 @@
 
       <section class="detalhe-secao">
         <h2 class="detalhe-secao-titulo"><i class="fas fa-receipt"></i> Resumo</h2>
-        <div class="detalhe-linha"><span>Subtotal</span><span>R$ {{ pedido.subtotal|floatformat:2 }}</span></div>
-        <div class="detalhe-linha"><span>Frete</span><span>R$ {{ pedido.frete|floatformat:2 }}</span></div>
+        <div class="detalhe-linha"><span>Subtotal</span><span>R$ {{ pedido.subtotal|floatformat:"2g" }}</span></div>
+        <div class="detalhe-linha"><span>Frete</span><span>R$ {{ pedido.frete|floatformat:"2g" }}</span></div>
         {% if pedido.desconto %}
-        <div class="detalhe-linha" style="color:#27ae60;"><span>Desconto</span><span>− R$ {{ pedido.desconto|floatformat:2 }}</span></div>
+        <div class="detalhe-linha" style="color:#27ae60;"><span>Desconto</span><span>− R$ {{ pedido.desconto|floatformat:"2g" }}</span></div>
         {% endif %}
-        <div class="detalhe-linha detalhe-total"><span>Total</span><span>R$ {{ pedido.total|floatformat:2 }}</span></div>
+        <div class="detalhe-linha detalhe-total"><span>Total</span><span>R$ {{ pedido.total|floatformat:"2g" }}</span></div>
         <div class="detalhe-linha" style="margin-top:.75rem;"><span>Pagamento</span><span>{{ pedido.get_forma_pagamento_display }}</span></div>
         {% if pedido.codigo_rastreio %}
         <div class="detalhe-linha" style="margin-top:.75rem;">

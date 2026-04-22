@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block titulo %}Ativar Conta — D'ELLA Instore{% endblock %}
+{% block navbar_class %}solida{% endblock %}
+
+{% block conteudo %}
+<main class="conta-page">
+  <div class="conta-box">
+
+    {% if token_invalido %}
+
+      <div class="conta-header">
+        <h1 class="conta-titulo">Link inválido</h1>
+      </div>
+      <div class="conta-alerta conta-alerta--error">
+        <i class="fas fa-circle-xmark"></i>
+        Este link de ativação é inválido ou já foi utilizado.
+      </div>
+      <p class="conta-subtitulo" style="margin-top:1rem;">
+        Tente se cadastrar normalmente ou
+        <a href="{% url 'usuarios:recuperar_senha' %}" class="conta-link">recupere sua senha</a>.
+      </p>
+
+    {% else %}
+
+      <div class="conta-header">
+        <h1 class="conta-titulo">Bem-vinda de volta!</h1>
+      </div>
+
+      <p class="conta-subtitulo">
+        {% if cliente %}
+          Olá, <strong>{{ cliente.nome }}</strong>! Encontramos seu cadastro.
+          Confirme seu e-mail e crie uma senha para acessar o site.
+        {% else %}
+          Confirme seu e-mail e crie uma senha para ativar sua conta.
+        {% endif %}
+      </p>
+
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="conta-alerta conta-alerta--{% if msg.tags == 'error' %}error{% else %}success{% endif %}">
+            {{ msg }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      {% if form.non_field_errors %}
+        <div class="conta-alerta conta-alerta--error">
+          {% for erro in form.non_field_errors %}{{ erro }}{% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <div class="conta-campo">
+          <label class="conta-label">E-mail</label>
+          {{ form.email }}
+          {% if form.email.errors %}<span class="conta-erro">{{ form.email.errors.0 }}</span>{% endif %}
+        </div>
+
+        <div class="conta-campo">
+          <label class="conta-label">Nova senha</label>
+          {{ form.senha }}
+          {% if form.senha.errors %}<span class="conta-erro">{{ form.senha.errors.0 }}</span>{% endif %}
+        </div>
+
+        <div class="conta-campo">
+          <label class="conta-label">Confirmar senha</label>
+          {{ form.confirmar_senha }}
+          {% if form.confirmar_senha.errors %}<span class="conta-erro">{{ form.confirmar_senha.errors.0 }}</span>{% endif %}
+        </div>
+
+        <button type="submit" class="btn-conta-primario">Ativar minha conta</button>
+      </form>
+
+      <p class="conta-texto-centro" style="margin-top:1.5rem;">
+        <a href="{% url 'usuarios:login' %}" class="conta-link">Já tenho senha — fazer login</a>
+      </p>
+
+    {% endif %}
+
+  </div>
+</main>
+{% endblock %}

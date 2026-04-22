@@ -8,5 +8,12 @@
       Importar via planilha
     </a>
   </li>
+  <li>
+    <a href="{% url 'admin:produtos_produto_exportar_csv' %}"
+       class="addlink"
+       style="background:#2e7d32;">
+      Exportar CSV
+    </a>
+  </li>
   {{ block.super }}
 {% endblock %}

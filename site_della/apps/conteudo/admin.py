@@ -16,6 +16,16 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
     class Media:
         js = ('admin/js/admin_linhas.js',)
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_banners
+        invalidar_banners()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import invalidar_banners
+        invalidar_banners()
+
     def get_actions(self, request):
         actions = super().get_actions(request)
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
@@ -103,6 +113,16 @@ class MiniBannerAdmin(admin.ModelAdmin):
     class Media:
         js = ('admin/js/admin_linhas.js',)
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_banners
+        invalidar_banners()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import invalidar_banners
+        invalidar_banners()
+
     def get_actions(self, request):
         actions = super().get_actions(request)
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
@@ -169,6 +189,16 @@ class PaginaEstaticaAdmin(admin.ModelAdmin):
     class Media:
         js = ('admin/js/pagina_editor.js', 'admin/js/admin_linhas.js')
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_pagina
+        invalidar_pagina(obj.slug)
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import invalidar_pagina
+        invalidar_pagina(obj.slug)
+
     def get_actions(self, request):
         actions = super().get_actions(request)
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
@@ -212,6 +242,12 @@ class PaginaEstaticaAdmin(admin.ModelAdmin):
 
 @admin.register(ConfiguracaoLoja)
 class ConfiguracaoLojaAdmin(admin.ModelAdmin):
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_config_loja
+        invalidar_config_loja()
+
     fieldsets = (
         ('Frete grátis', {
             'fields': ('frete_gratis_acima',),
@@ -239,6 +275,16 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
 
     class Media:
         js = ('admin/js/look_editor.js', 'admin/js/admin_linhas.js')
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_look
+        invalidar_look()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import invalidar_look
+        invalidar_look()
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -312,28 +358,35 @@ class InstagramPostAdmin(admin.ModelAdmin):
     list_editable = ('ativo', 'ordem')
     list_display_links = ('instagram_id',)
     list_filter   = ('ativo', 'media_type')
-    ordering      = ('ordem', '-timestamp')
+    ordering      = ('-ativo', 'ordem', '-timestamp')
     readonly_fields = ('instagram_id', 'media_type', 'permalink', 'timestamp', 'preview_grande')
+    list_per_page = 200
 
     class Media:
         js = ('admin/js/admin_linhas.js',)
 
     def get_urls(self):
         urls = super().get_urls()
-        extra = [path('importar-instagram/', self.admin_site.admin_view(self.importar_instagram), name='importar_instagram')]
+        extra = [
+            path('importar-instagram/', self.admin_site.admin_view(self.importar_historico), name='importar_instagram'),
+            path('atualizar-instagram/', self.admin_site.admin_view(self.atualizar_instagram), name='atualizar_instagram'),
+        ]
         return extra + urls
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
         extra_context['importar_url'] = 'importar-instagram/'
+        extra_context['atualizar_url'] = 'atualizar-instagram/'
+        extra_context['total_ativos'] = InstagramPost.objects.filter(ativo=True).count()
+        extra_context['total_posts']  = InstagramPost.objects.count()
         return super().changelist_view(request, extra_context=extra_context)
 
-    def importar_instagram(self, request):
+    def _executar_import(self, request, max_paginas, parar_se_sem_novos=False, since=None):
+        """Lógica compartilhada de importação. max_paginas=None = sem limite (histórico completo)."""
         from django.conf import settings
         from django.core.files.base import ContentFile
         import requests as req
         from dateutil.parser import parse as parse_dt
-        import os
 
         token      = getattr(settings, 'INSTAGRAM_ACCESS_TOKEN', '')
         account_id = getattr(settings, 'INSTAGRAM_ACCOUNT_ID', '')
@@ -342,23 +395,38 @@ class InstagramPostAdmin(admin.ModelAdmin):
             self.message_user(request, 'Configure INSTAGRAM_ACCESS_TOKEN e INSTAGRAM_ACCOUNT_ID no .env', messages.ERROR)
             return redirect('..')
 
+        since_param = f'&since={since}' if since else ''
         url = (
             f'https://graph.facebook.com/v19.0/{account_id}/media'
             f'?fields=id,media_type,media_url,thumbnail_url,permalink,caption,timestamp'
-            f'&limit=30&access_token={token}'
+            f'&limit=30{since_param}&access_token={token}'
         )
-        try:
-            r = req.get(url, timeout=10)
-            r.raise_for_status()
-            data = r.json().get('data', [])
-        except Exception as e:
-            self.message_user(request, f'Erro ao buscar posts: {e}', messages.ERROR)
-            return redirect('..')
+        data = []
+        paginas = 0
+        while url:
+            if max_paginas is not None and paginas >= max_paginas:
+                break
+            try:
+                r = req.get(url, timeout=10)
+                r.raise_for_status()
+                payload = r.json()
+            except Exception as e:
+                self.message_user(request, f'Erro ao buscar posts: {e}', messages.ERROR)
+                return redirect('..')
+            pagina_items = payload.get('data', [])
+            pagina_ids = [item['id'] for item in pagina_items]
+            existentes = set(InstagramPost.objects.filter(instagram_id__in=pagina_ids).values_list('instagram_id', flat=True))
+            novos_na_pagina = [item for item in pagina_items if item['id'] not in existentes]
+            data.extend(novos_na_pagina)
+            url = payload.get('paging', {}).get('next')
+            paginas += 1
+            # Só para cedo no modo "atualizar" (posts recentes já importados = nada novo)
+            if parar_se_sem_novos and not novos_na_pagina:
+                break
 
         novos = 0
         erros = 0
         for item in data:
-            # Vídeos usam thumbnail_url; fotos e carrosséis usam media_url
             media_type = item.get('media_type', 'IMAGE')
             if media_type == 'VIDEO':
                 img_url = item.get('thumbnail_url') or ''
@@ -368,15 +436,10 @@ class InstagramPostAdmin(admin.ModelAdmin):
             if not img_url:
                 continue
 
-            if InstagramPost.objects.filter(instagram_id=item['id']).exists():
-                continue
-
-            # Baixa a imagem localmente para não depender de URLs temporárias do Instagram
             try:
                 img_resp = req.get(img_url, timeout=15)
                 img_resp.raise_for_status()
-                ext      = '.jpg'
-                filename = f"{item['id']}{ext}"
+                filename = f"{item['id']}.jpg"
                 img_file = ContentFile(img_resp.content, name=filename)
             except Exception:
                 img_file = None
@@ -397,9 +460,17 @@ class InstagramPostAdmin(admin.ModelAdmin):
 
         msg = f'{novos} post(s) importado(s).'
         if erros:
-            msg += f' {erros} imagem(ns) não puderam ser baixadas (vídeos sem thumbnail).'
+            msg += f' {erros} imagem(ns) não puderam ser baixadas.'
         self.message_user(request, msg)
         return redirect('..')
+
+    def importar_historico(self, request):
+        """Importa posts desde 01/01/2025 até hoje, sem parada antecipada."""
+        return self._executar_import(request, max_paginas=None, parar_se_sem_novos=False, since=1735689600)
+
+    def atualizar_instagram(self, request):
+        """Busca só a primeira página; para se tudo já foi importado."""
+        return self._executar_import(request, max_paginas=1, parar_se_sem_novos=True)
 
     def preview(self, obj):
         url = obj.imagem_url

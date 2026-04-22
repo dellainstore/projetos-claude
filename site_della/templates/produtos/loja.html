@@ -173,10 +173,10 @@
             <a href="{{ produto.get_absolute_url }}" class="produto-card-nome">{{ produto.nome }}</a>
             <div class="produto-card-preco">
               {% if produto.em_promocao %}
-                <span class="preco-de">R$ {{ produto.preco|floatformat:2 }}</span>
-                <span class="preco-por">R$ {{ produto.preco_promocional|floatformat:2 }}</span>
+                <span class="preco-de">R$ {{ produto.preco|floatformat:"2g" }}</span>
+                <span class="preco-por">R$ {{ produto.preco_promocional|floatformat:"2g" }}</span>
               {% else %}
-                <span class="preco-por">R$ {{ produto.preco|floatformat:2 }}</span>
+                <span class="preco-por">R$ {{ produto.preco|floatformat:"2g" }}</span>
               {% endif %}
             </div>
             {% if produto.parcelamento_texto %}
@@ -186,7 +186,8 @@
             <div class="produto-card-acoes">
               <button class="btn-add-carrinho"
                       data-produto-id="{{ produto.pk }}"
-                      aria-label="Adicionar {{ produto.nome }} ao carrinho">
+                      data-produto-url="{{ produto.get_absolute_url }}"
+                      aria-label="Ver produto {{ produto.nome }}">
                 <i class="fas fa-bag-shopping"></i>
               </button>
               <button class="btn-wishlist {% if produto.pk in wishlist_ids %}ativo{% endif %}"

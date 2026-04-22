@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load safe_html %}
 {% block titulo %}Guia de tamanhos — D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
@@ -12,7 +13,7 @@
         <h2 style="font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:600;margin-bottom:1rem;">
           {{ tabela.nome }}{% if tabela.categoria %} — {{ tabela.categoria.nome }}{% endif %}
         </h2>
-        <div class="pagina-conteudo">{{ tabela.conteudo|safe }}</div>
+        <div class="pagina-conteudo">{{ tabela.conteudo|clean_html }}</div>
       </div>
       {% endfor %}
     {% else %}

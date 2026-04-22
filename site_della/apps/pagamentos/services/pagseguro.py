@@ -178,6 +178,70 @@ def criar_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1) -> dict:
         raise
 
 
+# ─── Criação de ordem PIX ────────────────────────────────────────────────────
+
+def criar_ordem_pix(pedido) -> dict:
+    """
+    Cria uma ordem de pagamento PIX via PagBank API.
+    Retorna dict com o QR code text e image_link (ou levanta HTTPError).
+    Resposta inclui qr_codes[0].text (payload copia-e-cola) e links para PNG.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    valor_centavos = int(round(float(pedido.total) * 100))
+    cpf_limpo      = ''.join(c for c in (pedido.cpf or '') if c.isdigit())
+
+    expira = (datetime.now(timezone.utc) + timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S-03:00')
+
+    site_url = settings.SITE_URL.rstrip('/')
+    payload: dict = {
+        'reference_id': pedido.numero,
+        'customer': {
+            'name':   pedido.nome_completo,
+            'email':  pedido.email,
+            'tax_id': cpf_limpo,
+        },
+        'items': [{
+            'reference_id': pedido.numero,
+            'name':         f'Pedido {pedido.numero}',
+            'quantity':     1,
+            'unit_amount':  valor_centavos,
+        }],
+        'qr_codes': [{
+            'amount':          {'value': valor_centavos},
+            'expiration_date': expira,
+        }],
+        'notification_urls': [
+            f'{site_url}/pagamento/pagseguro/notificacao/',
+        ],
+    }
+
+    tel_digits = ''.join(c for c in (pedido.telefone or '') if c.isdigit())
+    if len(tel_digits) >= 10:
+        payload['customer']['phones'] = [{
+            'country': '55',
+            'area':    tel_digits[:2],
+            'number':  tel_digits[2:],
+            'type':    'MOBILE',
+        }]
+
+    url = f'{_base_url()}/orders'
+    try:
+        r = requests.post(url, json=payload, headers=_headers(), timeout=30)
+        if not r.ok:
+            logger.error(
+                'PagSeguro PIX: erro %s ao criar ordem %s: %s',
+                r.status_code, pedido.numero, r.text[:500],
+            )
+            r.raise_for_status()
+        return r.json()
+    except requests.HTTPError:
+        raise
+    except Exception as exc:
+        logger.error('PagSeguro PIX: falha na ordem %s: %s', pedido.numero, exc)
+        raise
+
+
 # ─── Mapeamento de status ─────────────────────────────────────────────────────
 
 # Status da charge PagSeguro → status interno do Pedido

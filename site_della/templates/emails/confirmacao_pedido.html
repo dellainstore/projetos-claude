@@ -102,7 +102,7 @@
                 </td>
                 <td style="padding:12px;text-align:right;font-size:14px;
                             color:#222;font-weight:600;">
-                  R$ {{ item.subtotal|floatformat:2 }}
+                  R$ {{ item.subtotal|floatformat:"2g" }}
                 </td>
               </tr>
               {% endfor %}
@@ -114,20 +114,20 @@
               <tr>
                 <td style="padding:6px 0;font-size:14px;color:#555;">Subtotal</td>
                 <td style="padding:6px 0;font-size:14px;color:#333;
-                            text-align:right;">R$ {{ pedido.subtotal|floatformat:2 }}</td>
+                            text-align:right;">R$ {{ pedido.subtotal|floatformat:"2g" }}</td>
               </tr>
               {% if pedido.desconto %}
               <tr>
                 <td style="padding:6px 0;font-size:14px;color:#27ae60;">Desconto</td>
                 <td style="padding:6px 0;font-size:14px;color:#27ae60;
-                            text-align:right;">- R$ {{ pedido.desconto|floatformat:2 }}</td>
+                            text-align:right;">- R$ {{ pedido.desconto|floatformat:"2g" }}</td>
               </tr>
               {% endif %}
               <tr>
                 <td style="padding:6px 0;font-size:14px;color:#555;">Frete</td>
                 <td style="padding:6px 0;font-size:14px;color:#333;
                             text-align:right;">
-                  {% if pedido.frete %}R$ {{ pedido.frete|floatformat:2 }}{% else %}Grátis{% endif %}
+                  {% if pedido.frete %}R$ {{ pedido.frete|floatformat:"2g" }}{% else %}Grátis{% endif %}
                 </td>
               </tr>
               <tr>
@@ -135,7 +135,7 @@
                             color:#0a0a0a;border-top:2px solid #f0f0f0;">Total</td>
                 <td style="padding:12px 0 6px;font-size:16px;font-weight:700;
                             color:#c9a96e;text-align:right;border-top:2px solid #f0f0f0;">
-                  R$ {{ pedido.total|floatformat:2 }}
+                  R$ {{ pedido.total|floatformat:"2g" }}
                 </td>
               </tr>
             </table>

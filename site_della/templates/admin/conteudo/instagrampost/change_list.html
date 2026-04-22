@@ -1,11 +1,31 @@
 {% extends "admin/change_list.html" %}
 {% block object-tools-items %}
   <li>
-    <a href="{{ importar_url }}"
-       class="button"
-       style="background:#c9a96e;color:#fff;padding:6px 14px;border-radius:4px;text-decoration:none;font-size:13px;">
-      ↓ Importar do Instagram
+    <a href="{{ atualizar_url }}" class="della-btn-edit"
+       style="text-decoration:none;padding:0.35rem 1rem;"
+       title="Busca os 30 posts mais recentes (rápido)">
+      ↻ Atualizar (últimos 30)
+    </a>
+  </li>
+  <li>
+    <a href="{{ importar_url }}" class="della-btn-edit"
+       style="text-decoration:none;padding:0.35rem 1rem;background:#1a6ea8;"
+       onclick="return confirm('Isso vai buscar todos os seus posts do Instagram desde jan/2025. Continuar?')"
+       title="Busca histórico desde jan/2025 (use na primeira vez)">
+      ↓ Importar histórico completo
     </a>
   </li>
   {{ block.super }}
+{% endblock %}
+
+{% block content_title %}
+  <h1>Posts Instagram
+    <span style="font-family:'Jost',sans-serif;font-size:0.85rem;font-weight:400;
+                 color:#6b6b6b;margin-left:0.75rem;vertical-align:middle;">
+      📸 <strong style="color:#0a0a0a;">{{ total_ativos }}</strong> de {{ total_posts }} exibindo no site
+      {% if total_ativos > 12 %}
+        <span style="color:#c0392b;font-size:0.75rem;">(máx. 12 no site)</span>
+      {% endif %}
+    </span>
+  </h1>
 {% endblock %}

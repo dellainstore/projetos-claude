@@ -59,15 +59,6 @@
       <a href="{% url 'produtos:busca' %}" aria-label="Buscar">
         <i class="fas fa-magnifying-glass"></i>
       </a>
-      {% if user.is_authenticated %}
-        <a href="{% url 'usuarios:minha_conta' %}" aria-label="Minha conta">
-          <i class="far fa-user"></i>
-        </a>
-      {% else %}
-        <a href="{% url 'usuarios:login' %}" aria-label="Entrar">
-          <i class="far fa-user"></i>
-        </a>
-      {% endif %}
       {% if WHATSAPP_NUMBER_1 %}
       <a href="https://wa.me/{{ WHATSAPP_NUMBER_1 }}?text=Olá! Vim pelo site da Della Instore e gostaria de ajuda."
          target="_blank" rel="noopener noreferrer" aria-label="Suporte via WhatsApp">
@@ -80,6 +71,17 @@
           <span class="badge-carrinho">{{ carrinho_total_itens }}</span>
         {% endif %}
       </button>
+      {% if user.is_authenticated %}
+        <a href="{% url 'usuarios:minha_conta' %}" aria-label="Minha conta" class="navbar-acao-conta">
+          <i class="far fa-user"></i>
+          <span class="navbar-usuario-label">{{ user.nome }}</span>
+        </a>
+      {% else %}
+        <a href="{% url 'usuarios:login' %}" aria-label="Entrar" class="navbar-acao-conta">
+          <i class="far fa-user"></i>
+          <span class="navbar-usuario-label">Entrar</span>
+        </a>
+      {% endif %}
     </div>
   </div>
 

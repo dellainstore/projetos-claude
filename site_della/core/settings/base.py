@@ -43,6 +43,7 @@ LOCAL_APPS = [
     'apps.pagamentos',
     'apps.bling',
     'apps.usuarios',
+    'apps.core_utils',  # utilitários compartilhados (cache, sanitize, management commands)
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

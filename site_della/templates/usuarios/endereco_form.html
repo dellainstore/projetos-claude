@@ -136,7 +136,7 @@ document.getElementById('btn-buscar-cep')?.addEventListener('click', async funct
   if(cep.length !== 8){ alert('CEP inválido.'); return; }
   this.textContent = 'Buscando...';
   try {
-    const r = await fetch(`/carrinho/cep/?cep=${cep}`);
+    const r = await fetch(`/carrinho/cep/${cep}/`);
     const d = await r.json();
     if(d.erro){ alert('CEP não encontrado.'); return; }
     document.getElementById('id_end_logradouro').value = d.logradouro || '';
