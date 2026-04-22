@@ -1,15 +1,277 @@
-{% extends "admin/index.html" %}
-{% load i18n %}
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}Painel | D'ELLA Instore{% endblock %}
+
+{% block content_title %}{% endblock %}
 
 {% block content %}
-<div style="margin-bottom: 20px; padding: 12px 16px; background: #fff; border: 1px solid #ddd; border-radius: 6px; display: flex; align-items: center; gap: 12px;">
-  <span style="font-size: 13px; color: #444; font-weight: 600;">Acesso rápido:</span>
-  <a href="/painel/relatorio/" style="display:inline-block;padding:6px 16px;background:#c9a96e;color:#fff;border-radius:4px;font-size:13px;text-decoration:none;font-weight:600;">
-    📊 Relatório Geral
-  </a>
-  <a href="/painel/instagram/refresh/" style="display:inline-block;padding:6px 16px;background:#833ab4;color:#fff;border-radius:4px;font-size:13px;text-decoration:none;font-weight:600;">
-    📷 Atualizar Feed Instagram
-  </a>
+
+{# ── Banner de boas-vindas ────────────────────────────────────────────────── #}
+<div class="da-welcome">
+  <div class="da-welcome-eyebrow">Painel de Gestão</div>
+  <h1>D'ELLA Instore</h1>
+  <p>Gerencie produtos, pedidos, conteúdo e integrações em um só lugar.</p>
+  <div class="da-welcome-actions">
+    <a href="/painel/relatorio/" class="da-welcome-btn da-welcome-btn-primary">
+      📊 Relatório Geral
+    </a>
+    <a href="/painel/conteudo/instagrampost/" class="da-welcome-btn da-welcome-btn-ghost">
+      📷 Feed do Instagram
+    </a>
+    <a href="{% url 'admin:pedidos_pedido_changelist' %}" class="da-welcome-btn da-welcome-btn-ghost">
+      🛍️ Ver Pedidos
+    </a>
+    <a href="/" target="_blank" class="da-welcome-btn da-welcome-btn-ghost">
+      🌐 Ver Site ↗
+    </a>
+  </div>
 </div>
-{{ block.super }}
+
+{# ── Conteúdo do Site ─────────────────────────────────────────────────────── #}
+<div class="da-section-label">Conteúdo do Site</div>
+<div class="da-grid">
+
+  <a href="{% url 'admin:conteudo_bannerprincipal_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-dark">🎞️</div>
+    <div class="da-card-body">
+      <strong>Slides do Banner</strong>
+      <small>Fotos e vídeos do hero da homepage</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:conteudo_minibanner_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-gold">🖼️</div>
+    <div class="da-card-body">
+      <strong>Mini Banners</strong>
+      <small>Dois banners laterais na homepage</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:conteudo_lookdasemana_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-purple">✨</div>
+    <div class="da-card-body">
+      <strong>Look da Semana</strong>
+      <small>Foto editorial com pontos de produto</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:conteudo_instagrampost_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-orange">📷</div>
+    <div class="da-card-body">
+      <strong>Posts Instagram</strong>
+      <small>Feed importado e exibido na loja</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:conteudo_paginaestatica_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-blue">📄</div>
+    <div class="da-card-body">
+      <strong>Páginas Estáticas</strong>
+      <small>Política, termos, sobre, FAQ…</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:conteudo_configuracaoloja_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-teal">⚙️</div>
+    <div class="da-card-body">
+      <strong>Config. da Loja</strong>
+      <small>Frete grátis e configurações gerais</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+</div>
+
+{# ── Catálogo de Produtos ─────────────────────────────────────────────────── #}
+<div class="da-section-label">Catálogo de Produtos</div>
+<div class="da-grid">
+
+  <a href="{% url 'admin:produtos_produto_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-dark">👗</div>
+    <div class="da-card-body">
+      <strong>Produtos</strong>
+      <small>Catálogo completo com variações e fotos</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="/painel/produtos/produto/importar/" class="da-card">
+    <div class="da-card-icon ic-green">📥</div>
+    <div class="da-card-body">
+      <strong>Importar Produtos</strong>
+      <small>CSV ou XLSX exportado do Bling</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:produtos_categoria_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-blue">📂</div>
+    <div class="da-card-body">
+      <strong>Categorias</strong>
+      <small>Categorias mãe e subcategorias</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:produtos_corpadrao_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-gold">🎨</div>
+    <div class="da-card-body">
+      <strong>Cores Padrão</strong>
+      <small>Paleta de cores das variações</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:produtos_tamanhopadrao_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-gold">📏</div>
+    <div class="da-card-body">
+      <strong>Tamanhos Padrão</strong>
+      <small>P, M, G, GG, PP… definidos aqui</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:produtos_avaliacao_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-orange">⭐</div>
+    <div class="da-card-body">
+      <strong>Avaliações</strong>
+      <small>Moderação de avaliações dos clientes</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:produtos_tabelamedidas_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-teal">📐</div>
+    <div class="da-card-body">
+      <strong>Tabelas de Medidas</strong>
+      <small>Guia de tamanhos por categoria</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:produtos_newsletterinscricao_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-purple">💌</div>
+    <div class="da-card-body">
+      <strong>Newsletter</strong>
+      <small>Contatos inscritos via site</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+</div>
+
+{# ── Pedidos & Vendas ─────────────────────────────────────────────────────── #}
+<div class="da-section-label">Pedidos & Vendas</div>
+<div class="da-grid">
+
+  <a href="{% url 'admin:pedidos_pedido_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-dark">🛍️</div>
+    <div class="da-card-body">
+      <strong>Pedidos</strong>
+      <small>Todos os pedidos, status e rastreio</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:pedidos_cupom_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-green">🏷️</div>
+    <div class="da-card-body">
+      <strong>Cupons de Desconto</strong>
+      <small>Criar e gerenciar cupons</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:pedidos_codigovendedor_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-gold">👤</div>
+    <div class="da-card-body">
+      <strong>Códigos de Vendedor</strong>
+      <small>Rastrear vendas por consultora</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:pagamentos_pagamento_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-blue">💳</div>
+    <div class="da-card-body">
+      <strong>Transações</strong>
+      <small>Histórico de pagamentos PagSeguro</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+</div>
+
+{# ── Clientes ─────────────────────────────────────────────────────────────── #}
+<div class="da-section-label">Clientes</div>
+<div class="da-grid">
+
+  <a href="{% url 'admin:usuarios_cliente_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-dark">👥</div>
+    <div class="da-card-body">
+      <strong>Clientes</strong>
+      <small>Cadastros, endereços e histórico</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:usuarios_endereco_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-blue">📍</div>
+    <div class="da-card-body">
+      <strong>Endereços</strong>
+      <small>Endereços de entrega dos clientes</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:usuarios_wishlist_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-red">❤️</div>
+    <div class="da-card-body">
+      <strong>Lista de Desejos</strong>
+      <small>Produtos salvos pelos clientes</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+</div>
+
+{# ── Integrações ──────────────────────────────────────────────────────────── #}
+<div class="da-section-label">Integrações & Sistema</div>
+<div class="da-grid">
+
+  <a href="{% url 'admin:bling_blingtoken_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-orange">🔑</div>
+    <div class="da-card-body">
+      <strong>Bling — Tokens</strong>
+      <small>Autenticação OAuth com o ERP Bling</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:bling_blinglog_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-teal">📋</div>
+    <div class="da-card-body">
+      <strong>Bling — Logs</strong>
+      <small>Histórico de sincronizações</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="/painel/usuarios/cliente/?is_staff__exact=1" class="da-card">
+    <div class="da-card-icon ic-dark">🔐</div>
+    <div class="da-card-body">
+      <strong>Usuários do Painel</strong>
+      <small>Equipe com acesso ao admin</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+</div>
+
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load safe_html %}
 {% block navbar_class %}solida{% endblock %}
 
 {% block titulo %}{% if pagina %}{{ pagina.titulo }} — D'ELLA Instore{% else %}{% block titulo_fallback %}D'ELLA Instore{% endblock %}{% endif %}{% endblock %}
@@ -9,7 +10,7 @@
     {% if pagina %}
       <h1 class="pagina-estatica-titulo">{{ pagina.titulo }}</h1>
       <div class="pagina-conteudo">
-        {{ pagina.conteudo|safe }}
+        {{ pagina.conteudo|clean_html }}
       </div>
     {% else %}
       <h1 class="pagina-estatica-titulo">{% block titulo_pagina %}{% endblock %}</h1>

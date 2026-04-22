@@ -142,7 +142,8 @@
             <div class="produto-acoes" aria-hidden="true">
               <button class="btn-add-carrinho"
                       data-produto-id="{{ produto.id }}"
-                      aria-label="Adicionar {{ produto.nome }} ao carrinho">
+                      data-produto-url="{{ produto.get_absolute_url }}"
+                      aria-label="Ver produto {{ produto.nome }}">
                 <i class="fas fa-bag-shopping"></i> Adicionar
               </button>
               <button class="btn-wishlist {% if produto.id in wishlist_ids %}ativo{% endif %}"
@@ -158,9 +159,9 @@
               <a href="{{ produto.get_absolute_url }}">{{ produto.nome }}</a>
             </h3>
             <div class="produto-preco">
-              <span class="preco-atual">R$ {{ produto.preco_atual|floatformat:2 }}</span>
+              <span class="preco-atual">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
               {% if produto.em_promocao %}
-                <span class="preco-original">R$ {{ produto.preco|floatformat:2 }}</span>
+                <span class="preco-original">R$ {{ produto.preco|floatformat:"2g" }}</span>
               {% endif %}
             </div>
             {% if produto.parcelamento_texto %}
@@ -193,10 +194,10 @@
   <div class="mini-banners-grid">
     {% for mb in mini_banners %}
     <a href="{{ mb.url }}" class="mini-banner fade-in {% if not forloop.first %}fade-in-delay-1{% endif %}"
-       style="background-image: url('{{ mb.foto.url }}');"
        aria-label="{{ mb.titulo|default:'Ver coleção' }}">
-      <div class="mini-banner-overlay"></div>
+      <img src="{{ mb.foto.url }}" alt="{{ mb.titulo|default:'' }}" class="mini-banner-foto" loading="lazy">
       {% if mb.pretitulo or mb.titulo %}
+      <div class="mini-banner-overlay"></div>
       <div class="mini-banner-content">
         {% if mb.pretitulo %}<p class="mini-banner-pretitulo">{{ mb.pretitulo }}</p>{% endif %}
         {% if mb.titulo %}<h3 class="mini-banner-titulo">{{ mb.titulo }}</h3>{% endif %}
@@ -230,7 +231,7 @@
              aria-label="{{ look_obj.produto_ponto1.nome }}">
             <div class="look-ponto-tooltip">
               <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto1.nome }}</p>
-              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto1.preco_atual|floatformat:2 }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto1.preco_atual|floatformat:"2g" }}</p>
             </div>
           </a>
         {% endif %}
@@ -240,7 +241,7 @@
              aria-label="{{ look_obj.produto_ponto2.nome }}">
             <div class="look-ponto-tooltip">
               <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto2.nome }}</p>
-              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto2.preco_atual|floatformat:2 }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto2.preco_atual|floatformat:"2g" }}</p>
             </div>
           </a>
         {% endif %}
@@ -250,7 +251,7 @@
              aria-label="{{ look_obj.produto_ponto3.nome }}">
             <div class="look-ponto-tooltip">
               <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto3.nome }}</p>
-              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto3.preco_atual|floatformat:2 }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto3.preco_atual|floatformat:"2g" }}</p>
             </div>
           </a>
         {% endif %}
@@ -276,7 +277,7 @@
               {% endif %}
               <div style="flex:1">
                 <p style="font-family:var(--fonte-titulo);font-size:0.95rem;margin-bottom:0.2rem;">{{ produto.nome }}</p>
-                <p style="font-size:0.85rem;font-weight:500;">R$ {{ produto.preco_atual|floatformat:2 }}</p>
+                <p style="font-size:0.85rem;font-weight:500;">R$ {{ produto.preco_atual|floatformat:"2g" }}</p>
                 {% if produto.parcelamento_texto %}<p style="font-size:0.72rem;color:var(--cinza-texto);">{{ produto.parcelamento_texto }}</p>{% endif %}
               </div>
               <a href="{{ produto.get_absolute_url }}" class="btn-primario" style="padding:0.6rem 1.2rem;font-size:0.65rem;">

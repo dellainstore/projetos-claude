@@ -59,7 +59,7 @@
       <div class="conta-card" style="border:2px solid #c9a96e;background:#fffbf0;">
         <h3 class="conta-card-titulo" style="color:#8a6200;">
           <i class="fas fa-clock" style="color:#c9a96e;margin-right:.4rem;"></i>
-          Pagamento pendente — R$ {{ pedido.total|floatformat:2 }}
+          Pagamento pendente — R$ {{ pedido.total|floatformat:"2g" }}
         </h3>
 
         <div class="pagar-tabs" style="display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap;">
@@ -83,7 +83,7 @@
           <div style="text-align:center;margin-bottom:1.25rem;">
             <img src="data:image/png;base64,{{ pix_qrcode }}"
                  alt="QR Code Pix" class="pix-qrcode-img" style="max-width:220px;">
-            <div class="pix-valor">R$ {{ pedido.total|floatformat:2 }}</div>
+            <div class="pix-valor">R$ {{ pedido.total|floatformat:"2g" }}</div>
           </div>
           {% if pix_payload %}
           <div class="pix-copiar-bloco">
@@ -145,7 +145,7 @@
             <div id="det-cartao-erro" class="cartao-erro hidden" style="margin-top:.75rem;"></div>
             <button type="button" id="btn-pagar-cartao"
                     style="margin-top:1rem;width:100%;padding:.8rem;background:#c9a96e;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.95rem;cursor:pointer;font-weight:500;">
-              <i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:2 }}
+              <i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:"2g" }}
             </button>
             <p class="cartao-seguranca" style="margin-top:.75rem;font-size:.78rem;color:#888;text-align:center;">
               <i class="fas fa-lock"></i> Dados encriptados pelo PagSeguro — nunca chegam ao nosso servidor.
@@ -179,7 +179,7 @@
               <p class="conta-item-qty">Qtd: {{ item.quantidade }}</p>
             </div>
             <div class="conta-item-preco">
-              R$ {{ item.preco_unitario|floatformat:2 }}
+              R$ {{ item.preco_unitario|floatformat:"2g" }}
             </div>
           </div>
         {% endfor %}
@@ -191,21 +191,21 @@
         <div class="conta-resumo-lista">
           <div class="conta-resumo-linha">
             <span>Subtotal</span>
-            <span>R$ {{ pedido.subtotal|floatformat:2 }}</span>
+            <span>R$ {{ pedido.subtotal|floatformat:"2g" }}</span>
           </div>
           {% if pedido.desconto %}
             <div class="conta-resumo-linha">
               <span>Desconto</span>
-              <span class="cor-verde">− R$ {{ pedido.desconto|floatformat:2 }}</span>
+              <span class="cor-verde">− R$ {{ pedido.desconto|floatformat:"2g" }}</span>
             </div>
           {% endif %}
           <div class="conta-resumo-linha">
             <span>Frete</span>
-            <span>{% if pedido.frete %}R$ {{ pedido.frete|floatformat:2 }}{% else %}Grátis{% endif %}</span>
+            <span>{% if pedido.frete %}R$ {{ pedido.frete|floatformat:"2g" }}{% else %}Grátis{% endif %}</span>
           </div>
           <div class="conta-resumo-linha conta-resumo-linha--total">
             <span>Total</span>
-            <span>R$ {{ pedido.total|floatformat:2 }}</span>
+            <span>R$ {{ pedido.total|floatformat:"2g" }}</span>
           </div>
           <div class="conta-resumo-linha">
             <span>Pagamento</span>
@@ -335,7 +335,7 @@ function mostrarPainel(painel, btn) {
         erroEl.textContent = (errors||[]).map(c => msgs[c]||c).join(' ') || 'Dados inválidos.';
         erroEl.classList.remove('hidden');
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:2 }}';
+        btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:"2g" }}';
         return;
       }
 
@@ -362,13 +362,13 @@ function mostrarPainel(painel, btn) {
         erroEl.textContent = data.erro || 'Erro ao processar. Tente novamente.';
         erroEl.classList.remove('hidden');
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:2 }}';
+        btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:"2g" }}';
       }
     } catch(e) {
       erroEl.textContent = 'Erro de comunicação. Tente novamente.';
       erroEl.classList.remove('hidden');
       btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:2 }}';
+      btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:"2g" }}';
     }
   });
 })();

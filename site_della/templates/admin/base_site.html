@@ -1,0 +1,43 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | D'ELLA Instore — Painel{% endblock %}
+
+{# Remove Django's dark_mode.css entirely — forçamos tema claro via della_admin.css #}
+{% block dark-mode-vars %}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}">
+    <span class="della-admin-logo-main">D'ELLA</span>
+    <span class="della-admin-logo-dot"></span>
+    <span class="della-admin-logo-sub">Instore</span>
+  </a>
+</h1>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'admin/css/della_admin.css' %}">
+<script>
+// Persiste scroll do menu lateral em TODAS as páginas do admin
+(function(){
+  var KEY = 'admin_sidebar_scroll';
+  function restore(){
+    var nav = document.getElementById('nav-sidebar');
+    if (!nav) return;
+    var saved = sessionStorage.getItem(KEY);
+    if (saved) nav.scrollTop = parseInt(saved, 10);
+    nav.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click', function(){ sessionStorage.setItem(KEY, nav.scrollTop); });
+    });
+    window.addEventListener('beforeunload', function(){ sessionStorage.setItem(KEY, nav.scrollTop); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restore);
+  else restore();
+})();
+</script>
+{% endblock %}

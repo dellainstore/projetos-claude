@@ -82,19 +82,31 @@ def pagseguro_notificacao(request):
         logger.warning('PagSeguro webhook: não foi possível verificar order_id=%s — ignorando', order_id)
         return HttpResponse('OK')
 
-    charges = ordem_verificada.get('charges', [])
-    if not charges:
+    # Determina status: cartão usa charges; PIX usa qr_codes
+    charges     = ordem_verificada.get('charges', [])
+    qr_codes    = ordem_verificada.get('qr_codes', [])
+    charge_id   = ''
+    charge_status = ''
+
+    if charges:
+        charge        = charges[0]
+        charge_status = (charge.get('status') or '').upper()
+        charge_id     = charge.get('id', '')
+    elif qr_codes:
+        # PIX: quando pago, PagBank marca o qr_code como PAID
+        qr = qr_codes[0]
+        charge_status = (qr.get('status') or '').upper()
+        charge_id     = qr.get('id', '')
+
+    if not charge_status:
         return HttpResponse('OK')
 
-    charge        = charges[0]
-    charge_status = (charge.get('status') or '').upper()
-    novo_status   = status_interno(charge_status)
+    novo_status = status_interno(charge_status)
 
     if novo_status and pedido.status != novo_status:
         status_anterior = pedido.status
         pedido.status   = novo_status
 
-        charge_id = charge.get('id', '')
         if charge_id and not pedido.gateway_id:
             pedido.gateway_id = charge_id
 
@@ -226,8 +238,9 @@ def cartao_pagar_pedido(request, pedido_numero):
 @require_GET
 def pix_gerar(request, pedido_numero):
     """
-    Gera o QR Code Pix para um pedido.
-    Retorna JSON com payload e imagem base64.
+    Gera ou regenera o QR Code Pix para um pedido.
+    Tenta criar via PagBank API (webhook automático) e faz fallback para QR estático.
+    Retorna JSON com payload (texto) e qrcode (base64).
     """
     from django.conf import settings
     from apps.pedidos.models import Pedido
@@ -240,11 +253,41 @@ def pix_gerar(request, pedido_numero):
     if not _pode_acessar_pedido(request, pedido):
         return JsonResponse({'status': 'erro', 'erro': 'Não autorizado.'}, status=403)
 
+    # ── Tentativa 1: PagBank PIX API (gera QR dinâmico com webhook) ──────────
+    try:
+        from apps.pagamentos.services.pagseguro import criar_ordem_pix
+        from .pix import gerar_qrcode_base64
+
+        resposta = criar_ordem_pix(pedido)
+        qr_codes = resposta.get('qr_codes', [])
+        order_id = resposta.get('id', '')
+
+        if qr_codes and order_id:
+            pix_text = qr_codes[0].get('text', '')
+            if pix_text:
+                qrcode_b64 = gerar_qrcode_base64(pix_text)
+                # Salva o order_id do PagBank para rastreamento do webhook
+                if order_id and pedido.gateway_id != order_id:
+                    pedido.gateway    = 'pagseguro'
+                    pedido.gateway_id = order_id
+                    pedido.save(update_fields=['gateway', 'gateway_id'])
+                return JsonResponse({
+                    'status':  'ok',
+                    'payload': pix_text,
+                    'qrcode':  qrcode_b64,
+                    'valor':   str(pedido.total),
+                    'numero':  pedido_numero,
+                    'via':     'pagseguro',
+                })
+    except Exception as exc:
+        logger.warning('PIX PagBank falhou para pedido %s, usando QR estático: %s', pedido_numero, exc)
+
+    # ── Fallback: QR estático com chave PIX cadastrada no .env ───────────────
     chave_pix = getattr(settings, 'PIX_CHAVE', '')
     if not chave_pix:
         return JsonResponse({
             'status':   'sem_chave',
-            'mensagem': 'Chave Pix não configurada. Configure PIX_CHAVE no .env.',
+            'mensagem': 'Chave Pix não configurada.',
         })
 
     try:
@@ -258,16 +301,16 @@ def pix_gerar(request, pedido_numero):
             descricao      = f'Pedido {pedido.numero}',
         )
         qrcode_b64 = gerar_qrcode_base64(payload)
-
         return JsonResponse({
             'status':  'ok',
             'payload': payload,
             'qrcode':  qrcode_b64,
             'valor':   str(pedido.total),
-            'numero':  pedido.numero,
+            'numero':  pedido_numero,
+            'via':     'estatico',
         })
     except Exception as e:
-        logger.error('Erro ao gerar Pix %s: %s', pedido_numero, e, exc_info=True)
+        logger.error('Erro ao gerar Pix estático %s: %s', pedido_numero, e, exc_info=True)
         return JsonResponse({'status': 'erro', 'erro': 'Erro ao gerar QR Code.'}, status=500)
 
 

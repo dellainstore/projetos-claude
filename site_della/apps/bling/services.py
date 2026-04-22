@@ -9,7 +9,7 @@ Funções principais:
 """
 
 import logging
-from datetime import date, timedelta
+from datetime import date
 
 from .api import BlingAPI, BlingAPIError
 from .models import BlingLog
@@ -17,10 +17,29 @@ from .models import BlingLog
 logger = logging.getLogger(__name__)
 
 
+# ── Mapeamento serviço Melhor Envio → transportadora + modalidade Bling ──────
+# Bling API v3 — modalidade no objeto volume: 1=PAC, 2=SEDEX
+# Nome do objeto de postagem (campo textual em transporte.volumes[].servico)
+MELHOR_ENVIO_SERVICOS = {
+    '1':  {'nome_servico': 'PAC',   'modalidade': 1},   # Correios - PAC
+    '2':  {'nome_servico': 'SEDEX', 'modalidade': 2},   # Correios - SEDEX
+}
+# Nome que identifica a logística no Bling (cadastro de transportadora)
+LOGISTICA_NOME_PADRAO = 'Melhor Envio - Correios'
+TRANSPORTADORA_NOME   = 'CORREIOS'
+
+
 # ── Situações do Bling ────────────────────────────────────────────────────────
-SITUACAO_EM_ANDAMENTO_SITE = 6      # reserva estoque, sem financeiro
-SITUACAO_ATENDIDO_SITE     = 18723  # gera estoque e contas a pagar
-SITUACAO_CANCELADO         = 12
+# IDs verificados via GET /pedidos/vendas na conta D'ELLA:
+#   754756 = Em andamento - Site  (custom — pedido 9638)
+#   18723  = Atendido - Site      (custom — a confirmar)
+#   15762  = situação custom antiga (pedidos 9634/9635)
+#   15     = Em andamento         (padrão Bling)
+#   9      = Atendido             (padrão Bling)
+#   12     = Cancelado            (padrão Bling)
+SITUACAO_EM_ANDAMENTO_SITE = 754756  # Em andamento - Site (custom D'ELLA)
+SITUACAO_ATENDIDO_SITE     = 18723   # Atendido - Site (custom D'ELLA)
+SITUACAO_CANCELADO         = 12      # Cancelado (padrão Bling)
 
 # ── Loja e unidade de negócio ─────────────────────────────────────────────────
 LOJA_ID            = 204582763   # Show Room - D'ella
@@ -53,17 +72,27 @@ FORMA_PAG_CARTAO = {
 def enviar_pedido_bling(pedido) -> bool:
     """
     Envia pedido ao Bling como "Em andamento - Site".
-    Cria reserva de estoque no Bling, sem gerar financeiro.
+    Antes de criar, busca o contato por CPF e depois por telefone para evitar duplicatas.
     Retorna True em caso de sucesso, False em caso de falha.
     """
     if pedido.bling_pedido_id:
         logger.info('Pedido %s já enviado ao Bling (id=%s)', pedido.numero, pedido.bling_pedido_id)
         return True
 
-    payload = _montar_payload_pedido(pedido)
-
     try:
         api = BlingAPI()
+    except BlingAPIError as exc:
+        BlingLog.objects.create(
+            tipo='pedido', pedido=pedido, sucesso=False,
+            payload_enviado={}, resposta={}, erro=str(exc),
+        )
+        logger.error('Bling: token indisponível para pedido %s: %s', pedido.numero, exc)
+        return False
+
+    contato = _resolver_contato_bling(pedido, api)
+    payload = _montar_payload_pedido(pedido, contato)
+
+    try:
         resposta = api.criar_pedido_venda(payload)
     except BlingAPIError as exc:
         BlingLog.objects.create(
@@ -93,6 +122,15 @@ def enviar_pedido_bling(pedido) -> bool:
         pedido.save(update_fields=['bling_pedido_id', 'atualizado_em'])
         logger.info('Pedido %s enviado ao Bling (id=%s)', pedido.numero, bling_id)
 
+        # Força "Em andamento - Site" — o Bling costuma ignorar o campo situacao
+        # no POST de criação e deixa o pedido como "Em aberto".
+        try:
+            api.atualizar_situacao_pedido(bling_id, SITUACAO_EM_ANDAMENTO_SITE)
+            logger.info('Bling: pedido %s → Em andamento - Site', pedido.numero)
+        except BlingAPIError as exc:
+            logger.warning('Bling: falha ao forçar situação inicial no pedido %s: %s',
+                           pedido.numero, exc)
+
     return True
 
 
@@ -105,6 +143,10 @@ def atualizar_situacao_bling(pedido, situacao_id: int) -> bool:
     Uso típico:
         - Pagamento confirmado → SITUACAO_ATENDIDO_SITE (18723)
         - Pedido cancelado     → SITUACAO_CANCELADO (12)
+
+    Quando a nova situação é ATENDIDO, a data do pedido também é atualizada
+    para hoje — reflete a data real do pagamento (pedido pode ter sido criado
+    em outro dia e pago só hoje).
     """
     if not pedido.bling_pedido_id:
         logger.warning('Bling: pedido %s sem bling_pedido_id — situação não atualizada', pedido.numero)
@@ -112,6 +154,15 @@ def atualizar_situacao_bling(pedido, situacao_id: int) -> bool:
 
     try:
         api = BlingAPI()
+    except BlingAPIError as exc:
+        logger.error('Bling: token indisponível para atualizar pedido %s: %s', pedido.numero, exc)
+        return False
+
+    # Atualiza data do pedido antes de marcar como atendido
+    if situacao_id == SITUACAO_ATENDIDO_SITE:
+        _atualizar_data_pedido_bling(pedido, api)
+
+    try:
         api.atualizar_situacao_pedido(pedido.bling_pedido_id, situacao_id)
         logger.info('Bling: pedido %s → situacao_id=%s', pedido.numero, situacao_id)
         return True
@@ -120,6 +171,36 @@ def atualizar_situacao_bling(pedido, situacao_id: int) -> bool:
         return False
     except Exception as exc:
         logger.error('Bling: exceção ao atualizar situação pedido %s: %s', pedido.numero, exc)
+        return False
+
+
+def _atualizar_data_pedido_bling(pedido, api) -> bool:
+    """
+    Atualiza a data e dataSaida do pedido no Bling para hoje.
+    Usa GET+PUT (Bling v3 não tem PATCH parcial para /pedidos/vendas).
+    Falha silenciosa: se algo der errado, só loga e não interrompe o fluxo.
+    """
+    try:
+        resp = api.consultar_pedido_venda(pedido.bling_pedido_id)
+    except BlingAPIError as exc:
+        logger.warning('Bling: não consegui consultar pedido %s p/ atualizar data: %s',
+                       pedido.numero, exc)
+        return False
+
+    atual = resp.get('data') or {}
+    if not atual:
+        return False
+
+    hoje = date.today().isoformat()
+    atual['data']      = hoje
+    atual['dataSaida'] = hoje
+
+    try:
+        api.atualizar_pedido_venda(pedido.bling_pedido_id, atual)
+        logger.info('Bling: data do pedido %s atualizada para %s', pedido.numero, hoje)
+        return True
+    except BlingAPIError as exc:
+        logger.warning('Bling: falha ao atualizar data do pedido %s: %s', pedido.numero, exc)
         return False
 
 
@@ -194,6 +275,54 @@ def emitir_nfe_bling(pedido) -> bool:
     return True
 
 
+# ── Resolução de contato (evita duplicatas no Bling) ─────────────────────────
+
+def _dados_contato_pedido(pedido) -> dict:
+    """Dados atuais do comprador formatados para o Bling (create/update)."""
+    return {
+        'nome':       pedido.nome_completo,
+        'tipoPessoa': 'F',
+        'cpfCnpj':    pedido.cpf,
+        'email':      pedido.email,
+        'telefone':   pedido.telefone or '',
+        'enderecos': [{
+            'geral': {
+                'endereco':    pedido.logradouro,
+                'numero':      pedido.numero_entrega,
+                'complemento': pedido.complemento or '',
+                'bairro':      pedido.bairro,
+                'cep':         pedido.cep_entrega,
+                'municipio':   pedido.cidade,
+                'uf':          pedido.estado,
+            }
+        }],
+    }
+
+
+def _resolver_contato_bling(pedido, api) -> dict:
+    """
+    Busca contato existente no Bling pelo CPF do pedido (match exato).
+    - Se encontrar um contato com o mesmo CPF → retorna {'id': X} e o Bling
+      usa os dados cadastrais desse contato no pedido.
+    - Se NÃO encontrar → retorna os dados completos do pedido para o Bling
+      criar um contato novo.
+
+    Obs.: não fazemos busca por telefone/nome nem PUT no contato existente —
+    a busca por CPF é autoritativa e qualquer "atualização" poderia sobrescrever
+    dados corretos por informação digitada no checkout.
+    """
+    if pedido.cpf:
+        contato_id = api.buscar_contato_por_cpf(pedido.cpf)
+        if contato_id:
+            logger.info('Bling: contato encontrado por CPF (id=%s) — pedido %s',
+                        contato_id, pedido.numero)
+            return {'id': contato_id}
+
+    logger.info('Bling: contato não encontrado por CPF — será criado no pedido %s',
+                pedido.numero)
+    return _dados_contato_pedido(pedido)
+
+
 # ── Redação de PII para logs ──────────────────────────────────────────────────
 
 def _redact_payload_pii(payload: dict) -> dict:
@@ -259,28 +388,104 @@ def _montar_parcelas(pedido) -> list:
     }]
 
 
-def _montar_payload_pedido(pedido) -> dict:
+def _montar_transporte(pedido) -> dict:
+    """
+    Monta o bloco transporte do payload Bling v3.
+    - fretePorConta: 1=FOB (destinatário paga) | 0=CIF (remetente paga — frete grátis)
+    - logistica: "Melhor Envio - Correios" para preencher o campo logística do Bling
+    - volumes: peso e dimensões da caixa padrão D'ELLA
+    """
+    from apps.pagamentos.services.melhorenvio import DIMENSOES_PADRAO
+
+    servico_id = (pedido.frete_servico_id or '').strip()
+    info = MELHOR_ENVIO_SERVICOS.get(servico_id, {})
+    nome_servico = info.get('nome_servico') or (pedido.transportadora or 'PAC')
+    modalidade   = info.get('modalidade') or 1
+
+    # FOB quando cliente paga frete; CIF quando frete é gratuito (≥R$800 ou promoção)
+    frete_valor = float(pedido.frete)
+    frete_por_conta = 1 if frete_valor > 0 else 0
+
+    return {
+        'fretePorConta': frete_por_conta,
+        'frete':         frete_valor,
+        'transportador': {'nome': TRANSPORTADORA_NOME},
+        'logistica':     {'nome': LOGISTICA_NOME_PADRAO},
+        'volumes': [{
+            'servico':    nome_servico,
+            'modalidade': modalidade,
+            'peso':        DIMENSOES_PADRAO['weight'],
+            'altura':      DIMENSOES_PADRAO['height'],
+            'largura':     DIMENSOES_PADRAO['width'],
+            'comprimento': DIMENSOES_PADRAO['length'],
+        }],
+    }
+
+
+def _montar_payload_pedido(pedido, contato: dict) -> dict:
     """Constrói o payload JSON para criar um Pedido de Venda no Bling API v3."""
-    hoje     = date.today().isoformat()
-    prevista = (date.today() + timedelta(days=7)).isoformat()
+    hoje = date.today().isoformat()
 
     itens = []
-    for item in pedido.itens.select_related('produto').all():
-        itens.append({
-            'codigo':    item.sku or item.produto.sku or '',
-            'descricao': item.nome_produto + (f' — {item.variacao_desc}' if item.variacao_desc else ''),
+    qs = pedido.itens.select_related(
+        'produto', 'variacao', 'variacao__cor', 'variacao__tamanho'
+    ).all()
+    for item in qs:
+        # Código Bling: deve bater com o campo "Código" do produto/variação no catálogo Bling.
+        # item.sku é salvo no checkout como variacao.sku_variacao (ex: "4604") — fonte primária.
+        # bling_variacao_id é o ID interno numérico do Bling e NÃO deve ser usado como codigo.
+        codigo = item.sku or ''
+        if not codigo and item.variacao_id and item.variacao:
+            codigo = item.variacao.sku_variacao or ''
+        if not codigo:
+            codigo = item.produto.sku or ''
+
+        # Descrição no formato Bling: NOME PRODUTO (COR) (TAMANHO)
+        nome_bling = item.nome_produto.upper()
+        if item.variacao_id and item.variacao:
+            if item.variacao.cor_id and item.variacao.cor:
+                nome_bling += f' ({item.variacao.cor.nome.upper()})'
+            if item.variacao.tamanho_id and item.variacao.tamanho:
+                nome_bling += f' ({item.variacao.tamanho.nome.upper()})'
+        elif item.variacao_desc:
+            # fallback: parse variacao_desc salvo ("Branco Polar / Tam. G")
+            for parte in item.variacao_desc.split(' / '):
+                if parte.startswith('Tam. '):
+                    nome_bling += f' ({parte[5:].upper()})'
+                else:
+                    nome_bling += f' ({parte.upper()})'
+
+        item_payload = {
+            'descricao': nome_bling,
             'quantidade': item.quantidade,
             'valor':      float(item.preco_unitario),
             'desconto':   0,
             'unidade':   'PC',
-        })
+        }
+        if codigo:
+            item_payload['codigo'] = codigo
+        # Inclui o ID interno do Bling para vincular ao produto do catálogo.
+        # Prioridade: bling_variacao_id da variação; fallback para bling_id do produto pai.
+        bling_produto_id = None
+        if item.variacao_id and item.variacao and item.variacao.bling_variacao_id:
+            try:
+                bling_produto_id = int(item.variacao.bling_variacao_id)
+            except (ValueError, TypeError):
+                pass
+        if not bling_produto_id and item.produto and item.produto.bling_id:
+            try:
+                bling_produto_id = int(item.produto.bling_id)
+            except (ValueError, TypeError):
+                pass
+        if bling_produto_id:
+            item_payload['produto'] = {'id': bling_produto_id}
+        itens.append(item_payload)
 
     payload = {
         'numero':            pedido.numero,
         'numeroLoja':        pedido.numero,
         'data':              hoje,
         'dataSaida':         hoje,
-        'dataPrevista':      prevista,
         'total':             float(pedido.total),
         'desconto':          float(pedido.desconto),
         'observacoes':       pedido.observacao_cliente or '',
@@ -290,31 +495,10 @@ def _montar_payload_pedido(pedido) -> dict:
             'unidadeNegocio': {'id': UNIDADE_NEGOCIO_ID},
         },
         'vendedor': {'id': _resolver_vendedor_id(pedido)},
-        'contato': {
-            'nome':       pedido.nome_completo,
-            'tipoPessoa': 'F',
-            'cpfCnpj':    pedido.cpf,
-            'email':      pedido.email,
-            'telefone':   pedido.telefone or '',
-            'enderecos': [{
-                'geral': {
-                    'endereco':    pedido.logradouro,
-                    'numero':      pedido.numero_entrega,
-                    'complemento': pedido.complemento or '',
-                    'bairro':      pedido.bairro,
-                    'cep':         pedido.cep_entrega,
-                    'municipio':   pedido.cidade,
-                    'uf':          pedido.estado,
-                }
-            }],
-        },
+        'contato':  contato,
         'itens':    itens,
         'parcelas': _montar_parcelas(pedido),
-        'transporte': {
-            'fretePorConta': 1,
-            'frete':         float(pedido.frete),
-            'transportadora': {'id': 0},
-        },
+        'transporte': _montar_transporte(pedido),
     }
 
     return payload

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static l10n %}
 
 {% block titulo %}{{ produto.nome }} — Della Instore{% endblock %}
 {% block meta_descricao %}{{ produto.descricao|truncatewords:25 }}{% endblock %}
@@ -82,10 +82,10 @@
       
       <div class="produto-info-preco">
         {% if produto.em_promocao %}
-          <span class="preco-de">R$ {{ produto.preco|floatformat:2 }}</span>
-          <span class="preco-por destaque">R$ {{ produto.preco_promocional|floatformat:2 }}</span>
+          <span class="preco-de">R$ {{ produto.preco|floatformat:"2g" }}</span>
+          <span class="preco-por destaque">R$ {{ produto.preco_promocional|floatformat:"2g" }}</span>
         {% else %}
-          <span class="preco-por destaque">R$ {{ produto.preco|floatformat:2 }}</span>
+          <span class="preco-por destaque">R$ {{ produto.preco|floatformat:"2g" }}</span>
         {% endif %}
         {% if produto.parcelamento_texto %}
           <span class="preco-parcelamento">{{ produto.parcelamento_texto }}</span>
@@ -148,12 +148,23 @@
           <button class="qty-btn" id="qty-mais" aria-label="Aumentar quantidade">+</button>
         </div>
 
+        <p id="aviso-variacao" class="hidden" style="color:#c0392b;font-size:.85rem;margin:.25rem 0 .5rem;font-weight:500;"></p>
+
         <button class="btn-primario btn-comprar"
                 id="btn-adicionar-carrinho"
                 data-produto-id="{{ produto.pk }}"
+                data-preco="{{ produto.preco_atual|unlocalize }}"
                 aria-label="Adicionar {{ produto.nome }} ao carrinho">
-          <i class="far fa-shopping-bag"></i>
+          <i class="fas fa-bag-shopping"></i>
           Adicionar ao carrinho
+        </button>
+
+        <button class="btn-primario btn-comprar-agora"
+                id="btn-comprar-agora"
+                data-produto-id="{{ produto.pk }}"
+                aria-label="Comprar {{ produto.nome }} agora">
+          <i class="fas fa-bolt"></i>
+          Comprar agora
         </button>
       </div>
 
@@ -161,10 +172,22 @@
               data-wishlist-id="{{ produto.pk }}"
               id="btn-wishlist-detalhe">
         <i class="{% if na_wishlist %}fas{% else %}far{% endif %} fa-heart"></i>
-        {% if na_wishlist %}Salvo na wishlist{% else %}Salvar na wishlist{% endif %}
+        {% if na_wishlist %}Salvo na Lista de Desejos{% else %}Adicionar à Lista de Desejos{% endif %}
       </button>
 
       
+      <!-- Calcule o frete -->
+      <div class="frete-produto">
+        <p class="frete-produto-label">Calcule o Frete</p>
+        <div class="frete-produto-row">
+          <input type="text" id="frete-produto-cep" placeholder="00000-000"
+                 maxlength="9" inputmode="numeric" autocomplete="postal-code"
+                 class="frete-produto-cep-input" aria-label="CEP de entrega">
+          <button id="frete-produto-btn" class="frete-produto-btn">Consultar</button>
+        </div>
+        <div id="frete-produto-resultado"></div>
+      </div>
+
       <div class="produto-info-desc">
         <button class="acordeao-btn" aria-expanded="true" data-acordeao="desc">
           Descrição <i class="fas fa-chevron-up"></i>
@@ -191,7 +214,6 @@
         </button>
         <div class="acordeao-conteudo" id="acordeao-entrega">
           <ul class="info-lista">
-            <li><i class="fas fa-truck"></i> Frete calculado no checkout</li>
             <li><i class="fas fa-undo-alt"></i> Trocas em até 7 dias após o recebimento</li>
             <li><i class="fas fa-lock"></i> Compra 100% segura e protegida</li>
           </ul>
@@ -245,7 +267,7 @@
   <section class="relacionados-secao" aria-labelledby="titulo-relacionados">
     <div class="relacionados-inner">
       <p class="subtitulo-secao">Você também pode gostar</p>
-      <h2 class="titulo-secao" id="titulo-relacionados">Peças relacionadas</h2>
+      <h2 class="titulo-secao" id="titulo-relacionados">Peças Relacionadas</h2>
 
       <div class="relacionados-grid">
         {% for p in relacionados %}
@@ -263,10 +285,10 @@
             <a href="{{ p.get_absolute_url }}" class="produto-card-nome">{{ p.nome }}</a>
             <div class="produto-card-preco">
               {% if p.em_promocao %}
-                <span class="preco-de">R$ {{ p.preco|floatformat:2 }}</span>
-                <span class="preco-por">R$ {{ p.preco_promocional|floatformat:2 }}</span>
+                <span class="preco-de">R$ {{ p.preco|floatformat:"2g" }}</span>
+                <span class="preco-por">R$ {{ p.preco_promocional|floatformat:"2g" }}</span>
               {% else %}
-                <span class="preco-por">R$ {{ p.preco|floatformat:2 }}</span>
+                <span class="preco-por">R$ {{ p.preco|floatformat:"2g" }}</span>
               {% endif %}
             </div>
           </div>
@@ -340,27 +362,73 @@ document.addEventListener('DOMContentLoaded', () => {
   const temCores    = document.querySelectorAll('.variacao-cor').length > 0;
   const temTamanhos = document.querySelectorAll('.variacao-tamanho').length > 0;
 
-  // Atualiza o ID da variação selecionada a partir da combinação cor+tam atual
+  // Atualiza o ID da variação selecionada e limita o qty ao estoque disponível
   function resolverVariacao() {
     const corKey = corSelecionadaId  || 'null';
     const tamKey = tamSelecionadoId  || 'null';
     const entry  = variacoesMap[`${corKey}_${tamKey}`];
     variacaoSelecionadaId = entry ? entry.id : null;
+
+    if (qtyInput) {
+      const maxQty = (entry && entry.estoque > 0) ? entry.estoque : 10;
+      qtyInput.max = maxQty;
+      if (parseInt(qtyInput.value) > maxQty) qtyInput.value = maxQty;
+    }
   }
 
   // Habilita/desabilita botões de tamanho conforme a cor selecionada
   function atualizarDisponibilidadeTamanhos() {
     document.querySelectorAll('.variacao-tamanho').forEach(btn => {
       const tamId = btn.dataset.tamanhoId;
-      const corKey = corSelecionadaId || 'null';
-      const entry  = variacoesMap[`${corKey}_${tamId}`];
 
+      // Sem cor selecionada → todos os tamanhos habilitados
+      if (!corSelecionadaId) {
+        btn.classList.remove('esgotado');
+        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
+        btn.title = '';
+        return;
+      }
+
+      const entry = variacoesMap[`${corSelecionadaId}_${tamId}`];
       if (entry === undefined) {
-        // Combinação não existe para esta cor
         btn.classList.add('esgotado');
         btn.disabled = true;
         btn.setAttribute('aria-disabled', 'true');
         btn.title = 'Indisponível nesta cor';
+      } else if (!entry.disponivel) {
+        btn.classList.add('esgotado');
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+        btn.title = 'Esgotado';
+      } else {
+        btn.classList.remove('esgotado');
+        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
+        btn.title = '';
+      }
+    });
+  }
+
+  // Habilita/desabilita botões de cor conforme o tamanho selecionado
+  function atualizarDisponibilidadeCores() {
+    document.querySelectorAll('.variacao-cor').forEach(btn => {
+      const corId  = btn.dataset.corId;
+      const tamKey = tamSelecionadoId || 'null';
+      // Se nenhum tamanho selecionado, habilita todas as cores
+      if (!tamSelecionadoId) {
+        btn.classList.remove('esgotado');
+        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
+        btn.title = '';
+        return;
+      }
+      const entry = variacoesMap[`${corId}_${tamKey}`];
+      if (entry === undefined) {
+        btn.classList.add('esgotado');
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+        btn.title = 'Indisponível neste tamanho';
       } else if (!entry.disponivel) {
         btn.classList.add('esgotado');
         btn.disabled = true;
@@ -388,11 +456,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Inicializa estado de disponibilidade
-  if (temCores) {
-    // Com cor não selecionada, mostra todos os tamanhos habilitados
-    // (o mapa pode ter entradas "null_tamId" para produtos sem cor)
-    atualizarDisponibilidadeTamanhos();
+  // Se tamanho selecionado não cobre a cor já escolhida, deseleciona cor
+  function validarCorAposTamanhoMudar() {
+    if (!corSelecionadaId) return;
+    const tamKey = tamSelecionadoId || 'null';
+    const entry  = variacoesMap[`${corSelecionadaId}_${tamKey}`];
+    if (!entry || !entry.disponivel) {
+      const btnCor = document.querySelector(`.variacao-cor.selecionado`);
+      if (btnCor) btnCor.classList.remove('selecionado');
+      corSelecionadaId = null;
+      if (labelCorSel) labelCorSel.textContent = 'Selecione';
+    }
   }
 
   // ── Cores ─────────────────────────────────────────────────────────────
@@ -414,6 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       atualizarDisponibilidadeTamanhos();
+      atualizarDisponibilidadeCores();
       validarTamanhoAposCorMudar();
       resolverVariacao();
     });
@@ -436,6 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (labelTamSel) labelTamSel.textContent = btn.dataset.tamanho;
       }
 
+      atualizarDisponibilidadeCores();
+      validarCorAposTamanhoMudar();
       resolverVariacao();
     });
   });
@@ -451,14 +528,30 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   btnMais?.addEventListener('click', () => {
-    const v = parseInt(qtyInput.value);
-    if (v < 10) qtyInput.value = v + 1;
+    const v   = parseInt(qtyInput.value);
+    const max = parseInt(qtyInput.max) || 10;
+    if (v < max) qtyInput.value = v + 1;
   });
 
   // ── Adicionar ao carrinho (com quantidade e variação) ──────────────────
   const btnComprar = document.getElementById('btn-adicionar-carrinho');
 
   btnComprar?.addEventListener('click', async () => {
+    // Valida seleção obrigatória de cor e tamanho
+    if (temCores && !corSelecionadaId) {
+      const aviso = document.getElementById('aviso-variacao');
+      if (aviso) { aviso.textContent = 'Selecione uma cor antes de continuar.'; aviso.classList.remove('hidden'); }
+      document.querySelector('.variacao-cor')?.closest('.produto-cores')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (temTamanhos && !tamSelecionadoId) {
+      const aviso = document.getElementById('aviso-variacao');
+      if (aviso) { aviso.textContent = 'Selecione um tamanho antes de continuar.'; aviso.classList.remove('hidden'); }
+      document.querySelector('.variacao-tamanho')?.closest('.produto-tamanhos')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (document.getElementById('aviso-variacao')) document.getElementById('aviso-variacao').classList.add('hidden');
+
     const produtoId  = btnComprar.dataset.produtoId;
     const quantidade = parseInt(qtyInput?.value || 1);
     const csrfToken  = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
@@ -483,18 +576,80 @@ document.addEventListener('DOMContentLoaded', () => {
       const dados = await res.json();
 
       if (dados.status === 'ok') {
-        // Atualiza badge e drawer
         atualizarDrawer(dados);
-
         btnComprar.innerHTML = '<i class="fas fa-check"></i> Adicionado!';
         setTimeout(() => {
           btnComprar.innerHTML = textoOriginal;
           btnComprar.disabled = false;
         }, 2000);
+      } else {
+        const aviso = document.getElementById('aviso-variacao');
+        if (aviso) {
+          aviso.textContent = dados.mensagem || 'Estoque insuficiente.';
+          aviso.classList.remove('hidden');
+        }
+        btnComprar.innerHTML = textoOriginal;
+        btnComprar.disabled = false;
       }
     } catch (err) {
       btnComprar.innerHTML = textoOriginal;
       btnComprar.disabled  = false;
+    }
+  });
+
+  // ── Comprar agora (adiciona e vai direto pro checkout) ──────────────────
+  const btnComprarAgora = document.getElementById('btn-comprar-agora');
+
+  btnComprarAgora?.addEventListener('click', async () => {
+    if (temCores && !corSelecionadaId) {
+      const aviso = document.getElementById('aviso-variacao');
+      if (aviso) { aviso.textContent = 'Selecione uma cor antes de continuar.'; aviso.classList.remove('hidden'); }
+      return;
+    }
+    if (temTamanhos && !tamSelecionadoId) {
+      const aviso = document.getElementById('aviso-variacao');
+      if (aviso) { aviso.textContent = 'Selecione um tamanho antes de continuar.'; aviso.classList.remove('hidden'); }
+      return;
+    }
+    if (document.getElementById('aviso-variacao')) document.getElementById('aviso-variacao').classList.add('hidden');
+
+    const produtoId  = btnComprarAgora.dataset.produtoId;
+    const quantidade = parseInt(qtyInput?.value || 1);
+    const csrfToken  = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+    btnComprarAgora.disabled = true;
+    const textoOriginal = btnComprarAgora.innerHTML;
+    btnComprarAgora.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Indo para o checkout...';
+
+    try {
+      const res = await fetch(`/carrinho/adicionar/${produtoId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({
+          variacao_id: variacaoSelecionadaId || '',
+          quantidade:  quantidade,
+        }),
+      });
+
+      const dados = await res.json();
+
+      if (dados.status === 'ok') {
+        window.location.href = '/carrinho/checkout/';
+      } else {
+        const aviso = document.getElementById('aviso-variacao');
+        if (aviso && dados.mensagem) {
+          aviso.textContent = dados.mensagem;
+          aviso.classList.remove('hidden');
+        }
+        btnComprarAgora.innerHTML = textoOriginal;
+        btnComprarAgora.disabled = false;
+      }
+    } catch (err) {
+      btnComprarAgora.innerHTML = textoOriginal;
+      btnComprarAgora.disabled  = false;
     }
   });
 
@@ -624,5 +779,89 @@ function atualizarDrawerGlobal(dados) {
     }
   }
 }
+
+// ── Calculador de frete na página de produto ──────────────────────────────
+(function() {
+  const cepInput  = document.getElementById('frete-produto-cep');
+  const btn       = document.getElementById('frete-produto-btn');
+  const resultado = document.getElementById('frete-produto-resultado');
+  const btnComprar = document.getElementById('btn-adicionar-carrinho');
+
+  if (!cepInput || !btn) return;
+
+  // Máscara CEP: 00000-000
+  cepInput.addEventListener('input', () => {
+    let v = cepInput.value.replace(/\D/g, '').slice(0, 8);
+    if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5);
+    cepInput.value = v;
+  });
+
+  function dataEntrega(prazo) {
+    const d = new Date();
+    d.setDate(d.getDate() + parseInt(prazo || 0));
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  }
+
+  async function consultar() {
+    const cep = cepInput.value.replace(/\D/g, '');
+    if (cep.length !== 8) {
+      resultado.innerHTML = '<p class="frete-erro">Informe um CEP válido (8 dígitos).</p>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '...';
+    resultado.innerHTML = '';
+
+    const preco = btnComprar ? (btnComprar.dataset.preco || '0') : '0';
+    const qty   = document.getElementById('qty-input') ? document.getElementById('qty-input').value : '1';
+
+    try {
+      // Busca endereço e frete em paralelo
+      const [resEnd, resFrete] = await Promise.all([
+        fetch(`/carrinho/cep/${cep}/`),
+        fetch(`/carrinho/frete/?cep=${cep}&preco=${preco}&quantidade=${qty}`),
+      ]);
+      const dadosEnd   = await resEnd.json();
+      const dadosFrete = await resFrete.json();
+
+      let html = '';
+
+      if (dadosEnd.status === 'ok' && (dadosEnd.logradouro || dadosEnd.cidade)) {
+        const end = [dadosEnd.logradouro, dadosEnd.bairro, dadosEnd.cidade, dadosEnd.estado]
+          .filter(Boolean).join(', ');
+        html += `<p class="frete-endereco"><i class="fas fa-location-dot"></i> ${end}</p>`;
+      }
+
+      if (dadosFrete.status === 'ok' && dadosFrete.opcoes.length) {
+        html += '<ul class="frete-opcoes">';
+        dadosFrete.opcoes.forEach(op => {
+          const preco = parseFloat(op.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          html += `
+            <li class="frete-opcao">
+              <div>
+                <span class="frete-opcao-nome">${op.empresa} ${op.nome} — Prazo contado a partir da postagem.</span>
+                <span class="frete-opcao-data">${dataEntrega(op.prazo)}</span>
+              </div>
+              <span class="frete-opcao-preco">R$&nbsp;${preco}</span>
+            </li>`;
+        });
+        html += '</ul>';
+      } else if (dadosFrete.status !== 'ok') {
+        html += `<p class="frete-erro">${dadosFrete.erro || 'Não foi possível calcular o frete.'}</p>`;
+      }
+
+      resultado.innerHTML = html;
+    } catch {
+      resultado.innerHTML = '<p class="frete-erro">Erro ao consultar. Tente novamente.</p>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Consultar';
+    }
+  }
+
+  btn.addEventListener('click', consultar);
+  cepInput.addEventListener('keydown', e => { if (e.key === 'Enter') consultar(); });
+})();
 </script>
 {% endblock %}

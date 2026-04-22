@@ -20,16 +20,10 @@
     <form method="post" novalidate>
       {% csrf_token %}
 
-      <div class="conta-grid-2">
-        <div class="conta-campo">
-          <label class="conta-label">Nome *</label>
-          {{ form.nome }}
-          {% if form.nome.errors %}<span class="conta-erro">{{ form.nome.errors.0 }}</span>{% endif %}
-        </div>
-        <div class="conta-campo">
-          <label class="conta-label">Sobrenome</label>
-          {{ form.sobrenome }}
-        </div>
+      <div class="conta-campo">
+        <label class="conta-label">Nome completo *</label>
+        {{ form.nome }}
+        {% if form.nome.errors %}<span class="conta-erro">{{ form.nome.errors.0 }}</span>{% endif %}
       </div>
 
       <div class="conta-campo">
@@ -65,12 +59,12 @@
         </div>
       </div>
 
-      <div class="conta-campo">
+      <div class="conta-campo conta-campo-termos">
         <label class="conta-lembrar conta-lembrar--termos">
           {{ form.aceitar_termos }}
-          <span>Concordo com os <a href="#" class="conta-link">Termos de Uso</a> e a <a href="#" class="conta-link">Política de Privacidade</a></span>
+          <span>Concordo com os <a href="{% url 'produtos:termos_uso' %}" class="conta-link" target="_blank">Termos de Uso</a> e a <a href="{% url 'produtos:politica_privacidade' %}" class="conta-link" target="_blank">Política de Privacidade</a></span>
         </label>
-        {% if form.aceitar_termos.errors %}<span class="conta-erro">{{ form.aceitar_termos.errors.0 }}</span>{% endif %}
+        {% if form.aceitar_termos.errors %}<span class="conta-erro conta-erro--centro">{{ form.aceitar_termos.errors.0 }}</span>{% endif %}
       </div>
 
       <button type="submit" class="btn-conta-primario">Criar conta</button>

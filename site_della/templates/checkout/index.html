@@ -331,29 +331,34 @@
 
         <div class="checkout-resumo-itens">
           {% for item in itens %}
-          <div class="resumo-item">
+          <div class="resumo-item" data-chave="{{ item.chave }}">
             <div class="resumo-item-foto">
               {% if item.imagem %}
                 <img src="{{ item.imagem }}" alt="{{ item.nome }}" loading="lazy">
               {% else %}
                 <div class="resumo-item-sem-foto"></div>
               {% endif %}
-              <span class="resumo-item-qty">{{ item.quantidade }}</span>
             </div>
             <div class="resumo-item-info">
               <p class="resumo-item-nome">{{ item.nome }}</p>
               {% if item.variacao_desc %}
                 <p class="resumo-item-var">{{ item.variacao_desc }}</p>
               {% endif %}
+              <div class="resumo-item-qty-ctrl">
+                <button type="button" class="resumo-qty-btn" data-acao="menos">−</button>
+                <span class="resumo-qty-valor">{{ item.quantidade }}</span>
+                <button type="button" class="resumo-qty-btn" data-acao="mais">+</button>
+                <button type="button" class="resumo-qty-btn resumo-remover-btn" data-acao="remover" title="Remover item"><i class="fas fa-trash-alt"></i></button>
+              </div>
             </div>
-            <p class="resumo-item-preco">R$ {{ item.subtotal|floatformat:2 }}</p>
+            <p class="resumo-item-preco">R$ <span class="resumo-item-subtotal">{{ item.subtotal|floatformat:"2g" }}</span></p>
           </div>
           {% endfor %}
         </div>
 
         <div class="checkout-resumo-linha">
           <span>Subtotal</span>
-          <span>R$ {{ subtotal|floatformat:2 }}</span>
+          <span id="resumo-subtotal-valor">R$ {{ subtotal|floatformat:"2g" }}</span>
         </div>
         <div class="checkout-resumo-linha hidden" id="resumo-desconto-linha" style="color:#27ae60;">
           <span>Desconto</span>
@@ -365,7 +370,7 @@
         </div>
         <div class="checkout-resumo-total">
           <span>Total</span>
-          <span id="resumo-total">R$ {{ subtotal|floatformat:2 }}</span>
+          <span id="resumo-total">R$ {{ subtotal|floatformat:"2g" }}</span>
         </div>
 
         <div class="checkout-resumo-selos">
@@ -382,11 +387,13 @@
 {% endblock %}
 
 {% block js_extra %}
+{# SDK PagSeguro sempre carregado (independente da chave pública) — PagSeguro deve existir no submit #}
+<script src="https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js"></script>
 <script>
 (function() {
   'use strict';
 
-  const SUBTOTAL = parseFloat('{{ subtotal|floatformat:2 }}'.replace(',', '.'));
+  let SUBTOTAL = parseFloat('{{ subtotal|floatformat:2 }}'.replace(',', '.'));
   window.SUBTOTAL = SUBTOTAL;  // exposto para parcelas.js
   let descontoAtual = 0;
   window._descontoAtualCheckout = 0;
@@ -759,6 +766,11 @@
     const expMonth = (partes[0] || '').trim();
     const expYear  = '20' + (partes[1] || '').trim();
 
+    if (typeof PagSeguro === 'undefined' || typeof PagSeguro.encryptCard !== 'function') {
+      mostrarErroCartao('SDK de pagamento não carregou. Recarregue a página e tente novamente.');
+      return;
+    }
+
     try {
       const { hasErrors, errors, encryptedCard } = PagSeguro.encryptCard({
         publicKey:    '{{ pagseguro_public_key|escapejs }}',
@@ -786,8 +798,65 @@
       this.submit();  // submit real, não dispara este listener novamente
 
     } catch (err) {
-      mostrarErroCartao('Erro ao processar cartão. Tente novamente ou use o Pix.');
+      console.error('PagSeguro.encryptCard error:', err);
+      mostrarErroCartao('Erro ao encriptar cartão: ' + (err?.message || String(err)));
     }
+  });
+
+  // ── Quantidade no resumo (AJAX) ────────────────────────────────────────
+  document.querySelectorAll('.resumo-item').forEach(itemEl => {
+    const chave = itemEl.dataset.chave;
+    const qtyEl = itemEl.querySelector('.resumo-qty-valor');
+    const subtotalEl = itemEl.querySelector('.resumo-item-subtotal');
+
+    itemEl.querySelectorAll('.resumo-qty-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const acao  = btn.dataset.acao;
+        const atual = parseInt(qtyEl.textContent) || 1;
+        const nova  = acao === 'mais' ? atual + 1 : acao === 'remover' ? 0 : atual - 1;
+
+        const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+        try {
+          const res  = await fetch('/carrinho/atualizar/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            body: JSON.stringify({ chave, quantidade: nova }),
+          });
+          const dados = await res.json();
+          if (dados.status !== 'ok') return;
+
+          if (nova <= 0) {
+            itemEl.remove();
+          } else {
+            qtyEl.textContent = nova;
+          }
+
+          // Atualiza subtotal do item
+          const itemDados = (dados.itens || []).find(i => i.chave === chave);
+          if (itemDados && subtotalEl) {
+            subtotalEl.textContent = parseFloat(itemDados.subtotal).toFixed(2).replace('.', ',');
+          }
+
+          // Atualiza subtotal e total do resumo
+          const novoSubtotal = parseFloat(dados.total_valor) || 0;
+          SUBTOTAL = novoSubtotal;          // atualiza let local usada por atualizarResumoTotal()
+          window.SUBTOTAL = novoSubtotal;   // atualiza global usada por parcelas.js
+
+          const subtotalResumo = document.getElementById('resumo-subtotal-valor');
+          if (subtotalResumo) subtotalResumo.textContent = 'R$ ' + novoSubtotal.toFixed(2).replace('.', ',');
+
+          // Recalcula total via função central (lê id_valor_frete e descontoAtual)
+          atualizarResumoTotal();
+
+          // Atualiza badge do carrinho na navbar
+          const badge = document.querySelector('.badge-carrinho');
+          if (badge) badge.textContent = dados.total_itens;
+
+          // Re-calcula parcelas se cartão ativo
+          if (window._atualizarParcelasCheckout) window._atualizarParcelasCheckout();
+        } catch (e) {}
+      });
+    });
   });
 
   // Se houver erros do servidor, reabrir na etapa 1
@@ -836,7 +905,5 @@
   window._atualizarParcelasCheckout = atualizarParcelas;
 })();
 </script>
-{# SDK PagSeguro para encriptação do cartão no frontend #}
-<script src="https://assets.pagseguro.com.br/checkout-sdk/js/direct-checkout.js"></script>
 {% endif %}
 {% endblock %}

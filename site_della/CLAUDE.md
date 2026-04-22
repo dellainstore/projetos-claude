@@ -82,6 +82,7 @@ source venv/bin/activate
   - `produtos.0008_corpadrao_codigo_hex_secundario_produtocorfoto` (CorPadrao.codigo_hex_secundario + ProdutoCorFoto)
   - `conteudo.0007_paginaestatica_imagem_slugs` (PaginaEstatica.imagem + slug choices: perguntas_frequentes, meios_pagamento)
   - `pedidos.0004_codigovendedor_cupom_pedido_codigo_vendedor_str_and_more` (Cupom, CodigoVendedor, FK em Pedido)
+  - `pedidos.0006_alter_pedido_frete_servico_id` — `frete_servico_id` max_length 10→20 (fix crash PIX checkout quando ID do serviço excedia o limite)
 
 ```bash
 source venv/bin/activate
@@ -237,9 +238,20 @@ sudo nginx -t && sudo systemctl reload nginx
 
 | Evento | situacao_id | Nome no Bling |
 |---|---|---|
-| Pedido criado no checkout | `6` | Em andamento - Site |
-| Pagamento confirmado (cartão/pix) | `18723` | Atendido - Site |
-| Pedido cancelado | `12` | Cancelado |
+| Pedido criado no checkout | `754756` | Em andamento - Site (custom D'ELLA, verificado via API — pedido 9638) |
+| Pagamento confirmado (cartão/pix) | `18723` | Atendido - Site (custom D'ELLA) |
+| Pedido cancelado | `12` | Cancelado (padrão Bling) |
+
+**IDs de situação observados via API (referência):**
+- `754756` = Em andamento - Site (custom) ← usado no checkout
+- `18723` = Atendido - Site (custom) ← usado no pagamento confirmado
+- `15762` = situação custom antiga (pedidos anteriores)
+- `15` = Em andamento (padrão Bling)
+- `9` = Atendido (padrão Bling)
+- `12` = Cancelado (padrão Bling)
+- `6` = Em aberto (padrão Bling — estado inicial de criação, **não usar**)
+
+**Importante:** o Bling ignora o campo `situacao` no POST de criação e cria tudo como "Em aberto" (ID 6). Por isso o código faz um PATCH separado logo após a criação para forçar "Em andamento - Site". Se o PATCH falhar, o pedido fica como "Em aberto" — verificar logs do gunicorn.
 
 ### IDs fixos
 ```python
@@ -271,6 +283,32 @@ FORMA_PAG_CARTAO = {
     5: 7128331,   # PAG SEGURO 5x
 }
 ```
+
+### Descrição dos itens no Bling
+
+Formato: `NOME PRODUTO (COR) (TAMANHO)` — ex: `BODY BASIC ANACA (BRANCO POLAR) (P)`
+
+Código: lê diretamente das FKs `variacao.cor.nome` e `variacao.tamanho.nome` (uppercase). Se a variação foi deletada, faz fallback parseando `variacao_desc` salvo no `ItemPedido`. SKU da variação vai no campo `codigo`.
+
+### Transporte (bloco `transporte` no payload)
+
+```python
+{
+    'fretePorConta': 1,          # 1=FOB (cliente paga) | 0=CIF (frete grátis ≥R$800)
+    'frete':         29.78,
+    'transportador': {'nome': 'CORREIOS'},
+    'logistica':     {'nome': 'Melhor Envio - Correios'},
+    'volumes': [{
+        'servico':    'PAC',     # ou 'SEDEX'
+        'modalidade': 1,         # 1=PAC, 2=SEDEX
+        'peso':        0.5,      # DIMENSOES_PADRAO da caixa D'ELLA
+        'altura':      8,
+        'largura':     17,
+        'comprimento': 28,
+    }]
+}
+```
+`fretePorConta` é calculado automaticamente: `1` quando `pedido.frete > 0`, `0` quando frete grátis.
 
 ### Parcelas — sempre 1 (antecipação)
 Mesmo que o cliente parcele em 2–5x, lança **apenas 1 parcela** no Bling (valor total), pois a loja usa antecipação e recebe tudo à vista. A observação da parcela inclui o código de autorização PagSeguro (`pedido.gateway_id`):
@@ -360,6 +398,85 @@ Seções em ordem:
 ---
 
 ## Admin Painel (/painel/)
+
+### Tema do Painel Admin (design premium D'ELLA)
+
+O painel usa um tema completamente customizado, com identidade visual da marca D'ELLA (preto + dourado, fontes Playfair Display e Jost).
+
+#### Arquivos principais
+
+| Arquivo | Função |
+|---|---|
+| `static/admin/css/della_admin.css` | Todo o CSS customizado do painel — cores, tipografia, cards, sidebar, tabelas, botões |
+| `templates/admin/base_site.html` | Template base customizado: remove dark mode, injeta fontes, CSS e script de scroll |
+| `templates/admin/index.html` | Dashboard com cards organizados por seção |
+| `templates/admin/conteudo/instagrampost/change_list.html` | Listagem customizada com botões de importação do Instagram |
+
+#### Como funciona o tema (decisões arquiteturais importantes)
+
+**Dark mode desabilitado:**
+- Django Admin 5.x carrega `dark_mode.css` via `{% block dark-mode-vars %}` no `base.html`
+- Esse arquivo aplica `@media (prefers-color-scheme: dark)` que sobrescreve as variáveis CSS e escurece tudo quando o navegador do usuário está no tema escuro
+- **Solução:** `base_site.html` sobrescreve `{% block dark-mode-vars %}` como vazio, removendo completamente `dark_mode.css` e `theme.js` do Django. O painel fica sempre claro, independente do tema do navegador
+
+**Variáveis CSS:**
+- O `della_admin.css` redefine as variáveis nativas do Django (ex: `--body-bg`, `--primary`, `--darkened-bg`) no `:root` — elas são consumidas pelos próprios CSS do Django (base.css, nav_sidebar.css, changelists.css), então redefinindo aqui controlamos tudo
+
+**Botão theme-toggle oculto:**
+- Django ainda injeta o botão `<button class="theme-toggle">` no header via `color_theme_toggle.html`
+- Como removemos `dark_mode.css`, esse botão fica sem estilos e aparece como uma caixa branca no header
+- Corrigido com `.theme-toggle { display: none !important; }` no `della_admin.css`
+
+**Sidebar sempre branca:**
+- `#nav-sidebar { background-color: var(--da-white) !important; }`
+- `#nav-sidebar * { background-color: transparent !important; }` — reseta todos os filhos
+- Links "+ Adicionar" da sidebar **ocultos**: `#nav-sidebar .module td { display: none !important; }` — botão disponível dentro de cada página
+- Tabelas internas com `table-layout: fixed; width: 100%` para as captions ficarem em linha única
+
+**Ícone "+" nos botões de adicionar (object-tools):**
+- Django aplica `background-image: url(tooltag-add.svg)` com `padding-right: 26px` em `.addlink`
+- Nosso CSS sobrescreve o padding, fazendo o ícone sobrepor o texto
+- Corrigido com `background-image: none !important; padding-right: 0.9rem !important` em `ul.object-tools li a.addlink`
+
+**Scroll do menu lateral persistido em TODAS as páginas:**
+- `base_site.html` tem um `<script>` inline que salva/restaura `#nav-sidebar.scrollTop` via `sessionStorage`
+- Salva ao clicar em qualquer link da sidebar (`click`) e ao sair da página (`beforeunload`)
+- Antes existia só em `admin_linhas.js` (que só carrega nas páginas com `class Media` no admin), causando reset ao navegar para páginas sem o script
+
+**Barra de pesquisa centralizada:**
+- `#toolbar { padding: 0.6rem 1rem !important; display: flex; align-items: center; }`
+- `#changelist-search { display: flex; align-items: center; gap: 0.5rem; }`
+
+#### Botões por linha (padrão unificado)
+
+Todos os admins usam classes CSS em vez de estilos inline:
+- `della-btn-edit` — botão dourado (editar)
+- `della-btn-delete` — botão borda vermelha (excluir)
+
+```python
+from django.utils.html import format_html
+from django.urls import reverse
+
+def acoes_linha(self, obj):
+    edit_url   = reverse('admin:APP_MODEL_change', args=[obj.pk])
+    delete_url = reverse('admin:APP_MODEL_delete', args=[obj.pk])
+    return format_html(
+        '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+        '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir?\')">✕ Excluir</a>',
+        edit_url, delete_url,
+    )
+acoes_linha.short_description = 'Ações'
+```
+
+#### Após qualquer mudança no CSS do admin
+
+```bash
+cd /var/www/della-sistemas/projetos-claude/site_della && source venv/bin/activate
+python manage.py collectstatic --noinput --settings=core.settings.production
+kill -HUP $(ps aux | grep gunicorn | grep della_site | grep -v grep | head -1 | awk '{print $2}')
+```
+
+O WhiteNoise usa hash no nome do arquivo (`della_admin.<hash>.css`) — cada mudança gera hash novo e força o browser a baixar a versão atualizada.
 
 ### Produtos → Cores padrão
 Cadastre aqui todas as cores (nome + hex). Use ANTES de criar variações de produtos.
@@ -520,6 +637,116 @@ Colunas: `nome, categoria, descricao, composicao, genero, preco, preco_promocion
 | Nginx | Bloqueia .env, .git, .sql; scripts em /media/; headers de segurança |
 | `production.py` | HTTPS obrigatório, HSTS, cookies seguros. **`CSRF_COOKIE_HTTPONLY = False`** (necessário para AJAX ler o csrftoken) |
 | ORM Django | Zero SQL raw |
+
+---
+
+## Auditoria de Segurança — 2026-04-20 (Pós-lançamento, primeiros clientes reais)
+
+Auditoria completa rodada após o site começar a receber clientes reais colocando dados pessoais (nome, CPF, e-mail, endereço, telefone, senha).
+
+### ✅ Resultado: Nenhum vazamento identificado. Postura de segurança sólida.
+
+| Verificação | Resultado |
+|---|---|
+| `.env` rastreado no git | ❌ Não (apenas `.env.example` com placeholders) |
+| `.gitignore` bloqueia `.env`, `.env.*` | ✅ OK (exceção para `.env.example`) |
+| Permissões do `.env` | ✅ `600` (só owner lê/escreve) |
+| Credenciais hardcoded em `.py`/`.js` commitados | ✅ Nenhuma encontrada |
+| Histórico git com `.env` real | ✅ Nunca commitado |
+| `python manage.py check --deploy` | ✅ 0 issues |
+| HSTS 1 ano + preload | ✅ Ativo (`max-age=31536000; includeSubDomains; preload`) |
+| `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` | ✅ True |
+| `SESSION_COOKIE_HTTPONLY` | ✅ True |
+| `X-Frame-Options: DENY` | ✅ Ativo (Django + Nginx) |
+| `SECURE_CONTENT_TYPE_NOSNIFF` | ✅ True |
+| `SECURE_REFERRER_POLICY` | ✅ `strict-origin-when-cross-origin` |
+| CSP com domínios explícitos | ✅ Ativa (restringe `connect-src` a PagBank) |
+| Django `debug=False` em produção | ✅ Confirmado |
+| Nginx bloqueia `.env/.git/.sql/.bak/.log` | ✅ Todas retornam 403 |
+| Nginx bloqueia execução de scripts em `/media/` | ✅ `deny all` para `.php/.py/.pl/.sh/.cgi` |
+| `/media/` listagem direta | ✅ 403 Forbidden |
+| SQL raw no código | ✅ Nenhum — 100% ORM |
+| `eval/exec/pickle.loads/yaml.load` com input externo | ✅ Nenhum |
+| `django-axes` brute force | ✅ 5 tentativas / 1h lockout por IP+user |
+| Magic-bytes em uploads de imagem | ✅ `validate_image_upload` aplicado em conteudo e produtos |
+| CPF/e-mail/endereço em logs | ✅ `_redact_payload_pii` em Bling (S5) |
+| Webhook PagBank com verificação de origem | ✅ Reconsulta autenticada `GET /orders/{id}` (C3) |
+| Webhook Bling com HMAC | ✅ Ativo — valida `X-Bling-Signature-256` com `BLING_CLIENT_SECRET` (Bling v3) |
+| IDOR em detalhe de pedido | ✅ `_pode_acessar_pedido` unificado (S1) |
+| Dados de cartão no backend | ✅ Tokenização frontend — PAN nunca toca servidor (S3) |
+| Tokens Bling mascarados no admin | ✅ `access_token_mascarado` / `refresh_token_mascarado` (S4) |
+| OAuth Bling valida `state` | ✅ `secrets.token_urlsafe` + `compare_digest` (C4) |
+| Superusers da loja | ✅ Apenas 1 (`admin@dellainstore.com.br`) |
+| Access attempts bloqueados (axes) | ✅ 0 bloqueios ativos no momento |
+| URLs comuns de ataque (`/.env`, `/.git/config`, `/wp-admin`) | ✅ Todas retornam 403/404 |
+
+### ✅ Itens de atenção — TODOS RESOLVIDOS em 2026-04-20
+
+**1. `core/settings/django_default.py` — REMOVIDO** ✅
+- Era arquivo órfão gerado pelo `django-admin startproject` com `SECRET_KEY = 'django-insecure-...'` e `DEBUG = True`.
+- `git grep` confirmou que não era referenciado em nenhum lugar.
+- Removido via `git rm core/settings/django_default.py`.
+- Mantidos apenas `base.py`, `production.py`, `development.py`.
+
+**2. Webhook Bling v3 — HMAC CONFIGURADO** ✅
+- **Descoberta importante (2026-04-20):** Bling v3 **não usa segredo HMAC separado**. A API assina automaticamente cada POST com o `client_secret` do próprio app OAuth. `BLING_WEBHOOK_SECRET` foi removido (settings + .env) porque não existe no Bling v3.
+- **Validação aplicada em `apps/bling/views.py → webhook`:**
+  - Header: `X-Bling-Signature-256` (formato `sha256=<hex>`)
+  - Algoritmo: `HMAC-SHA256`
+  - Chave: `settings.BLING_CLIENT_SECRET` (o mesmo usado no OAuth)
+  - Requests sem assinatura válida → `401 Unauthorized`
+- **Ação pendente no painel Bling (developer.bling.com.br):** cadastrar servidor em **Webhooks → Adicionar** apontando para `https://novo.dellainstore.com.br/bling/webhook/`. Não há campo de "chave secreta" — o Bling assina automaticamente.
+- **Referência oficial:** https://developer.bling.com.br/webhooks
+
+**3. Sanitização de `|safe` em páginas estáticas — IMPLEMENTADA** ✅
+- Novo filter `{% load safe_html %}{{ ... |clean_html }}` em `apps/core_utils/templatetags/safe_html.py`.
+- Usa `bleach.clean()` + `CSSSanitizer` (do pacote `bleach[css]` via `tinycss2`).
+- Tags permitidas: formatação básica (`p`, `strong`, `em`, `a`, `img`, `h1-h6`, listas, tabelas).
+- CSS inline permitido APENAS com propriedades listadas (`color`, `font-*`, `margin`, `padding`, etc). `url(javascript:...)` é neutralizado para `url([bad url])`.
+- Protocolos aceitos em `href/src`: `http`, `https`, `mailto`, `tel` (bloqueia `javascript:`, `data:`).
+- Templates atualizados: `sobre.html`, `_pagina_base.html`, `guia_tamanhos.html`.
+- `tinycss2==1.5.1` adicionado ao `requirements.txt`.
+- **Testes realizados:** `<script>`, `onclick`, `<iframe>`, `href="javascript:"` e `style="background:url(javascript:...)"` são sanitizados; tags legítimas preservadas.
+
+### Dependências — versões disponíveis
+- `Django 5.1.15 → 5.1.x` (LTS) — atualizar para o último patch da série 5.1 quando disponível; 5.1 recebe security fixes até abril/2028. Não subir para 5.2/6.0 sem regressão testada.
+- `boto3 1.42.88 → 1.42.91` — patch trivial, update seguro (não urgente, o projeto usa pouco).
+- `django-anymail 14 → 15` — major: revisar changelog antes de subir.
+- Nenhuma CVE ativa nas versões atuais (Django 5.1.15 é a patch mais recente da LTS).
+
+**4. `|safe` em templates estáticos (`pagina.conteudo|safe`)**
+- Usado em `home/sobre.html`, `home/_pagina_base.html`, `home/guia_tamanhos.html`.
+- O conteúdo vem de `PaginaEstatica.conteudo` (HTML rich text do admin).
+- **Risco:** XSS se um admin comprometido injetar `<script>`. Mitigado por acesso restrito a staff e LGPD/axes.
+- **Ação opcional:** filtrar o HTML com `bleach` (já no requirements) antes de salvar, permitindo apenas tags seguras.
+
+### Testes efetuados na auditoria
+
+```bash
+# URLs testadas (todas retornam 403/404)
+curl -sI https://novo.dellainstore.com.br/.env           → 403
+curl -sI https://novo.dellainstore.com.br/.git/config    → 403
+curl -sI https://novo.dellainstore.com.br/admin/.env     → 403
+curl -sI https://novo.dellainstore.com.br/wp-admin       → 404
+curl -sI https://novo.dellainstore.com.br/media/         → 403
+
+# Headers de segurança confirmados
+curl -sI https://novo.dellainstore.com.br/ | grep -iE "strict-transport|x-frame|csp|referrer"
+# → Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+# → X-Frame-Options: DENY
+# → Content-Security-Policy: ... (restritivo)
+# → Referrer-Policy: strict-origin-when-cross-origin
+```
+
+### Recomendações gerais (próximos 30 dias)
+
+1. **Rotacionar credenciais** se houver suspeita de vazamento (não há evidência de vazamento, mas rotação periódica é boa prática).
+2. **Fazer backup diário do PostgreSQL** — configurar cron com `pg_dump` cifrado e guardar fora do VPS.
+3. **Implementar LGPD:**
+   - Rotina de anonimização de pedidos > 5 anos (prazo fiscal).
+   - Limpeza de `BlingLog` > 180 dias.
+   - Canal do titular de dados (formulário de direitos LGPD: acesso, correção, exclusão).
+4. **Monitoramento:** ativar alertas de `django_error.log` para stack traces 500.
 
 ---
 
@@ -689,14 +916,129 @@ SITE_URL=https://novo.dellainstore.com.br
 
 ---
 
+## Melhor Envio — Cálculo de Frete (apps/pagamentos/services/melhorenvio.py)
+
+- **Token:** `MELHOR_ENVIO_TOKEN` no `.env` | **Modo:** `MELHOR_ENVIO_SANDBOX=False` (produção)
+- **CEP de origem:** `MELHOR_ENVIO_CEP_ORIGEM` no `.env` (fallback: `01310100`)
+- **Serviços consultados:** `1=PAC Correios`, `2=SEDEX Correios`
+- **Caixa padrão D'ELLA:** `DIMENSOES_PADRAO = {width:17, height:8, length:28, weight:0.5}` (cm/kg por peça)
+- **Fallback:** quando sem token ou erro, retorna PAC R$18.90 / SEDEX R$34.90 estimados
+- **Retry CEP 422:** se a API rejeitar o CEP com HTTP 422, tenta novamente com CEP raiz (`cep[:5] + '000'`). Alguns CEPs válidos são rejeitados pelo Melhor Envio; o CEP raiz geralmente é aceito com prazo/preço equivalente
+- **IDs de serviço** (`frete_servico_id` no model `Pedido`): `'1'` = PAC, `'2'` = SEDEX. `max_length=20` no campo (aumentado de 10 para suportar os IDs)
+
+---
+
 ## PagSeguro (PagBank) — Integração ativa
 
 - **Token:** produção, configurado em `.env` como `PAGSEGURO_TOKEN`
 - **Sandbox:** `PAGSEGURO_SANDBOX=False` (produção ativa)
 - **Endpoint público-key correto:** `GET /public-keys/card` (não `/public-keys/CREDIT_CARD` — legado, retorna 404)
-- **Fluxo cartão:** frontend carrega `direct-checkout.js` → `PagSeguro.encryptCard()` → envia `encrypted_card` → backend chama `criar_ordem_cartao()` — PAN nunca toca o servidor
+- **Fluxo cartão:** frontend carrega SDK → `PagSeguro.encryptCard()` → envia `encrypted_card` → backend chama `criar_ordem_cartao()` — PAN nunca toca o servidor
 - **Webhook seguro (C3 implementado):** `pagseguro_notificacao` recebe o `order_id` do payload, reconsulta `GET /orders/{id}` na API PagBank de forma autenticada e só então atualiza o pedido — payloads forjados são descartados porque a reconsulta falha
 - **Chave pública cacheada:** 1 hora (`pagseguro_public_key` no cache Django). Limpar com `cache.delete('pagseguro_public_key')` se precisar forçar renovação
+
+### SDK do PagBank — URL atualizada (2026-04-20)
+
+A URL antiga do SDK retorna **403 Forbidden** (descontinuada pelo PagBank sem aviso):
+```
+❌ https://assets.pagseguro.com.br/checkout-sdk/js/direct-checkout.js  ← 403, não usar
+✅ https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js  ← ativa
+```
+O SDK é carregado **incondicionalmente** no `{% block js_extra %}` de `templates/checkout/index.html`, antes do handler de submit, para garantir que `PagSeguro` esteja definido quando o usuário submete o formulário.
+
+### Pagamento com cartão — pendência PagBank (2026-04-20)
+
+O frontend encripta o cartão corretamente (`PagSeguro.encryptCard()` retorna `encryptedCard`), mas o backend recebe `ACCESS_DENIED: whitelist access required` ao chamar `POST /orders`.
+
+**Diagnóstico:** a conta PagBank não está habilitada para Checkout Transparente via API. O token tem acesso à API (GET /orders retorna 400, não 401/403), mas criar ordens com cartão exige liberação específica.
+
+**Ações realizadas:**
+- Domínio `https://novo.dellainstore.com.br` cadastrado em "URL do serviço de chave pública" no painel do PagBank
+- Chamado aberto no suporte técnico PagBank (`https://dev.pagbank.uol.com.br` → Suporte) solicitando habilitação do Checkout Transparente
+
+**Enquanto aguarda:** Pix funciona normalmente. Cartão fica bloqueado até PagBank liberar a conta.
+
+---
+
+## Atualizações 2026-04-20 (sessão tarde)
+
+### Migração de clientes do site antigo
+
+- **Campo `precisa_ativar`** adicionado ao model `Cliente` (migration `usuarios.0004`). Contas importadas sem senha recebem `precisa_ativar=True`.
+- **Management command `importar_clientes`** (`apps/usuarios/management/commands/importar_clientes.py`): lê CSV com `;` ou `,`, detecta encoding automaticamente (latin-1/utf-8), aceita data no formato `MM/DD/AAAA HH:MM:SS`. Uso: `python manage.py importar_clientes arquivo.csv --dry-run --settings=core.settings.production`.
+- **Fluxo de ativação:** na view `cadastro`, o CPF é verificado em `request.POST` **antes** do `form.is_valid()` — assim funciona mesmo que o e-mail já exista no banco. Se CPF existe + `precisa_ativar=True` → redireciona para `/conta/ativar/<uid>/<token>/`. Tela pede e-mail (confirma identidade) + nova senha → login automático + `precisa_ativar=False`.
+- **View `ativar_conta`** em `apps/usuarios/views.py`. **Form `AtivacaoForm`** em `apps/usuarios/forms.py`. **Template** `templates/usuarios/ativar_conta.html`. **URL** `usuarios:ativar_conta`.
+
+### Navbar — reestruturação
+
+- **Nova ordem de ícones:** Busca → WhatsApp → Carrinho → Login/Nome.
+- **Nome do usuário logado:** quando autenticada, exibe `{{ user.nome }}` ao lado do ícone de pessoa (`navbar-usuario-label` — uppercase, 0.72rem, truncado em 7rem). Quando não logada, exibe "Entrar".
+- **`WHATSAPP_NUMBER_1` e `WHATSAPP_NUMBER_2` movidos para o context processor** `apps/produtos/context_processors.py → categorias_menu` — agora disponíveis em **todas** as páginas via contexto global. Antes só existiam no contexto da homepage.
+
+### Página de produto — correções
+
+- **Ícone "Adicionar ao carrinho":** trocado de `far fa-shopping-bag` (Pro, quebrava) para `fas fa-bag-shopping` (Free).
+- **Texto wishlist:** "Adicionar à Lista de Desejos" / "Salvo na Lista de Desejos" (era "Salvar/Salvo na wishlist").
+- **Seleção de cor/tamanho bidirecional:** ao carregar a página, todos os tamanhos ficam habilitados (antes ficavam todos desabilitados porque `corSelecionadaId=null` não existia no mapa). Selecionar cor → filtra tamanhos; selecionar tamanho → filtra cores. Ambos os sentidos funcionam independentemente.
+- **Ícones da sidebar da conta:** `wishlist.html` usava `fa-regular` (Pro) nos ícones. Corrigido para `fas`/`far` (Free) — igual às outras páginas da área do cliente.
+
+---
+
+## Atualizações 2026-04-20
+
+### Correções de UX — Cadastro / Login / Navbar
+
+- **CPF `maxlength` correto:** o model tem `max_length=11` (sem formatação), mas Django renderizava `maxlength="11"` no input, bloqueando a digitação da máscara `000.000.000-00` (14 chars). Solução: declarar o campo `cpf` explicitamente em `CadastroForm` com `max_length=14` fora do Meta. **Padrão a seguir:** todo campo onde o valor formatado é maior que `max_length` do model deve ser declarado explicitamente no form (não via `Meta.widgets`).
+- **CEP `maxlength` correto:** mesmo problema em `EnderecoForm` — CEP stored como 8 dígitos, mas formato `00000-000` tem 9 chars. Mesmo fix: `cep` declarado explicitamente com `max_length=9`.
+- **Nome completo unificado:** `CadastroForm` passou de dois campos (`nome` + `sobrenome`) para um único campo `nome` com placeholder "Nome completo". O `save()` divide automaticamente: primeira palavra → `nome`, resto → `sobrenome`. Modelo e migrations não foram alterados.
+- **Checkout exige login:** `@login_required(login_url='/conta/entrar/')` adicionado à view `checkout` em `apps/pedidos/views.py`. Quem tenta acessar sem login é redirecionado com `?next=/checkout/` e volta automaticamente após autenticar.
+- **"Criar conta grátis" → "Criar conta":** texto do link na página de login simplificado.
+- **Termos de uso no cadastro:** checkbox agora usa `:not([type="checkbox"])` no seletor `.conta-campo input` para não receber estilos de campo de texto. Tamanho fixo `18×18px` com `accent-color: var(--preto)`.
+- **Logo mobile:** no breakpoint ≤768px, `--navbar-total` é redefinido para `var(--navbar-topo-h)` (60px), removendo o overflow da logo de 96px sobre o conteúdo. Logo posicionada em `left: 3rem` para não sobrepor o hamburger.
+- **Separador da navbar:** linha entre topo e categorias agora usa `::before` pseudo-elemento centralizado (60% da largura, máx 780px) — não vai de ponta a ponta da tela.
+- **Área da conta (padding):** `.conta-area` usa `padding: calc(var(--navbar-total) + 4rem) 1.5rem 4rem` para que o conteúdo não fique colado à navbar. Vale para todas as páginas da conta (Início, Meus Pedidos, Endereços, etc.).
+- **Badge de quantidade no resumo do checkout:** `.resumo-item-foto` recebeu `overflow: visible` para o badge circular não ser cortado.
+
+### Carrinho e Página de Produto
+
+- **Botão "Adicionar" nas listagens (loja e home):** ao clicar no ícone de sacola em qualquer card de produto fora da página de detalhe, o cliente é redirecionado para a página do produto (não adiciona mais sem cor/tamanho). O botão recebe `data-produto-url` e o JS verifica: se não houver `data-variacao-id`, faz `window.location.href = produtoUrl`.
+- **Filtro bidirecional cor↔tamanho:** na página de detalhe, clicar em um tamanho agora também filtra/desabilita as cores indisponíveis para aquele tamanho (função `atualizarDisponibilidadeCores()`). Antes só cor → tamanhos era tratado. Agora ambos os sentidos funcionam.
+- **Descrição de variação no carrinho:** `carrinho.py` usa `_desc_variacao(variacao)` que retorna apenas `"Cor / Tam. X"` (ex: `"Preto / Tam. P"`), sem repetir o nome do produto. Exibido no drawer lateral e no resumo do checkout via `item.variacao`.
+- **Foto por cor no carrinho:** `carrinho.py → adicionar()` verifica `ProdutoCorFoto` pela cor da variação selecionada antes de usar `imagem_principal`. Se encontrar foto da cor, usa ela; caso contrário cai no fallback `produto.imagem_principal`. Garante que ao adicionar "Body Preta" o drawer mostre a foto preta, não a foto padrão.
+- **Botão remover no resumo do checkout:** cada item do resumo lateral (`templates/checkout/index.html`) tem botão de lixeira vermelho ao lado dos botões +/−. Envia `quantidade: 0` para `/carrinho/atualizar/` via AJAX e remove o elemento do DOM imediatamente. CSS: `.resumo-remover-btn` em `della.css`.
+- **Bug subtotal ao remover item no checkout:** `window.SUBTOTAL` (usado por `atualizarResumoTotal()` ao selecionar frete) é atualizado via `window.SUBTOTAL = novoSubtotal` no handler AJAX do resumo. Sem isso, ao selecionar o frete após remover um item, o total voltava com o valor original da página.
+- **E-mail de confirmação de pedido:** `bcc=['financeiro@dellainstore.com.br']` adicionado em `apps/pedidos/emails.py → enviar_confirmacao_pedido`. Todo pedido novo envia cópia interna automaticamente.
+- **Tela de confirmação — cartão aprovado:** `templates/checkout/confirmacao.html` verifica `pedido.status == 'pagamento_confirmado'` e exibe badge verde "Pagamento Confirmado" em vez de "Em processamento".
+
+### Correções 2026-04-21
+
+- **PIX checkout — crash corrigido:** `frete_servico_id` tinha `max_length=10` mas IDs do fallback Melhor Envio eram maiores. Aumentado para 20, migration `pedidos.0006` aplicada. IDs de fallback alterados de `'pac_fallback'`/`'sedex_fallback'` para `'pac'`/`'sedex'`.
+- **Validação de cor/tamanho — Adicionar ao carrinho:** botão bloqueado se cor ou tamanho não estiver selecionado. Aviso `#aviso-variacao` exibido inline em `templates/produtos/detalhe.html`. Handler do `btn-adicionar-carrinho` retorna antes de enviar ao carrinho.
+- **Validação de cor/tamanho — Comprar agora:** mesmo bloqueio aplicado no handler do `btn-comprar-agora`. Além disso, `static/js/della.js` foi corrigido: adicionado `if (btn.id === 'btn-comprar-agora') return;` no handler global `[data-produto-id]` que estava disparando independentemente da validação do template, causando bypass.
+- **Bling — webhook PIX confirmado:** `_MAPA_SITUACAO` em `apps/bling/views.py` incluiu `18723: 'pagamento_confirmado'` (Atendido - Site, custom D'ELLA) para que o admin moverem o pedido no Bling confirme automaticamente o PIX no Django.
+- **Bling — situação correta ao criar pedido:** `SITUACAO_EM_ANDAMENTO_SITE` corrigido de `6` (Em aberto) para `754756` (Em andamento - Site, custom D'ELLA — verificado via API no pedido 9638).
+- **Bling — descrição dos itens:** formato corrigido para `NOME PRODUTO (COR) (TAMANHO)` ex: `BODY BASIC ANACA (BRANCO POLAR) (P)`. Lê das FKs `variacao.cor.nome` e `variacao.tamanho.nome` via `select_related`. Fallback: parse do campo `variacao_desc` salvo no `ItemPedido`.
+- **Bling — código do produto (`codigo`) corrigido:** `bling_variacao_id` (ex: '15910731466') é o **ID interno** do Bling e não é o código do catálogo. Corrigido em `apps/bling/services.py → _montar_payload_pedido`: agora usa `item.sku` como fonte primária (salvo no checkout como `sku_variacao`, ex: '4604'). Fallback: `variacao.sku_variacao` → `produto.sku`. O `bling_variacao_id` foi removido da lógica de `codigo`.
+- **Bling — transporte completo:** payload inclui `logistica: {nome: 'Melhor Envio - Correios'}`, dimensões da caixa (peso 0.5kg, 17×8×28cm) e `fretePorConta` automático.
+- **Checkout resumo — botão remover:** botão de lixeira vermelho por item no resumo lateral. Bug de total ao remover corrigido: `window.SUBTOTAL` atualizado no callback AJAX + `atualizarResumoTotal()` chamada após remoção.
+- **Carrinho — foto por cor:** `carrinho.py → adicionar()` busca `ProdutoCorFoto` pela cor da variação selecionada antes de usar `imagem_principal`.
+- **Melhor Envio — CEP inválido (422):** alguns CEPs válidos são rejeitados pela API do Melhor Envio com HTTP 422. Solução: ao receber 422, o sistema tenta novamente com o CEP raiz (`cep[:5] + '000'`). Ex: CEP `14401385` → retry com `14401000`.
+- **PIX QR Code — expiração de 10 minutos:** tela de confirmação tem countdown `MM:SS`. Após expirar, esconde o QR e exibe bloco com botão "Gerar novo QR Code" (AJAX para `/pagamento/pix/gerar/<numero>/`). Polling de status a cada 30s enquanto aguarda confirmação.
+- **Carrinho — diminuir qty de 1 remove o item:** `atualizar_carrinho` em `views.py` chama `cart.remover(chave)` quando `quantidade <= 0`. Antes ficava preso em 1.
+- **Admin — select boxes em inlines:** CSS em `della_admin.css` com `height: auto`, `min-height: 2.2rem`, `line-height: 1.4` nos selects de inlines tabular. Remove o clipping vertical do texto. **Não usar `overflow: visible`** — causa o texto `.original` vazar sobre o select.
+- **Admin — widget de senha:** criado `templates/auth/widgets/read_only_password_hash.html` customizado. Exibe apenas dicas de requisitos (maiúscula, número, especial) em vez do hash/algoritmo Django padrão.
+- **Carrinho — foto por cor:** `carrinho.py → adicionar()` busca `ProdutoCorFoto` pela cor da variação. Mostrava sempre a foto padrão independente da cor selecionada.
+- **Checkout resumo — botão remover:** botão de lixeira vermelho por item. Bug de subtotal ao remover corrigido (`window.SUBTOTAL` atualizado no callback AJAX).
+- **Bling — formato descrição:** itens enviados como `NOME (COR) (TAMANHO)` (ex: `BODY BASIC ANACA (BRANCO POLAR) (P)`). Antes usava `NOME — Cor / Tam. X`.
+- **Bling — transporte completo:** payload agora inclui `logistica: {nome: 'Melhor Envio - Correios'}`, dimensões da caixa (peso 0.5kg, 17×8×28cm) e `fretePorConta` automático (1=FOB/cliente paga, 0=CIF/frete grátis).
+- **Bling — situação correta:** `SITUACAO_EM_ANDAMENTO_SITE` corrigido de `6` (Em aberto, padrão Bling — errado) para `754756` (Em andamento - Site, custom D'ELLA, verificado via API no pedido 9638).
+
+### Correções Admin (2026-04-20)
+
+- **CEP — busca automática corrigida:** `templates/usuarios/endereco_form.html` usava `/carrinho/cep/?cep=${cep}` (query param), mas a URL espera `/carrinho/cep/<cep>/` (path param). Corrigido para `/carrinho/cep/${cep}/`.
+- **Admin — campos cortando informações (overflow):** `#content .module` tem `overflow: hidden` necessário para border-radius, mas cortava a tabela de resultados e os inlines de variações. Solução: adicionar `overflow-x: auto` em `#changelist-form .results` e `.tabular.inline-related` — o conteúdo das colunas pode rolar horizontalmente sem cortar. `.inline-group` também mudou de `overflow: hidden` para `overflow-x: auto`.
+- **Admin — date hierarchy afastado da borda esquerda:** filtro de datas ("2026 / abril / 13 de abril") renderizado em `.xfull` sem padding. Adicionado `.xfull { padding-left: 0.9rem !important; }` em `della_admin.css`.
+- **Admin — exportar CSV de produtos:** novo botão verde "Exportar CSV" na listagem de produtos (`/painel/produtos/produto/`). Exporta todos os produtos com variações ativas no mesmo formato do CSV de importação (`nome, categoria, descricao, composicao, genero, preco, preco_promocional, ativo, destaque, novo, bling_id, sku, var_cor, var_tamanho, var_estoque, var_sku, var_bling_id`). URL: `/painel/produtos/produto/exportar-csv/`. Método `_exportar_csv` em `apps/produtos/admin.py`. Botão adicionado em `templates/admin/produtos/produto_changelist.html`.
 
 ---
 
@@ -710,9 +1052,9 @@ SITE_URL=https://novo.dellainstore.com.br
 - **Admin — padrão unificado em TODOS os menus**:
   - `get_actions` retorna apenas `delete_selected` → checkboxes para exclusão em massa, sem dropdown desnecessário
   - `admin_linhas.js` injetado via `class Media` → clique na linha navega para edição
-  - `acoes_linha` com botões ✎ (dourado) e ✕ (vermelho) por linha
+  - Botões por linha usam **classes CSS** (`della-btn-edit`, `della-btn-delete`) — não estilos inline
   - Arquivos atualizados: `bling/admin.py`, `conteudo/admin.py`, `pagamentos/admin.py`, `pedidos/admin.py`, `produtos/admin.py`, `usuarios/admin.py`
-- **Admin — menu lateral não sobe mais**: `admin_linhas.js` usa `sessionStorage` para persistir o scroll do `#nav-sidebar` entre navegações.
+- **Admin — menu lateral não sobe mais**: `base_site.html` tem `<script>` inline que persiste scroll em **todas** as páginas (não depende do `admin_linhas.js` que só carrega em algumas).
 - **Admin — Bling tokens**: botões "Atualizar Token" e "Re-autorizar" empilhados verticalmente (`flex-direction:column`) para não cortar em colunas estreitas.
 - **Homepage**: "Destaques da Semana" com S maiúsculo. "Look da **Semana**" também com S maiúsculo.
 - **Footer**: item "Perguntas frequentes" removido da coluna "Ajuda" (continua acessível via URL direta).
@@ -746,19 +1088,17 @@ def get_actions(self, request):
 
 def acoes_linha(self, obj):
     from django.urls import reverse
+    from django.utils.html import format_html
     edit_url   = reverse('admin:APP_MODEL_change', args=[obj.pk])
     delete_url = reverse('admin:APP_MODEL_delete', args=[obj.pk])
     return format_html(
-        '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-        'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-        'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-        '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-        'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-        'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir?\')">✕</a>',
+        '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+        '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir?\')">✕ Excluir</a>',
         edit_url, delete_url,
     )
 acoes_linha.short_description = 'Ações'
 # Adicionar 'acoes_linha' em list_display e list_display_links = ('<campo_link>',)
+# IMPORTANTE: usar classes CSS (della-btn-edit / della-btn-delete) — NUNCA estilos inline
 ```
 
 ## Estratégia de Cache (2026-04-18)
@@ -822,18 +1162,83 @@ Todo `ModelAdmin` que afeta conteúdo cacheado implementa `save_model` e `delete
 
 ---
 
+## Atualizações 2026-04-22
+
+### Bling — produto vinculado ao catálogo via `produto.id`
+
+- **Problema:** Bling exibia ⚠️ "Produto não encontrado no sistema" mesmo com `codigo` correto.
+- **Causa:** o Bling usa o campo `codigo` (SKU textual) para display, mas a vinculação ao catálogo usa o **ID interno** do produto/variação.
+- **Correção em `apps/bling/services.py → _montar_payload_pedido`:** payload de cada item agora inclui `produto: {'id': bling_variacao_id}` quando disponível. Prioridade: `variacao.bling_variacao_id` → fallback `produto.bling_id`. Conversão para `int()` com try/except para evitar crash se o campo estiver com valor textual.
+- `codigo` continua sendo enviado (útil para exibição no Bling).
+
+### Frete — cálculo consistente entre página de produto e checkout
+
+- **Causa raiz:** `{{ produto.preco_atual }}` renderizava como `"326,00"` (locale pt-br), e `float("326,00")` no Python falhava silenciosamente retornando `0`. Com `insurance_value = 0` (mínimo) na página do produto e `insurance_value = cart.get_total()` no checkout, o Melhor Envio retornava preços diferentes para o mesmo CEP.
+- **Correção 1 — template `templates/produtos/detalhe.html`:** adicionado `{% load l10n %}` no topo; `data-preco="{{ produto.preco_atual|unlocalize }}"` garante saída com ponto decimal (ex: `326.00`).
+- **Correção 2 — `apps/pedidos/views.py → calcular_frete`:** lógica refatorada: se `preco` estiver nos GET params, usa esses valores diretamente (ignora carrinho) — garante que a página de produto sempre calcule com base no produto sendo visto, independente do estado do carrinho. Safety net: `.replace(',', '.')` antes do `float()`. Contexto sem `preco`: usa o carrinho normalmente (checkout).
+
+### PIX — confirmação automática via PagBank API
+
+- **Problema anterior:** QR code era gerado localmente (padrão EMV estático com chave CNPJ). O pagamento ia direto ao banco D'ELLA sem passar pelo PagBank — nenhum webhook era disparado, pedido ficava em `aguardando_pagamento` para sempre.
+- **Solução implementada:** tanto `confirmacao_pedido` (`apps/pedidos/views.py`) quanto `pix_gerar` (`apps/pagamentos/views.py`) agora tentam criar uma ordem PIX via PagBank API antes de gerar QR estático.
+
+**Fluxo `criar_ordem_pix` (`apps/pagamentos/services/pagseguro.py`):**
+```python
+POST /orders
+{
+  "reference_id": "DI-XXXX",
+  "customer": {nome, email, tax_id (CPF)},
+  "items": [{"name": "Pedido DI-XXXX", "quantity": 1, "unit_amount": <centavos>}],
+  "qr_codes": [{"amount": {"value": <centavos>}, "expiration_date": "<+24h>"}],
+  "notification_urls": ["https://.../pagamento/pagseguro/notificacao/"]
+}
+```
+
+- Resposta: `qr_codes[0].text` = payload copia-e-cola; `id` = PagBank order ID (ex: `ORDE_xxx`).
+- O `pedido.gateway_id` é atualizado com o PagBank order ID para rastreamento.
+- **Fallback automático:** se PagBank retornar erro (ex: `ACCESS_DENIED`), usa o QR estático local. O campo `via` na resposta JSON indica `"pagseguro"` ou `"estatico"`.
+
+**Webhook atualizado (`apps/pagamentos/views.py → pagseguro_notificacao`):**
+- Antes: só tratava `charges` (cartão).
+- Agora: verifica `charges` primeiro; se vazio, verifica `qr_codes[0].status` (PIX). Isso cobre o fluxo PagBank PIX em que o pagamento confirma via qr_code e não necessariamente cria um charge separado.
+
+**Financeiro:** pagamentos via PagBank PIX vão para o **saldo da conta PagBank** (não direto ao banco). Transferência manual/automática via painel PagBank. Próximo passo planejado: integração direta com API PIX do banco (Opção C) para que o valor vá direto ao banco com confirmação automática.
+
+### Preços — separador de milhar (1.000,00 / 10.000,00)
+
+- **Todos os templates** de exibição de preço atualizados de `floatformat:2` para `floatformat:"2g"`.
+- O flag `"g"` ativa o separador de milhar respeitando o locale ativo (`pt-br`): ponto como separador de milhar, vírgula como decimal. Ex: `1234.56` → `"1.234,56"`.
+- **Exceções protegidas** (contextos JavaScript que fazem `parseFloat()`):
+  - `templates/checkout/index.html:396` — `let SUBTOTAL = parseFloat(...)` mantido como `floatformat:2`
+  - `templates/usuarios/detalhe_pedido.html:268` — `var total = parseFloat(...)` mantido como `floatformat:2`
+- **Filtro auxiliar `brl_price`** criado em `apps/core_utils/templatetags/della_filters.py` (disponível mas não obrigatório — `floatformat:"2g"` cobre o uso principal).
+
+### Página de produto — ajustes visuais
+
+- **"Peças Relacionadas"** — capitalização corrigida (era "Peças relacionadas").
+- **"Entrega e trocas"** — linha "Frete calculado no checkout" removida do acordeão. O frete já é consultado diretamente na página do produto, tornando a linha redundante e enganosa.
+
+---
+
 ## Pendências
 
 | Item | Prioridade |
 |---|---|
 | E-mail via Brevo API | ✅ implementado |
 | Cache de performance | ✅ implementado (2026-04-18) |
+| Bling produto vinculado ao catálogo | ✅ implementado (2026-04-22) |
+| Frete consistente produto ↔ checkout | ✅ implementado (2026-04-22) |
+| PIX via PagBank API (confirmação automática) | ✅ implementado (2026-04-22) |
+| Preços com separador de milhar | ✅ implementado (2026-04-22) |
 | **Migrar para `www.dellainstore.com`** — apontar DNS `.com` e `.com.br` na UOL para `159.203.101.232`, configurar Nginx + certbot, atualizar `.env`. Ver checklist em "Migração" acima | Quando aprovado |
 | **C2 — HMAC webhook Bling** — precisará de `BLING_WEBHOOK_SECRET` no `.env` e no painel Bling | Alta (antes de ir ao ar) |
 | **C3 — Webhook PagSeguro** ✅ implementado — reconsulta `/orders/{id}` autenticada antes de atualizar pedido | Concluído |
+| **Cartão de crédito bloqueado** — PagBank retorna `ACCESS_DENIED: whitelist access required`. Chamado aberto. Aguardando PagBank habilitar Checkout Transparente na conta. Pix funciona normalmente via PagBank API. | Aguardando PagBank |
+| **PIX Opção C — API PIX do banco** — integrar com API do banco da D'ELLA para confirmação automática com dinheiro indo direto ao banco (sem passar pelo PagBank). Requer integração específica da instituição (Sicredi, Itaú, Bradesco, etc.). | Planejado |
 | **C3 — Webhook Stone** — validar `X-Stone-Signature` (HMAC) antes de processar | Quando ativar Stone |
 | **M3 — Compilar Tailwind local** — remove `unsafe-inline` do CSP | Fase posterior |
 | Instagram feed | ✅ implementado |
+| **🔴 PENDENTE — Validação de estoque no carrinho/checkout:** hoje é possível adicionar ao carrinho quantidade maior que o estoque disponível. Corrigir em: (1) `apps/pedidos/carrinho.py → adicionar()` — limitar `quantidade` ao `variacao.estoque` disponível; (2) botão +/− no drawer/resumo — não incrementar além do estoque; (3) `apps/pedidos/views.py → _processar_checkout()` — validar antes de subtrair o estoque e retornar erro se insuficiente. | **Alta** |
 
 ---
 

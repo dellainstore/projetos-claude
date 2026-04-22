@@ -16,22 +16,22 @@
       </div>
       <nav class="conta-sidebar-nav">
         <a href="{% url 'usuarios:minha_conta' %}" class="conta-nav-link">
-          <i class="fa-regular fa-house"></i> Início
+          <i class="fas fa-house"></i> Início
         </a>
         <a href="{% url 'usuarios:meus_pedidos' %}" class="conta-nav-link">
-          <i class="fa-regular fa-bag-shopping"></i> Meus pedidos
+          <i class="fas fa-bag-shopping"></i> Meus pedidos
         </a>
         <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
-          <i class="fa-regular fa-location-dot"></i> Endereços
+          <i class="fas fa-location-dot"></i> Endereços
         </a>
         <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link ativo">
-          <i class="fa-regular fa-heart"></i> Lista de desejos
+          <i class="far fa-heart"></i> Lista de desejos
         </a>
         <a href="{% url 'usuarios:editar_perfil' %}" class="conta-nav-link">
-          <i class="fa-regular fa-user"></i> Editar perfil
+          <i class="far fa-user"></i> Editar perfil
         </a>
         <a href="{% url 'usuarios:logout' %}" class="conta-nav-link conta-nav-link--sair">
-          <i class="fa-regular fa-arrow-right-from-bracket"></i> Sair
+          <i class="fas fa-arrow-right-from-bracket"></i> Sair
         </a>
       </nav>
     </aside>
@@ -58,10 +58,10 @@
                     <p class="produto-card-nome">{{ p.nome }}</p>
                     <div class="produto-card-preco">
                       {% if p.preco_promocional %}
-                        <span class="preco-de">R$ {{ p.preco|floatformat:2 }}</span>
-                        <span class="preco-por">R$ {{ p.preco_promocional|floatformat:2 }}</span>
+                        <span class="preco-de">R$ {{ p.preco|floatformat:"2g" }}</span>
+                        <span class="preco-por">R$ {{ p.preco_promocional|floatformat:"2g" }}</span>
                       {% else %}
-                        <span class="preco-por">R$ {{ p.preco|floatformat:2 }}</span>
+                        <span class="preco-por">R$ {{ p.preco|floatformat:"2g" }}</span>
                       {% endif %}
                     </div>
                   </div>

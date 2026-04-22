@@ -36,42 +36,64 @@
           <li>Abra o aplicativo do seu banco</li>
           <li>Acesse a área Pix e escolha <em>Pagar com QR Code</em></li>
           <li>Aponte a câmera para o código abaixo</li>
-          <li>Confirme o pagamento de <strong>R$ {{ pedido.total|floatformat:2 }}</strong></li>
+          <li>Confirme o pagamento de <strong>R$ {{ pedido.total|floatformat:"2g" }}</strong></li>
         </ol>
       </div>
 
-      <div class="pix-qrcode-bloco">
-        <img src="data:image/png;base64,{{ pix_qrcode }}"
-             alt="QR Code Pix — Pedido {{ pedido.numero }}"
-             class="pix-qrcode-img">
-        <div class="pix-valor">R$ {{ pedido.total|floatformat:2 }}</div>
-      </div>
+      {# Bloco ativo com QR Code #}
+      <div id="pix-qrcode-ativo">
+        <div class="pix-qrcode-bloco">
+          <img id="pix-qrcode-img" src="data:image/png;base64,{{ pix_qrcode }}"
+               alt="QR Code Pix — Pedido {{ pedido.numero }}"
+               class="pix-qrcode-img">
+          <div class="pix-valor">R$ {{ pedido.total|floatformat:"2g" }}</div>
+        </div>
 
-      {% if pix_payload %}
-      <div class="pix-copiar-bloco">
-        <p class="pix-copiar-label">Ou copie o código Pix:</p>
-        <div class="pix-copiar-input-wrapper">
-          <input type="text" id="pix-payload-input" value="{{ pix_payload }}"
-                 readonly class="pix-copiar-input" aria-label="Código Pix copia e cola">
-          <button type="button" id="btn-copiar-pix" class="btn-copiar-pix"
-                  onclick="copiarPix()">
-            <i class="far fa-copy"></i> Copiar
-          </button>
+        {% if pix_payload %}
+        <div class="pix-copiar-bloco">
+          <p class="pix-copiar-label">Ou copie o código Pix:</p>
+          <div class="pix-copiar-input-wrapper">
+            <input type="text" id="pix-payload-input" value="{{ pix_payload }}"
+                   readonly class="pix-copiar-input" aria-label="Código Pix copia e cola">
+            <button type="button" id="btn-copiar-pix" class="btn-copiar-pix"
+                    onclick="copiarPix()">
+              <i class="far fa-copy"></i> Copiar
+            </button>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="pix-aviso">
+          <i class="fas fa-clock"></i>
+          QR Code válido por <strong id="pix-timer">10:00</strong>.
+          Após o pagamento, o pedido é confirmado automaticamente.
+        </div>
+
+        <div id="pix-status-bloco" class="pix-status-aguardando">
+          <i class="fas fa-spinner fa-spin"></i>
+          Aguardando confirmação do pagamento…
+          <button type="button" id="btn-verificar-pix" class="link-verificar-pix"
+                  onclick="verificarPix()">Verificar agora</button>
         </div>
       </div>
-      {% endif %}
 
-      <div class="pix-aviso">
-        <i class="fas fa-clock"></i>
-        O QR Code expira em <strong>30 minutos</strong>.
-        Após o pagamento, o pedido é confirmado automaticamente.
-      </div>
-
-      <div id="pix-status-bloco" class="pix-status-aguardando">
-        <i class="fas fa-spinner fa-spin"></i>
-        Aguardando confirmação do pagamento…
-        <button type="button" id="btn-verificar-pix" class="link-verificar-pix"
-                onclick="verificarPix()">Verificar agora</button>
+      {# Bloco exibido após expirar #}
+      <div id="pix-expirado" style="display:none;text-align:center;padding:1.5rem 0;">
+        <p style="color:#c0392b;font-weight:600;margin-bottom:1rem;">
+          <i class="fas fa-clock"></i> QR Code expirado.
+        </p>
+        <p style="color:#666;font-size:0.9rem;margin-bottom:1.5rem;">
+          Gere um novo código Pix ou finalize pelo cartão na área do cliente.
+        </p>
+        <button type="button" id="btn-novo-pix" class="btn-primario"
+                onclick="gerarNovoPix()">
+          <i class="fas fa-sync-alt"></i> Gerar novo QR Code
+        </button>
+        <p style="margin-top:1rem;">
+          <a href="{% url 'usuarios:minha_conta' %}" class="link-verificar-pix">
+            Pagar com cartão na área do cliente
+          </a>
+        </p>
       </div>
 
       {% else %}
@@ -81,7 +103,7 @@
           Seu pedido foi recebido! Realize o pagamento via Pix para nossa chave
           e informe o número do pedido <strong>{{ pedido.numero }}</strong> na descrição.
         </p>
-        <p>Valor: <strong>R$ {{ pedido.total|floatformat:2 }}</strong></p>
+        <p>Valor: <strong>R$ {{ pedido.total|floatformat:"2g" }}</strong></p>
         <p class="text-sm" style="color:var(--cinza-texto);margin-top:.5rem;">
           Entre em contato pelo WhatsApp para receber a chave Pix.
         </p>
@@ -95,8 +117,13 @@
         <i class="far fa-credit-card"></i> Cartão de Crédito
       </h2>
       <div class="confirmacao-status">
-        <span class="status-badge aguardando">Em processamento</span>
-        <p>Seu pagamento está sendo analisado. Você receberá um e-mail assim que for confirmado.</p>
+        {% if pedido.status == 'pagamento_confirmado' %}
+          <span class="status-badge confirmado"><i class="fas fa-check-circle"></i> Pagamento Confirmado</span>
+          <p>Seu pagamento foi aprovado! Seu pedido está sendo preparado.</p>
+        {% else %}
+          <span class="status-badge aguardando">Em processamento</span>
+          <p>Seu pagamento está sendo analisado. Você receberá um e-mail assim que for confirmado.</p>
+        {% endif %}
       </div>
     </section>
     {% endif %}
@@ -127,21 +154,21 @@
           <h3 class="confirmacao-card-titulo">Valores</h3>
           <div class="conf-linha">
             <span>Subtotal</span>
-            <span>R$ {{ pedido.subtotal|floatformat:2 }}</span>
+            <span>R$ {{ pedido.subtotal|floatformat:"2g" }}</span>
           </div>
           <div class="conf-linha">
             <span>Frete</span>
-            <span>R$ {{ pedido.frete|floatformat:2 }}</span>
+            <span>R$ {{ pedido.frete|floatformat:"2g" }}</span>
           </div>
           {% if pedido.desconto %}
           <div class="conf-linha">
             <span>Desconto</span>
-            <span style="color:#27ae60;">− R$ {{ pedido.desconto|floatformat:2 }}</span>
+            <span style="color:#27ae60;">− R$ {{ pedido.desconto|floatformat:"2g" }}</span>
           </div>
           {% endif %}
           <div class="conf-linha total">
             <span>Total</span>
-            <span>R$ {{ pedido.total|floatformat:2 }}</span>
+            <span>R$ {{ pedido.total|floatformat:"2g" }}</span>
           </div>
           {% if pedido.parcelas > 1 %}
             <p style="font-size:.78rem;color:var(--cinza-texto);margin-top:.35rem;">{{ pedido.parcelas }}x sem juros</p>
@@ -161,7 +188,7 @@
             {% endif %}
             <p class="conf-item-qty">Qtd: {{ item.quantidade }}</p>
           </div>
-          <p class="conf-item-preco">R$ {{ item.subtotal|floatformat:2 }}</p>
+          <p class="conf-item-preco">R$ {{ item.subtotal|floatformat:"2g" }}</p>
         </div>
         {% endfor %}
       </div>
@@ -183,8 +210,73 @@
 {% block js_extra %}
 {% if pedido.forma_pagamento == 'pix' and pix_qrcode %}
 <script>
+const PIX_NUMERO  = '{{ pedido.numero|escapejs }}';
+const PIX_TIMEOUT = 10 * 60; // 10 minutos em segundos
+
+let segundosRestantes = PIX_TIMEOUT;
+let pollingAtivo      = true;
+let pollingId         = null;
+
+// ── Contador regressivo ────────────────────────────────────────────────────
+function atualizarTimer() {
+  const min = String(Math.floor(segundosRestantes / 60)).padStart(2, '0');
+  const sec = String(segundosRestantes % 60).padStart(2, '0');
+  const el  = document.getElementById('pix-timer');
+  if (el) el.textContent = `${min}:${sec}`;
+}
+
+const timerId = setInterval(() => {
+  segundosRestantes -= 1;
+  atualizarTimer();
+
+  if (segundosRestantes <= 0) {
+    clearInterval(timerId);
+    clearInterval(pollingId);
+    pollingAtivo = false;
+    // Exibe bloco expirado
+    document.getElementById('pix-qrcode-ativo')?.style.setProperty('display', 'none');
+    document.getElementById('pix-expirado')?.style.setProperty('display', 'block');
+  }
+}, 1000);
+
+// ── Polling de status ────────────────────────────────────────────────────
+function marcarPago() {
+  clearInterval(timerId);
+  clearInterval(pollingId);
+  pollingAtivo = false;
+  document.getElementById('pix-status-bloco').innerHTML =
+    '<span style="color:#27ae60;font-weight:600;"><i class="fas fa-check-circle"></i> Pagamento confirmado! Seu pedido está em processamento.</span>';
+  document.getElementById('pix-expirado')?.style.setProperty('display', 'none');
+  document.getElementById('pix-qrcode-ativo')?.style.setProperty('display', 'block');
+}
+
+async function verificarPix() {
+  const btn = document.getElementById('btn-verificar-pix');
+  if (btn) btn.textContent = 'Verificando…';
+  try {
+    const res   = await fetch(`/pagamento/pix/status/${PIX_NUMERO}/`);
+    const dados = await res.json();
+    if (dados.status === 'pago') {
+      marcarPago();
+    } else {
+      if (btn) btn.textContent = 'Verificar agora';
+    }
+  } catch(e) { if (btn) btn.textContent = 'Verificar agora'; }
+}
+
+pollingId = setInterval(async () => {
+  if (!pollingAtivo) return;
+  try {
+    const res   = await fetch(`/pagamento/pix/status/${PIX_NUMERO}/`);
+    const dados = await res.json();
+    if (dados.status === 'pago') marcarPago();
+  } catch(e) {}
+}, 30000);
+
+// ── Copiar código Pix ─────────────────────────────────────────────────────
 function copiarPix() {
   const input = document.getElementById('pix-payload-input');
+  if (!input) return;
   navigator.clipboard?.writeText(input.value).then(() => {
     const btn = document.getElementById('btn-copiar-pix');
     btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
@@ -192,35 +284,55 @@ function copiarPix() {
   }).catch(() => { input.select(); document.execCommand('copy'); });
 }
 
-async function verificarPix() {
-  const btn = document.getElementById('btn-verificar-pix');
-  btn.textContent = 'Verificando…';
-  try {
-    const res   = await fetch('/pagamento/pix/status/{{ pedido.numero }}/');
-    const dados = await res.json();
-    if (dados.status === 'pago') {
-      clearInterval(pollingId);
-      document.getElementById('pix-status-bloco').innerHTML =
-        '<span style="color:#27ae60;font-weight:500;"><i class="fas fa-check-circle"></i> Pagamento confirmado! Seu pedido está em processamento.</span>';
-    } else {
-      btn.textContent = 'Verificar agora';
-    }
-  } catch(e) { btn.textContent = 'Verificar agora'; }
-}
+// ── Gerar novo QR Code (após expirar) ────────────────────────────────────
+async function gerarNovoPix() {
+  const btn = document.getElementById('btn-novo-pix');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando…'; }
 
-let tentativas = 0;
-const pollingId = setInterval(async () => {
-  if (++tentativas > 20) { clearInterval(pollingId); return; }
   try {
-    const res   = await fetch('/pagamento/pix/status/{{ pedido.numero }}/');
+    const res   = await fetch(`/pagamento/pix/gerar/${PIX_NUMERO}/`);
     const dados = await res.json();
-    if (dados.status === 'pago') {
-      clearInterval(pollingId);
-      document.getElementById('pix-status-bloco').innerHTML =
-        '<span style="color:#27ae60;font-weight:500;"><i class="fas fa-check-circle"></i> Pagamento confirmado!</span>';
+
+    if (dados.status === 'ok') {
+      // Atualiza imagem e payload
+      const img = document.getElementById('pix-qrcode-img');
+      if (img) img.src = `data:image/png;base64,${dados.qrcode}`;
+      const payloadInput = document.getElementById('pix-payload-input');
+      if (payloadInput) payloadInput.value = dados.payload;
+
+      // Reinicia timer
+      segundosRestantes = PIX_TIMEOUT;
+      pollingAtivo      = true;
+      atualizarTimer();
+
+      // Troca blocos
+      document.getElementById('pix-expirado')?.style.setProperty('display', 'none');
+      document.getElementById('pix-qrcode-ativo')?.style.setProperty('display', 'block');
+
+      // Reinicia countdown
+      clearInterval(timerId);
+      setInterval(() => {
+        segundosRestantes -= 1;
+        atualizarTimer();
+        if (segundosRestantes <= 0) {
+          clearInterval(timerId);
+          clearInterval(pollingId);
+          pollingAtivo = false;
+          document.getElementById('pix-qrcode-ativo')?.style.setProperty('display', 'none');
+          document.getElementById('pix-expirado')?.style.setProperty('display', 'block');
+          const b = document.getElementById('btn-novo-pix');
+          if (b) { b.disabled = false; b.innerHTML = '<i class="fas fa-sync-alt"></i> Gerar novo QR Code'; }
+        }
+      }, 1000);
+    } else {
+      alert('Não foi possível gerar novo QR Code. Tente recarregar a página.');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i> Gerar novo QR Code'; }
     }
-  } catch(e) {}
-}, 30000);
+  } catch(e) {
+    alert('Erro ao gerar QR Code. Verifique sua conexão.');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i> Gerar novo QR Code'; }
+  }
+}
 </script>
 {% endif %}
 {% endblock %}

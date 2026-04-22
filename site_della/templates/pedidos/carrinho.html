@@ -33,7 +33,7 @@
           {% if item.variacao_desc %}
             <p class="carrinho-item-variacao">{{ item.variacao_desc }}</p>
           {% endif %}
-          <p class="carrinho-item-preco-unit">R$ {{ item.preco_decimal|floatformat:2 }} cada</p>
+          <p class="carrinho-item-preco-unit">R$ {{ item.preco_decimal|floatformat:"2g" }} cada</p>
         </div>
 
         <div class="carrinho-item-qty">
@@ -49,7 +49,7 @@
         </div>
 
         <p class="carrinho-item-subtotal" id="sub-{{ item.chave }}">
-          R$ {{ item.subtotal|floatformat:2 }}
+          R$ {{ item.subtotal|floatformat:"2g" }}
         </p>
 
         <button class="carrinho-item-remover"
@@ -68,7 +68,7 @@
 
       <div class="carrinho-resumo-linha">
         <span>Subtotal (<span id="resumo-qtd">{{ carrinho|length }}</span> ite{{ carrinho|length|pluralize:"m,ns" }})</span>
-        <span id="resumo-subtotal">R$ {{ total|floatformat:2 }}</span>
+        <span id="resumo-subtotal">R$ {{ total|floatformat:"2g" }}</span>
       </div>
 
       <div class="carrinho-resumo-linha">
@@ -78,7 +78,7 @@
 
       <div class="carrinho-resumo-total">
         <span>Total</span>
-        <span id="resumo-total">R$ {{ total|floatformat:2 }}</span>
+        <span id="resumo-total">R$ {{ total|floatformat:"2g" }}</span>
       </div>
 
       <a href="{% url 'pedidos:checkout' %}" class="btn-primario btn-finalizar w-full justify-center">

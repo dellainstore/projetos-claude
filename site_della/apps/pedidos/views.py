@@ -6,6 +6,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.db import models, transaction
 
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 class _PagamentoRecusado(Exception):
     """Levantada quando o gateway recusa o cartão dentro do bloco atômico."""
+
+
+class _EstoqueInsuficiente(Exception):
+    """Levantada quando o estoque é insuficiente para o item no momento do checkout."""
 
 
 # ─── Carrinho ─────────────────────────────────────────────────────────────────
@@ -63,6 +68,19 @@ def adicionar_ao_carrinho(request, produto_id):
             pass
 
     cart = Carrinho(request)
+
+    if variacao:
+        chave = cart._chave(produto.id, variacao.id)
+        qtd_no_carrinho = cart.carrinho.get(chave, {}).get('quantidade', 0)
+        estoque = variacao.estoque
+        if qtd_no_carrinho + quantidade > estoque:
+            # Limita silenciosamente ao estoque restante
+            quantidade = max(0, estoque - qtd_no_carrinho)
+            if quantidade <= 0:
+                return JsonResponse({'status': 'ok', 'total_itens': len(cart),
+                                     'total_valor': str(cart.get_total()),
+                                     'itens': _itens_para_drawer(cart)})
+
     cart.adicionar(produto, variacao=variacao, quantidade=quantidade)
 
     itens_drawer = _itens_para_drawer(cart)
@@ -93,11 +111,28 @@ def atualizar_carrinho(request):
     except (json.JSONDecodeError, ValueError):
         dados = {}
 
-    chave      = dados.get('chave', '')
-    quantidade = int(dados.get('quantidade', 1) or 1)
+    chave = dados.get('chave', '')
+    try:
+        quantidade = int(dados.get('quantidade', 1))
+    except (TypeError, ValueError):
+        quantidade = 1
 
     cart = Carrinho(request)
-    cart.atualizar(chave, quantidade)
+    if quantidade <= 0:
+        cart.remover(chave)
+    else:
+        cart_item = cart.carrinho.get(chave)
+        if cart_item and cart_item.get('variacao_id'):
+            from apps.produtos.models import Variacao
+            try:
+                variacao = Variacao.objects.get(pk=cart_item['variacao_id'])
+                quantidade = min(quantidade, variacao.estoque)
+            except Variacao.DoesNotExist:
+                pass
+        if quantidade <= 0:
+            cart.remover(chave)
+        else:
+            cart.atualizar(chave, quantidade)
     return JsonResponse({
         'status':      'ok',
         'total_itens': len(cart),
@@ -123,6 +158,7 @@ def _itens_para_drawer(cart):
 
 # ─── Checkout ─────────────────────────────────────────────────────────────────
 
+@login_required(login_url='/conta/entrar/')
 def checkout(request):
     cart = Carrinho(request)
 
@@ -250,22 +286,33 @@ def _processar_checkout(request, form, cart):
                     variacao_obj = Variacao.objects.get(pk=item['variacao_id'])
                 except Variacao.DoesNotExist:
                     pass
+            # SKU da variação tem prioridade — é o código que casa com o produto
+            # cadastrado no Bling. Cai no SKU do produto pai apenas se não houver variação.
+            sku_item = (variacao_obj.sku_variacao if variacao_obj and variacao_obj.sku_variacao
+                        else produto_obj.sku)
             ItemPedido.objects.create(
                 pedido         = pedido,
                 produto        = produto_obj,
                 variacao       = variacao_obj,
                 nome_produto   = item['nome'],
-                sku            = produto_obj.sku,
+                sku            = sku_item,
                 variacao_desc  = item.get('variacao_desc', ''),
                 preco_unitario = Decimal(item['preco']),
                 quantidade     = item['quantidade'],
             )
-            # Diminui estoque imediatamente (dentro do atomic — revertido se cartão recusado)
+            # Verifica e decrementa estoque de forma atômica (select_for_update evita
+            # condição de corrida quando dois clientes compram o último item ao mesmo tempo)
             if variacao_obj:
                 from django.db.models import F
-                from django.db.models.functions import Greatest
+                variacao_locked = Variacao.objects.select_for_update().get(pk=variacao_obj.pk)
+                if variacao_locked.estoque < item['quantidade']:
+                    raise _EstoqueInsuficiente(
+                        f'Estoque insuficiente para "{item["nome"]}". '
+                        f'Disponível: {variacao_locked.estoque}, '
+                        f'solicitado: {item["quantidade"]}.'
+                    )
                 Variacao.objects.filter(pk=variacao_obj.pk).update(
-                    estoque=Greatest(F('estoque') - item['quantidade'], models.Value(0))
+                    estoque=F('estoque') - item['quantidade']
                 )
 
     try:
@@ -290,6 +337,7 @@ def _processar_checkout(request, form, cart):
                 forma_pagamento       = forma_pagamento,
                 parcelas              = parcelas,
                 transportadora        = cd.get('servico_frete_nome', ''),
+                frete_servico_id      = (cd.get('opcao_frete') or '').strip(),
                 observacao_cliente    = cd.get('observacao', ''),
                 gateway               = 'pagseguro' if forma_pagamento == 'cartao_credito' else '',
                 cupom                 = cupom_obj,
@@ -326,9 +374,29 @@ def _processar_checkout(request, form, cart):
         messages.error(request, str(e))
         return redirect('pedidos:checkout')
 
+    except _EstoqueInsuficiente as e:
+        messages.error(request, str(e))
+        return redirect('pedidos:carrinho')
+
     except Exception as e:
-        logger.error('Erro ao criar pedido: %s', e, exc_info=True)
-        messages.error(request, 'Ocorreu um erro ao processar seu pedido. Tente novamente.')
+        import requests as _req
+        if isinstance(e, _req.HTTPError) and e.response is not None:
+            logger.error(
+                'Erro PagSeguro ao criar pedido: HTTP %s — %s',
+                e.response.status_code, e.response.text[:800], exc_info=False,
+            )
+            # Tenta extrair mensagem legível da resposta PagSeguro
+            try:
+                erros = e.response.json().get('error_messages', [])
+                descricao = '; '.join(
+                    f"{err.get('code','')}: {err.get('description','')}" for err in erros
+                ) if erros else e.response.text[:200]
+            except Exception:
+                descricao = e.response.text[:200]
+            messages.error(request, f'Erro no gateway de pagamento: {descricao}')
+        else:
+            logger.error('Erro ao criar pedido: %s', e, exc_info=True)
+            messages.error(request, 'Ocorreu um erro ao processar seu pedido. Tente novamente.')
         return redirect('pedidos:checkout')
 
     # ── Fora do atomic: só executa se o pedido foi commitado ──────────────────
@@ -381,25 +449,43 @@ def confirmacao_pedido(request, numero):
     if not autorizado:
         return redirect('produtos:home')
 
-    # Gera QR Code Pix se for forma de pagamento Pix
+    # Gera QR Code Pix: tenta PagBank (webhook automático), fallback estático
     pix_qrcode = None
     pix_payload = None
     if pedido.forma_pagamento == 'pix':
         try:
-            from apps.pagamentos.pix import gerar_payload_pix, gerar_qrcode_base64
-            chave_pix = getattr(settings, 'PIX_CHAVE', '')
-            if chave_pix:
-                pix_payload = gerar_payload_pix(
-                    chave          = chave_pix,
-                    valor          = float(pedido.total),
-                    nome_recebedor = 'DELLA INSTORE',
-                    cidade         = 'SAO PAULO',
-                    txid           = pedido.numero.replace('-', ''),
-                    descricao      = f'Pedido {pedido.numero}',
-                )
-                pix_qrcode = gerar_qrcode_base64(pix_payload)
-        except Exception as e:
-            logger.error('Erro ao gerar QR Code Pix: %s', e)
+            from apps.pagamentos.services.pagseguro import criar_ordem_pix
+            from apps.pagamentos.pix import gerar_qrcode_base64
+            resposta = criar_ordem_pix(pedido)
+            qr_codes = resposta.get('qr_codes', [])
+            order_id = resposta.get('id', '')
+            if qr_codes and order_id:
+                pix_payload = qr_codes[0].get('text', '')
+                if pix_payload:
+                    pix_qrcode = gerar_qrcode_base64(pix_payload)
+                    if order_id and pedido.gateway_id != order_id:
+                        pedido.gateway    = 'pagseguro'
+                        pedido.gateway_id = order_id
+                        pedido.save(update_fields=['gateway', 'gateway_id'])
+        except Exception as exc:
+            logger.warning('PIX PagBank na confirmação falhou, usando estático: %s', exc)
+        # Fallback estático
+        if not pix_qrcode:
+            try:
+                from apps.pagamentos.pix import gerar_payload_pix, gerar_qrcode_base64
+                chave_pix = getattr(settings, 'PIX_CHAVE', '')
+                if chave_pix:
+                    pix_payload = gerar_payload_pix(
+                        chave          = chave_pix,
+                        valor          = float(pedido.total),
+                        nome_recebedor = 'DELLA INSTORE',
+                        cidade         = 'SAO PAULO',
+                        txid           = pedido.numero.replace('-', ''),
+                        descricao      = f'Pedido {pedido.numero}',
+                    )
+                    pix_qrcode = gerar_qrcode_base64(pix_payload)
+            except Exception as e:
+                logger.error('Erro ao gerar QR Code Pix estático: %s', e)
 
     context = {
         'pedido':      pedido,
@@ -475,12 +561,27 @@ def calcular_frete(request):
     if not cep or len(''.join(filter(str.isdigit, cep))) != 8:
         return JsonResponse({'status': 'erro', 'erro': 'CEP inválido.'})
 
-    cart  = Carrinho(request)
-    itens = [
-        {'quantidade': item['quantidade'], 'preco': item['preco']}
-        for item in cart
-    ]
-    valor_declarado = float(cart.get_total())
+    # Quando a página de produto passa preco+quantidade, usa esses valores diretamente
+    # (ignora o carrinho) para que o frete calculado no produto seja idêntico ao do checkout.
+    preco_param = request.GET.get('preco', '').strip()
+    if preco_param:
+        try:
+            preco_unit = float((preco_param or '0').replace(',', '.'))
+            qtd        = max(1, int(request.GET.get('quantidade', '1') or 1))
+        except (ValueError, TypeError):
+            preco_unit, qtd = 0.0, 1
+        itens           = [{'quantidade': qtd, 'preco': str(preco_unit or 1)}]
+        valor_declarado = preco_unit * qtd
+    else:
+        cart  = Carrinho(request)
+        itens = [
+            {'quantidade': item['quantidade'], 'preco': item['preco']}
+            for item in cart
+        ]
+        valor_declarado = float(cart.get_total())
+        if not itens:
+            itens           = [{'quantidade': 1, 'preco': '1'}]
+            valor_declarado = 1.0
 
     from apps.pagamentos.services.melhorenvio import calcular
     opcoes = calcular(cep, itens, valor_declarado)
