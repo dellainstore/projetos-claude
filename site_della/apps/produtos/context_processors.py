@@ -1,10 +1,10 @@
 def categorias_menu(request):
     """
-    Injeta categorias ativas em todos os templates (para o menu de navegação).
-    Retorna apenas categorias-mãe (parent=None), com subcategorias pré-carregadas.
+    Injeta categorias ativas e números de WhatsApp em todos os templates.
     Cache de 4 horas — invalidado automaticamente ao salvar/deletar no admin.
     """
     from django.core.cache import cache
+    from django.conf import settings
     from apps.core_utils.cache_utils import MENU_CATEGORIAS
     from apps.produtos.models import Categoria
 
@@ -21,4 +21,10 @@ def categorias_menu(request):
             categorias = []
         cache.set(MENU_CATEGORIAS, categorias, 60 * 60 * 4)
 
-    return {'categorias_menu': categorias}
+    return {
+        'categorias_menu':  categorias,
+        'WHATSAPP_NUMBER_1': getattr(settings, 'WHATSAPP_NUMBER_1', ''),
+        'WHATSAPP_NUMBER_2': getattr(settings, 'WHATSAPP_NUMBER_2', ''),
+        'META_PIXEL_ID':     getattr(settings, 'META_PIXEL_ID', ''),
+        'GA_MEASUREMENT_ID': getattr(settings, 'GA_MEASUREMENT_ID', ''),
+    }

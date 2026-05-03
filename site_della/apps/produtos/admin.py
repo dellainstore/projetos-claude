@@ -1,15 +1,63 @@
 import csv
 import io
+import json
+import re
+import unicodedata
+from decimal import Decimal, InvalidOperation
+from django import forms
 from django.contrib import admin
 from django.contrib import messages as django_messages
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.db.models import Avg
+from django.db import transaction
 from django.urls import path
-from django.http import HttpResponseRedirect, HttpResponse
+from django.http import HttpResponseRedirect, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.contrib.admin.views.decorators import staff_member_required
-from .models import Categoria, Produto, ProdutoImagem, Variacao, Avaliacao, CorPadrao, TamanhoPadrao, TabelaMedidas, ProdutoCorFoto, NewsletterInscricao
+from apps.core_utils.sanitize import sanitize_text
+from .models import (
+    Categoria, Produto, ProdutoImagem, Variacao, Avaliacao, CorPadrao,
+    TamanhoPadrao, TabelaMedidas, TabelaMedidasLinha, ProdutoCorFoto,
+    NewsletterInscricao,
+)
+from .forms import ProdutoCorFotoForm, ProdutoAdminForm, CategoriaSubSelect, PENDING_PREFIX
+
+
+def _estilo_preview_cor(cor_primaria='', cor_secundaria=''):
+    cor_primaria = cor_primaria or '#ccc'
+    if cor_secundaria:
+        return (
+            f'background-color:{cor_primaria};'
+            f'background-image:conic-gradient(from 135deg, {cor_primaria} 0deg 180deg, '
+            f'{cor_secundaria} 180deg 360deg);'
+        )
+    return f'background-color:{cor_primaria};'
+
+
+class CorPreviewSelect(forms.Select):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        instance = getattr(value, 'instance', None)
+        if instance is not None:
+            option['attrs']['data-cor-hex'] = instance.codigo_hex or ''
+            option['attrs']['data-cor-hex-secundario'] = instance.codigo_hex_secundario or ''
+        return option
+
+
+def _texto_importacao_chave(valor):
+    bruto = unicodedata.normalize('NFKD', str(valor or ''))
+    sem_acentos = ''.join(ch for ch in bruto if not unicodedata.combining(ch))
+    sem_acentos = sem_acentos.replace('\xa0', ' ')
+    sem_acentos = sem_acentos.replace('\ufeff', '').replace('\u200b', '').replace('\u200c', '').replace('\u200d', '')
+    return ' '.join(sem_acentos.upper().split())
+
+
+def _limpar_celula_planilha(valor):
+    if valor is None:
+        return ''
+    texto = str(valor).strip()
+    return texto.replace('\ufeff', '').replace('\u200b', '').replace('\u200c', '').replace('\u200d', '').strip()
 
 
 # ---------------------------------------------------------------------------
@@ -19,17 +67,18 @@ from .models import Categoria, Produto, ProdutoImagem, Variacao, Avaliacao, CorP
 class ProdutoImagemInline(admin.TabularInline):
     model = ProdutoImagem
     extra = 1
-    fields = ('thumb_preview', 'imagem', 'alt', 'principal', 'ordem')
+    fields = ('thumb_preview', 'imagem', 'principal', 'ordem')
     readonly_fields = ('thumb_preview',)
     ordering = ('-principal', 'ordem')
     verbose_name = 'Foto do produto'
-    verbose_name_plural = 'Fotos do produto (marque "Principal" na foto de capa)'
+    verbose_name_plural = 'Fotos do produto'
 
     def thumb_preview(self, obj):
         if obj.imagem:
             return mark_safe(
                 f'<img src="{obj.imagem.url}" style="height:70px;width:70px;'
-                f'object-fit:cover;border-radius:6px;border:1px solid #eee;" />'
+                f'object-fit:contain;background:#fafaf8;'
+                f'border-radius:6px;border:1px solid #eee;" />'
             )
         return '—'
     thumb_preview.short_description = 'Preview'
@@ -38,22 +87,30 @@ class ProdutoImagemInline(admin.TabularInline):
 class VariacaoInline(admin.TabularInline):
     model = Variacao
     extra = 1
-    fields = ('cor', 'cor_preview', 'tamanho', 'estoque', 'sku_variacao', 'bling_variacao_id', 'ativa', 'clonar_btn')
+    fields = (
+        'cor', 'cor_preview', 'tamanho', 'preco', 'preco_promocional',
+        'disponibilidade', 'prazo_confeccao_dias',
+        'estoque', 'sku_variacao', 'bling_variacao_id', 'ativa', 'clonar_btn'
+    )
     readonly_fields = ('cor_preview', 'clonar_btn')
     ordering = ('cor__ordem', 'cor__nome', 'tamanho__ordem')
     autocomplete_fields = []
     verbose_name = 'Variação'
-    verbose_name_plural = (
-        'Variações — cada linha = 1 combinação (Cor + Tamanho). '
-        'Cadastre as cores em Produtos → Cores padrão antes de usar.'
-    )
+    verbose_name_plural = 'Variações'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == 'cor':
+            formfield.widget = CorPreviewSelect(attrs=formfield.widget.attrs)
+        return formfield
 
     def cor_preview(self, obj):
         hex_val = obj.cor.codigo_hex if obj.cor_id and obj.cor.codigo_hex else ''
+        hex_sec = obj.cor.codigo_hex_secundario if obj.cor_id and obj.cor.codigo_hex_secundario else ''
         if hex_val:
             return mark_safe(
                 f'<span style="display:inline-block;width:22px;height:22px;'
-                f'border-radius:50%;background:{hex_val};'
+                f'border-radius:50%;{_estilo_preview_cor(hex_val, hex_sec)}'
                 f'border:1px solid #ccc;vertical-align:middle;" '
                 f'title="{hex_val}"></span>'
             )
@@ -61,17 +118,10 @@ class VariacaoInline(admin.TabularInline):
     cor_preview.short_description = '●'
 
     def clonar_btn(self, obj):
-        if obj.pk:
-            from django.urls import reverse
-            url = reverse('admin:produtos_variacao_clonar', args=[obj.pk])
-            return format_html(
-                '<a href="{}" '
-                'style="background:#c9a96e;color:#fff;padding:3px 10px;'
-                'border-radius:3px;font-size:11px;text-decoration:none;white-space:nowrap;" '
-                'title="Duplica esta variação para editar">Clonar</a>',
-                url,
-            )
-        return '—'
+        return format_html(
+            '<button type="button" class="della-inline-clone" '
+            'title="Clona esta linha para você ajustar a próxima variação antes de salvar">Clonar</button>'
+        )
     clonar_btn.short_description = 'Clonar'
 
 
@@ -82,26 +132,31 @@ class ProdutoCorFotoInline(admin.TabularInline):
     Basta vincular UMA variação de cada cor — vale para todos os tamanhos.
     """
     model = ProdutoCorFoto
+    form = ProdutoCorFotoForm
     extra = 0
     fields = ('cor', 'cor_preview', 'imagem', 'foto_preview')
     readonly_fields = ('cor_preview', 'foto_preview')
     verbose_name = 'Foto por cor'
-    verbose_name_plural = (
-        'Fotos por cor — ao clicar na bolinha, a galeria muda para essa foto. '
-        'Cadastre UMA entrada por cor (vale para todos os tamanhos).'
-    )
+    verbose_name_plural = 'Fotos por Cor'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Aplica widget de preview de cor + filtra `imagem` por produto sendo editado."""
+        if db_field.name == 'imagem':
+            parent_id = request.resolver_match.kwargs.get('object_id')
+            if parent_id:
+                kwargs['queryset'] = ProdutoImagem.objects.filter(produto_id=parent_id)
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == 'cor':
+            formfield.widget = CorPreviewSelect(attrs=formfield.widget.attrs)
+        return formfield
 
     def cor_preview(self, obj):
         if obj.cor_id and obj.cor.codigo_hex:
             hex1 = obj.cor.codigo_hex
             hex2 = obj.cor.codigo_hex_secundario
-            if hex2:
-                bg = f'conic-gradient({hex1} 0deg 180deg, {hex2} 180deg 360deg)'
-            else:
-                bg = hex1
             return mark_safe(
                 f'<span style="display:inline-block;width:22px;height:22px;'
-                f'border-radius:50%;background:{bg};'
+                f'border-radius:50%;{_estilo_preview_cor(hex1, hex2)}'
                 f'border:1px solid #ccc;vertical-align:middle;"></span>'
             )
         return '—'
@@ -111,24 +166,32 @@ class ProdutoCorFotoInline(admin.TabularInline):
         if obj.imagem_id and obj.imagem.imagem:
             return mark_safe(
                 f'<img src="{obj.imagem.imagem.url}" '
-                f'style="height:55px;width:55px;object-fit:cover;border-radius:4px;border:1px solid #eee;" />'
+                f'style="height:70px;width:70px;object-fit:contain;background:#fafaf8;'
+                f'border-radius:4px;border:1px solid #eee;" />'
             )
         return '—'
     foto_preview.short_description = 'Preview'
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Filtra o campo 'imagem' para mostrar apenas imagens do produto sendo editado."""
-        if db_field.name == 'imagem':
-            parent_id = request.resolver_match.kwargs.get('object_id')
-            if parent_id:
-                kwargs['queryset'] = ProdutoImagem.objects.filter(produto_id=parent_id)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+class TabelaMedidasLinhaInline(admin.TabularInline):
+    model = TabelaMedidasLinha
+    extra = 5
+    fields = (
+        'ordem', 'medida', 'unidade',
+        'valor_1', 'valor_2', 'valor_3', 'valor_4', 'valor_5', 'valor_6',
+    )
+    ordering = ('ordem', 'id')
+    verbose_name = 'Linha da tabela'
+    verbose_name_plural = (
+        'Linhas da tabela de medidas. Exemplo: Manequim, Peso medio, Busto, '
+        'Cintura, Quadril.'
+    )
 
 
 class AvaliacaoInline(admin.StackedInline):
     model = Avaliacao
     extra = 0
-    fields = ('nome_publico', 'nota', 'titulo', 'comentario', 'aprovada', 'criada_em')
+    fields = ('nome_publico', 'nota', 'comentario', 'aprovada', 'criada_em')
     readonly_fields = ('criada_em',)
     ordering = ('-criada_em',)
     show_change_link = True
@@ -143,25 +206,20 @@ class AvaliacaoInline(admin.StackedInline):
 
 @admin.register(Categoria)
 class CategoriaAdmin(admin.ModelAdmin):
-    list_display = ('nome_arvore', 'nivel_badge', 'slug', 'ordem', 'ativa', 'total_produtos', 'thumb_preview')
-    list_editable = ('ordem', 'ativa')
+    list_display = ('nome_arvore', 'nivel_badge', 'slug', 'ativa', 'total_produtos', 'acoes_linha')
+    change_list_template = 'admin/produtos/categoria_changelist.html'
+    list_display_links = ('nome_arvore',)
     list_filter = ('ativa', 'parent')
     search_fields = ('nome', 'slug')
     prepopulated_fields = {'slug': ('nome',)}
-    ordering = ('parent__ordem', 'parent__nome', 'ordem', 'nome')
+    ordering = ('parent__id', 'parent__ordem', 'parent__nome', 'nome')
+
+    class Media:
+        js = ('admin/js/admin_linhas.js', 'admin/js/categoria_sort.js')
 
     fieldsets = (
-        ('Identificação', {
-            'fields': ('nome', 'slug', 'parent', 'ordem', 'ativa'),
-            'description': (
-                'Categoria mãe = deixe "Categoria mãe" vazio.<br>'
-                'Subcategoria = selecione a "Categoria mãe" à qual pertence.<br>'
-                'A ordem controla a posição no menu.'
-            ),
-        }),
-        ('Conteúdo', {
-            'fields': ('descricao', 'imagem'),
-            'classes': ('collapse',),
+        (None, {
+            'fields': ('nome', 'slug', 'parent', 'ativa'),
         }),
     )
 
@@ -185,20 +243,27 @@ class CategoriaAdmin(admin.ModelAdmin):
         )
     nivel_badge.short_description = 'Nível'
 
-    def thumb_preview(self, obj):
-        if obj.imagem:
-            return mark_safe(
-                f'<img src="{obj.imagem.url}" style="height:36px;width:36px;'
-                f'object-fit:cover;border-radius:4px;" />'
-            )
-        return '—'
-    thumb_preview.short_description = 'Img'
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:produtos_categoria_change', args=[obj.pk])
+        delete_url = reverse('admin:produtos_categoria_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta categoria?\')">✕ Excluir</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
 
     def total_produtos(self, obj):
         return obj.produtos.filter(ativo=True).count()
     total_produtos.short_description = 'Ativos'
 
     def save_model(self, request, obj, form, change):
+        parent_changed = change and 'parent' in form.changed_data
+        if not change or parent_changed:
+            irmaos = Categoria.objects.filter(parent=obj.parent).exclude(pk=obj.pk)
+            ultima_ordem = irmaos.order_by('-ordem').values_list('ordem', flat=True).first() or 0
+            obj.ordem = ultima_ordem + 1
         super().save_model(request, obj, form, change)
         from apps.core_utils.cache_utils import invalidar_categorias, invalidar_categoria_produtos
         invalidar_categorias()
@@ -211,40 +276,95 @@ class CategoriaAdmin(admin.ModelAdmin):
         invalidar_categoria_produtos(obj.pk)
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request).select_related('parent')
-        return qs
+        return super().get_queryset(request).select_related('parent')
 
-    def get_ordering(self, request):
-        """Ordena: mães primeiro por ordem, depois as filhas logo abaixo da mãe."""
-        return []  # ordenação feita no Python abaixo
+    def get_urls(self):
+        urls = super().get_urls()
+        extras = [
+            path(
+                'salvar-ordem/',
+                self.admin_site.admin_view(self._salvar_ordem),
+                name='produtos_categoria_salvar_ordem',
+            ),
+        ]
+        return extras + urls
+
+    def _build_categorias_tree(self):
+        categorias = list(
+            Categoria.objects.select_related('parent').order_by('parent__ordem', 'parent__nome', 'ordem', 'nome', 'pk')
+        )
+        maes = sorted(
+            [categoria for categoria in categorias if categoria.parent_id is None],
+            key=lambda categoria: (categoria.ordem, categoria.nome.lower(), categoria.pk),
+        )
+        filhas_por_mae = {}
+        for categoria in categorias:
+            if categoria.parent_id:
+                filhas_por_mae.setdefault(categoria.parent_id, []).append(categoria)
+        for filhas in filhas_por_mae.values():
+            filhas.sort(key=lambda categoria: (categoria.ordem, categoria.nome.lower(), categoria.pk))
+
+        tree = []
+        for mae in maes:
+            tree.append({
+                'parent': mae,
+                'children': filhas_por_mae.get(mae.pk, []),
+            })
+        return tree
+
+    def _salvar_ordem(self, request):
+        if request.method != 'POST':
+            return JsonResponse({'error': 'Método inválido.'}, status=405)
+
+        try:
+            payload = json.loads(request.body or '{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Payload inválido.'}, status=400)
+
+        parent_ids = payload.get('parents') or []
+        children_map = payload.get('children') or {}
+
+        maes = list(Categoria.objects.filter(parent__isnull=True).order_by('pk'))
+        maes_ids = [categoria.pk for categoria in maes]
+
+        if sorted(parent_ids) != sorted(maes_ids) or len(parent_ids) != len(maes_ids):
+            return JsonResponse({'error': 'Lista de categorias mãe incompleta.'}, status=400)
+
+        filhas_por_mae = {
+            categoria_mae.pk: list(
+                Categoria.objects.filter(parent_id=categoria_mae.pk).order_by('pk')
+            )
+            for categoria_mae in maes
+        }
+
+        for mae in maes:
+            child_ids = children_map.get(str(mae.pk), children_map.get(mae.pk, [])) or []
+            esperados = [categoria.pk for categoria in filhas_por_mae[mae.pk]]
+            if sorted(child_ids) != sorted(esperados) or len(child_ids) != len(esperados):
+                return JsonResponse(
+                    {'error': f'Subcategorias incompletas para {mae.nome}.'},
+                    status=400,
+                )
+
+        with transaction.atomic():
+            for ordem_mae, categoria_id in enumerate(parent_ids, start=1):
+                Categoria.objects.filter(pk=categoria_id, parent__isnull=True).update(ordem=ordem_mae)
+
+            for mae in maes:
+                child_ids = children_map.get(str(mae.pk), children_map.get(mae.pk, [])) or []
+                for ordem_filha, categoria_id in enumerate(child_ids, start=1):
+                    Categoria.objects.filter(pk=categoria_id, parent_id=mae.pk).update(ordem=ordem_filha)
+
+        from apps.core_utils.cache_utils import invalidar_categorias
+        invalidar_categorias()
+        return JsonResponse({'ok': True})
 
     def changelist_view(self, request, extra_context=None):
-        # Força ordenação: mãe (parent=None) por ordem, depois filhas logo abaixo
-        response = super().changelist_view(request, extra_context)
+        response = super().changelist_view(request, extra_context=extra_context)
         try:
-            cl = response.context_data['cl']
-            qs = cl.queryset.select_related('parent')
-            # Separar mães e filhas
-            maes = sorted([c for c in qs if c.parent_id is None], key=lambda x: (x.ordem, x.nome))
-            filhas_map = {}
-            for c in qs:
-                if c.parent_id:
-                    filhas_map.setdefault(c.parent_id, []).append(c)
-            for pid in filhas_map:
-                filhas_map[pid].sort(key=lambda x: (x.ordem, x.nome))
-            # Monta lista final: mãe, suas filhas, próxima mãe, ...
-            ordenadas = []
-            for mae in maes:
-                ordenadas.append(mae)
-                ordenadas.extend(filhas_map.get(mae.pk, []))
-            # Injeta as órfãs (filhas cujas mães não estão no qs — raro)
-            ids_vistos = {c.pk for c in ordenadas}
-            for c in qs:
-                if c.pk not in ids_vistos:
-                    ordenadas.append(c)
-            # Substitui o queryset por lista ordenada (Django suporta lista aqui)
-            cl.queryset = ordenadas
-        except (AttributeError, KeyError, TypeError):
+            response.context_data['categorias_tree'] = self._build_categorias_tree()
+            response.context_data['categoria_sort_save_url'] = 'salvar-ordem/'
+        except Exception:
             pass
         return response
 
@@ -255,6 +375,9 @@ class CategoriaAdmin(admin.ModelAdmin):
 
 @admin.register(Produto)
 class ProdutoAdmin(admin.ModelAdmin):
+    form = ProdutoAdminForm
+    IMPORT_PREVIEW_SESSION_KEY = 'produtos_import_preview_v2'
+    IMPORT_FOTOS_PREVIEW_SESSION_KEY = 'produtos_import_fotos_preview_v1'
     list_display = (
         'thumb_principal', 'nome', 'categoria', 'preco_fmt', 'preco_promo_fmt',
         'badge_promocao', 'total_estoque', 'media_avaliacao', 'ativo', 'destaque', 'novo',
@@ -262,15 +385,15 @@ class ProdutoAdmin(admin.ModelAdmin):
     )
     list_display_links = ('thumb_principal', 'nome')
     list_editable = ('ativo', 'destaque', 'novo')
-    list_filter = ('ativo', 'destaque', 'novo', 'categoria', 'genero')
-    search_fields = ('nome', 'slug', 'sku', 'bling_id')
+    list_filter = ('ativo', 'destaque', 'novo', 'categoria')
+    search_fields = ('nome', 'slug', 'sku')
     ordering = ('ordem', '-criado_em')
     date_hierarchy = 'criado_em'
     readonly_fields = ('criado_em', 'atualizado_em', 'slug')
     change_list_template = 'admin/produtos/produto_changelist.html'
 
     class Media:
-        js = ('admin/js/admin_linhas.js',)
+        js = ('admin/js/admin_linhas.js', 'admin/js/produto_admin.js')
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -278,15 +401,7 @@ class ProdutoAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Identificação', {
-            'fields': ('nome', 'slug', 'categoria', 'genero'),
-        }),
-        ('Integração Bling', {
-            'fields': ('bling_id', 'sku'),
-            'description': (
-                'Bling ID e SKU são do produto pai. '
-                'Cada variação tem seu próprio SKU e ID Bling no bloco de Variações abaixo.'
-            ),
-            'classes': ('collapse',),
+            'fields': ('nome', 'slug', 'categoria_pai', 'categoria'),
         }),
         ('Textos', {
             'fields': ('descricao', 'composicao'),
@@ -294,6 +409,10 @@ class ProdutoAdmin(admin.ModelAdmin):
         ('Preços', {
             'fields': ('preco', 'preco_promocional'),
             'description': 'Digite o valor com ponto como separador decimal. Ex: 512.00',
+        }),
+        ('Logística', {
+            'fields': ('peso',),
+            'description': 'Peso da peça em gramas — usado no cálculo de frete.',
         }),
         ('Controle e ordem', {
             'fields': ('ativo', 'destaque', 'novo', 'ordem'),
@@ -313,8 +432,22 @@ class ProdutoAdmin(admin.ModelAdmin):
         }),
     )
 
-    inlines = [ProdutoImagemInline, ProdutoCorFotoInline, VariacaoInline, AvaliacaoInline]
+    inlines = [ProdutoImagemInline, ProdutoCorFotoInline, VariacaoInline]
     actions = ['marcar_ativo', 'marcar_inativo', 'marcar_destaque', 'remover_destaque']
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Aplica o widget custom CategoriaSubSelect (com data-parent em cada
+        <option>) e o queryset filtrado por subcategorias no campo `categoria`.
+        Forma idiomática para admin — Django gerencia choices/wrapper sozinho."""
+        if db_field.name == 'categoria':
+            kwargs['queryset'] = (
+                Categoria.objects
+                .filter(parent__isnull=False)
+                .select_related('parent')
+                .order_by('parent__nome', 'ordem', 'nome')
+            )
+            kwargs['widget'] = CategoriaSubSelect()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -323,6 +456,51 @@ class ProdutoAdmin(admin.ModelAdmin):
         cache.delete(HOME_DESTAQUES)
         if obj.categoria_id:
             invalidar_categoria_produtos(obj.categoria_id)
+
+    def save_related(self, request, form, formsets, change):
+        """Salva imagens primeiro, resolve refs 'pending:imagens-N' nos forms
+        de Foto por Cor, e só então salva o resto. Isso permite que o usuário
+        suba fotos novas e já as escolha no inline de Foto por Cor no mesmo
+        save (sem precisar de um save intermediário)."""
+        imagens_fs = None
+        cor_fotos_fs = None
+        outros = []
+        for fs in formsets:
+            model = getattr(fs, 'model', None)
+            if model is ProdutoImagem:
+                imagens_fs = fs
+            elif model is ProdutoCorFoto:
+                cor_fotos_fs = fs
+            else:
+                outros.append(fs)
+
+        form.save_m2m()
+
+        if imagens_fs is not None:
+            imagens_fs.save()
+
+        if cor_fotos_fs is not None:
+            prefix_to_imagem = {}
+            if imagens_fs is not None:
+                for sub in imagens_fs.forms:
+                    if sub.instance.pk:
+                        prefix_to_imagem[sub.prefix] = sub.instance
+
+            for sub in cor_fotos_fs.forms:
+                ref = getattr(sub, '_pending_imagem_ref', None)
+                if not ref:
+                    continue
+                key = ref[len(PENDING_PREFIX):]
+                imagem_obj = prefix_to_imagem.get(key)
+                if imagem_obj is not None:
+                    sub.instance.imagem = imagem_obj
+                else:
+                    sub.cleaned_data['DELETE'] = True
+
+            cor_fotos_fs.save()
+
+        for fs in outros:
+            fs.save()
 
     def delete_model(self, request, obj):
         super().delete_model(request, obj)
@@ -341,9 +519,15 @@ class ProdutoAdmin(admin.ModelAdmin):
             path('importar/',
                  self.admin_site.admin_view(self._importar_view),
                  name='produtos_produto_importar'),
+            path('importar-fotos/',
+                 self.admin_site.admin_view(self._importar_fotos_view),
+                 name='produtos_produto_importar_fotos'),
             path('modelo-csv/',
                  self.admin_site.admin_view(self._modelo_csv),
                  name='produtos_produto_modelo_csv'),
+            path('exportar-csv/',
+                 self.admin_site.admin_view(self._exportar_csv),
+                 name='produtos_produto_exportar_csv'),
         ]
         return extras + urls
 
@@ -375,26 +559,22 @@ class ProdutoAdmin(admin.ModelAdmin):
         chave = nome_cor.upper().strip()
         return self._COR_HEX.get(chave, '')
 
-    def _parse_bling_descricao(self, descricao):
+    def _parse_nome_variacao(self, nome_completo):
         """
         Faz parse de 'BODY GIU (AZUL MARINHO) (PP)' → (modelo, cor, tamanho).
-        Retorna (None, None, None) se não reconhecer o padrão.
         """
         import re as _re
-        m = _re.match(r'^(.+?)\s*\((.+?)\)\s*\((.+?)\)\s*$', descricao.strip())
-        if m:
-            return m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
-        # Só um parêntese — tenta (MODELO) (TAMANHO_ou_COR)
-        m2 = _re.match(r'^(.+?)\s*\((.+?)\)\s*$', descricao.strip())
-        if m2:
-            return m2.group(1).strip(), '', m2.group(2).strip()
-        return descricao.strip(), '', ''
+        bruto = unicodedata.normalize('NFKC', str(nome_completo or ''))
+        bruto = bruto.replace('\xa0', ' ').replace('（', '(').replace('）', ')')
+        bruto = ' '.join(bruto.split())
+        m = _re.match(r'^(.*?)\s*[\(]\s*(.+?)\s*[\)]\s*[\(]\s*(.+?)\s*[\)]\s*$', bruto)
+        if not m:
+            return None, None, None
+        return m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
 
     def _ler_arquivo(self, arquivo):
         """
         Lê o arquivo enviado (CSV ou XLSX) e retorna lista de dicts.
-        Detecta automaticamente o formato Bling (colunas ID/Código/Descrição)
-        ou o formato legado (nome/categoria/...).
         """
         nome = arquivo.name.lower()
 
@@ -404,309 +584,1027 @@ class ProdutoAdmin(admin.ModelAdmin):
             ws = wb.active
             rows = list(ws.values)
             if not rows:
-                return [], 'bling'
-            headers = [str(h).strip() if h else '' for h in rows[0]]
+                return []
+            headers = [_limpar_celula_planilha(h) if h else '' for h in rows[0]]
             data = []
             for row in rows[1:]:
-                data.append({headers[i]: (str(row[i]).strip() if row[i] is not None else '') for i in range(len(headers))})
+                data.append({
+                    headers[i]: (_limpar_celula_planilha(row[i]) if i < len(row) and row[i] is not None else '')
+                    for i in range(len(headers))
+                })
         else:
             decoded = arquivo.read().decode('utf-8-sig')
-            reader = csv.DictReader(io.StringIO(decoded))
+            sample = decoded[:4096]
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
+            except csv.Error:
+                dialect = csv.excel
+                dialect.delimiter = ';' if sample.count(';') > sample.count(',') else ','
+            reader = csv.DictReader(io.StringIO(decoded), dialect=dialect)
             data = list(reader)
-            if data:
-                headers = list(data[0].keys())
-            else:
-                return [], 'bling'
+        return data
 
-        # Detecta formato: Bling tem colunas "ID", "Código", "Descrição"
-        headers_norm = [h.lower().strip() for h in (headers if data else [])]
-        is_bling = any(h in headers_norm for h in ['id', 'código', 'codigo', 'descrição', 'descricao'])
-        formato = 'bling' if is_bling else 'legado'
-        return data, formato
+    def _get_valor_coluna(self, row, *aliases):
+        aliases_norm = {alias.lower().strip() for alias in aliases}
+        for chave, valor in row.items():
+            chave_limpa = _limpar_celula_planilha(chave).lower()
+            if chave_limpa in aliases_norm:
+                return _limpar_celula_planilha(valor)
+        return ''
+
+    def _linha_vazia(self, row):
+        return not any(str(v).strip() for v in row.values() if v is not None)
+
+    def _parse_bool(self, valor):
+        bruto = (str(valor or '')).strip().lower()
+        if bruto in ('sim', 's', 'yes', 'y', '1', 'true', 'ativo', 'ativa'):
+            return True, None
+        if bruto in ('nao', 'não', 'n', 'no', '0', 'false', 'inativo', 'inativa'):
+            return False, None
+        return None, f'valor booleano inválido "{valor}"'
+
+    def _parse_decimal(self, valor, campo, obrigatorio=False):
+        bruto = str(valor or '').strip()
+        if not bruto:
+            if obrigatorio:
+                return None, f'{campo} não informado'
+            return None, None
+        bruto = bruto.replace('R$', '').replace(' ', '')
+        if ',' in bruto:
+            bruto = bruto.replace('.', '').replace(',', '.')
+        try:
+            return Decimal(bruto), None
+        except (InvalidOperation, ValueError):
+            return None, f'{campo} inválido "{valor}"'
+
+    def _parse_int(self, valor, campo, obrigatorio=False, minimo=None):
+        bruto = str(valor or '').strip()
+        if not bruto:
+            if obrigatorio:
+                return None, f'{campo} não informado'
+            return None, None
+        try:
+            numero = int(float(bruto.replace(',', '.')))
+        except (TypeError, ValueError):
+            return None, f'{campo} inválido "{valor}"'
+        if minimo is not None and numero < minimo:
+            return None, f'{campo} deve ser maior ou igual a {minimo}'
+        return numero, None
+
+    def _parse_disponibilidade(self, valor):
+        bruto = (str(valor or '')).strip().lower()
+        if bruto in ('imediata', 'disponibilidade imediata', 'pronta entrega', 'pronta-entrega'):
+            return Variacao.DISPONIBILIDADE_IMEDIATA, None
+        if bruto in ('sob demanda', 'sob_demanda', 'sob encomenda', 'encomenda'):
+            return Variacao.DISPONIBILIDADE_SOB_DEMANDA, None
+        return None, f'disponibilidade inválida "{valor}"'
+
+    def _resolver_categoria(self, categoria_pai_nome, subcategoria_nome=''):
+        categoria_pai_nome = (categoria_pai_nome or '').strip()
+        subcategoria_nome = (subcategoria_nome or '').strip()
+
+        if subcategoria_nome:
+            if not categoria_pai_nome:
+                return None, 'categoria_pai não informada para a subcategoria'
+            categoria_pai = Categoria.objects.filter(
+                nome__iexact=categoria_pai_nome,
+                parent__isnull=True,
+            ).first()
+            if not categoria_pai:
+                return None, f'categoria pai "{categoria_pai_nome}" não cadastrada'
+            subcategoria = Categoria.objects.filter(
+                nome__iexact=subcategoria_nome,
+                parent=categoria_pai,
+            ).first()
+            if not subcategoria:
+                return None, f'subcategoria "{subcategoria_nome}" não cadastrada em "{categoria_pai_nome}"'
+            return subcategoria, None
+
+        if not categoria_pai_nome:
+            return None, 'categoria_pai não informada'
+
+        categoria_pai = Categoria.objects.filter(
+            nome__iexact=categoria_pai_nome,
+            parent__isnull=True,
+        ).first()
+        if not categoria_pai:
+            return None, f'categoria pai "{categoria_pai_nome}" não cadastrada'
+        return categoria_pai, None
+
+    def _mapa_nomes_normalizados(self, queryset):
+        mapa = {}
+        duplicados = {}
+        for obj in queryset:
+            chave = _texto_importacao_chave(getattr(obj, 'nome', ''))
+            if not chave:
+                continue
+            if chave in mapa:
+                duplicados.setdefault(chave, [mapa[chave]]).append(obj)
+            else:
+                mapa[chave] = obj
+        return mapa, duplicados
+
+    def _mapa_subcategorias_normalizadas(self):
+        mapa = {}
+        duplicados = {}
+        for categoria in Categoria.objects.select_related('parent').filter(parent__isnull=False):
+            chave = (
+                _texto_importacao_chave(categoria.parent.nome),
+                _texto_importacao_chave(categoria.nome),
+            )
+            if chave in mapa:
+                duplicados.setdefault(chave, [mapa[chave]]).append(categoria)
+            else:
+                mapa[chave] = categoria
+        return mapa, duplicados
+
+    def _resolver_cor(self, nome):
+        cor = CorPadrao.objects.filter(nome__iexact=(nome or '').strip()).first()
+        if not cor:
+            return None, f'cor "{nome}" não cadastrada'
+        return cor, None
+
+    def _resolver_tamanho(self, nome):
+        tamanho = TamanhoPadrao.objects.filter(nome__iexact=(nome or '').strip()).first()
+        if not tamanho:
+            return None, f'tamanho "{nome}" não cadastrado'
+        return tamanho, None
+
+    def _validar_planilha_produtos(self, rows):
+        campos = {
+            'nome': ('nome',),
+            'categoria_pai': ('categoria_pai', 'categoria pai'),
+            'subcategoria': ('subcategoria', 'sub categoria'),
+            'descricao': ('descricao', 'descrição'),
+            'composicao': ('composicao', 'composição'),
+            'preco': ('preco_geral', 'preço_geral', 'preco geral', 'preco', 'preço'),
+            'preco_promocional': ('preco_promocional_geral', 'preço promocional geral', 'preco promocional geral', 'preco_promocional', 'preço promocional'),
+            'peso': ('peso',),
+            'ativo': ('ativo',),
+            'destaque': ('destaque',),
+            'novo': ('novo',),
+            'ordem': ('ordem',),
+            'seo_titulo': ('seo_titulo', 'seo titulo'),
+            'seo_descricao': ('seo_descricao', 'seo descrição', 'seo descricao'),
+            'seo_keywords': ('palavra_chave', 'palavra chave', 'palavras_chave', 'seo_keywords'),
+            'disponibilidade': ('disponibilidade',),
+            'prazo_confeccao_dias': ('prazo_confeccao_dias', 'prazo confecção dias', 'prazo confeccao dias'),
+            'estoque': ('estoque',),
+            'sku_variacao': ('sku',),
+            'bling_variacao_id': ('id_bling', 'id bling'),
+            'preco_variacao': ('preco_variacao', 'preço_variacao', 'preco variação', 'preço variação'),
+            'preco_promocional_variacao': (
+                'preco_promocional_variacao', 'preço_promocional_variacao',
+                'preco promocional variação', 'preço promocional variação'
+            ),
+        }
+
+        grupos = {}
+        erros = []
+        avisos = []
+        produtos_mapa, produtos_duplicados = self._mapa_nomes_normalizados(Produto.objects.all())
+        cores_mapa, cores_duplicadas = self._mapa_nomes_normalizados(CorPadrao.objects.all())
+        tamanhos_mapa, tamanhos_duplicados = self._mapa_nomes_normalizados(TamanhoPadrao.objects.all())
+        categorias_mae_mapa, categorias_mae_duplicadas = self._mapa_nomes_normalizados(
+            Categoria.objects.filter(parent__isnull=True)
+        )
+        subcategorias_mapa, subcategorias_duplicadas = self._mapa_subcategorias_normalizadas()
+
+        for i, row in enumerate(rows, start=2):
+            if self._linha_vazia(row):
+                continue
+
+            nome_completo = self._get_valor_coluna(row, *campos['nome'])
+            modelo, cor_nome, tam_nome = self._parse_nome_variacao(nome_completo)
+            if not modelo:
+                erros.append(
+                    f'Linha {i}: o campo nome deve estar no formato MODELO (COR) (TAMANHO). '
+                    f'Valor lido: "{nome_completo}".'
+                )
+                continue
+
+            grupo = grupos.setdefault(_texto_importacao_chave(modelo), {
+                'modelo': modelo,
+                'linhas': [],
+                'produto': {k: '' for k in (
+                    'categoria_pai', 'subcategoria', 'descricao', 'composicao', 'preco', 'preco_promocional',
+                    'peso', 'ativo', 'destaque', 'novo', 'ordem',
+                    'seo_titulo', 'seo_descricao', 'seo_keywords',
+                )},
+                'conflitos': [],
+            })
+
+            linha = {
+                'linha': i,
+                'nome_completo': nome_completo,
+                'modelo': modelo,
+                'cor_nome': cor_nome,
+                'tam_nome': tam_nome,
+                'disponibilidade_raw': self._get_valor_coluna(row, *campos['disponibilidade']),
+                'prazo_confeccao_dias_raw': self._get_valor_coluna(row, *campos['prazo_confeccao_dias']),
+                'estoque_raw': self._get_valor_coluna(row, *campos['estoque']),
+                'sku_variacao': self._get_valor_coluna(row, *campos['sku_variacao']),
+                'bling_variacao_id': self._get_valor_coluna(row, *campos['bling_variacao_id']),
+                'preco_variacao_raw': self._get_valor_coluna(row, *campos['preco_variacao']),
+                'preco_promocional_variacao_raw': self._get_valor_coluna(row, *campos['preco_promocional_variacao']),
+            }
+            grupo['linhas'].append(linha)
+
+            for campo in grupo['produto'].keys():
+                aliases = campos[campo]
+                valor = self._get_valor_coluna(row, *aliases)
+                if valor == '':
+                    continue
+                atual = grupo['produto'][campo]
+                if atual == '':
+                    grupo['produto'][campo] = valor
+                elif str(atual).strip() != str(valor).strip():
+                    grupo['conflitos'].append(
+                        f'Linha {i}: conflito no campo "{campo}" para o produto "{modelo}".'
+                    )
+
+        preview_grupos = []
+        total_variacoes = 0
+        produtos_criar = 0
+        produtos_atualizar = 0
+        variacoes_criar = 0
+        variacoes_atualizar = 0
+        campos_opcionais = {
+            'descricao', 'composicao', 'preco_promocional',
+            'seo_titulo', 'seo_descricao', 'seo_keywords',
+        }
+
+        for _key, grupo in grupos.items():
+            erros.extend(grupo['conflitos'])
+            dados_produto = grupo['produto']
+            modelo = grupo['modelo']
+            modelo_chave = _texto_importacao_chave(modelo)
+            if modelo_chave in produtos_duplicados:
+                erros.append(
+                    f'Produto "{modelo}": existem cadastros duplicados com o mesmo nome base, diferenciados apenas por acento ou caixa.'
+                )
+            produto_existente = produtos_mapa.get(modelo_chave)
+            status_produto = 'Atualizar' if produto_existente else 'Criar'
+            if produto_existente:
+                produtos_atualizar += 1
+            else:
+                produtos_criar += 1
+
+            categoria_obj = None
+            categoria_pai_nome = dados_produto['categoria_pai']
+            subcategoria_nome = dados_produto['subcategoria']
+            if not categoria_pai_nome:
+                erros.append(f'Produto "{modelo}": campo "categoria_pai" não informado.')
+            else:
+                categoria_pai_chave = _texto_importacao_chave(categoria_pai_nome)
+                if categoria_pai_chave in categorias_mae_duplicadas:
+                    erros.append(
+                        f'Produto "{modelo}": existem categorias pai duplicadas para "{categoria_pai_nome}", diferenciadas apenas por acento ou caixa.'
+                    )
+                elif subcategoria_nome:
+                    subcategoria_chave = (categoria_pai_chave, _texto_importacao_chave(subcategoria_nome))
+                    if subcategoria_chave in subcategorias_duplicadas:
+                        erros.append(
+                            f'Produto "{modelo}": existem subcategorias duplicadas para "{subcategoria_nome}" em "{categoria_pai_nome}", diferenciadas apenas por acento ou caixa.'
+                        )
+                    else:
+                        categoria_obj = subcategorias_mapa.get(subcategoria_chave)
+                        if not categoria_obj:
+                            erros.append(
+                                f'Produto "{modelo}": subcategoria "{subcategoria_nome}" não cadastrada em "{categoria_pai_nome}".'
+                            )
+                else:
+                    categoria_obj = categorias_mae_mapa.get(categoria_pai_chave)
+                    if not categoria_obj:
+                        erros.append(f'Produto "{modelo}": categoria pai "{categoria_pai_nome}" não cadastrada.')
+
+            for campo_obrigatorio in ('preco', 'peso', 'ativo', 'destaque', 'novo'):
+                if not str(dados_produto.get(campo_obrigatorio, '')).strip():
+                    erros.append(f'Produto "{modelo}": campo "{campo_obrigatorio}" não informado.')
+            for campo_opcional in campos_opcionais:
+                if not str(dados_produto.get(campo_opcional, '')).strip():
+                    avisos.append(f'Produto "{modelo}": campo "{campo_opcional}" não informado.')
+
+            preco, erro_preco = self._parse_decimal(dados_produto['preco'], 'preço', obrigatorio=True)
+            if erro_preco:
+                erros.append(f'Produto "{modelo}": {erro_preco}.')
+
+            preco_promocional, erro_promo = self._parse_decimal(
+                dados_produto['preco_promocional'], 'preço promocional', obrigatorio=False
+            )
+            if erro_promo:
+                erros.append(f'Produto "{modelo}": {erro_promo}.')
+
+            peso, erro_peso = self._parse_int(dados_produto['peso'], 'peso', obrigatorio=True, minimo=1)
+            if erro_peso:
+                erros.append(f'Produto "{modelo}": {erro_peso}.')
+
+            ativo, erro_ativo = self._parse_bool(dados_produto['ativo'])
+            destaque, erro_destaque = self._parse_bool(dados_produto['destaque'])
+            novo, erro_novo = self._parse_bool(dados_produto['novo'])
+            for erro_bool in (erro_ativo, erro_destaque, erro_novo):
+                if erro_bool:
+                    erros.append(f'Produto "{modelo}": {erro_bool}.')
+
+            ordem, erro_ordem = self._parse_int(dados_produto['ordem'], 'ordem', obrigatorio=False, minimo=0)
+            if erro_ordem:
+                erros.append(f'Produto "{modelo}": {erro_ordem}.')
+
+            preview_linhas = []
+            vistos = set()
+            for linha in grupo['linhas']:
+                chave_var = (
+                    _texto_importacao_chave(linha['cor_nome']),
+                    _texto_importacao_chave(linha['tam_nome']),
+                )
+                if chave_var in vistos:
+                    erros.append(
+                        f'Linha {linha["linha"]}: variação duplicada para "{modelo}" '
+                        f'({linha["cor_nome"]} / {linha["tam_nome"]}).'
+                    )
+                vistos.add(chave_var)
+
+                cor_obj = None
+                cor_sera_criada = False
+                cor_chave = _texto_importacao_chave(linha['cor_nome'])
+                if cor_chave in cores_duplicadas:
+                    erros.append(
+                        f'Linha {linha["linha"]}: existem cores duplicadas para "{linha["cor_nome"]}", diferenciadas apenas por acento ou caixa.'
+                    )
+                else:
+                    cor_obj = cores_mapa.get(cor_chave)
+                if not cor_obj:
+                    avisos.append(
+                        f'Linha {linha["linha"]}: cor "{linha["cor_nome"]}" não cadastrada. A cor será criada sem código HEX.'
+                    )
+                    cor_sera_criada = True
+                tamanho_obj = None
+                tamanho_chave = _texto_importacao_chave(linha['tam_nome'])
+                if tamanho_chave in tamanhos_duplicados:
+                    erros.append(
+                        f'Linha {linha["linha"]}: existem tamanhos duplicados para "{linha["tam_nome"]}", diferenciados apenas por acento ou caixa.'
+                    )
+                else:
+                    tamanho_obj = tamanhos_mapa.get(tamanho_chave)
+                if not tamanho_obj:
+                    erros.append(f'Linha {linha["linha"]}: tamanho "{linha["tam_nome"]}" não cadastrado.')
+
+                disponibilidade, erro_disp = self._parse_disponibilidade(linha['disponibilidade_raw'])
+                if erro_disp:
+                    erros.append(f'Linha {linha["linha"]}: {erro_disp}.')
+
+                prazo_confeccao, erro_prazo = self._parse_int(
+                    linha['prazo_confeccao_dias_raw'],
+                    'prazo_confeccao_dias',
+                    obrigatorio=False,
+                    minimo=1,
+                )
+                if erro_prazo:
+                    erros.append(f'Linha {linha["linha"]}: {erro_prazo}.')
+
+                if disponibilidade == Variacao.DISPONIBILIDADE_SOB_DEMANDA and prazo_confeccao is None:
+                    erros.append(
+                        f'Linha {linha["linha"]}: informe prazo_confeccao_dias para variações sob demanda.'
+                    )
+                if disponibilidade == Variacao.DISPONIBILIDADE_IMEDIATA and prazo_confeccao is not None:
+                    avisos.append(
+                        f'Linha {linha["linha"]}: prazo_confeccao_dias será ignorado para disponibilidade imediata.'
+                    )
+
+                estoque, erro_estoque = self._parse_int(
+                    linha['estoque_raw'],
+                    'estoque',
+                    obrigatorio=(disponibilidade == Variacao.DISPONIBILIDADE_IMEDIATA),
+                    minimo=0,
+                )
+                if erro_estoque:
+                    erros.append(f'Linha {linha["linha"]}: {erro_estoque}.')
+                if disponibilidade == Variacao.DISPONIBILIDADE_SOB_DEMANDA and estoque is None:
+                    estoque = 0
+
+                preco_variacao, erro_preco_variacao = self._parse_decimal(
+                    linha['preco_variacao_raw'], 'preco_variacao', obrigatorio=False
+                )
+                if erro_preco_variacao:
+                    erros.append(f'Linha {linha["linha"]}: {erro_preco_variacao}.')
+
+                preco_promocional_variacao, erro_promo_variacao = self._parse_decimal(
+                    linha['preco_promocional_variacao_raw'], 'preco_promocional_variacao', obrigatorio=False
+                )
+                if erro_promo_variacao:
+                    erros.append(f'Linha {linha["linha"]}: {erro_promo_variacao}.')
+                preco_base_aplicado = preco_variacao if preco_variacao is not None else preco
+                if (
+                    preco_promocional_variacao is not None and
+                    preco_base_aplicado is not None and
+                    preco_promocional_variacao >= preco_base_aplicado
+                ):
+                    erros.append(
+                        f'Linha {linha["linha"]}: preco_promocional_variacao deve ser menor que o preço aplicado.'
+                    )
+
+                variacao_existente = None
+                if produto_existente and cor_obj and tamanho_obj:
+                    variacao_existente = Variacao.objects.filter(
+                        produto=produto_existente,
+                        cor=cor_obj,
+                        tamanho=tamanho_obj,
+                    ).first()
+                status_variacao = 'Atualizar' if variacao_existente else 'Criar'
+                if variacao_existente:
+                    variacoes_atualizar += 1
+                else:
+                    variacoes_criar += 1
+
+                total_variacoes += 1
+                preview_linhas.append({
+                    'linha': linha['linha'],
+                    'nome_completo': linha['nome_completo'],
+                    'cor_nome': linha['cor_nome'],
+                    'tam_nome': linha['tam_nome'],
+                    'disponibilidade': disponibilidade or '',
+                    'prazo_confeccao_dias': prazo_confeccao,
+                    'estoque': estoque if estoque is not None else '',
+                    'sku_variacao': linha['sku_variacao'],
+                    'bling_variacao_id': linha['bling_variacao_id'],
+                    'preco_variacao': str(preco_variacao) if preco_variacao is not None else '',
+                    'preco_promocional_variacao': str(preco_promocional_variacao) if preco_promocional_variacao is not None else '',
+                    'status_variacao': status_variacao,
+                    'cor_sera_criada': cor_sera_criada,
+                    'cor_id': cor_obj.pk if cor_obj else None,
+                    'tamanho_id': tamanho_obj.pk if tamanho_obj else None,
+                })
+
+            preview_grupos.append({
+                'modelo': modelo,
+                'produto_id': produto_existente.pk if produto_existente else None,
+                'status_produto': status_produto,
+                'categoria': (
+                    f'{categoria_pai_nome} > {subcategoria_nome}'
+                    if subcategoria_nome else categoria_pai_nome
+                ),
+                'preview_linhas': preview_linhas,
+                'produto': {
+                    'categoria_pai': categoria_pai_nome,
+                    'subcategoria': subcategoria_nome,
+                    'descricao': dados_produto['descricao'],
+                    'composicao': dados_produto['composicao'],
+                    'preco': str(preco) if preco is not None else '',
+                    'preco_promocional': str(preco_promocional) if preco_promocional is not None else '',
+                    'peso': peso if peso is not None else '',
+                    'ativo': ativo,
+                    'destaque': destaque,
+                    'novo': novo,
+                    'ordem': ordem if ordem is not None else '',
+                    'seo_titulo': dados_produto['seo_titulo'],
+                    'seo_descricao': dados_produto['seo_descricao'],
+                    'seo_keywords': dados_produto['seo_keywords'],
+                },
+                'categoria_id': categoria_obj.pk if categoria_obj else None,
+            })
+
+        return {
+            'grupos': preview_grupos,
+            'erros': erros,
+            'avisos': avisos,
+            'resumo': {
+                'produtos_criar': produtos_criar,
+                'produtos_atualizar': produtos_atualizar,
+                'variacoes_criar': variacoes_criar,
+                'variacoes_atualizar': variacoes_atualizar,
+                'total_variacoes': total_variacoes,
+            },
+            'pode_importar': not erros and bool(preview_grupos),
+        }
 
     def _modelo_csv(self, request):
-        """Baixa um arquivo CSV modelo (formato legado) para preenchimento."""
+        """Baixa um arquivo CSV modelo para validação/importação completa."""
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
         response['Content-Disposition'] = 'attachment; filename="modelo_importacao_produtos.csv"'
         writer = csv.writer(response)
         writer.writerow([
-            'nome', 'categoria', 'descricao', 'composicao', 'genero',
-            'preco', 'preco_promocional', 'ativo', 'destaque', 'novo',
-            'bling_id', 'sku',
-            'var_cor', 'var_tamanho', 'var_estoque', 'var_sku', 'var_bling_id',
+            'nome', 'categoria_pai', 'subcategoria', 'descricao', 'composicao',
+            'preco_geral', 'preco_promocional_geral', 'peso',
+            'ativo', 'destaque', 'novo', 'ordem',
+            'seo_titulo', 'seo_descricao', 'palavra_chave',
+            'preco_variacao', 'preco_promocional_variacao',
+            'disponibilidade', 'prazo_confeccao_dias', 'estoque', 'sku', 'id_bling',
         ])
         writer.writerow([
-            'Body Adriana', 'Body', 'Descrição do produto', 'Poliéster 95% Elastano 5%', 'F',
-            '299.90', '', 'sim', 'não', 'sim', '9876', '100',
-            'Preto', 'P', '5', '100', '9876',
+            'Body Adriana (Preto) (P)', 'Moda Praia', 'Body', 'Descrição do produto', 'Poliéster 95% Elastano 5%',
+            '299.90', '', '500',
+            'sim', 'não', 'sim', '10',
+            'Body Adriana Della', 'Body Adriana premium', 'body adriana, body preto, moda premium',
+            '', '',
+            'disponibilidade imediata', '', '5', '4334', '15819914733',
         ])
         writer.writerow([
-            '', '', '', '', '', '', '', '', '', '', '', '',
-            'Preto', 'M', '3', '101', '9877',
+            'Body Adriana (Preto) (M)', 'Moda Praia', 'Body', 'Descrição do produto', 'Poliéster 95% Elastano 5%',
+            '299.90', '', '500',
+            'sim', 'não', 'sim', '10',
+            'Body Adriana Della', 'Body Adriana premium', 'body adriana, body preto, moda premium',
+            '329.90', '279.90',
+            'sob demanda', '7', '0', '4335', '15819914734',
         ])
         return response
 
-    def _importar_bling(self, rows, categoria_padrao):
-        """
-        Processa linhas do CSV/XLSX exportado pelo Bling.
-        Colunas: ID, Código, Descrição (MODELO (COR) (TAMANHO)), Preço, Situação
-        Agrupa por modelo → cria Produto + Variações.
-        """
-        criados = 0
+    def _exportar_csv(self, request):
+        """Exporta todos os produtos cadastrados no mesmo formato CSV da importação."""
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = 'attachment; filename="produtos_exportados.csv"'
+        writer = csv.writer(response)
+        writer.writerow([
+            'nome', 'categoria_pai', 'subcategoria', 'descricao', 'composicao',
+            'preco_geral', 'preco_promocional_geral', 'peso',
+            'ativo', 'destaque', 'novo', 'ordem',
+            'seo_titulo', 'seo_descricao', 'palavra_chave',
+            'preco_variacao', 'preco_promocional_variacao',
+            'disponibilidade', 'prazo_confeccao_dias', 'estoque', 'sku', 'id_bling',
+        ])
+        produtos = Produto.objects.select_related('categoria').prefetch_related(
+            'variacoes__cor', 'variacoes__tamanho'
+        ).order_by('categoria__nome', 'nome')
+        for produto in produtos:
+            variacoes = list(
+                produto.variacoes.filter(ativa=True).order_by('cor__nome', 'tamanho__ordem')
+            )
+            ativo = 'sim' if produto.ativo else 'não'
+            destaque = 'sim' if produto.destaque else 'não'
+            novo = 'sim' if produto.novo else 'não'
+            for var in variacoes:
+                nome_variacao = produto.nome
+                if var.cor_id and var.tamanho_id:
+                    nome_variacao = f'{produto.nome} ({var.cor.nome}) ({var.tamanho.nome})'
+                writer.writerow([
+                    nome_variacao,
+                    produto.categoria.parent.nome if produto.categoria_id and produto.categoria.parent_id else (produto.categoria.nome if produto.categoria_id else ''),
+                    produto.categoria.nome if produto.categoria_id and produto.categoria.parent_id else '',
+                    produto.descricao or '',
+                    produto.composicao or '',
+                    str(produto.preco),
+                    str(produto.preco_promocional) if produto.preco_promocional else '',
+                    str(produto.peso or ''),
+                    ativo, destaque, novo,
+                    str(produto.ordem or ''),
+                    produto.seo_titulo or '',
+                    produto.seo_descricao or '',
+                    produto.seo_keywords or '',
+                    str(var.preco) if var.preco is not None else '',
+                    str(var.preco_promocional) if var.preco_promocional is not None else '',
+                    var.get_disponibilidade_display().lower(),
+                    str(var.prazo_confeccao_dias or ''),
+                    str(var.estoque),
+                    var.sku_variacao or '',
+                    var.bling_variacao_id or '',
+                ])
+            if not variacoes:
+                writer.writerow([
+                    produto.nome,
+                    produto.categoria.parent.nome if produto.categoria_id and produto.categoria.parent_id else (produto.categoria.nome if produto.categoria_id else ''),
+                    produto.categoria.nome if produto.categoria_id and produto.categoria.parent_id else '',
+                    produto.descricao or '',
+                    produto.composicao or '',
+                    str(produto.preco),
+                    str(produto.preco_promocional) if produto.preco_promocional else '',
+                    str(produto.peso or ''),
+                    ativo, destaque, novo,
+                    str(produto.ordem or ''),
+                    produto.seo_titulo or '',
+                    produto.seo_descricao or '',
+                    produto.seo_keywords or '',
+                    '', '',
+                    '', '', '', '', '',
+                ])
+        return response
+
+    def _importar_preview_confirmado(self, preview):
+        produtos_criados = 0
+        produtos_atualizados = 0
         variacoes_criadas = 0
-        erros = []
+        variacoes_atualizadas = 0
+        cores_criadas_no_import = {}
 
-        # Normaliza nomes de colunas
-        def get(row, *keys):
-            for k in keys:
-                for rk in row:
-                    if rk and rk.lower().strip() == k.lower():
-                        return row[rk].strip() if row[rk] else ''
-            return ''
-
-        # Agrupa por modelo
-        from collections import OrderedDict
-        produtos_map = OrderedDict()
-
-        for i, row in enumerate(rows, start=2):
-            descricao_raw = get(row, 'Descrição', 'Descricao', 'descrição', 'descricao', 'description')
-            if not descricao_raw:
-                continue
-
-            modelo, cor_nome, tam_nome = self._parse_bling_descricao(descricao_raw)
-            if not modelo:
-                erros.append(f'Linha {i}: não foi possível extrair modelo da descrição "{descricao_raw}"')
-                continue
-
-            preco_raw = get(row, 'Preço', 'Preco', 'preço', 'preco', 'price')
-            try:
-                preco = float(preco_raw.replace(',', '.')) if preco_raw else 0
-            except ValueError:
-                preco = 0
-
-            situacao = get(row, 'Situação', 'Situacao', 'situação', 'situacao', 'status').lower()
-            ativo = situacao in ('ativo', 'ativa', 'active', 'a', '', '1')
-
-            bling_id  = get(row, 'ID', 'id')
-            sku_var   = get(row, 'Código', 'Codigo', 'código', 'codigo', 'code', 'sku')
-
-            key = modelo.upper()
-            if key not in produtos_map:
-                produtos_map[key] = {
-                    'nome': modelo,
-                    'preco': preco,
-                    'ativo': ativo,
-                    'variacoes': [],
-                }
-            if preco > produtos_map[key]['preco']:
-                produtos_map[key]['preco'] = preco
-
-            produtos_map[key]['variacoes'].append({
-                'cor_nome': cor_nome,
-                'tam_nome': tam_nome,
-                'bling_id': bling_id,
-                'sku_var':  sku_var,
-                'ativo':    ativo,
-                'linha':    i,
-            })
-
-        # Cria produtos e variações
-        for key, info in produtos_map.items():
-            try:
-                produto, criado = Produto.objects.update_or_create(
-                    nome=info['nome'],
-                    defaults={
-                        'categoria':    categoria_padrao,
-                        'descricao':    info['nome'],
-                        'preco':        info['preco'] or 1,
-                        'ativo':        info['ativo'],
-                    },
-                )
+        with transaction.atomic():
+            for grupo in preview['grupos']:
+                dados = grupo['produto']
+                categoria = Categoria.objects.get(pk=grupo['categoria_id'])
+                produto = Produto.objects.filter(pk=grupo.get('produto_id')).first() if grupo.get('produto_id') else None
+                criado = produto is None
                 if criado:
-                    criados += 1
-            except Exception as e:
-                erros.append(f'Produto "{info["nome"]}": {e}')
-                continue
+                    produto = Produto(nome=grupo['modelo'])
+                    produtos_criados += 1
+                else:
+                    produtos_atualizados += 1
 
-            for var in info['variacoes']:
-                try:
-                    cor_obj = None
-                    if var['cor_nome']:
-                        hex_val = self._hex_da_cor(var['cor_nome'])
-                        cor_obj, _ = CorPadrao.objects.get_or_create(
-                            nome__iexact=var['cor_nome'],
-                            defaults={'nome': var['cor_nome'].title(), 'codigo_hex': hex_val},
-                        )
-                        if not cor_obj.codigo_hex and hex_val:
-                            cor_obj.codigo_hex = hex_val
-                            cor_obj.save(update_fields=['codigo_hex'])
+                produto.categoria = categoria
+                produto.descricao = (dados['descricao'] or produto.descricao or grupo['modelo']).strip()
+                produto.composicao = (dados['composicao'] or produto.composicao or '').strip()
+                produto.preco = Decimal(dados['preco'])
+                produto.preco_promocional = Decimal(dados['preco_promocional']) if dados['preco_promocional'] else None
+                produto.peso = int(dados['peso'])
+                produto.ativo = bool(dados['ativo'])
+                produto.destaque = bool(dados['destaque'])
+                produto.novo = bool(dados['novo'])
+                produto.ordem = int(dados['ordem']) if str(dados['ordem']).strip() else 0
+                produto.seo_titulo = dados['seo_titulo']
+                produto.seo_descricao = dados['seo_descricao']
+                produto.seo_keywords = dados['seo_keywords']
+                produto.save()
 
-                    tam_obj = None
-                    if var['tam_nome']:
-                        tam_obj, _ = TamanhoPadrao.objects.get_or_create(
-                            nome__iexact=var['tam_nome'],
-                            defaults={'nome': var['tam_nome'].upper()},
-                        )
+                for linha in grupo['preview_linhas']:
+                    cor = CorPadrao.objects.filter(pk=linha.get('cor_id')).first() if linha.get('cor_id') else None
+                    if not cor:
+                        # Cache local protege contra duplicate na mesma rodada
+                        # (várias linhas da planilha com a mesma cor nova) e o
+                        # filter(nome__iexact) cobre criação concorrente por
+                        # outro request entre a validação e o import.
+                        cor_chave = _texto_importacao_chave(linha['cor_nome'])
+                        cor = cores_criadas_no_import.get(cor_chave)
+                        if not cor:
+                            nome_upper = sanitize_text(linha['cor_nome'], max_length=50).upper()
+                            cor = CorPadrao.objects.filter(nome__iexact=nome_upper).first()
+                            if not cor:
+                                cor = CorPadrao.objects.create(
+                                    nome=nome_upper,
+                                    codigo_hex='',
+                                    codigo_hex_secundario='',
+                                )
+                            cores_criadas_no_import[cor_chave] = cor
+                    tamanho = TamanhoPadrao.objects.get(pk=linha['tamanho_id'])
+                    variacao = Variacao.objects.filter(produto=produto, cor=cor, tamanho=tamanho).first()
+                    if variacao:
+                        variacoes_atualizadas += 1
+                    else:
+                        variacao = Variacao(produto=produto, cor=cor, tamanho=tamanho)
+                        variacoes_criadas += 1
 
-                    Variacao.objects.update_or_create(
-                        produto=produto,
-                        cor=cor_obj,
-                        tamanho=tam_obj,
-                        defaults={
-                            'sku_variacao':     var['sku_var'],
-                            'bling_variacao_id': var['bling_id'],
-                            'ativa':            var['ativo'],
-                        },
+                    variacao.disponibilidade = linha['disponibilidade']
+                    variacao.prazo_confeccao_dias = linha['prazo_confeccao_dias'] or None
+                    variacao.preco = Decimal(linha['preco_variacao']) if linha['preco_variacao'] else None
+                    variacao.preco_promocional = (
+                        Decimal(linha['preco_promocional_variacao'])
+                        if linha['preco_promocional_variacao'] else None
                     )
-                    variacoes_criadas += 1
-                except Exception as e:
-                    erros.append(f'Linha {var["linha"]} ({info["nome"]} / {var["cor_nome"]} / {var["tam_nome"]}): {e}')
+                    variacao.estoque = int(linha['estoque'] or 0)
+                    variacao.sku_variacao = linha['sku_variacao']
+                    variacao.bling_variacao_id = linha['bling_variacao_id']
+                    variacao.ativa = True
+                    variacao.save()
 
-        return criados, variacoes_criadas, erros
-
-    def _importar_legado(self, rows):
-        """Processa o CSV no formato legado (colunas nome/categoria/var_cor/...)."""
-        criados = 0
-        variacoes_criadas = 0
-        erros = []
-        produto_atual = None
-
-        for i, row in enumerate(rows, start=2):
-            nome = row.get('nome', '').strip()
-            try:
-                if nome:
-                    cat_nome = row.get('categoria', '').strip()
-                    categoria, _ = Categoria.objects.get_or_create(
-                        nome__iexact=cat_nome or 'Geral',
-                        defaults={'nome': cat_nome or 'Geral', 'ativa': True, 'ordem': 99},
-                    )
-                    preco_raw = row.get('preco', '0').strip().replace(',', '.')
-                    preco = float(preco_raw) if preco_raw else 0
-                    promo_raw = row.get('preco_promocional', '').strip().replace(',', '.')
-                    promo = float(promo_raw) if promo_raw else None
-
-                    produto_atual, criado = Produto.objects.update_or_create(
-                        nome=nome,
-                        defaults={
-                            'categoria':       categoria,
-                            'descricao':       row.get('descricao', '').strip() or nome,
-                            'composicao':      row.get('composicao', '').strip(),
-                            'genero':          'F' if row.get('genero', 'F').strip().upper() != 'U' else 'U',
-                            'preco':           preco,
-                            'preco_promocional': promo,
-                            'ativo':           row.get('ativo', 'sim').strip().lower() in ('sim','s','yes','1','true'),
-                            'destaque':        row.get('destaque', 'não').strip().lower() in ('sim','s','yes','1','true'),
-                            'novo':            row.get('novo', 'sim').strip().lower() in ('sim','s','yes','1','true'),
-                            'bling_id':        row.get('bling_id', '').strip(),
-                            'sku':             row.get('sku', '').strip(),
-                        },
-                    )
-                    if criado:
-                        criados += 1
-
-                var_cor_nome = row.get('var_cor', '').strip()
-                var_tam_nome = row.get('var_tamanho', '').strip()
-
-                if produto_atual and (var_cor_nome or var_tam_nome):
-                    cor_obj = None
-                    if var_cor_nome:
-                        hex_val = row.get('var_hex', '').strip() or self._hex_da_cor(var_cor_nome)
-                        cor_obj, _ = CorPadrao.objects.get_or_create(
-                            nome__iexact=var_cor_nome,
-                            defaults={'nome': var_cor_nome.title(), 'codigo_hex': hex_val},
-                        )
-                    tam_obj = None
-                    if var_tam_nome:
-                        tam_obj, _ = TamanhoPadrao.objects.get_or_create(
-                            nome__iexact=var_tam_nome,
-                            defaults={'nome': var_tam_nome.upper()},
-                        )
-                    var_est_raw = row.get('var_estoque', '0').strip()
-                    Variacao.objects.update_or_create(
-                        produto=produto_atual,
-                        cor=cor_obj,
-                        tamanho=tam_obj,
-                        defaults={
-                            'estoque':          int(var_est_raw) if var_est_raw.isdigit() else 0,
-                            'sku_variacao':     row.get('var_sku', '').strip(),
-                            'bling_variacao_id': row.get('var_bling_id', '').strip(),
-                            'ativa':            True,
-                        },
-                    )
-                    variacoes_criadas += 1
-
-            except Exception as e:
-                erros.append(f'Linha {i}: {e}')
-
-        return criados, variacoes_criadas, erros
+        return produtos_criados, produtos_atualizados, variacoes_criadas, variacoes_atualizadas
 
     def _importar_view(self, request):
-        """View de importação de produtos via CSV ou XLSX (formato Bling ou legado)."""
+        """View de importação de produtos com validação prévia."""
         context = {
             'title': 'Importar produtos',
             'opts': self.model._meta,
             'has_view_permission': True,
         }
+        if request.method == 'GET':
+            request.session.pop(self.IMPORT_PREVIEW_SESSION_KEY, None)
+            return render(request, 'admin/produtos/importar.html', context)
 
-        if request.method == 'POST' and request.FILES.get('arquivo_csv'):
-            arquivo = request.FILES['arquivo_csv']
-            categoria_nome = request.POST.get('categoria', '').strip()
+        preview_session = request.session.get(self.IMPORT_PREVIEW_SESSION_KEY)
+        if preview_session:
+            context['preview'] = preview_session
 
-            try:
-                rows, formato = self._ler_arquivo(arquivo)
-
-                if formato == 'bling':
-                    # Categoria padrão para importação Bling
-                    if categoria_nome:
-                        categoria_padrao, _ = Categoria.objects.get_or_create(
-                            nome__iexact=categoria_nome,
-                            defaults={'nome': categoria_nome, 'ativa': True, 'ordem': 99},
-                        )
-                    else:
-                        categoria_padrao, _ = Categoria.objects.get_or_create(
-                            nome='Importado',
-                            defaults={'ativa': True, 'ordem': 99},
-                        )
-                    criados, variacoes_criadas, erros = self._importar_bling(rows, categoria_padrao)
+        if request.method == 'POST':
+            acao = request.POST.get('acao', '').strip()
+            if acao == 'validar' and request.FILES.get('arquivo_csv'):
+                arquivo = request.FILES['arquivo_csv']
+                try:
+                    rows = self._ler_arquivo(arquivo)
+                    preview = self._validar_planilha_produtos(rows)
+                    preview['arquivo_nome'] = arquivo.name
+                    request.session[self.IMPORT_PREVIEW_SESSION_KEY] = preview
+                    context['preview'] = preview
+                except Exception as e:
+                    self.message_user(request, f'Erro ao validar arquivo: {e}', django_messages.ERROR)
+            elif acao == 'importar_confirmado':
+                preview = request.session.get(self.IMPORT_PREVIEW_SESSION_KEY)
+                if not preview:
+                    self.message_user(request, 'Valide a planilha antes de importar.', django_messages.WARNING)
+                elif not preview.get('pode_importar'):
+                    self.message_user(request, 'A planilha possui erros e não pode ser importada.', django_messages.ERROR)
+                    context['preview'] = preview
                 else:
-                    criados, variacoes_criadas, erros = self._importar_legado(rows)
+                    try:
+                        criados, atualizados, vars_criadas, vars_atualizadas = self._importar_preview_confirmado(preview)
+                        request.session.pop(self.IMPORT_PREVIEW_SESSION_KEY, None)
+                        self.message_user(
+                            request,
+                            (
+                                f'{criados} produto(s) criado(s), {atualizados} atualizado(s), '
+                                f'{vars_criadas} variação(ões) criada(s) e {vars_atualizadas} atualizada(s).'
+                            ),
+                            django_messages.SUCCESS,
+                        )
+                        return HttpResponseRedirect('/painel/produtos/produto/')
+                    except Exception as e:
+                        self.message_user(request, f'Erro ao importar arquivo: {e}', django_messages.ERROR)
+                        context['preview'] = preview
+            else:
+                preview = request.session.get(self.IMPORT_PREVIEW_SESSION_KEY)
+                if preview:
+                    context['preview'] = preview
 
-                msg = (
-                    f'{criados} produto(s) criado(s) / atualizado(s) e '
-                    f'{variacoes_criadas} variação(ões) importada(s).'
-                )
-                if erros:
-                    msg += ' Erros: ' + ' | '.join(erros[:5])
-                    if len(erros) > 5:
-                        msg += f' (+ {len(erros)-5} outros)'
-                self.message_user(
-                    request, msg,
-                    django_messages.SUCCESS if not erros else django_messages.WARNING,
-                )
-                return HttpResponseRedirect('/painel/produtos/produto/')
-
-            except Exception as e:
-                self.message_user(request, f'Erro ao processar arquivo: {e}', django_messages.ERROR)
-
-        context['categorias'] = Categoria.objects.filter(ativa=True, parent__isnull=True).order_by('ordem', 'nome')
         return render(request, 'admin/produtos/importar.html', context)
+
+    # ------------------------------------------------------------------
+    # Importação de fotos via ZIP
+    # ------------------------------------------------------------------
+    EXTENSOES_FOTO_ZIP = {'.png', '.jpg', '.jpeg', '.webp'}
+
+    def _importar_fotos_view(self, request):
+        """View de importação de fotos via ZIP. Cada pasta de primeiro nível
+        do ZIP corresponde ao nome de um produto pai cadastrado. Produtos que
+        já têm fotos são ignorados."""
+        import os
+
+        context = {
+            'title': 'Importar fotos via ZIP',
+            'opts': self.model._meta,
+            'has_view_permission': True,
+        }
+
+        def _limpar_temp(preview):
+            zip_path = (preview or {}).get('zip_path')
+            if zip_path:
+                try:
+                    os.unlink(zip_path)
+                except OSError:
+                    pass
+
+        if request.method == 'GET':
+            old = request.session.pop(self.IMPORT_FOTOS_PREVIEW_SESSION_KEY, None)
+            _limpar_temp(old)
+            return render(request, 'admin/produtos/importar_fotos.html', context)
+
+        preview_session = request.session.get(self.IMPORT_FOTOS_PREVIEW_SESSION_KEY)
+        if preview_session:
+            context['preview'] = preview_session
+
+        if request.method == 'POST':
+            acao = request.POST.get('acao', '').strip()
+            if acao == 'validar' and request.FILES.get('arquivo_zip'):
+                arquivo = request.FILES['arquivo_zip']
+                old = request.session.get(self.IMPORT_FOTOS_PREVIEW_SESSION_KEY)
+                _limpar_temp(old)
+                try:
+                    preview = self._validar_zip_fotos(arquivo)
+                    preview['arquivo_nome'] = arquivo.name
+                    request.session[self.IMPORT_FOTOS_PREVIEW_SESSION_KEY] = preview
+                    context['preview'] = preview
+                except Exception as e:
+                    self.message_user(request, f'Erro ao validar ZIP: {e}', django_messages.ERROR)
+            elif acao == 'importar_confirmado':
+                preview = request.session.get(self.IMPORT_FOTOS_PREVIEW_SESSION_KEY)
+                if not preview:
+                    self.message_user(request, 'Valide o ZIP antes de importar.', django_messages.WARNING)
+                elif not preview.get('pode_importar'):
+                    self.message_user(request, 'O ZIP possui erros e não pode ser importado.', django_messages.ERROR)
+                    context['preview'] = preview
+                else:
+                    try:
+                        produtos_atualizados, fotos_criadas = self._importar_fotos_zip_confirmado(preview)
+                        _limpar_temp(preview)
+                        request.session.pop(self.IMPORT_FOTOS_PREVIEW_SESSION_KEY, None)
+                        self.message_user(
+                            request,
+                            f'{produtos_atualizados} produto(s) atualizado(s), {fotos_criadas} foto(s) importada(s).',
+                            django_messages.SUCCESS,
+                        )
+                        return HttpResponseRedirect('/painel/produtos/produto/')
+                    except Exception as e:
+                        self.message_user(request, f'Erro ao importar ZIP: {e}', django_messages.ERROR)
+                        context['preview'] = preview
+
+        return render(request, 'admin/produtos/importar_fotos.html', context)
+
+    def _validar_zip_fotos(self, arquivo_zip):
+        """Lê o ZIP, agrupa por pasta e valida contra produtos cadastrados.
+        Salva o ZIP num tempfile cujo path é gravado em preview['zip_path']
+        para ser reusado no import confirmado."""
+        import os
+        import tempfile
+        import zipfile
+
+        fd, tmp_path = tempfile.mkstemp(prefix='della_import_fotos_', suffix='.zip')
+        try:
+            with os.fdopen(fd, 'wb') as f:
+                for chunk in arquivo_zip.chunks():
+                    f.write(chunk)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        produtos_por_chave = {}
+        for p in Produto.objects.all().only('id', 'nome'):
+            chave = _texto_importacao_chave(p.nome)
+            if chave and chave not in produtos_por_chave:
+                produtos_por_chave[chave] = (p.id, p.nome)
+
+        produtos_com_foto_ids = set(
+            ProdutoImagem.objects.values_list('produto_id', flat=True).distinct()
+        )
+
+        pastas = {}
+        try:
+            with zipfile.ZipFile(tmp_path) as zf:
+                # Detecta se existe uma pasta wrapper única (ex: o usuário zipou
+                # a pasta-pai inteira em vez de só o conteúdo) e desconta o prefixo
+                primeiros = set()
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    nome = info.filename.replace('\\', '/')
+                    if nome.startswith('__MACOSX'):
+                        continue
+                    base = os.path.basename(nome)
+                    if not base or base.startswith('.'):
+                        continue
+                    parts = nome.split('/')
+                    if len(parts) >= 2:
+                        primeiros.add(parts[0])
+                    else:
+                        primeiros.add('')
+                wrapper = None
+                if len(primeiros) == 1:
+                    candidato = next(iter(primeiros))
+                    if candidato:
+                        wrapper = candidato + '/'
+
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    nome = info.filename.replace('\\', '/')
+                    if nome.startswith('__MACOSX'):
+                        continue
+                    base = os.path.basename(nome)
+                    if not base or base.startswith('.'):
+                        continue
+                    ext = os.path.splitext(base)[1].lower()
+                    if ext not in self.EXTENSOES_FOTO_ZIP:
+                        continue
+                    rel = nome[len(wrapper):] if wrapper and nome.startswith(wrapper) else nome
+                    parts = rel.split('/')
+                    pasta = parts[0] if len(parts) >= 2 else '(raiz)'
+                    pastas.setdefault(pasta, []).append((info.filename, base))
+        except zipfile.BadZipFile:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise ValueError('O arquivo enviado não é um ZIP válido.')
+
+        linhas = []
+        avisos = []
+        erros = []
+        produtos_atualizar = 0
+        fotos_total = 0
+        pastas_ja_com_fotos = 0
+        pastas_sem_produto = 0
+
+        for pasta in sorted(pastas.keys(), key=lambda s: s.lower()):
+            arquivos = pastas[pasta]
+            chave = _texto_importacao_chave(pasta)
+            match = produtos_por_chave.get(chave)
+
+            if match is None:
+                pastas_sem_produto += 1
+                avisos.append(f'Pasta "{pasta}": produto não encontrado, será ignorada.')
+                linhas.append({
+                    'pasta': pasta,
+                    'produto_id': None,
+                    'produto_nome': None,
+                    'status': 'sem_produto',
+                    'qtd_fotos': len(arquivos),
+                    'arquivos': [b for _, b in arquivos],
+                })
+                continue
+
+            produto_id, produto_nome = match
+
+            if produto_id in produtos_com_foto_ids:
+                pastas_ja_com_fotos += 1
+                avisos.append(
+                    f'Pasta "{pasta}": produto "{produto_nome}" já tem fotos cadastradas, será ignorada.'
+                )
+                linhas.append({
+                    'pasta': pasta,
+                    'produto_id': produto_id,
+                    'produto_nome': produto_nome,
+                    'status': 'ja_tem_fotos',
+                    'qtd_fotos': len(arquivos),
+                    'arquivos': [b for _, b in arquivos],
+                })
+                continue
+
+            produtos_atualizar += 1
+            fotos_total += len(arquivos)
+            linhas.append({
+                'pasta': pasta,
+                'produto_id': produto_id,
+                'produto_nome': produto_nome,
+                'status': 'ok',
+                'qtd_fotos': len(arquivos),
+                'arquivos': [b for _, b in arquivos],
+                'arquivos_zip': [zn for zn, _ in arquivos],
+            })
+
+        if not pastas:
+            erros.append('O ZIP não contém arquivos de imagem (.png/.jpg/.jpeg/.webp).')
+
+        pode_importar = (produtos_atualizar > 0) and not erros
+
+        try:
+            tamanho_kb = round(os.path.getsize(tmp_path) / 1024, 1)
+        except OSError:
+            tamanho_kb = 0
+
+        return {
+            'arquivo_nome': '',
+            'tamanho_kb': tamanho_kb,
+            'zip_path': tmp_path,
+            'resumo': {
+                'pastas_total': len(pastas),
+                'produtos_atualizar': produtos_atualizar,
+                'fotos_total': fotos_total,
+                'pastas_ja_com_fotos': pastas_ja_com_fotos,
+                'pastas_sem_produto': pastas_sem_produto,
+            },
+            'linhas': linhas,
+            'avisos': avisos,
+            'erros': erros,
+            'pode_importar': pode_importar,
+        }
+
+    def _importar_fotos_zip_confirmado(self, preview):
+        """Lê o ZIP do tempfile salvo na validação e cria ProdutoImagem para
+        cada pasta com status='ok'. Re-checa no momento do save que o produto
+        ainda não tem fotos (proteção contra concorrência)."""
+        import os
+        import zipfile
+        from django.core.files.base import ContentFile
+        from apps.core_utils.cache_utils import invalidar_categoria_produtos
+
+        zip_path = preview.get('zip_path')
+        if not zip_path or not os.path.exists(zip_path):
+            raise ValueError('Arquivo ZIP temporário não encontrado. Reenvie o arquivo.')
+
+        produtos_atualizados = 0
+        fotos_criadas = 0
+
+        with zipfile.ZipFile(zip_path) as zf:
+            for linha in preview.get('linhas', []):
+                if linha.get('status') != 'ok':
+                    continue
+                produto_id = linha.get('produto_id')
+                arquivos_zip = linha.get('arquivos_zip') or []
+                if not produto_id or not arquivos_zip:
+                    continue
+                try:
+                    produto = Produto.objects.get(id=produto_id)
+                except Produto.DoesNotExist:
+                    continue
+
+                if ProdutoImagem.objects.filter(produto_id=produto_id).exists():
+                    continue
+
+                with transaction.atomic():
+                    criou_alguma = False
+                    for ordem, zn in enumerate(sorted(arquivos_zip)):
+                        try:
+                            data = zf.read(zn)
+                        except KeyError:
+                            continue
+                        base = os.path.basename(zn.replace('\\', '/'))
+                        img = ProdutoImagem(
+                            produto=produto,
+                            principal=(not criou_alguma),
+                            ordem=ordem,
+                        )
+                        img.imagem.save(base, ContentFile(data), save=False)
+                        img.save()
+                        fotos_criadas += 1
+                        criou_alguma = True
+                    if criou_alguma:
+                        produtos_atualizados += 1
+                        if produto.categoria_id:
+                            invalidar_categoria_produtos(produto.categoria_id)
+
+        return produtos_atualizados, fotos_criadas
 
     def _clonar_variacao(self, request, pk):
         var = get_object_or_404(Variacao, pk=pk)
-        nova = Variacao(
-            produto=var.produto,
-            cor=var.cor,
-            tamanho=var.tamanho,
-            estoque=0,
-            sku_variacao='',
-            bling_variacao_id='',
-            ativa=False,
-        )
-        nova.save()
         self.message_user(
             request,
-            f'Variação clonada com sucesso! Edite os campos da nova linha e ative quando estiver pronto.',
-            django_messages.SUCCESS,
+            'Atualize a página e use o botão "Clonar" direto na linha da variação. '
+            'O clone agora acontece antes de salvar, sem criar duplicatas escondidas.',
+            django_messages.WARNING,
         )
         return HttpResponseRedirect(
             f'/painel/produtos/produto/{var.produto_id}/change/#variacoes'
@@ -717,12 +1615,8 @@ class ProdutoAdmin(admin.ModelAdmin):
         edit_url   = reverse('admin:produtos_produto_change', args=[obj.pk])
         delete_url = reverse('admin:produtos_produto_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este produto?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este produto?\')" >✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
@@ -813,28 +1707,338 @@ class ProdutoAdmin(admin.ModelAdmin):
 
 @admin.register(CorPadrao)
 class CorPadraoAdmin(admin.ModelAdmin):
-    list_display = ('cor_bolinha', 'nome', 'codigo_hex', 'ordem')
+    IMPORT_PREVIEW_SESSION_KEY = 'corpadrao_import_preview_v1'
+    change_list_template = 'admin/produtos/corpadrao_changelist.html'
+    list_display = ('cor_bolinha', 'nome', 'codigo_hex', 'ordem', 'acoes_linha')
     list_editable = ('ordem',)
+    list_display_links = ('nome',)
     search_fields = ('nome',)
     ordering = ('ordem', 'nome')
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
+
+    def get_urls(self):
+        urls = super().get_urls()
+        extras = [
+            path(
+                'importar/',
+                self.admin_site.admin_view(self._importar_view),
+                name='produtos_corpadrao_importar',
+            ),
+            path(
+                'modelo-csv/',
+                self.admin_site.admin_view(self._modelo_csv),
+                name='produtos_corpadrao_modelo_csv',
+            ),
+            path(
+                'exportar-csv/',
+                self.admin_site.admin_view(self._exportar_csv),
+                name='produtos_corpadrao_exportar_csv',
+            ),
+        ]
+        return extras + urls
+
+    def _ler_arquivo(self, arquivo):
+        """Lê CSV/XLSX com colunas do cadastro de CorPadrao."""
+        nome = arquivo.name.lower()
+
+        if nome.endswith('.xlsx') or nome.endswith('.xls'):
+            import openpyxl
+            wb = openpyxl.load_workbook(arquivo, data_only=True)
+            ws = wb.active
+            rows = list(ws.values)
+            if not rows:
+                return []
+            headers = [_limpar_celula_planilha(h) if h else '' for h in rows[0]]
+            data = []
+            for row in rows[1:]:
+                data.append({
+                    headers[i]: (_limpar_celula_planilha(row[i]) if i < len(row) and row[i] is not None else '')
+                    for i in range(len(headers))
+                })
+            return data
+
+        decoded = arquivo.read().decode('utf-8-sig')
+        sample = decoded[:4096]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
+        except csv.Error:
+            dialect = csv.excel
+            dialect.delimiter = ';' if sample.count(';') > sample.count(',') else ','
+        reader = csv.DictReader(io.StringIO(decoded), dialect=dialect)
+        data = []
+        for row in reader:
+            data.append({
+                _limpar_celula_planilha(chave): _limpar_celula_planilha(valor)
+                for chave, valor in row.items()
+            })
+        return data
+
+    def _get_valor_coluna(self, row, *nomes):
+        for nome in nomes:
+            for chave, valor in row.items():
+                if _limpar_celula_planilha(chave).lower() == nome.lower():
+                    return _limpar_celula_planilha(valor)
+        return ''
+
+    def _modelo_csv(self, request):
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = 'attachment; filename="modelo_importacao_cores_padrao.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['nome', 'codigo_hex', 'codigo_hex_secundario', 'ordem'])
+        writer.writerow(['PRETO', '#000000', '', '1'])
+        writer.writerow(['PRETO/BRANCO', '#000000', '#FFFFFF', '2'])
+        writer.writerow(['ROSA CHA', '#E8B4A0', '', '3'])
+        return response
+
+    def _exportar_csv(self, request):
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = 'attachment; filename="cores_padrao_exportadas.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['nome', 'codigo_hex', 'codigo_hex_secundario', 'ordem'])
+        for cor in CorPadrao.objects.order_by('ordem', 'nome'):
+            writer.writerow([
+                cor.nome,
+                cor.codigo_hex or '',
+                cor.codigo_hex_secundario or '',
+                cor.ordem,
+            ])
+        return response
+
+    def _linha_vazia(self, row):
+        return not any(str(valor).strip() for valor in row.values() if valor is not None)
+
+    def _normalizar_hex(self, valor):
+        valor = str(valor or '').strip().upper()
+        if not valor:
+            return ''
+        if not valor.startswith('#'):
+            valor = f'#{valor}'
+        return valor
+
+    def _hex_valido(self, valor):
+        if not valor:
+            return True
+        return bool(re.fullmatch(r'#[0-9A-F]{6}', valor))
+
+    def _mapa_nomes_normalizados(self, queryset):
+        mapa = {}
+        duplicados = {}
+        for obj in queryset:
+            chave = _texto_importacao_chave(getattr(obj, 'nome', ''))
+            if not chave:
+                continue
+            if chave in mapa:
+                duplicados.setdefault(chave, [mapa[chave]]).append(obj)
+            else:
+                mapa[chave] = obj
+        return mapa, duplicados
+
+    def _validar_planilha_cores(self, rows):
+        preview = {
+            'erros': [],
+            'avisos': [],
+            'linhas': [],
+            'resumo': {
+                'criar': 0,
+                'atualizar': 0,
+            },
+            'pode_importar': False,
+        }
+        nomes_vistos = set()
+        cores_mapa, cores_duplicadas = self._mapa_nomes_normalizados(CorPadrao.objects.all())
+
+        for i, row in enumerate(rows, start=2):
+            if self._linha_vazia(row):
+                continue
+
+            nome = self._get_valor_coluna(row, 'nome', 'cor', 'nome da cor')
+            if not nome:
+                preview['erros'].append(f'Linha {i}: nome da cor não informado.')
+                continue
+
+            nome_sanitizado = sanitize_text(nome, max_length=50).upper()
+            nome_chave = _texto_importacao_chave(nome_sanitizado)
+            if not nome_sanitizado:
+                preview['erros'].append(f'Linha {i}: nome da cor ficou vazio após a validação.')
+                continue
+            if nome_chave in nomes_vistos:
+                preview['erros'].append(f'Linha {i}: cor duplicada no arquivo ({nome_sanitizado}).')
+                continue
+            nomes_vistos.add(nome_chave)
+
+            codigo_hex = self._normalizar_hex(
+                self._get_valor_coluna(row, 'codigo_hex', 'código hex', 'codigo hex')
+            )
+            codigo_hex_secundario = self._normalizar_hex(self._get_valor_coluna(
+                row,
+                'codigo_hex_secundario',
+                'código hex secundário',
+                'codigo hex secundario',
+            ))
+            ordem_raw = self._get_valor_coluna(row, 'ordem')
+
+            if not self._hex_valido(codigo_hex):
+                preview['erros'].append(f'Linha {i} ({nome_sanitizado}): código HEX principal inválido ({codigo_hex}).')
+                continue
+            if not self._hex_valido(codigo_hex_secundario):
+                preview['erros'].append(
+                    f'Linha {i} ({nome_sanitizado}): código HEX secundário inválido ({codigo_hex_secundario}).'
+                )
+                continue
+
+            try:
+                ordem = int(str(ordem_raw).strip()) if str(ordem_raw).strip() else 0
+            except (TypeError, ValueError):
+                preview['erros'].append(f'Linha {i}: ordem inválida "{ordem_raw}".')
+                continue
+
+            if nome_chave in cores_duplicadas:
+                preview['erros'].append(
+                    f'Linha {i} ({nome_sanitizado}): já existem cores cadastradas com o mesmo nome base, diferenciadas apenas por acento ou caixa.'
+                )
+                continue
+
+            cor_existente = cores_mapa.get(nome_chave)
+            status = 'Atualizar' if cor_existente else 'Criar'
+            preview['resumo']['atualizar' if cor_existente else 'criar'] += 1
+            preview['linhas'].append({
+                'linha_numero': i,
+                'nome': nome_sanitizado,
+                'nome_chave': nome_chave,
+                'codigo_hex': codigo_hex,
+                'codigo_hex_secundario': codigo_hex_secundario,
+                'ordem': ordem,
+                'status': status,
+                'cor_id': cor_existente.pk if cor_existente else None,
+            })
+
+        preview['pode_importar'] = bool(preview['linhas']) and not preview['erros']
+        if not preview['linhas'] and not preview['erros']:
+            preview['avisos'].append('Nenhuma linha válida foi encontrada na planilha.')
+        return preview
+
+    @transaction.atomic
+    def _importar_preview_confirmado(self, preview):
+        criadas = 0
+        atualizadas = 0
+
+        for linha in preview.get('linhas', []):
+            cor = CorPadrao.objects.filter(pk=linha.get('cor_id')).first() if linha.get('cor_id') else None
+            if cor:
+                atualizadas += 1
+            else:
+                cor = CorPadrao()
+                criadas += 1
+            cor.nome = linha['nome']
+            cor.codigo_hex = linha['codigo_hex']
+            cor.codigo_hex_secundario = linha['codigo_hex_secundario']
+            cor.ordem = linha['ordem']
+            cor.save()
+
+        return criadas, atualizadas
+
+    def _importar_view(self, request):
+        context = {
+            'title': 'Importar cores padrão',
+            'opts': self.model._meta,
+            'has_view_permission': True,
+        }
+        if request.method == 'GET':
+            request.session.pop(self.IMPORT_PREVIEW_SESSION_KEY, None)
+            return render(request, 'admin/produtos/importar_cores.html', context)
+
+        preview_session = request.session.get(self.IMPORT_PREVIEW_SESSION_KEY)
+        if preview_session:
+            context['preview'] = preview_session
+
+        if request.method == 'POST':
+            acao = request.POST.get('acao', '').strip()
+            if acao == 'validar' and request.FILES.get('arquivo_csv'):
+                arquivo = request.FILES['arquivo_csv']
+                try:
+                    rows = self._ler_arquivo(arquivo)
+                    preview = self._validar_planilha_cores(rows)
+                    preview['arquivo_nome'] = arquivo.name
+                    request.session[self.IMPORT_PREVIEW_SESSION_KEY] = preview
+                    context['preview'] = preview
+                except Exception as e:
+                    self.message_user(request, f'Erro ao validar arquivo: {e}', django_messages.ERROR)
+            elif acao == 'importar_confirmado':
+                preview = request.session.get(self.IMPORT_PREVIEW_SESSION_KEY)
+                if not preview:
+                    self.message_user(request, 'Valide a planilha antes de importar.', django_messages.WARNING)
+                elif not preview.get('pode_importar'):
+                    self.message_user(request, 'A planilha possui erros e não pode ser importada.', django_messages.ERROR)
+                    context['preview'] = preview
+                else:
+                    try:
+                        criadas, atualizadas = self._importar_preview_confirmado(preview)
+                        request.session.pop(self.IMPORT_PREVIEW_SESSION_KEY, None)
+                        self.message_user(
+                            request,
+                            f'{criadas} cor(es) criada(s) e {atualizadas} atualizada(s).',
+                            django_messages.SUCCESS,
+                        )
+                        return HttpResponseRedirect('/painel/produtos/corpadrao/')
+                    except Exception as e:
+                        self.message_user(request, f'Erro ao importar arquivo: {e}', django_messages.ERROR)
+                        context['preview'] = preview
+
+        return render(request, 'admin/produtos/importar_cores.html', context)
 
     def cor_bolinha(self, obj):
         if obj.codigo_hex:
             return mark_safe(
                 f'<span style="display:inline-block;width:24px;height:24px;'
-                f'border-radius:50%;background:{obj.codigo_hex};'
+                f'border-radius:50%;{_estilo_preview_cor(obj.codigo_hex, obj.codigo_hex_secundario)}'
                 f'border:1px solid #ccc;vertical-align:middle;"></span>'
             )
         return '—'
     cor_bolinha.short_description = '●'
 
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:produtos_corpadrao_change', args=[obj.pk])
+        delete_url = reverse('admin:produtos_corpadrao_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta cor?\')">✕ Excluir</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
+
 
 @admin.register(TamanhoPadrao)
 class TamanhoPadraoAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'ordem')
+    list_display = ('nome', 'ordem', 'acoes_linha')
     list_editable = ('ordem',)
+    list_display_links = ('nome',)
     search_fields = ('nome',)
     ordering = ('ordem', 'nome')
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:produtos_tamanhopadrao_change', args=[obj.pk])
+        delete_url = reverse('admin:produtos_tamanhopadrao_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este tamanho?\')">✕ Excluir</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
 
 
 # ---------------------------------------------------------------------------
@@ -843,29 +2047,66 @@ class TamanhoPadraoAdmin(admin.ModelAdmin):
 
 @admin.register(TabelaMedidas)
 class TabelaMedidasAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'categoria', 'ativo')
+    list_display = ('nome', 'ativo', 'acoes_linha')
+    list_display_links = ('nome',)
     list_editable = ('ativo',)
-    list_filter = ('ativo', 'categoria')
-    ordering = ('categoria', 'nome')
+    list_filter = ('ativo',)
+    ordering = ('nome',)
+    inlines = (TabelaMedidasLinhaInline,)
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
 
     fieldsets = (
         (None, {
-            'fields': ('nome', 'categoria', 'ativo'),
+            'fields': ('nome', 'ativo'),
+        }),
+        ('Cabeçalho das colunas', {
+            'fields': (
+                'cabecalho_1', 'cabecalho_2', 'cabecalho_3',
+                'cabecalho_4', 'cabecalho_5', 'cabecalho_6',
+            ),
             'description': (
-                'Crie uma tabela geral (categoria em branco) como padrão, '
-                'e tabelas específicas por categoria quando necessário.'
+                'Defina os tamanhos nas colunas da tabela. '
+                'As quatro primeiras já vêm como P, M, G e GG.'
             ),
         }),
-        ('Conteúdo da tabela', {
+        ('Conteúdo legado', {
             'fields': ('conteudo',),
+            'classes': ('collapse',),
             'description': (
-                'Descreva as medidas. Pode usar texto simples ou HTML básico. '
-                'Exemplo:<br>'
-                '<strong>PP</strong> — Busto: 82cm | Cintura: 62cm | Quadril: 88cm<br>'
-                '<strong>P</strong> — Busto: 86cm | Cintura: 66cm | Quadril: 92cm'
+                'Opcional. Se a tabela tiver linhas cadastradas abaixo, o site '
+                'usa a versão estruturada e ignora este campo.'
             ),
         }),
     )
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:produtos_tabelamedidas_change', args=[obj.pk])
+        delete_url = reverse('admin:produtos_tabelamedidas_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta tabela?\')">✕ Excluir</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
+
+    def _invalidar_cache_tabelas(self):
+        from apps.core_utils.cache_utils import invalidar_tabelas_medidas
+        invalidar_tabelas_medidas()
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        self._invalidar_cache_tabelas()
+
+    def save_formset(self, request, form, formset, change):
+        super().save_formset(request, form, formset, change)
+        self._invalidar_cache_tabelas()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        self._invalidar_cache_tabelas()
 
 
 # ---------------------------------------------------------------------------
@@ -874,10 +2115,14 @@ class TabelaMedidasAdmin(admin.ModelAdmin):
 
 @admin.register(Avaliacao)
 class AvaliacaoAdmin(admin.ModelAdmin):
-    list_display = ('produto', 'nome_publico', 'nota_estrelas', 'titulo', 'aprovada', 'criada_em')
+    list_display = ('nome_publico', 'nota_estrelas', 'comentario_resumo', 'aprovada', 'criada_em', 'acoes_linha')
+    list_display_links = ('nome_publico',)
     list_filter = ('aprovada', 'nota')
     list_editable = ('aprovada',)
-    search_fields = ('produto__nome', 'nome_publico', 'titulo', 'comentario')
+    search_fields = ('nome_publico', 'comentario')
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
     date_hierarchy = 'criada_em'
     readonly_fields = ('criada_em',)
     ordering = ('-criada_em',)
@@ -890,6 +2135,23 @@ class AvaliacaoAdmin(admin.ModelAdmin):
             '☆' * (5 - obj.nota),
         )
     nota_estrelas.short_description = 'Nota'
+
+    def comentario_resumo(self, obj):
+        if obj.comentario:
+            return obj.comentario[:80] + ('…' if len(obj.comentario) > 80 else '')
+        return '—'
+    comentario_resumo.short_description = 'Comentário'
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:produtos_avaliacao_change', args=[obj.pk])
+        delete_url = reverse('admin:produtos_avaliacao_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta avaliação?\')">✕ Excluir</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
 
     @admin.action(description='Aprovar avaliações selecionadas')
     def aprovar(self, request, queryset):
@@ -904,8 +2166,28 @@ class AvaliacaoAdmin(admin.ModelAdmin):
 
 @admin.register(NewsletterInscricao)
 class NewsletterInscricaoAdmin(admin.ModelAdmin):
-    list_display  = ('email', 'inscrito_em', 'ativo')
+    list_display  = ('email', 'inscrito_em', 'ativo', 'acoes_linha')
+    list_display_links = ('email',)
+    list_editable = ('ativo',)
     list_filter   = ('ativo',)
     search_fields = ('email',)
-    readonly_fields = ('email', 'inscrito_em')
+    readonly_fields = ('inscrito_em',)
     ordering = ('-inscrito_em',)
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        return {k: v for k, v in actions.items() if k == 'delete_selected'}
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:produtos_newsletterinscricao_change', args=[obj.pk])
+        delete_url = reverse('admin:produtos_newsletterinscricao_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta inscrição?\')">✕ Excluir</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'

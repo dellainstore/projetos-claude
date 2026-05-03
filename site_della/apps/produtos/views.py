@@ -1,12 +1,17 @@
+from xml.sax.saxutils import escape
+
 from django.shortcuts import render, get_object_or_404, redirect
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.core.cache import cache
 from django.db.models import Q, Avg, Count
+from django.db.models import Case, IntegerField, Value, When
 from django.conf import settings
+from django.utils.html import strip_tags
 
+from apps.core_utils.meta import enviar_evento_meta, gerar_evento_id
 from apps.core_utils.cache_utils import (
     MENU_CATEGORIAS, HOME_BANNERS, HOME_MINI_BANNERS, HOME_LOOK,
     HOME_DEPOIMENTOS, HOME_DESTAQUES, LOJA_CONFIG, GUIA_TABELAS,
@@ -64,7 +69,16 @@ def homepage(request):
     mini_banners = cache.get(HOME_MINI_BANNERS)
     if mini_banners is None:
         try:
-            mini_banners = list(MiniBanner.objects.filter(ativo=True).order_by('posicao'))
+            mini_banners = list(
+                MiniBanner.objects.filter(ativo=True).order_by(
+                    Case(
+                        When(posicao='esq', then=Value(0)),
+                        When(posicao='dir', then=Value(1)),
+                        default=Value(99),
+                        output_field=IntegerField(),
+                    )
+                )
+            )
         except Exception:
             mini_banners = []
         cache.set(HOME_MINI_BANNERS, mini_banners, 60 * 60)
@@ -74,7 +88,8 @@ def homepage(request):
     if look_obj is None:
         try:
             look_obj = LookDaSemana.objects.filter(ativo=True).select_related(
-                'produto_ponto1', 'produto_ponto2', 'produto_ponto3'
+                'produto_ponto1', 'produto_ponto2', 'produto_ponto3',
+                'foto_ponto1', 'foto_ponto2', 'foto_ponto3',
             ).prefetch_related(
                 'produto_ponto1__imagens', 'produto_ponto2__imagens', 'produto_ponto3__imagens'
             ).first()
@@ -83,12 +98,16 @@ def homepage(request):
         cache.set(HOME_LOOK, look_obj, 60 * 60)
 
     look_produtos = []
+    look_items = []   # lista de (produto, foto_escolhida_ou_None)
     if look_obj:
-        look_produtos = [p for p in [
-            look_obj.produto_ponto1,
-            look_obj.produto_ponto2,
-            look_obj.produto_ponto3,
-        ] if p and p.ativo]
+        for produto, foto in [
+            (look_obj.produto_ponto1, look_obj.foto_ponto1),
+            (look_obj.produto_ponto2, look_obj.foto_ponto2),
+            (look_obj.produto_ponto3, look_obj.foto_ponto3),
+        ]:
+            if produto and produto.ativo:
+                look_produtos.append(produto)
+                look_items.append((produto, foto))
 
     wishlist_ids = set()
     if request.user.is_authenticated:
@@ -104,6 +123,7 @@ def homepage(request):
         'mini_banners':           mini_banners,
         'look_obj':               look_obj,
         'look_produtos':          look_produtos,
+        'look_items':             look_items,
         'wishlist_ids':           wishlist_ids,
         'instagram_posts':        _get_instagram_posts(),
         'WHATSAPP_NUMBER_1':      settings.WHATSAPP_NUMBER_1,
@@ -112,7 +132,79 @@ def homepage(request):
     return render(request, 'home/index.html', context)
 
 
-def loja(request, categoria_slug=None):
+def feed_meta_xml(request):
+    from apps.produtos.models import Produto
+
+    site_url = (getattr(settings, 'SITE_URL', '') or '').rstrip('/')
+    produtos = (
+        Produto.objects
+        .filter(ativo=True, categoria__ativa=True)
+        .select_related('categoria', 'categoria__parent')
+        .prefetch_related('imagens', 'variacoes__cor', 'variacoes__tamanho')
+        .order_by('id')
+    )
+
+    itens = []
+    for produto in produtos:
+        imagem = produto.imagem_principal
+        if not imagem or not getattr(imagem, 'imagem', None):
+            continue
+
+        link = f'{site_url}{produto.get_absolute_url()}'
+        image_link = f'{site_url}{imagem.imagem.url}'
+        description = ' '.join(strip_tags(produto.descricao or '').split())
+        availability = 'in stock' if _produto_disponivel_meta(produto) else 'out of stock'
+        category_parts = []
+        if produto.categoria.parent_id:
+            category_parts.append(produto.categoria.parent.nome)
+        category_parts.append(produto.categoria.nome)
+        product_type = ' > '.join(category_parts)
+        color_values = sorted({v.cor.nome for v in produto.variacoes.all() if v.ativa and v.cor_id})
+        size_values = sorted({v.tamanho.nome for v in produto.variacoes.all() if v.ativa and v.tamanho_id})
+
+        parts = [
+            '    <item>',
+            f'      <g:id>{produto.id}</g:id>',
+            f'      <g:title>{escape(produto.nome)}</g:title>',
+            f'      <g:description>{escape(description[:9999])}</g:description>',
+            f'      <g:availability>{availability}</g:availability>',
+            '      <g:condition>new</g:condition>',
+            f'      <g:price>{_format_meta_price(produto.preco_base_exibicao)} BRL</g:price>',
+            f'      <g:link>{escape(link)}</g:link>',
+            f'      <g:image_link>{escape(image_link)}</g:image_link>',
+            '      <g:brand>D\'ELLA Instore</g:brand>',
+            f'      <g:google_product_category>{escape("Apparel & Accessories > Clothing")}</g:google_product_category>',
+            f'      <g:product_type>{escape(product_type)}</g:product_type>',
+            '      <g:gender>female</g:gender>',
+            '      <g:age_group>adult</g:age_group>',
+            f'      <g:item_group_id>{produto.id}</g:item_group_id>',
+        ]
+        if produto.em_promocao:
+            parts.append(f'      <g:sale_price>{_format_meta_price(produto.preco_atual)} BRL</g:sale_price>')
+        if produto.sku:
+            parts.append(f'      <g:mpn>{escape(produto.sku)}</g:mpn>')
+        if color_values:
+            parts.append(f'      <g:color>{escape(", ".join(color_values))}</g:color>')
+        if size_values:
+            parts.append(f'      <g:size>{escape(", ".join(size_values))}</g:size>')
+        parts.append('    </item>')
+        itens.append('\n'.join(parts))
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">\n'
+        '  <channel>\n'
+        '    <title>D\'ELLA Instore</title>\n'
+        f'    <link>{escape(site_url)}</link>\n'
+        '    <description>Catalogo de produtos D\'ELLA Instore para Meta Commerce Manager.</description>\n'
+        f'{"\n".join(itens)}\n'
+        '  </channel>\n'
+        '</rss>\n'
+    )
+    return HttpResponse(xml, content_type='application/xml; charset=utf-8')
+
+
+def loja(request, categoria_slug=None, parent_slug=None):
     from apps.produtos.models import Categoria, Produto
 
     # Sidebar — reutiliza o mesmo cache do menu principal (invalidado junto)
@@ -129,8 +221,21 @@ def loja(request, categoria_slug=None):
 
     produtos_qs = Produto.objects.filter(ativo=True).prefetch_related('imagens', 'variacoes')
 
-    if categoria_slug:
-        categoria_ativa = get_object_or_404(Categoria, slug=categoria_slug, ativa=True)
+    if categoria_slug and parent_slug:
+        categoria_ativa = get_object_or_404(
+            Categoria,
+            slug=categoria_slug,
+            parent__slug=parent_slug,
+            ativa=True,
+        )
+        produtos_qs = produtos_qs.filter(categoria=categoria_ativa)
+    elif categoria_slug:
+        categoria_ativa = get_object_or_404(
+            Categoria,
+            slug=categoria_slug,
+            parent__isnull=True,
+            ativa=True,
+        )
         # Se é uma categoria-mãe, inclui também os produtos das subcategorias
         sub_ids = list(categoria_ativa.subcategorias.filter(ativa=True).values_list('id', flat=True))
         if sub_ids:
@@ -168,7 +273,9 @@ def loja(request, categoria_slug=None):
     if apenas_novos:
         produtos_qs = produtos_qs.filter(novo=True)
     if apenas_promo:
-        produtos_qs = produtos_qs.exclude(preco_promocional__isnull=True)
+        produtos_qs = produtos_qs.filter(
+            Q(preco_promocional__isnull=False) | Q(variacoes__preco_promocional__isnull=False)
+        ).distinct()
 
     # Ordenação
     ordem = request.GET.get('ordem', 'relevancia')
@@ -206,6 +313,17 @@ def loja(request, categoria_slug=None):
         'wishlist_ids':    wishlist_ids,
     }
     return render(request, 'produtos/loja.html', context)
+
+
+def _produto_disponivel_meta(produto) -> bool:
+    variacoes = [v for v in produto.variacoes.all() if v.ativa]
+    if not variacoes:
+        return True
+    return any(v.disponivel for v in variacoes)
+
+
+def _format_meta_price(valor) -> str:
+    return f'{valor:.2f}'
 
 
 def detalhe_produto(request, slug):
@@ -256,7 +374,18 @@ def detalhe_produto(request, slug):
     variacoes_map = {}
     for v in variacoes_todas:
         key = f"{v.cor_id or 'null'}_{v.tamanho_id or 'null'}"
-        variacoes_map[key] = {'id': v.pk, 'disponivel': v.disponivel}
+        variacoes_map[key] = {
+            'id': v.pk,
+            'disponivel': v.disponivel,
+            'estoque': v.estoque,
+            'disponibilidade': v.disponibilidade,
+            'disponibilidade_label': v.disponibilidade_label,
+            'prazo_confeccao_dias': v.prazo_total_adicional_dias,
+            'preco_base': str(v.preco_base),
+            'preco_atual': str(v.preco_atual),
+            'preco_promocional': str(v.preco_promocional_efetivo) if v.preco_promocional_efetivo else '',
+            'em_promocao': v.em_promocao,
+        }
     variacoes_json = _json.dumps(variacoes_map)
     avaliacoes   = produto.avaliacoes.filter(aprovada=True).order_by('-criada_em')[:10]
 
@@ -283,16 +412,13 @@ def detalhe_produto(request, slug):
         except Exception:
             pass
 
-    # Tabela de medidas — cache 12h por categoria
+    # Tabela de medidas — cache 12h (única tabela global)
     _cache_med = _key_tabela_medidas(produto.categoria_id)
     tabela_medidas = cache.get(_cache_med)
     if tabela_medidas is None:
         try:
             from apps.produtos.models import TabelaMedidas
-            tabela_medidas = (
-                TabelaMedidas.objects.filter(ativo=True, categoria=produto.categoria).first()
-                or TabelaMedidas.objects.filter(ativo=True, categoria__isnull=True).first()
-            )
+            tabela_medidas = TabelaMedidas.objects.filter(ativo=True).first()
         except Exception:
             tabela_medidas = None
         cache.set(_cache_med, tabela_medidas, 60 * 60 * 12)
@@ -319,6 +445,7 @@ def detalhe_produto(request, slug):
     except Exception:
         pass
     fotos_cor_json = _json.dumps(fotos_cor_map)
+    meta_viewcontent_event_id = gerar_evento_id('viewcontent')
 
     context = {
         'produto':            produto,
@@ -335,7 +462,24 @@ def detalhe_produto(request, slug):
         'na_wishlist':        na_wishlist,
         'tabela_medidas':     tabela_medidas,
         'config_loja':        config_loja,
+        'meta_viewcontent_event_id': meta_viewcontent_event_id,
     }
+    try:
+        enviar_evento_meta(
+            request,
+            event_name='ViewContent',
+            event_id=meta_viewcontent_event_id,
+            event_source_url=request.build_absolute_uri(produto.get_absolute_url()),
+            custom_data={
+                'content_ids': [str(produto.id)],
+                'content_type': 'product',
+                'content_name': produto.nome,
+                'value': float(produto.preco_atual),
+                'currency': 'BRL',
+            },
+        )
+    except Exception:
+        pass
     return render(request, 'produtos/detalhe.html', context)
 
 

@@ -1,0 +1,159 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Importar Fotos via ZIP — Painel D'ELLA{% endblock %}
+
+{% block content %}
+<div style="max-width:1020px;">
+  <h1>Importar fotos via ZIP</h1>
+
+  <div style="padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-top:1.5rem;">
+    <div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:6px;padding:1.25rem;margin-bottom:1.5rem;">
+      <strong>Como funciona:</strong>
+      <ol style="margin:0.75rem 0 0 1.2rem;line-height:2;font-size:0.88rem;">
+        <li>Suba um arquivo <strong>.zip</strong>. Dentro dele, cada pasta deve ter o <strong>mesmo nome do produto pai</strong> cadastrado.</li>
+        <li>Cada pasta pode ter quantas fotos quiser (<code>.png</code>, <code>.jpg</code>, <code>.jpeg</code> ou <code>.webp</code>).</li>
+        <li>A primeira foto (ordem alfabética) vira a foto <strong>principal</strong> do produto.</li>
+        <li>Pastas cujo nome <strong>não bate</strong> com nenhum produto cadastrado são ignoradas.</li>
+        <li>Produtos que <strong>já têm fotos</strong> também são ignorados (sem sobrescrever nem duplicar).</li>
+        <li>Primeiro <strong>Validar ZIP</strong>, confirme o resumo, e só então <strong>Importar fotos validadas</strong>.</li>
+      </ol>
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="acao" value="validar">
+
+      <div style="margin-bottom:1.25rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">
+          Arquivo ZIP:
+        </label>
+        <input type="file" name="arquivo_zip" accept=".zip,application/zip,application/x-zip-compressed"
+               style="display:block;width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
+      </div>
+
+      <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+        <button type="submit"
+                style="background:#c9a96e;color:#fff;padding:0.65rem 1.5rem;border:none;
+                       border-radius:4px;font-size:0.9rem;cursor:pointer;font-weight:600;">
+          Validar ZIP
+        </button>
+        <a href="/painel/produtos/produto/" style="color:#666;font-size:0.85rem;">Cancelar</a>
+      </div>
+    </form>
+  </div>
+
+  {% if preview %}
+  <div style="padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-top:1.5rem;">
+    <h2 style="margin:0 0 1rem;font-size:1.15rem;">Resultado da validação</h2>
+
+    {% if preview.arquivo_nome %}
+      <p style="margin:0 0 1rem;color:#666;font-size:0.9rem;">
+        Arquivo analisado: <strong>{{ preview.arquivo_nome }}</strong>
+        {% if preview.tamanho_kb %}<span style="color:#999;">({{ preview.tamanho_kb }} KB)</span>{% endif %}
+      </p>
+    {% endif %}
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;margin-bottom:1.25rem;">
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Pastas no ZIP</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0a0a0a;">{{ preview.resumo.pastas_total }}</div>
+      </div>
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Produtos a atualizar</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#2e7d32;">{{ preview.resumo.produtos_atualizar }}</div>
+      </div>
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Fotos a importar</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#2e7d32;">{{ preview.resumo.fotos_total }}</div>
+      </div>
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Já com fotos (ignoradas)</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#a07a16;">{{ preview.resumo.pastas_ja_com_fotos }}</div>
+      </div>
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Sem produto (ignoradas)</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#a94442;">{{ preview.resumo.pastas_sem_produto }}</div>
+      </div>
+    </div>
+
+    {% if preview.erros %}
+      <div style="background:#f8d7da;border:1px solid #e5aeb5;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+        <strong style="display:block;margin-bottom:0.5rem;">Erros</strong>
+        <ul style="margin:0;padding-left:1.25rem;line-height:1.8;font-size:0.9rem;">
+          {% for erro in preview.erros %}
+            <li>{{ erro }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if preview.avisos %}
+      <div style="background:#fff3cd;border:1px solid #ffe08a;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+        <strong style="display:block;margin-bottom:0.5rem;">Avisos</strong>
+        <ul style="margin:0;padding-left:1.25rem;line-height:1.8;font-size:0.9rem;">
+          {% for aviso in preview.avisos %}
+            <li>{{ aviso }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div style="overflow:auto;border:1px solid #eee;border-radius:6px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead>
+          <tr style="background:#f5f5f3;">
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Pasta no ZIP</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Produto encontrado</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Status</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Qtd. fotos</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Arquivos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linha in preview.linhas %}
+          <tr>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;font-weight:600;">{{ linha.pasta }}</td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">
+              {% if linha.produto_nome %}{{ linha.produto_nome }}{% else %}<span style="color:#a94442;">—</span>{% endif %}
+            </td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">
+              {% if linha.status == 'ok' %}
+                <span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:3px;font-size:0.78rem;font-weight:600;">✓ Importar</span>
+              {% elif linha.status == 'ja_tem_fotos' %}
+                <span style="background:#fff3cd;color:#a07a16;padding:2px 8px;border-radius:3px;font-size:0.78rem;font-weight:600;">⚠ Já tem fotos</span>
+              {% elif linha.status == 'sem_produto' %}
+                <span style="background:#f8d7da;color:#a94442;padding:2px 8px;border-radius:3px;font-size:0.78rem;font-weight:600;">✗ Produto não encontrado</span>
+              {% endif %}
+            </td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.qtd_fotos }}</td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;color:#666;font-size:0.82rem;">
+              {{ linha.arquivos|join:", "|truncatechars:120 }}
+            </td>
+          </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" style="padding:1rem;text-align:center;color:#777;">Nenhuma pasta encontrada no ZIP.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if preview.pode_importar %}
+      <form method="post" style="margin-top:1.25rem;">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="importar_confirmado">
+        <button type="submit"
+                style="background:#2e7d32;color:#fff;padding:0.7rem 1.6rem;border:none;
+                       border-radius:4px;font-size:0.92rem;cursor:pointer;font-weight:600;">
+          Importar fotos validadas
+        </button>
+      </form>
+    {% else %}
+      <p style="margin:1rem 0 0;color:#a94442;font-weight:600;">
+        Nenhuma pasta válida encontrada para importar. Confira o conteúdo do ZIP e os nomes dos produtos.
+      </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

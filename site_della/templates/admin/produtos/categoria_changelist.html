@@ -1,0 +1,77 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block result_list %}
+  <div class="categoria-sort-app" id="categoria-sort-app" data-save-url="{{ categoria_sort_save_url }}">
+    <div class="categoria-sort-root" id="categoria-sort-root">
+      {% for item in categorias_tree %}
+        <section class="categoria-sort-group" data-category-id="{{ item.parent.pk }}" draggable="true">
+          <div class="categoria-sort-item categoria-sort-parent categoria-sort-row-click"
+               data-edit-url="{% url 'admin:produtos_categoria_change' item.parent.pk %}">
+            <button type="button" class="categoria-sort-handle" aria-label="Arrastar categoria">⋮⋮</button>
+            {% if item.children %}
+              <button type="button"
+                      class="categoria-sort-toggle"
+                      aria-label="Mostrar ou esconder subcategorias"
+                      aria-expanded="false">
+                <span class="categoria-sort-chevron">▸</span>
+              </button>
+            {% else %}
+              <span class="categoria-sort-toggle categoria-sort-toggle-placeholder"></span>
+            {% endif %}
+            <div class="categoria-sort-main">
+              <span class="categoria-sort-name">{{ item.parent.nome }}</span>
+              {% if not item.parent.ativa %}
+                <span class="categoria-sort-meta categoria-sort-meta-inativa">Inativa</span>
+              {% else %}
+                <span class="categoria-sort-meta categoria-sort-meta-ativa">Ativa</span>
+              {% endif %}
+            </div>
+            <div class="categoria-sort-row-actions">
+              <a href="{% url 'admin:produtos_categoria_change' item.parent.pk %}" class="della-btn-edit">Editar</a>
+              <a href="{% url 'admin:produtos_categoria_delete' item.parent.pk %}"
+                 class="della-btn-delete"
+                 onclick="return confirm('Excluir esta categoria?')">Excluir</a>
+            </div>
+          </div>
+
+          <div class="categoria-sort-children is-collapsed" data-parent-id="{{ item.parent.pk }}">
+            {% for filha in item.children %}
+              <div class="categoria-sort-item categoria-sort-child categoria-sort-row-click"
+                   data-category-id="{{ filha.pk }}"
+                   data-parent-id="{{ item.parent.pk }}"
+                   data-edit-url="{% url 'admin:produtos_categoria_change' filha.pk %}"
+                   draggable="true">
+                <button type="button" class="categoria-sort-handle" aria-label="Arrastar subcategoria">⋮⋮</button>
+                <span class="categoria-sort-child-indent">└</span>
+                <div class="categoria-sort-main">
+                  <span class="categoria-sort-name">{{ filha.nome }}</span>
+                  {% if not filha.ativa %}
+                    <span class="categoria-sort-meta categoria-sort-meta-inativa">Inativa</span>
+                  {% else %}
+                    <span class="categoria-sort-meta categoria-sort-meta-ativa">Ativa</span>
+                  {% endif %}
+                </div>
+                <div class="categoria-sort-row-actions">
+                  <a href="{% url 'admin:produtos_categoria_change' filha.pk %}" class="della-btn-edit">Editar</a>
+                  <a href="{% url 'admin:produtos_categoria_delete' filha.pk %}"
+                     class="della-btn-delete"
+                     onclick="return confirm('Excluir esta categoria?')">Excluir</a>
+                </div>
+              </div>
+            {% empty %}
+              <div class="categoria-sort-empty">Sem subcategorias.</div>
+            {% endfor %}
+          </div>
+        </section>
+      {% empty %}
+        <p>Nenhuma categoria cadastrada.</p>
+      {% endfor %}
+    </div>
+
+    <div class="categoria-sort-footer">
+      <button type="button" class="button default" id="categoria-sort-save">Salvar ordem</button>
+      <span class="categoria-sort-status" id="categoria-sort-status"></span>
+    </div>
+  </div>
+{% endblock %}

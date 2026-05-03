@@ -2,22 +2,22 @@ import os
 import uuid
 from django.db import models
 from django.utils.text import slugify
+from django.urls import reverse
 from django.core.exceptions import ValidationError
-from apps.core_utils.sanitize import sanitize_text, validate_image_upload
+from apps.core_utils.sanitize import sanitize_text, sanitize_multiline_text, validate_image_upload
 
 
 def produto_imagem_path(instance, filename):
     """Salva imagens em subpastas por produto para evitar diretório flat gigante."""
-    ext = filename.rsplit('.', 1)[-1].lower()
-    nome = f'{uuid.uuid4().hex}.{ext}'
+    base, ext = os.path.splitext(os.path.basename(filename or 'imagem'))
+    base = slugify(base) or 'imagem'
+    nome = f'{base}{ext.lower()}'
     return f'produtos/{instance.produto.slug if hasattr(instance, "produto") else "temp"}/{nome}'
 
 
 class Categoria(models.Model):
-    nome = models.CharField('Nome', max_length=80, unique=True)
-    slug = models.SlugField('Slug', max_length=80, unique=True, blank=True)
-    descricao = models.TextField('Descrição', blank=True, max_length=500)
-    imagem = models.ImageField('Imagem', upload_to='categorias/', blank=True)
+    nome = models.CharField('Nome', max_length=80)
+    slug = models.SlugField('Slug', max_length=80, blank=True)
     parent = models.ForeignKey(
         'self', verbose_name='Categoria mãe', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='subcategorias',
@@ -29,37 +29,91 @@ class Categoria(models.Model):
         verbose_name = 'Categoria'
         verbose_name_plural = 'Categorias'
         ordering = ['ordem', 'nome']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['parent', 'nome'],
+                condition=models.Q(parent__isnull=False),
+                name='uniq_categoria_nome_por_parent',
+            ),
+            models.UniqueConstraint(
+                fields=['parent', 'slug'],
+                condition=models.Q(parent__isnull=False),
+                name='uniq_categoria_slug_por_parent',
+            ),
+            models.UniqueConstraint(
+                fields=['nome'],
+                condition=models.Q(parent__isnull=True),
+                name='uniq_categoria_mae_nome',
+            ),
+            models.UniqueConstraint(
+                fields=['slug'],
+                condition=models.Q(parent__isnull=True),
+                name='uniq_categoria_mae_slug',
+            ),
+        ]
 
     def __str__(self):
         return self.nome
 
+    def get_absolute_url(self):
+        if self.parent_id:
+            return reverse(
+                'produtos:loja_subcategoria',
+                kwargs={'parent_slug': self.parent.slug, 'categoria_slug': self.slug},
+            )
+        return reverse('produtos:loja_categoria', kwargs={'categoria_slug': self.slug})
+
     def clean(self):
         self.nome = sanitize_text(self.nome, max_length=80)
-        self.descricao = sanitize_text(self.descricao, max_length=500)
-        if self.imagem and hasattr(self.imagem, 'file'):
-            validate_image_upload(self.imagem)
+        if self.slug:
+            self.slug = slugify(self.slug)
+        else:
+            self.slug = slugify(self.nome)
+
+        conflitos = Categoria.objects.exclude(pk=self.pk).filter(parent=self.parent)
+        if conflitos.filter(nome__iexact=self.nome).exists():
+            raise ValidationError({'nome': 'Ja existe uma categoria com este nome neste mesmo nivel.'})
+        if conflitos.filter(slug=self.slug).exists():
+            raise ValidationError({'slug': 'Ja existe uma categoria com este slug nesta mesma categoria mae.'})
 
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.nome)
         self.full_clean()
+
+        # Detecta se a flag `ativa` mudou em uma categoria PAI (sem parent),
+        # para propagar a mudança para todas as subcategorias após salvar.
+        propagar_ativa_para_subs = False
+        if self.pk and self.parent_id is None:
+            try:
+                estado_db = Categoria.objects.only('ativa').get(pk=self.pk)
+                if estado_db.ativa != self.ativa:
+                    propagar_ativa_para_subs = True
+            except Categoria.DoesNotExist:
+                pass
+
         super().save(*args, **kwargs)
+
+        if propagar_ativa_para_subs:
+            Categoria.objects.filter(parent_id=self.pk).update(ativa=self.ativa)
 
 
 class Produto(models.Model):
-    GENEROS = [('F', 'Feminino'), ('U', 'Unissex')]
 
     categoria = models.ForeignKey(Categoria, on_delete=models.PROTECT, related_name='produtos')
     nome = models.CharField('Nome', max_length=200)
     slug = models.SlugField('Slug', max_length=220, unique=True, blank=True)
     descricao = models.TextField('Descrição', max_length=2000)
     composicao = models.CharField('Composição/Material', max_length=200, blank=True)
-    genero = models.CharField('Gênero', max_length=1, choices=GENEROS, default='F')
 
     # Preços
     preco = models.DecimalField('Preço', max_digits=10, decimal_places=2)
     preco_promocional = models.DecimalField('Preço promocional', max_digits=10,
                                              decimal_places=2, null=True, blank=True)
+
+    # Logística
+    peso = models.PositiveSmallIntegerField(
+        'Peso (g)', default=500,
+        help_text='Peso da peça em gramas — usado no cálculo de frete (ex: 200, 300, 500)',
+    )
 
     # Controle
     ativo = models.BooleanField('Ativo', default=True)
@@ -95,17 +149,45 @@ class Produto(models.Model):
         return self.nome
 
     @property
+    def variacao_referencia_preco(self):
+        cache = getattr(self, '_prefetched_objects_cache', {})
+        if 'variacoes' in cache:
+            fonte = cache['variacoes']
+        else:
+            fonte = self.variacoes.all()
+        variacoes = [v for v in fonte if v.ativa and v.preco_atual is not None]
+        if not variacoes:
+            return None
+        return min(variacoes, key=lambda v: v.preco_atual)
+
+    @property
+    def preco_base_exibicao(self):
+        variacao = self.variacao_referencia_preco
+        if variacao:
+            return variacao.preco_base
+        return self.preco
+
+    @property
+    def preco_promocional_exibicao(self):
+        variacao = self.variacao_referencia_preco
+        if variacao:
+            return variacao.preco_promocional_efetivo
+        return self.preco_promocional
+
+    @property
     def preco_atual(self):
-        return self.preco_promocional if self.preco_promocional else self.preco
+        return self.preco_promocional_exibicao if self.preco_promocional_exibicao else self.preco_base_exibicao
 
     @property
     def em_promocao(self):
-        return bool(self.preco_promocional and self.preco_promocional < self.preco)
+        preco_promo = self.preco_promocional_exibicao
+        preco_base = self.preco_base_exibicao
+        return bool(preco_promo and preco_base and preco_promo < preco_base)
 
     @property
     def percentual_desconto(self):
         if self.em_promocao:
-            return int((1 - self.preco_promocional / self.preco) * 100)
+            return int((1 - self.preco_promocional_exibicao / self.preco_base_exibicao) * 100)
         return 0
 
     @property
@@ -128,14 +210,19 @@ class Produto(models.Model):
     def imagem_principal(self):
         return self.imagens.filter(principal=True).first() or self.imagens.first()
 
+    @property
+    def imagem_hover(self):
+        imagens = list(self.imagens.order_by('-principal', 'ordem', 'id'))
+        return imagens[1] if len(imagens) > 1 else None
+
     def get_absolute_url(self):
         from django.urls import reverse
         return reverse('produtos:detalhe', kwargs={'slug': self.slug})
 
     def clean(self):
-        self.nome = sanitize_text(self.nome, max_length=200)
-        self.descricao = sanitize_text(self.descricao, max_length=2000)
-        self.composicao = sanitize_text(self.composicao, max_length=200)
+        self.nome = sanitize_text(self.nome, max_length=200).upper()
+        self.descricao = sanitize_multiline_text(self.descricao, max_length=2000)
+        self.composicao = sanitize_multiline_text(self.composicao, max_length=200)
         # Trata 0 ou valores negativos como "sem promoção" (converte para NULL)
         if self.preco_promocional is not None and self.preco_promocional <= 0:
             self.preco_promocional = None
@@ -170,6 +257,11 @@ class ProdutoImagem(models.Model):
         verbose_name = 'Imagem do produto'
         verbose_name_plural = 'Imagens do produto'
         ordering = ['-principal', 'ordem']
+
+    def __str__(self):
+        arquivo = os.path.basename(self.imagem.name) if self.imagem else ''
+        marcador = ' (principal)' if self.principal else ''
+        return f'{arquivo or "imagem"}{marcador}'
 
     def clean(self):
         if self.imagem and hasattr(self.imagem, 'file'):
@@ -207,7 +299,7 @@ class CorPadrao(models.Model):
         return self.nome
 
     def clean(self):
-        self.nome = sanitize_text(self.nome, max_length=50)
+        self.nome = sanitize_text(self.nome, max_length=50).upper()
         if self.codigo_hex and not self.codigo_hex.startswith('#'):
             self.codigo_hex = f'#{self.codigo_hex}'
         if self.codigo_hex_secundario and not self.codigo_hex_secundario.startswith('#'):
@@ -272,6 +364,7 @@ class TamanhoPadrao(models.Model):
         return self.nome
 
     def save(self, *args, **kwargs):
+        self.nome = sanitize_text(self.nome, max_length=20).upper()
         super().save(*args, **kwargs)
 
 
@@ -288,6 +381,13 @@ class Variacao(models.Model):
     Se tiver apenas cor (sem tamanho), deixe o campo Tamanho vazio.
     """
 
+    DISPONIBILIDADE_IMEDIATA = 'imediata'
+    DISPONIBILIDADE_SOB_DEMANDA = 'sob_demanda'
+    DISPONIBILIDADE_CHOICES = [
+        (DISPONIBILIDADE_IMEDIATA, 'Disponibilidade imediata'),
+        (DISPONIBILIDADE_SOB_DEMANDA, 'Sob demanda'),
+    ]
+
     produto   = models.ForeignKey(Produto, on_delete=models.CASCADE, related_name='variacoes')
 
     cor       = models.ForeignKey(
@@ -301,7 +401,36 @@ class Variacao(models.Model):
         help_text='Selecione da lista. Cadastre novos tamanhos em Produtos → Tamanhos padrão.',
     )
 
+    preco = models.DecimalField(
+        'Preço da variação',
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Opcional. Se vazio, usa o preço geral do produto.',
+    )
+    preco_promocional = models.DecimalField(
+        'Preço promocional da variação',
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Opcional. Se vazio, não aplica promoção da variação.',
+    )
     estoque        = models.PositiveIntegerField('Estoque', default=0)
+    disponibilidade = models.CharField(
+        'Disponibilidade',
+        max_length=20,
+        choices=DISPONIBILIDADE_CHOICES,
+        default=DISPONIBILIDADE_IMEDIATA,
+        help_text='Use "disponibilidade imediata" para peças a pronta entrega e "sob demanda" para peças confeccionadas após a compra.',
+    )
+    prazo_confeccao_dias = models.PositiveSmallIntegerField(
+        'Prazo de confecção (dias úteis)',
+        null=True,
+        blank=True,
+        help_text='Preencha apenas para variações sob demanda. Esse prazo será somado ao prazo do frete.',
+    )
     sku_variacao   = models.CharField('SKU', max_length=80, blank=True, db_index=True,
                         help_text='SKU individual desta variação no Bling. Ex: 100')
     bling_variacao_id = models.CharField('ID Bling', max_length=50, blank=True,
@@ -337,6 +466,22 @@ class Variacao(models.Model):
                     f'Já existe uma variação com cor "{cor_nome}" e tamanho "{tam_nome}" '
                     f'para este produto. Edite a variação existente.'
                 )
+        if self.disponibilidade == self.DISPONIBILIDADE_SOB_DEMANDA:
+            if not self.prazo_confeccao_dias or self.prazo_confeccao_dias <= 0:
+                raise ValidationError({
+                    'prazo_confeccao_dias': 'Informe o prazo de confecção em dias úteis para variações sob demanda.'
+                })
+        else:
+            self.prazo_confeccao_dias = None
+        if self.preco_promocional is not None and self.preco_promocional <= 0:
+            self.preco_promocional = None
+        preco_base = self.preco if self.preco is not None else (self.produto.preco if self.produto_id else None)
+        if self.preco is not None and self.preco <= 0:
+            raise ValidationError({'preco': 'Preço da variação deve ser maior que zero.'})
+        if self.preco_promocional is not None and preco_base is not None and self.preco_promocional >= preco_base:
+            raise ValidationError({
+                'preco_promocional': 'Preço promocional da variação deve ser menor que o preço base aplicado.'
+            })
 
     @property
     def label(self):
@@ -350,24 +495,72 @@ class Variacao(models.Model):
 
     @property
     def disponivel(self):
+        if self.disponibilidade == self.DISPONIBILIDADE_SOB_DEMANDA:
+            return self.ativa
         return self.estoque > 0
+
+    @property
+    def usa_preco_proprio(self):
+        return self.preco is not None or self.preco_promocional is not None
+
+    @property
+    def preco_base(self):
+        if self.preco is not None:
+            return self.preco
+        return self.produto.preco
+
+    @property
+    def preco_promocional_efetivo(self):
+        if self.preco_promocional is not None:
+            return self.preco_promocional
+        if not self.usa_preco_proprio:
+            return self.produto.preco_promocional
+        return None
+
+    @property
+    def preco_atual(self):
+        return self.preco_promocional_efetivo if self.preco_promocional_efetivo else self.preco_base
+
+    @property
+    def em_promocao(self):
+        return bool(self.preco_promocional_efetivo and self.preco_promocional_efetivo < self.preco_base)
+
+    @property
+    def pronta_entrega(self):
+        return self.disponibilidade == self.DISPONIBILIDADE_IMEDIATA
+
+    @property
+    def sob_demanda(self):
+        return self.disponibilidade == self.DISPONIBILIDADE_SOB_DEMANDA
+
+    @property
+    def prazo_total_adicional_dias(self):
+        return self.prazo_confeccao_dias or 0
+
+    @property
+    def disponibilidade_label(self):
+        if self.sob_demanda:
+            dias = self.prazo_total_adicional_dias
+            return f'Sob demanda: +{dias} dia{"s" if dias != 1 else ""} útil{"eis" if dias != 1 else ""} para confecção'
+        return 'Disponibilidade imediata'
 
 
 class TabelaMedidas(models.Model):
     """Tabela de medidas exibida ao clicar em 'Guia de tamanhos' no produto."""
     nome = models.CharField('Nome', max_length=80, default='Geral',
                 help_text='Ex: Body, Beachwear, Geral')
-    categoria = models.ForeignKey(
-        Categoria, null=True, blank=True, on_delete=models.SET_NULL,
-        verbose_name='Categoria',
-        help_text='Deixe em branco para usar como tabela padrão geral. '
-                  'Se preenchida, é usada para produtos dessa categoria.',
-    )
+    cabecalho_1 = models.CharField('Coluna 1', max_length=20, blank=True, default='P')
+    cabecalho_2 = models.CharField('Coluna 2', max_length=20, blank=True, default='M')
+    cabecalho_3 = models.CharField('Coluna 3', max_length=20, blank=True, default='G')
+    cabecalho_4 = models.CharField('Coluna 4', max_length=20, blank=True, default='GG')
+    cabecalho_5 = models.CharField('Coluna 5', max_length=20, blank=True)
+    cabecalho_6 = models.CharField('Coluna 6', max_length=20, blank=True)
     conteudo = models.TextField(
-        'Conteúdo da tabela',
+        'Conteúdo legado da tabela',
+        blank=True,
         help_text=(
-            'Descreva as medidas. Pode usar texto simples ou HTML básico. '
-            'Exemplo: PP: busto 82cm | cintura 62cm | quadril 88cm'
+            'Opcional. Mantido por compatibilidade para tabelas antigas em texto/HTML. '
+            'Se você cadastrar linhas abaixo, o site usará a tabela estruturada.'
         )
     )
     ativo = models.BooleanField('Ativo', default=True)
@@ -378,20 +571,104 @@ class TabelaMedidas(models.Model):
         ordering = ['nome']
 
     def __str__(self):
-        if self.categoria:
-            return f'{self.nome} — {self.categoria.nome}'
-        return f'{self.nome} (padrão geral)'
+        return self.nome
+
+    def clean(self):
+        self.nome = sanitize_text(self.nome, max_length=80)
+        for idx in range(1, 7):
+            campo = f'cabecalho_{idx}'
+            valor = getattr(self, campo, '')
+            setattr(self, campo, sanitize_text(valor, max_length=20))
+
+    @property
+    def colunas_configuradas(self):
+        colunas = []
+        for idx in range(1, 7):
+            valor = getattr(self, f'cabecalho_{idx}', '').strip()
+            if valor:
+                colunas.append((idx, valor))
+        return colunas
+
+    @property
+    def usa_tabela_estruturada(self):
+        return bool(self.colunas_configuradas and self.linhas.exists())
+
+    @property
+    def linhas_formatadas(self):
+        colunas = self.colunas_configuradas
+        linhas = []
+        for linha in self.linhas.all():
+            valores = []
+            for idx, _rotulo in colunas:
+                valores.append(getattr(linha, f'valor_{idx}', ''))
+            linhas.append({
+                'rotulo': linha.rotulo,
+                'valores': valores,
+            })
+        return linhas
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
+class TabelaMedidasLinha(models.Model):
+    tabela = models.ForeignKey(
+        TabelaMedidas, on_delete=models.CASCADE, related_name='linhas',
+        verbose_name='Tabela',
+    )
+    ordem = models.PositiveSmallIntegerField('Ordem', default=0)
+    medida = models.CharField('Medida', max_length=80)
+    unidade = models.CharField(
+        'Unidade', max_length=20, blank=True,
+        help_text='Opcional. Ex: cm, kg'
+    )
+    valor_1 = models.CharField('Valor coluna 1', max_length=40, blank=True)
+    valor_2 = models.CharField('Valor coluna 2', max_length=40, blank=True)
+    valor_3 = models.CharField('Valor coluna 3', max_length=40, blank=True)
+    valor_4 = models.CharField('Valor coluna 4', max_length=40, blank=True)
+    valor_5 = models.CharField('Valor coluna 5', max_length=40, blank=True)
+    valor_6 = models.CharField('Valor coluna 6', max_length=40, blank=True)
+
+    class Meta:
+        verbose_name = 'Linha da tabela'
+        verbose_name_plural = 'Linhas da tabela'
+        ordering = ['ordem', 'id']
+
+    def __str__(self):
+        return f'{self.tabela.nome} — {self.rotulo}'
+
+    @property
+    def rotulo(self):
+        if self.unidade:
+            return f'{self.medida} ({self.unidade})'
+        return self.medida
+
+    def clean(self):
+        self.medida = sanitize_text(self.medida, max_length=80)
+        self.unidade = sanitize_text(self.unidade, max_length=20)
+        for idx in range(1, 7):
+            campo = f'valor_{idx}'
+            valor = getattr(self, campo, '')
+            setattr(self, campo, sanitize_text(valor, max_length=40))
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class Avaliacao(models.Model):
-    """Avaliações de clientes — moderadas antes de aparecer no site."""
+    """Avaliações da loja — moderadas antes de aparecer no site."""
 
-    produto = models.ForeignKey(Produto, on_delete=models.CASCADE, related_name='avaliacoes')
+    produto = models.ForeignKey(
+        Produto, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='avaliacoes',
+        verbose_name='Produto (opcional)',
+    )
     cliente = models.ForeignKey('usuarios.Cliente', on_delete=models.SET_NULL,
                                  null=True, blank=True, related_name='avaliacoes')
     nome_publico = models.CharField('Nome', max_length=80)
     nota = models.PositiveSmallIntegerField('Nota', choices=[(i, i) for i in range(1, 6)])
-    titulo = models.CharField('Título', max_length=120, blank=True)
     comentario = models.TextField('Comentário', max_length=800, blank=True)
     aprovada = models.BooleanField('Aprovada', default=False)   # moderação manual
     criada_em = models.DateTimeField(auto_now_add=True)
@@ -402,12 +679,12 @@ class Avaliacao(models.Model):
         ordering = ['-criada_em']
 
     def __str__(self):
-        return f'{self.produto.nome} — {self.nota}★ por {self.nome_publico}'
+        prod = self.produto.nome if self.produto_id else 'Loja'
+        return f'{prod} — {self.nota}★ por {self.nome_publico}'
 
     def clean(self):
         # Sanitiza campos de texto livre do cliente
         self.nome_publico = sanitize_text(self.nome_publico, max_length=80)
-        self.titulo = sanitize_text(self.titulo, max_length=120)
         self.comentario = sanitize_text(self.comentario, max_length=800)
 
     def save(self, *args, **kwargs):

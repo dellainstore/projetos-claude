@@ -2,99 +2,39 @@
 {% block title %}Importar Produtos — Painel D'ELLA{% endblock %}
 
 {% block content %}
-<div style="max-width:760px;">
+<div style="max-width:1020px;">
   <h1>Importar produtos via planilha</h1>
 
-  <!-- Tabs -->
-  <div style="display:flex;gap:0;margin:1.5rem 0 0;border-bottom:2px solid #c9a96e;">
-    <button onclick="mostrarAba('bling')" id="tab-bling"
-      style="padding:0.6rem 1.5rem;border:none;cursor:pointer;font-weight:600;
-             background:#c9a96e;color:#fff;border-radius:4px 4px 0 0;font-size:0.9rem;">
-      Formato Bling (recomendado)
-    </button>
-    <button onclick="mostrarAba('legado')" id="tab-legado"
-      style="padding:0.6rem 1.5rem;border:none;cursor:pointer;font-weight:400;
-             background:#f5f5f3;color:#666;border-radius:4px 4px 0 0;font-size:0.9rem;">
-      Formato personalizado
-    </button>
-  </div>
-
-  <!-- Aba Bling -->
-  <div id="aba-bling" style="padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;">
+  <div style="padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-top:1.5rem;">
     <div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:6px;padding:1.25rem;margin-bottom:1.5rem;">
-      <strong>Como funciona o formato Bling:</strong>
+      <strong>Formato da planilha:</strong>
       <ol style="margin:0.75rem 0 0 1.2rem;line-height:2;font-size:0.88rem;">
-        <li>No Bling: <strong>Produtos → Exportar → CSV</strong> (ou XLSX)</li>
-        <li>O arquivo exportado tem colunas <strong>ID, Código, Descrição, Preço, Situação</strong></li>
-        <li>A Descrição segue o padrão: <code>MODELO (COR) (TAMANHO)</code> — ex: <em>BODY GIU (AZUL MARINHO) (PP)</em></li>
-        <li>O sistema detecta o formato automaticamente e cria produtos, cores e tamanhos</li>
-        <li>O código HEX das cores é preenchido automaticamente para cores conhecidas</li>
-        <li>Escolha a <strong>categoria</strong> que será usada para todos os produtos importados</li>
+        <li>Use o campo <strong>nome</strong> no formato <code>MODELO (COR) (TAMANHO)</code>.</li>
+        <li>Preencha <strong>categoria_pai</strong> e, quando houver, também a <strong>subcategoria</strong>.</li>
+        <li>Se o produto ficar direto na categoria mãe, deixe <strong>subcategoria</strong> em branco.</li>
+        <li><strong>Cor</strong> e <strong>tamanho</strong> são lidos do nome e também já precisam estar cadastrados.</li>
+        <li>Para variações <strong>sob demanda</strong>, preencha <strong>prazo_confeccao_dias</strong>.</li>
+        <li>Primeiro clique em <strong>Validar planilha</strong>. Só depois, se estiver tudo certo, clique em <strong>Importar planilha validada</strong>.</li>
       </ol>
     </div>
 
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
-      <input type="hidden" name="formato_hint" value="bling">
+      <input type="hidden" name="acao" value="validar">
 
       <div style="margin-bottom:1.25rem;">
         <label style="display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">
-          Categoria dos produtos <small style="font-weight:300;color:#888;">(obrigatório)</small>
-        </label>
-        <select name="categoria"
-                style="width:100%;padding:0.6rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem;">
-          <option value="">— Selecione ou deixe em branco para criar "Importado" —</option>
-          {% for cat in categorias %}
-            <option value="{{ cat.nome }}">{{ cat.nome }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div style="margin-bottom:1.25rem;">
-        <label style="display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">
-          Arquivo CSV ou XLSX exportado do Bling:
+          Arquivo CSV ou XLSX:
         </label>
         <input type="file" name="arquivo_csv" accept=".csv,.xlsx,.xls"
                style="display:block;width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
       </div>
 
-      <div style="display:flex;gap:1rem;align-items:center;">
+      <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
         <button type="submit"
                 style="background:#c9a96e;color:#fff;padding:0.65rem 1.5rem;border:none;
                        border-radius:4px;font-size:0.9rem;cursor:pointer;font-weight:600;">
-          Importar do Bling
-        </button>
-        <a href="/painel/produtos/produto/" style="color:#666;font-size:0.85rem;">Cancelar</a>
-      </div>
-    </form>
-  </div>
-
-  <!-- Aba Legado -->
-  <div id="aba-legado" style="display:none;padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;">
-    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:1.25rem;margin-bottom:1.5rem;">
-      <strong>Formato personalizado (CSV manual):</strong>
-      <ol style="margin:0.75rem 0 0 1.2rem;line-height:2;font-size:0.88rem;">
-        <li>Baixe o <a href="{% url 'admin:produtos_produto_modelo_csv' %}" style="color:#c9a96e;font-weight:600;">modelo CSV</a> e preencha no Excel ou Google Planilhas</li>
-        <li>Para um produto com várias variações: deixe o <strong>nome</strong> apenas na primeira linha</li>
-        <li>Salve como <strong>CSV UTF-8</strong> (Excel: Arquivo → Salvar como → CSV UTF-8)</li>
-        <li>Colunas: nome, categoria, preco, var_cor, var_tamanho, var_estoque, var_sku, var_bling_id</li>
-      </ol>
-    </div>
-
-    <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
-      <div style="margin-bottom:1.25rem;">
-        <label style="display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">
-          Arquivo CSV (formato personalizado):
-        </label>
-        <input type="file" name="arquivo_csv" accept=".csv"
-               style="display:block;width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
-      </div>
-      <div style="display:flex;gap:1rem;align-items:center;">
-        <button type="submit"
-                style="background:#888;color:#fff;padding:0.65rem 1.5rem;border:none;
-                       border-radius:4px;font-size:0.9rem;cursor:pointer;font-weight:600;">
-          Importar CSV personalizado
+          Validar planilha
         </button>
         <a href="{% url 'admin:produtos_produto_modelo_csv' %}" style="color:#c9a96e;font-size:0.85rem;">Baixar modelo</a>
         <a href="/painel/produtos/produto/" style="color:#666;font-size:0.85rem;">Cancelar</a>
@@ -102,18 +42,111 @@
     </form>
   </div>
 
-</div>
+  {% if preview %}
+  <div style="padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-top:1.5rem;">
+    <h2 style="margin:0 0 1rem;font-size:1.15rem;">Resultado da validação</h2>
 
-<script>
-function mostrarAba(aba) {
-  document.getElementById('aba-bling').style.display  = aba === 'bling'  ? '' : 'none';
-  document.getElementById('aba-legado').style.display = aba === 'legado' ? '' : 'none';
-  document.getElementById('tab-bling').style.background  = aba === 'bling'  ? '#c9a96e' : '#f5f5f3';
-  document.getElementById('tab-bling').style.color       = aba === 'bling'  ? '#fff'    : '#666';
-  document.getElementById('tab-bling').style.fontWeight  = aba === 'bling'  ? '600'     : '400';
-  document.getElementById('tab-legado').style.background = aba === 'legado' ? '#c9a96e' : '#f5f5f3';
-  document.getElementById('tab-legado').style.color      = aba === 'legado' ? '#fff'    : '#666';
-  document.getElementById('tab-legado').style.fontWeight = aba === 'legado' ? '600'     : '400';
-}
-</script>
+    {% if preview.arquivo_nome %}
+      <p style="margin:0 0 1rem;color:#666;font-size:0.9rem;">
+        Arquivo analisado: <strong>{{ preview.arquivo_nome }}</strong>
+      </p>
+    {% endif %}
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;margin-bottom:1.25rem;">
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Produtos novos</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0a0a0a;">{{ preview.resumo.produtos_criar }}</div>
+      </div>
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Produtos atualização</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0a0a0a;">{{ preview.resumo.produtos_atualizar }}</div>
+      </div>
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Variações novas</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0a0a0a;">{{ preview.resumo.variacoes_criar }}</div>
+      </div>
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Variações atualização</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0a0a0a;">{{ preview.resumo.variacoes_atualizar }}</div>
+      </div>
+    </div>
+
+    {% if preview.erros %}
+      <div style="background:#f8d7da;border:1px solid #e5aeb5;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+        <strong style="display:block;margin-bottom:0.5rem;">Erros encontrados</strong>
+        <ul style="margin:0;padding-left:1.25rem;line-height:1.8;font-size:0.9rem;">
+          {% for erro in preview.erros %}
+            <li>{{ erro }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if preview.avisos %}
+      <div style="background:#fff3cd;border:1px solid #ffe08a;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+        <strong style="display:block;margin-bottom:0.5rem;">Avisos</strong>
+        <ul style="margin:0;padding-left:1.25rem;line-height:1.8;font-size:0.9rem;">
+          {% for aviso in preview.avisos %}
+            <li>{{ aviso }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div style="overflow:auto;border:1px solid #eee;border-radius:6px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead>
+          <tr style="background:#f5f5f3;">
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Produto</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Status produto</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Categoria</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Variação</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Status variação</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Disponibilidade</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Estoque</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for grupo in preview.grupos %}
+            {% for linha in grupo.preview_linhas %}
+            <tr>
+              <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ grupo.modelo }}</td>
+              <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ grupo.status_produto }}</td>
+              <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ grupo.categoria }}</td>
+              <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.cor_nome }} / {{ linha.tam_nome }}</td>
+              <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.status_variacao }}</td>
+              <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">
+                {{ linha.disponibilidade }}
+                {% if linha.prazo_confeccao_dias %}<br><small>+{{ linha.prazo_confeccao_dias }} dias</small>{% endif %}
+              </td>
+              <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.estoque }}</td>
+            </tr>
+            {% endfor %}
+          {% empty %}
+            <tr>
+              <td colspan="7" style="padding:1rem;text-align:center;color:#777;">Nenhuma linha válida encontrada na planilha.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if preview.pode_importar %}
+      <form method="post" style="margin-top:1.25rem;">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="importar_confirmado">
+        <button type="submit"
+                style="background:#2e7d32;color:#fff;padding:0.7rem 1.6rem;border:none;
+                       border-radius:4px;font-size:0.92rem;cursor:pointer;font-weight:600;">
+          Importar planilha validada
+        </button>
+      </form>
+    {% else %}
+      <p style="margin:1rem 0 0;color:#a94442;font-weight:600;">
+        Corrija os erros da planilha e valide novamente antes de importar.
+      </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

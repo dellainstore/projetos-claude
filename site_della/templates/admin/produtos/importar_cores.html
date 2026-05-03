@@ -1,0 +1,137 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Importar Cores Padrão — Painel D'ELLA{% endblock %}
+
+{% block content %}
+<div style="max-width:980px;">
+  <h1>Importar cores padrão via planilha</h1>
+
+  <div style="padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-radius:8px;">
+    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:1.25rem;margin-bottom:1.5rem;">
+      <strong>Formato da planilha:</strong>
+      <ol style="margin:0.75rem 0 0 1.2rem;line-height:2;font-size:0.88rem;">
+        <li>Baixe o <a href="{% url 'admin:produtos_corpadrao_modelo_csv' %}" style="color:#c9a96e;font-weight:600;">modelo CSV</a> e preencha no Excel ou Google Planilhas</li>
+        <li>Colunas aceitas: <strong>nome</strong>, <strong>codigo_hex</strong>, <strong>codigo_hex_secundario</strong>, <strong>ordem</strong></li>
+        <li>Os nomes são normalizados em <strong>maiúsculas</strong> antes de salvar</li>
+        <li>Você pode subir <strong>CSV</strong>, <strong>XLSX</strong> ou <strong>XLS</strong></li>
+        <li>Se a cor já existir, ela será <strong>atualizada pelo nome</strong></li>
+        <li>Primeiro clique em <strong>Validar planilha</strong>. Só depois, se estiver tudo certo, clique em <strong>Importar planilha validada</strong></li>
+      </ol>
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="acao" value="validar">
+
+      <div style="margin-bottom:1.25rem;">
+        <label style="display:block;font-weight:600;margin-bottom:0.5rem;font-size:0.9rem;">
+          Arquivo da planilha:
+        </label>
+        <input type="file" name="arquivo_csv" accept=".csv,.xlsx,.xls"
+               style="display:block;width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;">
+      </div>
+
+      <div style="display:flex;gap:1rem;align-items:center;">
+        <button type="submit"
+                style="background:#c9a96e;color:#fff;padding:0.65rem 1.5rem;border:none;
+                       border-radius:4px;font-size:0.9rem;cursor:pointer;font-weight:600;">
+          Validar planilha
+        </button>
+        <a href="{% url 'admin:produtos_corpadrao_modelo_csv' %}" style="color:#c9a96e;font-size:0.85rem;">Baixar modelo</a>
+        <a href="/painel/produtos/corpadrao/" style="color:#666;font-size:0.85rem;">Cancelar</a>
+      </div>
+    </form>
+  </div>
+
+  {% if preview %}
+  <div style="padding:1.5rem;background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-top:1.5rem;">
+    <h2 style="margin:0 0 1rem;font-size:1.15rem;">Resultado da validação</h2>
+
+    {% if preview.arquivo_nome %}
+      <p style="margin:0 0 1rem;color:#666;font-size:0.9rem;">
+        Arquivo analisado: <strong>{{ preview.arquivo_nome }}</strong>
+      </p>
+    {% endif %}
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;margin-bottom:1.25rem;">
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Cores novas</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0a0a0a;">{{ preview.resumo.criar }}</div>
+      </div>
+      <div style="padding:0.85rem 1rem;border:1px solid #e6e2d8;border-radius:6px;background:#faf8f3;">
+        <div style="font-size:0.75rem;color:#777;text-transform:uppercase;letter-spacing:0.08em;">Cores atualização</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0a0a0a;">{{ preview.resumo.atualizar }}</div>
+      </div>
+    </div>
+
+    {% if preview.erros %}
+      <div style="background:#f8d7da;border:1px solid #e5aeb5;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+        <strong style="display:block;margin-bottom:0.5rem;">Erros encontrados</strong>
+        <ul style="margin:0;padding-left:1.25rem;line-height:1.8;font-size:0.9rem;">
+          {% for erro in preview.erros %}
+            <li>{{ erro }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if preview.avisos %}
+      <div style="background:#fff3cd;border:1px solid #ffe08a;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+        <strong style="display:block;margin-bottom:0.5rem;">Avisos</strong>
+        <ul style="margin:0;padding-left:1.25rem;line-height:1.8;font-size:0.9rem;">
+          {% for aviso in preview.avisos %}
+            <li>{{ aviso }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div style="overflow:auto;border:1px solid #eee;border-radius:6px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead>
+          <tr style="background:#f5f5f3;">
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Linha</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Nome</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">HEX principal</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">HEX secundário</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Ordem</th>
+            <th style="text-align:left;padding:0.7rem;border-bottom:1px solid #e5e5e5;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linha in preview.linhas %}
+          <tr>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.linha_numero }}</td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.nome }}</td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.codigo_hex|default:'—' }}</td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.codigo_hex_secundario|default:'—' }}</td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.ordem }}</td>
+            <td style="padding:0.7rem;border-bottom:1px solid #f0f0f0;">{{ linha.status }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" style="padding:1rem;text-align:center;color:#777;">Nenhuma linha válida encontrada na planilha.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if preview.pode_importar %}
+      <form method="post" style="margin-top:1.25rem;">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="importar_confirmado">
+        <button type="submit"
+                style="background:#2e7d32;color:#fff;padding:0.7rem 1.6rem;border:none;
+                       border-radius:4px;font-size:0.92rem;cursor:pointer;font-weight:600;">
+          Importar planilha validada
+        </button>
+      </form>
+    {% else %}
+      <p style="margin:1rem 0 0;color:#a94442;font-weight:600;">
+        Corrija os erros da planilha e valide novamente antes de importar.
+      </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
