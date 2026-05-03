@@ -44,3 +44,15 @@ cache/*
 # OS
 .DS_Store
 Thumbs.db
+
+# Node / Tailwind build
+node_modules/
+static/css/tailwind.css
+
+# Dados sensíveis (PII de clientes, exports, dumps)
+*.csv
+!.env.example
+*.sql
+*.dump
+*.bak
+clientes*

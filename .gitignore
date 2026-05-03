@@ -1,5 +1,7 @@
 venv/
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 *.pyo
@@ -9,5 +11,25 @@ dist/
 build/
 .idea/
 .vscode/
+
 # Credenciais Google Cloud
 *-[a-f0-9]*.json
+
+# Logs (podem conter PII, dados de cartão, tokens)
+logs/
+*.log
+
+# Dados sensíveis (PII, dumps, exports)
+*.csv
+*.sql
+*.dump
+*.bak
+clientes*
+
+# Logs PagSeguro NÃO mascarados (segurança PCI)
+pagseguro_*.json
+!pagseguro_*_masked.json
+!pagseguro_*_masked.txt
+
+# Node
+node_modules/
