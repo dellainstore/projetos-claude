@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count
 from django.utils import timezone
 
 
@@ -85,6 +85,78 @@ def relatorio(request):
         'estoque_critico': estoque_critico,
     }
     return render(request, 'admin/relatorio.html', context)
+
+
+@staff_member_required
+def dashboard_pedidos(request):
+    from apps.pedidos.models import Pedido, ItemPedido, HistoricoPedido
+
+    dias_opcoes = [1, 7, 15, 30, 60, 90]
+    try:
+        dias = int(request.GET.get('dias', 7))
+    except (TypeError, ValueError):
+        dias = 7
+    if dias not in dias_opcoes:
+        dias = 7
+
+    agora = timezone.now()
+    inicio_periodo = agora - timezone.timedelta(days=dias)
+    status_validos = ('pagamento_confirmado', 'em_separacao', 'enviado', 'entregue')
+
+    pedidos_a_enviar = Pedido.objects.filter(
+        status__in=('pagamento_confirmado', 'em_separacao'),
+    ).count()
+
+    pedidos_periodo = Pedido.objects.filter(
+        criado_em__gte=inicio_periodo,
+        status__in=status_validos,
+    )
+
+    historico_enviados = (
+        HistoricoPedido.objects
+        .filter(criado_em__gte=inicio_periodo, status_novo='enviado')
+        .values('pedido_id')
+        .distinct()
+    )
+
+    faturamento_periodo = pedidos_periodo.aggregate(total=Sum('total'))['total'] or Decimal('0')
+    clientes_periodo = (
+        pedidos_periodo.exclude(email='')
+        .values('email')
+        .distinct()
+        .count()
+    )
+    sku_vendidos_periodo = (
+        ItemPedido.objects
+        .filter(pedido__in=pedidos_periodo)
+        .aggregate(total=Sum('quantidade'))['total'] or 0
+    )
+
+    enviados_recentes = (
+        Pedido.objects
+        .filter(id__in=historico_enviados.values('pedido_id'))
+        .order_by('-atualizado_em')[:10]
+    )
+
+    pedidos_para_envio = (
+        Pedido.objects
+        .filter(status__in=('pagamento_confirmado', 'em_separacao'))
+        .order_by('criado_em')[:10]
+    )
+
+    context = {
+        'title': 'Dashboard de Pedidos',
+        'dias': dias,
+        'dias_opcoes': dias_opcoes,
+        'pedidos_a_enviar': pedidos_a_enviar,
+        'pedidos_enviados': historico_enviados.count(),
+        'faturamento_periodo': _fmt(faturamento_periodo),
+        'clientes_periodo': clientes_periodo,
+        'sku_vendidos_periodo': sku_vendidos_periodo,
+        'pedidos_para_envio': pedidos_para_envio,
+        'enviados_recentes': enviados_recentes,
+    }
+    return render(request, 'admin/dashboard_pedidos.html', context)
 
 
 @staff_member_required

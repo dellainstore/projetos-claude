@@ -9,6 +9,7 @@ HOME_DEPOIMENTOS     = 'home_depoimentos'
 HOME_DESTAQUES       = 'home_produtos_destaque'
 LOJA_CONFIG          = 'loja_config'
 GUIA_TABELAS         = 'guia_tabelas_medidas'
+MANUTENCAO_ATIVA     = 'manutencao_ativa'
 
 def _key_pagina(slug: str) -> str:
     return f'pagina_estatica_{slug}'
@@ -36,11 +37,29 @@ def invalidar_pagina(slug: str):
 def invalidar_config_loja():
     cache.delete_many([LOJA_CONFIG, HOME_DESTAQUES])
 
+def invalidar_manutencao():
+    cache.delete(MANUTENCAO_ATIVA)
+
 def invalidar_categoria_produtos(categoria_id):
     cache.delete_many([
         _key_relacionados(categoria_id),
         _key_tabela_medidas(categoria_id),
     ])
+
+
+def invalidar_tabelas_medidas(categoria_id=None):
+    cache.delete(GUIA_TABELAS)
+
+    if categoria_id:
+        cache.delete(_key_tabela_medidas(categoria_id))
+        return
+
+    try:
+        from apps.produtos.models import Categoria
+        categoria_ids = Categoria.objects.values_list('id', flat=True)
+        cache.delete_many([_key_tabela_medidas(cat_id) for cat_id in categoria_ids])
+    except Exception:
+        pass
 
 def invalidar_home_completa():
     cache.delete_many([

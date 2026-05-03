@@ -56,6 +56,25 @@ def sanitize_text(value: str, max_length: int = 500) -> str:
     return cleaned[:max_length]
 
 
+def sanitize_multiline_text(value: str, max_length: int = 2000) -> str:
+    """
+    Sanitiza texto livre preservando quebras de linha.
+    - Remove todas as tags HTML
+    - Remove caracteres de controle, exceto \\n
+    - Mantém organização em linhas/parágrafos
+    """
+    if not value:
+        return ''
+
+    cleaned = bleach.clean(str(value), tags=ALLOWED_TAGS_NONE, attributes=ALLOWED_ATTRIBUTES, strip=True)
+    cleaned = cleaned.replace('\r\n', '\n').replace('\r', '\n')
+    cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', cleaned)
+    cleaned = unicodedata.normalize('NFKC', cleaned)
+    cleaned = '\n'.join(' '.join(linha.split()) for linha in cleaned.split('\n'))
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+    return cleaned[:max_length]
+
+
 def sanitize_name(value: str) -> str:
     """
     Para campos de nome próprio (cliente, remetente).

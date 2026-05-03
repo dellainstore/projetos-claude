@@ -1,0 +1,97 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D'ELLA Instore — Em breve</title>
+  <meta name="facebook-domain-verification" content="sh7orcu6j8difu9pudh8i15u064ijc" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #fafafa;
+      font-family: 'Jost', sans-serif;
+      font-weight: 300;
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .logo img {
+      height: clamp(48px, 10vw, 80px);
+      width: auto;
+      filter: brightness(0) invert(1);
+    }
+
+    .logo-instore {
+      font-family: 'Jost', sans-serif;
+      font-weight: 300;
+      font-size: clamp(0.9rem, 2.5vw, 1.3rem);
+      letter-spacing: 0.45em;
+      text-transform: uppercase;
+      color: #fafafa;
+      margin-top: 2px;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(1.4rem, 4vw, 2rem);
+      font-weight: 400;
+      color: #fafafa;
+      margin-bottom: 1rem;
+      line-height: 1.3;
+    }
+
+    p {
+      font-size: 0.95rem;
+      color: #aaa;
+      line-height: 1.8;
+      max-width: 420px;
+    }
+
+    .contact {
+      margin-top: 3rem;
+      font-size: 0.8rem;
+      color: #666;
+      letter-spacing: 0.05em;
+    }
+
+    .contact a {
+      color: #c9a96e;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo">
+    <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA Instore">
+    <span class="logo-instore">Instore</span>
+  </div>
+
+  <h1>Estamos em manutenção</h1>
+  <p>Nossa loja está passando por melhorias e voltará em breve.<br>Agradecemos sua compreensão.</p>
+
+  <div class="contact">
+    Dúvidas? Entre em contato pelo
+    <a href="https://wa.me/5511988879928">WhatsApp</a>
+  </div>
+
+</body>
+</html>
