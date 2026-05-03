@@ -69,6 +69,19 @@ WhiteNoise gera hash no nome (`della.<hash>.css/js`) — qualquer mudança forç
 sudo journalctl -u gunicorn_della_site -f
 ```
 
+### Backups automáticos (cron + rclone OneDrive)
+
+| Quando | O que | Script | Destino | Retenção |
+|---|---|---|---|---|
+| 02:00 diário | `pg_dump della_site \| gzip` | `site_della/scripts/backup_db.sh` | `onedrive:Della/Backups/site_della/` | 30 dias |
+| 03:30 diário | `tar.gz` do código fonte (exclui deps/cache/media/.env/CSV) | `site_della/scripts/backup_codigo.sh` | `onedrive:Della/Backups/codigo/` | 14 dias |
+
+Logs: `site_della/logs/backup_db.log` e `site_della/logs/backup_codigo.log`.
+
+Restaurar (exemplo banco): `rclone copy onedrive:Della/Backups/site_della/della_site_YYYYMMDD_HHMM.sql.gz /tmp/ && gunzip /tmp/*.sql.gz && psql -U della_user -d della_site < /tmp/*.sql`
+
+Restaurar (exemplo código): `rclone copy onedrive:Della/Backups/codigo/codigo_YYYYMMDD_HHMM.tar.gz /tmp/ && tar -xzf /tmp/codigo_*.tar.gz -C /tmp/restore/`
+
 ---
 
 ## Estrutura
@@ -510,7 +523,8 @@ GA_MEASUREMENT_ID=G-ELSG6BRW0M
 | Meta — Catálogo de produtos (`/feed-meta.xml`) | ✅ |
 | Google Analytics GA4 (`G-ELSG6BRW0M`) com consent | ✅ |
 | Cron auto-entrega — `marcar_entrega_automatica` às 03:00 | ✅ |
-| Backup diário pg_dump → OneDrive `Della/Backups/site_della/` às 02:00 | ✅ |
+| Backup diário pg_dump → OneDrive `Della/Backups/site_della/` às 02:00 (30 dias retenção) | ✅ |
+| Backup diário código fonte → OneDrive `Della/Backups/codigo/` às 03:30 (14 dias retenção) | ✅ |
 | Bug preview foto admin (usuário não-superuser) | ✅ |
 | Bugs de CEP, estorno PIX, ativação de conta | ✅ |
 | Remover registro `novo.dellainstore.com.br` do DNS da UOL | ✅ |
