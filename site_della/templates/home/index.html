@@ -12,7 +12,9 @@
   {% if banners %}
   <div class="hero-slides" id="hero-slides-container">
     {% for banner in banners %}
-    <div class="hero-slide {% if forloop.first %}ativo{% endif %}" data-slide="{{ forloop.counter0 }}">
+    <div class="hero-slide {% if forloop.first %}ativo{% endif %}" data-slide="{{ forloop.counter0 }}"
+         data-has-video="{% if banner.tipo == 'video' and banner.video %}true{% else %}false{% endif %}"
+         {% if banner.url_botao %}data-href="{{ banner.url_botao }}" style="cursor:pointer"{% endif %}>
 
       {% if banner.tipo == 'video' and banner.video %}
         <video class="hero-video" autoplay muted playsinline
@@ -26,31 +28,9 @@
           {% if banner.foto_mobile %}
             <source media="(max-width: 767px)" srcset="{{ banner.foto_mobile.url }}">
           {% endif %}
-          <img src="{{ banner.foto.url }}" alt="{{ banner.titulo }}"
+          <img src="{{ banner.foto.url }}" alt=""
                class="hero-foto" loading="eager" aria-hidden="true">
         </picture>
-      {% endif %}
-
-      <div class="hero-overlay" aria-hidden="true"></div>
-      {% if banner.pretitulo or banner.titulo or banner.subtitulo or banner.texto_botao %}
-      <div class="hero-content">
-        {% if banner.pretitulo %}<p class="hero-pretitulo">{{ banner.pretitulo }}</p>{% endif %}
-        {% if banner.titulo %}
-          {% if forloop.first %}<h1 class="hero-titulo">{% else %}<h2 class="hero-titulo">{% endif %}
-            {% if banner.titulo_italico %}
-              {{ banner.titulo|cut:banner.titulo_italico }}<em>{{ banner.titulo_italico }}</em>
-            {% else %}
-              {{ banner.titulo }}
-            {% endif %}
-          {% if forloop.first %}</h1>{% else %}</h2>{% endif %}
-        {% endif %}
-        {% if banner.subtitulo %}<p class="hero-subtitulo">{{ banner.subtitulo }}</p>{% endif %}
-        {% if banner.texto_botao %}
-        <a href="{{ banner.url_botao }}" class="btn-hero">
-          {{ banner.texto_botao }} <i class="fas fa-arrow-right text-xs"></i>
-        </a>
-        {% endif %}
-      </div>
       {% endif %}
     </div>
     {% endfor %}
@@ -71,8 +51,8 @@
 
   {% else %}
   <div class="hero-slides" id="hero-slides-container">
-    <div class="hero-slide ativo" data-slide="0">
-      <video id="hero-video" class="hero-video" autoplay muted playsinline
+    <div class="hero-slide ativo" data-slide="0" data-has-video="true">
+      <video class="hero-video" autoplay muted playsinline
              poster="{% static 'images/brand/hero-poster.jpg' %}" aria-hidden="true">
         <source src="{% static 'images/brand/hero.mp4' %}" type="video/mp4">
       </video>
@@ -130,11 +110,11 @@
                 {% endif %}
               {% endwith %}
 
-              {% with produto.imagens.all|slice:"1:2" as imgs_hover %}
-                {% for img in imgs_hover %}
-                  <img src="{{ img.imagem.url }}" alt="{{ produto.nome }} — foto alternativa"
+              {% with produto.imagem_hover as img_hover %}
+                {% if img_hover %}
+                  <img src="{{ img_hover.imagem.url }}" alt="{{ produto.nome }} — foto alternativa"
                        class="foto-hover" loading="lazy" aria-hidden="true">
-                {% endfor %}
+                {% endif %}
               {% endwith %}
 
             </a>
@@ -161,7 +141,7 @@
             <div class="produto-preco">
               <span class="preco-atual">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
               {% if produto.em_promocao %}
-                <span class="preco-original">R$ {{ produto.preco|floatformat:"2g" }}</span>
+                <span class="preco-original">R$ {{ produto.preco_base_exibicao|floatformat:"2g" }}</span>
               {% endif %}
             </div>
             {% if produto.parcelamento_texto %}
@@ -194,16 +174,8 @@
   <div class="mini-banners-grid">
     {% for mb in mini_banners %}
     <a href="{{ mb.url }}" class="mini-banner fade-in {% if not forloop.first %}fade-in-delay-1{% endif %}"
-       aria-label="{{ mb.titulo|default:'Ver coleção' }}">
-      <img src="{{ mb.foto.url }}" alt="{{ mb.titulo|default:'' }}" class="mini-banner-foto" loading="lazy">
-      {% if mb.pretitulo or mb.titulo %}
-      <div class="mini-banner-overlay"></div>
-      <div class="mini-banner-content">
-        {% if mb.pretitulo %}<p class="mini-banner-pretitulo">{{ mb.pretitulo }}</p>{% endif %}
-        {% if mb.titulo %}<h3 class="mini-banner-titulo">{{ mb.titulo }}</h3>{% endif %}
-        <span class="mini-banner-btn">Conferir</span>
-      </div>
-      {% endif %}
+       aria-label="Ver coleção">
+      <img src="{{ mb.foto.url }}" alt="" class="mini-banner-foto" loading="lazy">
     </a>
     {% endfor %}
   </div>
@@ -268,11 +240,13 @@
         {% if look_obj and look_obj.descricao %}{{ look_obj.descricao }}{% else %}Sofisticação no detalhe. Este look combina sensualidade e elegância para uma noite especial ou uma ocasião que pede presença marcante.{% endif %}
       </p>
 
-      {% if look_produtos %}
+      {% if look_items %}
         <ul class="look-produtos-lista" role="list">
-          {% for produto in look_produtos %}
+          {% for produto, foto in look_items %}
             <li class="look-produto-item">
-              {% if produto.imagem_principal %}
+              {% if foto %}
+                <img src="{{ foto.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb">
+              {% elif produto.imagem_principal %}
                 <img src="{{ produto.imagem_principal.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb">
               {% endif %}
               <div style="flex:1">
@@ -312,11 +286,11 @@
       <em>exatamente quem é</em>
     </h2>
     <p class="manifesto-texto fade-in fade-in-delay-1">
-      A Della Instore nasceu do desejo de vestir a mulher moderna com peças que transcendem a moda.
+      A D'ELLA Instore nasceu do desejo de vestir a mulher moderna com peças que transcendem a moda.
       Cada detalhe é pensado para realçar não apenas a beleza exterior, mas a confiança e a essência
       de quem usa. Moda com propósito, elegância com alma.
     </p>
-    <p class="manifesto-assinatura fade-in fade-in-delay-2">— Della Instore</p>
+    <p class="manifesto-assinatura fade-in fade-in-delay-2">D'ELLA Instore</p>
   </div>
 </section>
 

@@ -30,7 +30,12 @@
         <i class="fas fa-qrcode"></i> Pagamento via Pix
       </h2>
 
-      {% if pix_qrcode %}
+      {% if pedido.status == 'pagamento_confirmado' %}
+      <div class="confirmacao-status">
+        <span class="status-badge confirmado"><i class="fas fa-check-circle"></i> Pagamento Confirmado</span>
+        <p>Seu pagamento via Pix foi confirmado! Seu pedido está sendo preparado.</p>
+      </div>
+      {% elif pix_qrcode %}
       <div class="pix-instrucoes">
         <ol class="pix-passos">
           <li>Abra o aplicativo do seu banco</li>
@@ -64,19 +69,32 @@
         {% endif %}
 
         <div class="pix-aviso">
+          {% if pix_via == 'pagseguro' %}
           <i class="fas fa-clock"></i>
           QR Code válido por <strong id="pix-timer">10:00</strong>.
           Após o pagamento, o pedido é confirmado automaticamente.
+          {% else %}
+          <i class="fas fa-info-circle"></i>
+          O Pix está temporariamente indisponível até a liberação do gateway.
+          {% endif %}
         </div>
 
+        {% if pix_via == 'pagseguro' %}
         <div id="pix-status-bloco" class="pix-status-aguardando">
           <i class="fas fa-spinner fa-spin"></i>
           Aguardando confirmação do pagamento…
           <button type="button" id="btn-verificar-pix" class="link-verificar-pix"
                   onclick="verificarPix()">Verificar agora</button>
         </div>
+        {% else %}
+        <div id="pix-status-bloco" class="pix-status-aguardando">
+          <i class="fas fa-info-circle"></i>
+          Após pagar, envie o comprovante pelo WhatsApp ou aguarde a conferência manual do pedido.
+        </div>
+        {% endif %}
       </div>
 
+      {% if pix_via == 'pagseguro' %}
       {# Bloco exibido após expirar #}
       <div id="pix-expirado" style="display:none;text-align:center;padding:1.5rem 0;">
         <p style="color:#c0392b;font-weight:600;margin-bottom:1rem;">
@@ -95,17 +113,16 @@
           </a>
         </p>
       </div>
+      {% endif %}
 
       {% else %}
       <div class="pix-sem-chave">
         <i class="fas fa-info-circle"></i>
         <p>
-          Seu pedido foi recebido! Realize o pagamento via Pix para nossa chave
-          e informe o número do pedido <strong>{{ pedido.numero }}</strong> na descrição.
+          O pagamento via Pix está temporariamente indisponível neste momento.
         </p>
-        <p>Valor: <strong>R$ {{ pedido.total|floatformat:"2g" }}</strong></p>
         <p class="text-sm" style="color:var(--cinza-texto);margin-top:.5rem;">
-          Entre em contato pelo WhatsApp para receber a chave Pix.
+          Assim que o gateway for liberado, o pagamento voltará a funcionar com confirmação adequada.
         </p>
       </div>
       {% endif %}
@@ -208,7 +225,22 @@
 {% endblock %}
 
 {% block js_extra %}
-{% if pedido.forma_pagamento == 'pix' and pix_qrcode %}
+{# Meta Pixel: Purchase — disparado uma vez por pedido confirmado #}
+{% load l10n %}
+<script type="application/json" data-meta-event="Purchase">
+{
+  "value": {{ pedido.total|unlocalize }},
+  "currency": "BRL",
+  "content_ids": [{% for item in pedido.itens.all %}"{{ item.produto_id }}"{% if not forloop.last %},{% endif %}{% endfor %}],
+  "content_type": "product",
+  "num_items": {{ pedido.itens.count }},
+  "order_id": "{{ pedido.numero|escapejs }}",
+  "_event_id": "purchase_{{ pedido.numero|escapejs }}",
+  "_once_key": "purchase_{{ pedido.numero|escapejs }}"
+}
+</script>
+
+{% if pedido.forma_pagamento == 'pix' and pix_qrcode and pix_via == 'pagseguro' %}
 <script>
 const PIX_NUMERO  = '{{ pedido.numero|escapejs }}';
 const PIX_TIMEOUT = 10 * 60; // 10 minutos em segundos
@@ -244,10 +276,12 @@ function marcarPago() {
   clearInterval(timerId);
   clearInterval(pollingId);
   pollingAtivo = false;
-  document.getElementById('pix-status-bloco').innerHTML =
-    '<span style="color:#27ae60;font-weight:600;"><i class="fas fa-check-circle"></i> Pagamento confirmado! Seu pedido está em processamento.</span>';
-  document.getElementById('pix-expirado')?.style.setProperty('display', 'none');
-  document.getElementById('pix-qrcode-ativo')?.style.setProperty('display', 'block');
+  const statusEl = document.getElementById('pix-status-bloco');
+  if (statusEl) {
+    statusEl.innerHTML =
+      '<span style="color:#27ae60;font-weight:600;"><i class="fas fa-check-circle"></i> Pagamento confirmado! Atualizando…</span>';
+  }
+  setTimeout(() => window.location.reload(), 1500);
 }
 
 async function verificarPix() {
@@ -294,6 +328,10 @@ async function gerarNovoPix() {
     const dados = await res.json();
 
     if (dados.status === 'ok') {
+      if (dados.via !== 'pagseguro') {
+        window.location.reload();
+        return;
+      }
       // Atualiza imagem e payload
       const img = document.getElementById('pix-qrcode-img');
       if (img) img.src = `data:image/png;base64,${dados.qrcode}`;

@@ -4,17 +4,17 @@
 {% block navbar_class %}solida{% endblock %}
 
 {% block conteudo %}
-<div class="pagina-estatica-wrapper">
-  <div class="pagina-estatica-inner">
-    <h1 class="pagina-estatica-titulo">Guia de Tamanhos</h1>
+<div class="pagina-estatica-wrapper guia-tamanhos-wrapper">
+  <div class="pagina-estatica-inner guia-tamanhos-inner">
     {% if tabelas %}
       {% for tabela in tabelas %}
-      <div style="margin-bottom:2.5rem;">
-        <h2 style="font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:600;margin-bottom:1rem;">
-          {{ tabela.nome }}{% if tabela.categoria %} — {{ tabela.categoria.nome }}{% endif %}
-        </h2>
+      <section class="guia-tamanhos-bloco">
+        {% if tabela.usa_tabela_estruturada %}
+          {% include 'components/tabela_medidas.html' with tabela=tabela %}
+        {% else %}
         <div class="pagina-conteudo">{{ tabela.conteudo|clean_html }}</div>
-      </div>
+        {% endif %}
+      </section>
       {% endfor %}
     {% else %}
       <div class="pagina-conteudo">

@@ -46,10 +46,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const heroSlides    = document.querySelectorAll('.hero-slide');
   const heroDots      = document.querySelectorAll('.hero-dot');
   const heroProgress  = document.getElementById('hero-progress');
+  const muteBtn       = document.getElementById('btn-mute');
+  const muteIcon      = document.getElementById('mute-icon');
   const SLIDE_DURACAO = 6000; // 6 segundos por slide
   let slideAtual  = 0;
   let sliderTimer = null;
   let progressTimer = null;
+
+  function videoAtivoHero() {
+    return heroSlides.length > 0 ? heroSlides[slideAtual]?.querySelector('video') : null;
+  }
+
+  function atualizarControleAudioHero() {
+    if (!muteBtn || !muteIcon) return;
+    const video = videoAtivoHero();
+    if (!video) {
+      muteBtn.hidden = true;
+      return;
+    }
+    muteBtn.hidden = false;
+    muteIcon.className = video.muted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+  }
 
   function iniciarProgressBar() {
     if (!heroProgress) return;
@@ -87,6 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
       videoNovo.play().catch(() => {});
     }
 
+    atualizarControleAudioHero();
     iniciarProgressBar();
   }
 
@@ -153,6 +171,16 @@ document.addEventListener('DOMContentLoaded', () => {
     iniciarTimer();
   }
 
+  atualizarControleAudioHero();
+
+  // Click em slides com url_botao
+  heroSlides.forEach(slide => {
+    const href = slide.dataset.href;
+    if (href) {
+      slide.addEventListener('click', () => { window.location.href = href; });
+    }
+  });
+
   // Se o primeiro slide tem vídeo sem loop, avançar ao terminar
   const primeiroVideoHero = heroSlides.length > 0
     ? heroSlides[0].querySelector('video')
@@ -168,17 +196,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ─── Hero: mute/unmute do vídeo ────────────────────────────────────────────
-  const heroVideo  = document.getElementById('hero-video');
-  const muteBtn    = document.getElementById('btn-mute');
-  const muteIcon   = document.getElementById('mute-icon');
-
-  if (heroVideo && muteBtn) {
-    heroVideo.muted = true;
-
-    muteBtn.addEventListener('click', () => {
+  // ─── Hero: mute/unmute do vídeo ativo ─────────────────────────────────────
+  if (muteBtn) {
+    muteBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const heroVideo = videoAtivoHero();
+      if (!heroVideo) return;
       heroVideo.muted = !heroVideo.muted;
-      muteIcon.className = heroVideo.muted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+      atualizarControleAudioHero();
     });
   }
 
@@ -265,12 +290,23 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-produto-id]');
     if (!btn) return;
-    // O detalhe usa #btn-adicionar-carrinho — evita duplo disparo
+    // O detalhe usa #btn-adicionar-carrinho e #btn-comprar-agora — evita duplo disparo
     if (btn.id === 'btn-adicionar-carrinho') return;
+    if (btn.id === 'btn-comprar-agora') return;
 
-    const produtoId  = btn.dataset.produtoId;
-    const variacaoId = btn.dataset.variacaoId || '';
-    const csrfToken  = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const produtoId   = btn.dataset.produtoId;
+    const variacaoId  = btn.dataset.variacaoId || '';
+    const produtoUrl  = btn.dataset.produtoUrl || '';
+    const csrfToken   = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const metaEventId = (window.crypto && window.crypto.randomUUID)
+      ? `addtocart_${window.crypto.randomUUID().replace(/-/g, '')}`
+      : `addtocart_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+    // Sem variação pré-selecionada → redireciona para o produto para escolher cor/tamanho
+    if (!variacaoId && produtoUrl) {
+      window.location.href = produtoUrl;
+      return;
+    }
 
     btn.disabled = true;
     const textoOriginal = btn.innerHTML;
@@ -283,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
           'Content-Type': 'application/json',
           'X-CSRFToken': csrfToken,
         },
-        body: JSON.stringify({ variacao_id: variacaoId, quantidade: 1 }),
+        body: JSON.stringify({ variacao_id: variacaoId, quantidade: 1, meta_event_id: metaEventId }),
       });
 
       const dados = await res.json();
@@ -291,8 +327,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (dados.status === 'ok') {
         atualizarDrawerConteudo(dados);
         abrirCarrinho();
+        if (window.fbq) {
+          fbq('track', 'AddToCart', {
+            content_ids: [produtoId],
+            content_type: 'product',
+            value: parseFloat(btn.dataset.produtoPreco || dados.total_valor || 0),
+            currency: 'BRL',
+          }, { eventID: metaEventId });
+        }
         btn.innerHTML = '<i class="fas fa-check"></i>';
         setTimeout(() => { btn.innerHTML = textoOriginal; btn.disabled = false; }, 1500);
+      } else {
+        btn.innerHTML = textoOriginal;
+        btn.disabled = false;
+        if (dados.mensagem) alert(dados.mensagem);
       }
     } catch (err) {
       btn.innerHTML = textoOriginal;
@@ -646,6 +694,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!sessionStorage.getItem(POPUP_KEY)) {
       setTimeout(() => {
+        // Não abrir se o banner de cookies ainda está visível — evita 2 popups sobrepostos
+        const cookieBanner = document.getElementById('della-cookie-banner');
+        if (cookieBanner && cookieBanner.style.display !== 'none') return;
         popupNewsletter.style.display = 'flex';
         sessionStorage.setItem(POPUP_KEY, '1');
       }, 5000);
@@ -691,5 +742,171 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   }
+
+  // ─── Meta Pixel — carregamento condicional respeitando consent ────────────
+  function carregarMetaPixel() {
+    if (window.fbq) return; // já carregado
+    const pixelId = document.body.dataset.metaPixelId;
+    if (!pixelId) return;
+
+    // Snippet oficial da Meta — montado dinamicamente para só rodar com consent
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+
+    fbq('init', pixelId);
+    fbq('track', 'PageView');
+
+    // Dispara eventos custom registrados pelo template (ViewContent, Purchase, etc.)
+    dispararMetaEventosCustom();
+  }
+
+  function dispararMetaEventosCustom() {
+    if (!window.fbq) return;
+    document.querySelectorAll('script[type="application/json"][data-meta-event]').forEach(function (script) {
+      try {
+        const evento = script.dataset.metaEvent;
+        const dados = JSON.parse(script.textContent || '{}');
+        const eventId = dados._event_id || '';
+        const onceKey = dados._once_key || '';
+        delete dados._event_id;
+        delete dados._once_key;
+
+        if (onceKey) {
+          try {
+            if (sessionStorage.getItem('meta-event:' + onceKey)) return;
+          } catch (e) { /* silencioso */ }
+        }
+
+        if (eventId) {
+          fbq('track', evento, dados, { eventID: eventId });
+        } else {
+          fbq('track', evento, dados);
+        }
+
+        if (onceKey) {
+          try {
+            sessionStorage.setItem('meta-event:' + onceKey, '1');
+          } catch (e) { /* silencioso */ }
+        }
+      } catch (e) { /* silencioso */ }
+    });
+  }
+
+  // ─── Cookie Consent (LGPD) ─────────────────────────────────────────────────
+  (function () {
+    const COOKIE_NAME = 'della_consent';
+    const COOKIE_VERSION = 1;
+    const VALID_DAYS = 180;
+
+    function lerConsent() {
+      const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + COOKIE_NAME + '=([^;]+)'));
+      if (!m) return null;
+      try {
+        const data = JSON.parse(decodeURIComponent(m[1]));
+        if (data.v !== COOKIE_VERSION) return null;
+        return data;
+      } catch (e) { return null; }
+    }
+
+    function salvarConsent(prefs) {
+      const data = {
+        v: COOKIE_VERSION,
+        necessary: true,
+        analytics: !!prefs.analytics,
+        marketing: !!prefs.marketing,
+        ts: Math.floor(Date.now() / 1000),
+      };
+      const expira = new Date(Date.now() + VALID_DAYS * 86400 * 1000);
+      const secure = location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = COOKIE_NAME + '=' + encodeURIComponent(JSON.stringify(data))
+        + '; path=/; expires=' + expira.toUTCString()
+        + '; SameSite=Lax' + secure;
+      window.dellaConsent = data;
+      document.dispatchEvent(new CustomEvent('della:consent', { detail: data }));
+    }
+
+    const banner = document.getElementById('della-cookie-banner');
+    const modal = document.getElementById('della-cookie-modal');
+    const tgAnalytics = document.getElementById('della-cookie-tg-analytics');
+    const tgMarketing = document.getElementById('della-cookie-tg-marketing');
+
+    function abrirBanner() { if (banner) banner.style.display = 'block'; }
+    function fecharBanner() { if (banner) banner.style.display = 'none'; }
+    function abrirModal(prefs) {
+      if (!modal) return;
+      if (tgAnalytics) tgAnalytics.checked = !!(prefs && prefs.analytics);
+      if (tgMarketing) tgMarketing.checked = !!(prefs && prefs.marketing);
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    function fecharModal() {
+      if (!modal) return;
+      modal.style.display = 'none';
+      document.body.style.overflow = '';
+    }
+
+    const existente = lerConsent();
+    if (existente) {
+      window.dellaConsent = existente;
+      if (existente.marketing) carregarMetaPixel();
+    } else {
+      abrirBanner();
+    }
+
+    // Quando o usuário consentir marketing pela 1ª vez, carrega o Pixel
+    document.addEventListener('della:consent', function (e) {
+      if (e.detail && e.detail.marketing) carregarMetaPixel();
+    });
+
+    const btnAceitarTudo = document.getElementById('della-cookie-aceitar-tudo');
+    if (btnAceitarTudo) btnAceitarTudo.addEventListener('click', function () {
+      salvarConsent({ analytics: true, marketing: true });
+      fecharBanner();
+    });
+
+    const btnCustomizar = document.getElementById('della-cookie-customizar');
+    if (btnCustomizar) btnCustomizar.addEventListener('click', function () {
+      abrirModal(lerConsent() || { analytics: true, marketing: true });
+    });
+
+    const btnFecharModal = document.getElementById('della-cookie-modal-fechar');
+    if (btnFecharModal) btnFecharModal.addEventListener('click', fecharModal);
+
+    const btnNecess = document.getElementById('della-cookie-apenas-necessarios');
+    if (btnNecess) btnNecess.addEventListener('click', function () {
+      salvarConsent({ analytics: false, marketing: false });
+      fecharModal();
+      fecharBanner();
+    });
+
+    const btnSalvar = document.getElementById('della-cookie-salvar');
+    if (btnSalvar) btnSalvar.addEventListener('click', function () {
+      salvarConsent({
+        analytics: tgAnalytics ? tgAnalytics.checked : false,
+        marketing: tgMarketing ? tgMarketing.checked : false,
+      });
+      fecharModal();
+      fecharBanner();
+    });
+
+    if (modal) modal.addEventListener('click', function (e) {
+      if (e.target === modal) fecharModal();
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modal && modal.style.display === 'flex') fecharModal();
+    });
+
+    const linkPrefs = document.getElementById('della-cookie-preferencias-link');
+    if (linkPrefs) linkPrefs.addEventListener('click', function (e) {
+      e.preventDefault();
+      abrirModal(lerConsent() || { analytics: true, marketing: true });
+    });
+  })();
 
 });

@@ -165,7 +165,6 @@
             <span class="secao-num">3</span> Pagamento
           </h2>
 
-
           <div class="pagamento-tabs" role="tablist" aria-label="Forma de pagamento">
             <button type="button" role="tab" class="pagamento-tab ativa" data-tab="pix"
                     aria-selected="true" aria-controls="tab-pix">
@@ -176,7 +175,6 @@
               <i class="far fa-credit-card"></i> Cartão de crédito
             </button>
           </div>
-
 
           <div id="tab-pix" role="tabpanel" class="pagamento-tabpanel ativo">
             <input type="radio" name="forma_pagamento" value="pix" id="radio_pix"
@@ -189,94 +187,67 @@
               <div>
                 <p class="pix-titulo">Pague com Pix</p>
                 <ul class="pix-vantagens">
-                  <li><i class="fas fa-check"></i> Aprovação instantânea</li>
-                  <li><i class="fas fa-check"></i> Disponível 24h por dia</li>
-                  <li><i class="fas fa-check"></i> Sem taxas adicionais</li>
+                  <li><i class="fas fa-check"></i> Pagamento disponível para testes</li>
+                  <li><i class="fas fa-check"></i> O QR Code será exibido após confirmar o pedido</li>
+                  <li><i class="fas fa-check"></i> Confirmação manual enquanto o gateway dinâmico não é liberado</li>
                 </ul>
                 <p class="pix-instrucao">
-                  Após confirmar o pedido, você verá o QR Code para pagar.
+                  Neste momento o checkout usa Pix estático para viabilizar os testes do fluxo do pedido.
                 </p>
               </div>
             </div>
           </div>
 
-          {# Cartão — Checkout Transparente PagSeguro (tokenização JS SDK, PAN nunca chega ao backend) #}
           <div id="tab-cartao" role="tabpanel" class="pagamento-tabpanel">
             <input type="radio" name="forma_pagamento" value="cartao_credito" id="radio_cartao"
                    class="sr-only">
 
-            {% if pagseguro_public_key %}
-            {# Campo hidden preenchido pelo JS SDK antes do submit #}
-            <input type="hidden" name="pagseguro_card_encrypted" id="pagseguro-card-encrypted">
-
-            <div class="cartao-form">
-
+            {% if cartao_habilitado %}
+            <div class="checkout-grid-2">
+              <div class="checkout-campo" style="grid-column:1 / -1;">
+                <label for="card-holder">Nome impresso no cartão *</label>
+                <input type="text" id="card-holder" class="checkout-input" placeholder="NOME COMO ESTÁ NO CARTÃO" autocomplete="cc-name">
+              </div>
+              <div class="checkout-campo" style="grid-column:1 / -1;">
+                <label for="card-number">Número do cartão *</label>
+                <input type="text" id="card-number" class="checkout-input" placeholder="0000 0000 0000 0000" inputmode="numeric" autocomplete="cc-number">
+              </div>
               <div class="checkout-campo">
-                <label for="card-number">Número do cartão</label>
-                <input type="text" id="card-number"
-                       placeholder="0000 0000 0000 0000"
-                       maxlength="19"
-                       inputmode="numeric"
-                       autocomplete="cc-number"
-                       class="checkout-input checkout-input--card">
-                <span id="card-flag" class="card-flag"></span>
+                <label for="card-expiry">Validade *</label>
+                <input type="text" id="card-expiry" class="checkout-input" placeholder="MM/AA" inputmode="numeric" autocomplete="cc-exp">
               </div>
-
               <div class="checkout-campo">
-                <label for="card-holder">Nome impresso no cartão</label>
-                <input type="text" id="card-holder"
-                       placeholder="NOME COMO NO CARTÃO"
-                       autocomplete="cc-name"
-                       style="text-transform:uppercase"
-                       class="checkout-input">
+                <label for="card-cvv">CVV *</label>
+                <input type="text" id="card-cvv" class="checkout-input" placeholder="123" inputmode="numeric" autocomplete="cc-csc">
               </div>
-
-              <div class="checkout-grid-2">
-                <div class="checkout-campo">
-                  <label for="card-expiry">Validade</label>
-                  <input type="text" id="card-expiry"
-                         placeholder="MM/AA"
-                         maxlength="5"
-                         inputmode="numeric"
-                         autocomplete="cc-exp"
-                         class="checkout-input">
-                </div>
-                <div class="checkout-campo">
-                  <label for="card-cvv">CVV</label>
-                  <input type="text" id="card-cvv"
-                         placeholder="123"
-                         maxlength="4"
-                         inputmode="numeric"
-                         autocomplete="cc-csc"
-                         class="checkout-input">
-                </div>
-              </div>
-
               <div class="checkout-campo">
                 <label for="{{ form.parcelas.id_for_label }}">Parcelas</label>
                 {{ form.parcelas }}
-                {# Opções geradas dinamicamente por parcelas.js após carregar o total #}
               </div>
-
-              <div id="cartao-erro" class="cartao-erro hidden"></div>
-
-              <div class="cartao-seguranca">
-                <i class="fas fa-lock"></i>
-                Dados encriptados pelo PagSeguro — nunca chegam ao nosso servidor.
-              </div>
-
             </div>
+            <input type="hidden" name="pagseguro_card_encrypted" id="pagseguro-card-encrypted">
+            <p id="cartao-erro" class="campo-erro hidden" style="margin-top:1rem;"></p>
+            <p style="color:#666;font-size:0.9rem;margin-top:1rem;">
+              {% if pagseguro_sandbox %}
+              Checkout em modo sandbox para testes da integração PagBank.
+              {% else %}
+              Pagamento processado com tokenização PagBank em ambiente de produção.
+              {% endif %}
+            </p>
             {% else %}
             <div class="pagamento-em-breve">
               <i class="far fa-credit-card" style="font-size:2rem;color:var(--dourado);display:block;margin-bottom:0.75rem;"></i>
               <p class="pix-titulo">Cartão de crédito</p>
               <p style="color:#888;font-size:0.9rem;margin-top:0.5rem;">
-                Pagamento por cartão temporariamente indisponível. Por favor, use o Pix.
+                {% if pagseguro_sandbox %}
+                Cartão em sandbox ainda indisponível nesta tela porque a chave pública do PagBank não foi carregada com as credenciais atuais.
+                {% else %}
+                Pagamento por cartão temporariamente indisponível enquanto finalizamos a liberação do gateway.
+                {% endif %}
               </p>
             </div>
             {% endif %}
           </div>
-
 
           <div class="checkout-cupom-bloco" style="margin-top:1.5rem;">
             <details class="cupom-details">
@@ -387,6 +358,16 @@
 {% endblock %}
 
 {% block js_extra %}
+{# Meta Pixel: InitiateCheckout #}
+{% load l10n %}
+<script type="application/json" data-meta-event="InitiateCheckout">
+{
+  "value": {{ subtotal|unlocalize }},
+  "currency": "BRL",
+  "num_items": {{ total_itens|default:0 }},
+  "_event_id": "{{ meta_initiatecheckout_event_id|escapejs }}"
+}
+</script>
 {# SDK PagSeguro sempre carregado (independente da chave pública) — PagSeguro deve existir no submit #}
 <script src="https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js"></script>
 <script>
@@ -873,7 +854,7 @@
 </script>
 
 {% load static %}
-{% if pagseguro_public_key %}
+{% if pagseguro_public_key and not pagamentos_temporariamente_indisponiveis %}
 <script src="{% static 'js/parcelas.js' %}"></script>
 <script>
 // Popula o select de parcelas assim que o total (com frete) for conhecido

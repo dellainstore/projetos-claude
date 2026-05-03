@@ -1,0 +1,50 @@
+{% load static %}
+{% if tabela %}
+  {% if tabela.usa_tabela_estruturada %}
+  <section class="tabela-medidas-card" aria-label="{{ tabela.nome }}">
+    <header class="tabela-medidas-topo">
+      <div>
+        <h3 class="tabela-medidas-titulo">{{ tabela.nome }}</h3>
+      </div>
+      <div class="tabela-medidas-marca" aria-hidden="true">
+        <img src="{% static 'images/brand/d-logo-della-gold-soft.png' %}" alt="" class="tabela-medidas-marca-img">
+      </div>
+    </header>
+
+    <div class="tabela-medidas-scroll">
+      <table class="tabela-medidas-grid">
+        {% with linhas=tabela.linhas_formatadas %}
+        {% if linhas %}
+        <thead>
+          <tr>
+            <th class="tabela-medidas-manequim">Manequim</th>
+            {% for _idx, cabecalho in tabela.colunas_configuradas %}
+            <th>{{ cabecalho }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="tabela-medidas-tamanhos">
+            <th class="tabela-medidas-manequim-valores">{{ linhas.0.rotulo }}</th>
+            {% for valor in linhas.0.valores %}
+            <td>{{ valor|default:'-' }}</td>
+            {% endfor %}
+          </tr>
+          {% for linha in linhas|slice:'1:' %}
+          <tr>
+            <th>{{ linha.rotulo }}</th>
+            {% for valor in linha.valores %}
+            <td>{{ valor|default:'-' }}</td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+        {% endif %}
+        {% endwith %}
+      </table>
+    </div>
+  </section>
+  {% elif tabela.conteudo %}
+  <div class="pagina-conteudo">{{ tabela.conteudo|linebreaksbr }}</div>
+  {% endif %}
+{% endif %}

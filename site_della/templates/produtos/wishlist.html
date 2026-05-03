@@ -51,17 +51,17 @@
                     {% else %}
                       <img src="/static/images/brand/produto-placeholder.jpg" alt="{{ p.nome }}">
                     {% endif %}
-                    {% if p.preco_promocional %}<span class="produto-badge produto-badge--promo">Promo</span>{% endif %}
+                    {% if p.em_promocao %}<span class="produto-badge produto-badge--promo">Promo</span>{% endif %}
                     {% if p.novo %}<span class="produto-badge produto-badge--novo">Novo</span>{% endif %}
                   </div>
                   <div class="produto-card-info">
                     <p class="produto-card-nome">{{ p.nome }}</p>
                     <div class="produto-card-preco">
-                      {% if p.preco_promocional %}
-                        <span class="preco-de">R$ {{ p.preco|floatformat:"2g" }}</span>
-                        <span class="preco-por">R$ {{ p.preco_promocional|floatformat:"2g" }}</span>
+                      {% if p.em_promocao %}
+                        <span class="preco-de">R$ {{ p.preco_base_exibicao|floatformat:"2g" }}</span>
+                        <span class="preco-por">R$ {{ p.preco_atual|floatformat:"2g" }}</span>
                       {% else %}
-                        <span class="preco-por">R$ {{ p.preco|floatformat:"2g" }}</span>
+                        <span class="preco-por">R$ {{ p.preco_atual|floatformat:"2g" }}</span>
                       {% endif %}
                     </div>
                   </div>

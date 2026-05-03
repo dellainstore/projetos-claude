@@ -11,6 +11,8 @@
   <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
 
   
+  <meta name="facebook-domain-verification" content="sh7orcu6j8difu9pudh8i15u064ijc" />
+
   <meta property="og:site_name" content="D'ELLA Instore">
   <meta property="og:title" content="{% block og_titulo %}D'ELLA Instore — Moda Feminina Premium{% endblock %}">
   <meta property="og:description" content="{% block og_descricao %}Moda feminina premium.{% endblock %}">
@@ -21,31 +23,33 @@
   {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 
   
-  <link rel="icon" type="image/x-icon" href="{% static 'images/brand/favicon.ico' %}">
+  <link rel="icon" type="image/png" href="{% static 'images/brand/favicon.png' %}">
+  <link rel="apple-touch-icon" href="{% static 'images/brand/favicon.png' %}">
+  <link rel="shortcut icon" href="{% static 'images/brand/favicon.svg' %}">
 
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
-  
-  <script src="https://cdn.tailwindcss.com"></script>
 
-  
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+
+
   <link rel="stylesheet" href="{% static 'css/della.css' %}">
 
   {% block css_extra %}{% endblock %}
 </head>
-<body>
+<body{% if META_PIXEL_ID %} data-meta-pixel-id="{{ META_PIXEL_ID }}"{% endif %}>
 
 
 <nav id="navbar" class="navbar {% block navbar_class %}transparente{% endblock %}" role="navigation" aria-label="Menu principal">
 
   <a href="{% url 'produtos:home' %}" class="navbar-logo" aria-label="D'ELLA Instore — Página inicial">
-    <span class="navbar-logo-della">D'ELLA</span>
+    <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA" class="navbar-logo-della-img">
     <span class="navbar-logo-instore">Instore</span>
   </a>
 
@@ -92,19 +96,19 @@
         {% with subs=cat.subcategorias.all %}
         {% if subs %}
           <li class="navbar-item-dropdown">
-            <a href="{% url 'produtos:loja_categoria' cat.slug %}" class="navbar-link-pai">
+            <a href="{{ cat.get_absolute_url }}" class="navbar-link-pai">
               {{ cat.nome }} <i class="fas fa-chevron-down navbar-chevron"></i>
             </a>
             <ul class="navbar-dropdown">
               {% for sub in subs %}
                 {% if sub.ativa %}
-                <li><a href="{% url 'produtos:loja_categoria' sub.slug %}">{{ sub.nome }}</a></li>
+                <li><a href="{{ sub.get_absolute_url }}">{{ sub.nome }}</a></li>
                 {% endif %}
               {% endfor %}
             </ul>
           </li>
         {% else %}
-          <li><a href="{% url 'produtos:loja_categoria' cat.slug %}">{{ cat.nome }}</a></li>
+          <li><a href="{{ cat.get_absolute_url }}">{{ cat.nome }}</a></li>
         {% endif %}
         {% endwith %}
       {% empty %}
@@ -118,18 +122,21 @@
 
 <div id="menu-mobile" class="fixed inset-0 bg-white z-[1050] flex flex-col p-8 overflow-y-auto overscroll-contain transform -translate-x-full transition-transform duration-300 [&.aberto]:translate-x-0">
   <div class="flex justify-between items-center mb-10">
-    <span class="font-['Playfair_Display'] text-2xl tracking-wide">D'ELLA <span class="font-['Jost'] font-light text-base tracking-widest">Instore</span></span>
+    <a href="{% url 'produtos:home' %}" class="mobile-logo" aria-label="D'ELLA Instore — Página inicial">
+      <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA" class="mobile-logo-della-img">
+      <span class="mobile-logo-instore">Instore</span>
+    </a>
     <button id="btn-menu-mobile-fechar" class="text-2xl" aria-label="Fechar menu">&times;</button>
   </div>
   <nav class="flex flex-col gap-0">
     {% for cat in categorias_menu %}
       {% with subs=cat.subcategorias.all %}
-      <a href="{% url 'produtos:loja_categoria' cat.slug %}"
+      <a href="{{ cat.get_absolute_url }}"
          class="text-2xl font-light tracking-wide border-b border-gray-100 py-4">{{ cat.nome }}</a>
       {% if subs %}
         {% for sub in subs %}
           {% if sub.ativa %}
-          <a href="{% url 'produtos:loja_categoria' sub.slug %}"
+          <a href="{{ sub.get_absolute_url }}"
              class="text-base font-light tracking-widest text-gray-500 border-b border-gray-50 py-3 pl-5">
             — {{ sub.nome }}
           </a>
@@ -236,7 +243,7 @@
       <!-- Coluna 1: Brand -->
       <div>
         <div class="footer-logo">
-          <span class="footer-logo-della">D'ELLA</span>
+          <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA" class="footer-logo-della-img">
           <span class="footer-logo-instore">Instore</span>
         </div>
         <p class="footer-desc">
@@ -266,30 +273,36 @@
         <ul class="footer-links">
           <li><a href="{% url 'produtos:sobre' %}">Nossa História</a></li>
           <li><a href="{% url 'produtos:politica_privacidade' %}">Política de Privacidade</a></li>
+          <li><a href="{% url 'produtos:termos_uso' %}">Termos de Uso</a></li>
           <li><a href="{% url 'produtos:meios_pagamento' %}">Meios de Pagamento e Frete</a></li>
+          <li><a href="#" id="della-cookie-preferencias-link">Preferências de Cookies</a></li>
         </ul>
       </div>
 
-      <!-- Coluna 4: Endereços -->
+      <!-- Coluna 4: Endereços (Show Room + Loja lado a lado) -->
       <div>
         <div class="footer-enderecos">
-          <p class="footer-endereco-titulo">Show Room</p>
-          <p class="footer-endereco-linha">Rua Visconde da Luz, 183 — Vila Nova Conceição</p>
-          <p class="footer-endereco-linha">São Paulo/SP — CEP: 04537-070</p>
-          <p class="footer-endereco-linha">CNPJ 29.049.870/0001-37</p>
-          <p class="footer-endereco-linha"><a href="mailto:contato@dellainstore.com.br">contato@dellainstore.com.br</a></p>
-          <p class="footer-endereco-linha">
-            <a href="https://wa.me/5511969168475?text=Olá! Vim pelo site e gostaria de falar com o Show Room." target="_blank" rel="noopener noreferrer">+55 11 96916-8475</a>
-          </p>
+          <div class="footer-endereco-bloco">
+            <p class="footer-endereco-titulo">Show Room</p>
+            <p class="footer-endereco-linha">Rua Visconde da Luz, 183 — Vila Nova Conceição</p>
+            <p class="footer-endereco-linha">São Paulo/SP — CEP: 04537-070</p>
+            <p class="footer-endereco-linha">CNPJ 29.049.870/0001-37</p>
+            <p class="footer-endereco-linha"><a href="mailto:contato@dellainstore.com.br">contato@dellainstore.com.br</a></p>
+            <p class="footer-endereco-linha">
+              <a href="https://wa.me/5511969168475?text=Olá! Vim pelo site e gostaria de falar com o Show Room." target="_blank" rel="noopener noreferrer">+55 11 96916-8475</a>
+            </p>
+          </div>
 
-          <p class="footer-endereco-titulo" style="margin-top:1.5rem;">Loja</p>
-          <p class="footer-endereco-subtitulo">Studio Anacã</p>
-          <p class="footer-endereco-linha">Av. Brasil, 649 — Jardim Paulista</p>
-          <p class="footer-endereco-linha">São Paulo/SP — CEP: 01431-000</p>
-          <p class="footer-endereco-linha"><a href="mailto:contato@dellainstore.com.br">contato@dellainstore.com.br</a></p>
-          <p class="footer-endereco-linha">
-            <a href="https://wa.me/5511949635073?text=Olá! Vim pelo site e gostaria de falar com a loja Studio Anacã." target="_blank" rel="noopener noreferrer">+55 11 94963-5073</a>
-          </p>
+          <div class="footer-endereco-bloco">
+            <p class="footer-endereco-titulo">Loja</p>
+            <p class="footer-endereco-subtitulo">Studio Anacã</p>
+            <p class="footer-endereco-linha">Av. Brasil, 649 — Jardim Paulista</p>
+            <p class="footer-endereco-linha">São Paulo/SP — CEP: 01431-000</p>
+            <p class="footer-endereco-linha"><a href="mailto:contato@dellainstore.com.br">contato@dellainstore.com.br</a></p>
+            <p class="footer-endereco-linha">
+              <a href="https://wa.me/5511949635073?text=Olá! Vim pelo site e gostaria de falar com a loja Studio Anacã." target="_blank" rel="noopener noreferrer">+55 11 94963-5073</a>
+            </p>
+          </div>
         </div>
       </div>
 
@@ -324,6 +337,81 @@
 {% endblock %}
 
 
+<!-- Cookie Consent: Banner inicial -->
+<div id="della-cookie-banner" class="della-cookie-banner" role="dialog"
+     aria-label="Consentimento de cookies" style="display:none;">
+  <div class="della-cookie-banner-inner">
+<p class="della-cookie-banner-text">
+      Usamos cookies para melhorar sua experiência e personalizar anúncios.
+      Ao continuar navegando, você concorda com nossa
+      <a href="{% url 'produtos:politica_privacidade' %}">Política de Privacidade</a>.
+    </p>
+    <div class="della-cookie-banner-acoes">
+      <button type="button" class="della-cookie-btn-secundario" id="della-cookie-customizar">Customizar</button>
+      <button type="button" class="della-cookie-btn-primario" id="della-cookie-aceitar-tudo">Aceitar tudo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cookie Consent: Modal de personalização -->
+<div id="della-cookie-modal" class="della-cookie-modal-overlay" role="dialog" aria-modal="true"
+     aria-labelledby="della-cookie-modal-titulo" style="display:none;">
+  <div class="della-cookie-modal-box">
+    <div class="della-cookie-modal-header">
+      <h3 id="della-cookie-modal-titulo">Preferências de cookies</h3>
+      <button type="button" class="della-cookie-modal-close" id="della-cookie-modal-fechar"
+              aria-label="Fechar">&times;</button>
+    </div>
+
+    <div class="della-cookie-modal-body">
+      <p class="della-cookie-modal-intro">
+        Escolha quais cookies você autoriza. Sua preferência fica salva por 6 meses.
+      </p>
+
+      <div class="della-cookie-categoria">
+        <div class="della-cookie-categoria-header">
+          <span class="della-cookie-categoria-nome">Necessários</span>
+          <span class="della-cookie-categoria-fixo">Sempre ativo</span>
+        </div>
+        <p class="della-cookie-categoria-desc">
+          Login, carrinho de compras e segurança (CSRF). Sem eles o site não funciona.
+        </p>
+      </div>
+
+      <div class="della-cookie-categoria">
+        <div class="della-cookie-categoria-header">
+          <span class="della-cookie-categoria-nome">Análise</span>
+          <label class="della-cookie-toggle" for="della-cookie-tg-analytics">
+            <input type="checkbox" id="della-cookie-tg-analytics">
+            <span class="della-cookie-toggle-slider"></span>
+          </label>
+        </div>
+        <p class="della-cookie-categoria-desc">
+          Estatísticas de navegação para entender quais páginas têm mais visitas.
+        </p>
+      </div>
+
+      <div class="della-cookie-categoria">
+        <div class="della-cookie-categoria-header">
+          <span class="della-cookie-categoria-nome">Marketing</span>
+          <label class="della-cookie-toggle" for="della-cookie-tg-marketing">
+            <input type="checkbox" id="della-cookie-tg-marketing">
+            <span class="della-cookie-toggle-slider"></span>
+          </label>
+        </div>
+        <p class="della-cookie-categoria-desc">
+          Anúncios personalizados no Instagram e Facebook através do Meta Pixel.
+        </p>
+      </div>
+    </div>
+
+    <div class="della-cookie-modal-footer">
+      <button type="button" class="della-cookie-btn-recusar" id="della-cookie-apenas-necessarios">Apenas necessários</button>
+      <button type="button" class="della-cookie-btn-primario" id="della-cookie-salvar">Salvar escolhas</button>
+    </div>
+  </div>
+</div>
+
 <!-- Newsletter Popup -->
 <div id="popup-newsletter" class="popup-overlay" role="dialog" aria-modal="true"
      aria-labelledby="popup-newsletter-titulo" style="display:none;">
@@ -348,6 +436,46 @@
 </div>
 
 <script src="{% static 'js/della.js' %}"></script>
+
+{% if GA_MEASUREMENT_ID %}
+<script>
+(function(){
+  var GA_ID = '{{ GA_MEASUREMENT_ID }}';
+
+  function carregarGA() {
+    if(window._gaCarregado) return;
+    window._gaCarregado = true;
+    var s = document.createElement('script');
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_ID;
+    s.async = true;
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    window.gtag = gtag;
+    gtag('js', new Date());
+    gtag('config', GA_ID);
+  }
+
+  function lerAnalytics() {
+    // Lê o cookie diretamente (mesmo método que della.js usa)
+    var m = document.cookie.match(/(?:^|;\s*)della_consent=([^;]+)/);
+    if (!m) return false;
+    try { return !!JSON.parse(decodeURIComponent(m[1])).analytics; } catch(e) { return false; }
+  }
+
+  // Verifica no DOMContentLoaded (mesma fase que della.js seta window.dellaConsent)
+  document.addEventListener('DOMContentLoaded', function(){
+    if(lerAnalytics()) carregarGA();
+  });
+
+  // Escuta mudanças futuras de consentimento (usuário aceita/altera)
+  document.addEventListener('della:consent', function(e){
+    if(e.detail && e.detail.analytics) carregarGA();
+  });
+})();
+</script>
+{% endif %}
+
 {% block js_extra %}{% endblock %}
 
 </body>

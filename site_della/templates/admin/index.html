@@ -16,6 +16,9 @@
     <a href="/painel/relatorio/" class="da-welcome-btn da-welcome-btn-primary">
       📊 Relatório Geral
     </a>
+    <a href="/painel/pedidos/dashboard/" class="da-welcome-btn da-welcome-btn-primary">
+      🚚 Dashboard de Pedidos
+    </a>
     <a href="/painel/conteudo/instagrampost/" class="da-welcome-btn da-welcome-btn-ghost">
       📷 Feed do Instagram
     </a>
@@ -28,7 +31,7 @@
   </div>
 </div>
 
-{# ── Conteúdo do Site ─────────────────────────────────────────────────────── #}
+{# ── 1° Conteúdo do Site ──────────────────────────────────────────────────── #}
 <div class="da-section-label">Conteúdo do Site</div>
 <div class="da-grid">
 
@@ -78,18 +81,18 @@
   </a>
 
   <a href="{% url 'admin:conteudo_configuracaoloja_changelist' %}" class="da-card">
-    <div class="da-card-icon ic-teal">⚙️</div>
+    <div class="da-card-icon ic-teal">🚚</div>
     <div class="da-card-body">
-      <strong>Config. da Loja</strong>
-      <small>Frete grátis e configurações gerais</small>
+      <strong>Frete Grátis</strong>
+      <small>Valor mínimo para frete grátis</small>
     </div>
     <span class="da-card-arrow">›</span>
   </a>
 
 </div>
 
-{# ── Catálogo de Produtos ─────────────────────────────────────────────────── #}
-<div class="da-section-label">Catálogo de Produtos</div>
+{# ── 2° Produtos ──────────────────────────────────────────────────────────── #}
+<div class="da-section-label">Produtos</div>
 <div class="da-grid">
 
   <a href="{% url 'admin:produtos_produto_changelist' %}" class="da-card">
@@ -140,7 +143,7 @@
   <a href="{% url 'admin:produtos_avaliacao_changelist' %}" class="da-card">
     <div class="da-card-icon ic-orange">⭐</div>
     <div class="da-card-body">
-      <strong>Avaliações</strong>
+      <strong>Avaliações da Loja</strong>
       <small>Moderação de avaliações dos clientes</small>
     </div>
     <span class="da-card-arrow">›</span>
@@ -149,8 +152,8 @@
   <a href="{% url 'admin:produtos_tabelamedidas_changelist' %}" class="da-card">
     <div class="da-card-icon ic-teal">📐</div>
     <div class="da-card-body">
-      <strong>Tabelas de Medidas</strong>
-      <small>Guia de tamanhos por categoria</small>
+      <strong>Tabela de Medidas</strong>
+      <small>Guia de tamanhos exibido no produto</small>
     </div>
     <span class="da-card-arrow">›</span>
   </a>
@@ -166,8 +169,8 @@
 
 </div>
 
-{# ── Pedidos & Vendas ─────────────────────────────────────────────────────── #}
-<div class="da-section-label">Pedidos & Vendas</div>
+{# ── 3° Pedidos (inclui Pagamentos) ───────────────────────────────────────── #}
+<div class="da-section-label">Pedidos</div>
 <div class="da-grid">
 
   <a href="{% url 'admin:pedidos_pedido_changelist' %}" class="da-card">
@@ -175,6 +178,15 @@
     <div class="da-card-body">
       <strong>Pedidos</strong>
       <small>Todos os pedidos, status e rastreio</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:pagamentos_pagamento_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-blue">💳</div>
+    <div class="da-card-body">
+      <strong>Pagamentos</strong>
+      <small>Transações e retornos do gateway</small>
     </div>
     <span class="da-card-arrow">›</span>
   </a>
@@ -197,19 +209,10 @@
     <span class="da-card-arrow">›</span>
   </a>
 
-  <a href="{% url 'admin:pagamentos_pagamento_changelist' %}" class="da-card">
-    <div class="da-card-icon ic-blue">💳</div>
-    <div class="da-card-body">
-      <strong>Transações</strong>
-      <small>Histórico de pagamentos PagSeguro</small>
-    </div>
-    <span class="da-card-arrow">›</span>
-  </a>
-
 </div>
 
-{# ── Clientes ─────────────────────────────────────────────────────────────── #}
-<div class="da-section-label">Clientes</div>
+{# ── 4° Usuários (inclui Grupos de acesso) ───────────────────────────────── #}
+<div class="da-section-label">Usuários</div>
 <div class="da-grid">
 
   <a href="{% url 'admin:usuarios_cliente_changelist' %}" class="da-card">
@@ -239,17 +242,35 @@
     <span class="da-card-arrow">›</span>
   </a>
 
+  <a href="/painel/usuarios/cliente/?is_staff__exact=1" class="da-card">
+    <div class="da-card-icon ic-dark">🔐</div>
+    <div class="da-card-body">
+      <strong>Usuários do Painel</strong>
+      <small>Equipe com acesso ao admin</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:auth_group_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-teal">🔑</div>
+    <div class="da-card-body">
+      <strong>Grupos de Acesso</strong>
+      <small>Permissões por grupo de usuários</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
 </div>
 
-{# ── Integrações ──────────────────────────────────────────────────────────── #}
-<div class="da-section-label">Integrações & Sistema</div>
+{# ── 5° Bling ERP ──────────────────────────────────────────────────────────── #}
+<div class="da-section-label">Bling ERP</div>
 <div class="da-grid">
 
   <a href="{% url 'admin:bling_blingtoken_changelist' %}" class="da-card">
-    <div class="da-card-icon ic-orange">🔑</div>
+    <div class="da-card-icon ic-orange">🔗</div>
     <div class="da-card-body">
-      <strong>Bling — Tokens</strong>
-      <small>Autenticação OAuth com o ERP Bling</small>
+      <strong>Token de Conexão</strong>
+      <small>Autenticação OAuth — renovar se expirado</small>
     </div>
     <span class="da-card-arrow">›</span>
   </a>
@@ -257,17 +278,41 @@
   <a href="{% url 'admin:bling_blinglog_changelist' %}" class="da-card">
     <div class="da-card-icon ic-teal">📋</div>
     <div class="da-card-body">
-      <strong>Bling — Logs</strong>
-      <small>Histórico de sincronizações</small>
+      <strong>Histórico de Envios</strong>
+      <small>Log de pedidos enviados ao Bling</small>
     </div>
     <span class="da-card-arrow">›</span>
   </a>
 
-  <a href="/painel/usuarios/cliente/?is_staff__exact=1" class="da-card">
-    <div class="da-card-icon ic-dark">🔐</div>
+</div>
+
+{# ── 6° Segurança ─────────────────────────────────────────────────────────── #}
+<div class="da-section-label">Segurança</div>
+<div class="da-grid">
+
+  <a href="/painel/axes/accessattempt/" class="da-card">
+    <div class="da-card-icon ic-red">🚫</div>
     <div class="da-card-body">
-      <strong>Usuários do Painel</strong>
-      <small>Equipe com acesso ao admin</small>
+      <strong>Bloqueios de acesso</strong>
+      <small>IPs bloqueados por muitas tentativas erradas</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="/painel/axes/accesslog/" class="da-card">
+    <div class="da-card-icon ic-blue">📝</div>
+    <div class="da-card-body">
+      <strong>Histórico de logins</strong>
+      <small>Histórico de logins realizados no painel</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="/painel/axes/accessfailurelog/" class="da-card">
+    <div class="da-card-icon ic-orange">⚠️</div>
+    <div class="da-card-body">
+      <strong>Tentativas com senha errada</strong>
+      <small>Tentativas de acesso com senha errada</small>
     </div>
     <span class="da-card-arrow">›</span>
   </a>

@@ -1,0 +1,1763 @@
+/* =============================================================================
+   D'ELLA INSTORE — Painel Administrativo  |  Django Admin 5.x
+   ============================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap');
+
+/* ---------------------------------------------------------------------------
+   1. ANULAR DARK MODE DO DJANGO — sobrescreve as variáveis CSS nativas dele
+      (Django usa @media prefers-color-scheme:dark para mudar essas vars)
+   --------------------------------------------------------------------------- */
+:root {
+  /* Forçar paleta clara no Django Admin */
+  --body-bg:            #ffffff;
+  --body-fg:            #1a1a1a;
+  --body-quiet-color:   #6b6b6b;
+  --body-loud-color:    #000000;
+  --darkened-bg:        #f4f4f2;
+  --selected-bg:        rgba(201,169,110,0.13);
+  --selected-row:       rgba(201,169,110,0.18);
+  --hairline-color:     #e4e4e0;
+  --border-color:       #e4e4e0;
+  --link-fg:            #c9a96e;
+  --link-hover-color:   #0a0a0a;
+  --link-selected-fg:   #c9a96e;
+  --error-fg:           #c0392b;
+  --message-success-bg: #d4edda;
+  --message-warning-bg: #fff3cd;
+  --message-error-bg:   #f8d7da;
+  --header-bg:          #0a0a0a;
+  --header-color:       #ffffff;
+  --header-link-color:  #e8d5b0;
+  --breadcrumbs-bg:     transparent;
+  --breadcrumbs-fg:     #6b6b6b;
+  --breadcrumbs-link-fg:#c9a96e;
+  --primary:            #0a0a0a;
+  --secondary:          #c9a96e;
+  --accent:             #c9a96e;
+  --primary-fg:         #ffffff;
+  --button-fg:          #ffffff;
+  --button-bg:          #0a0a0a;
+  --button-hover-bg:    #333333;
+  --default-button-bg:  #c9a96e;
+  --default-button-hover-bg: #b8954f;
+  --close-button-bg:    #6b6b6b;
+  --close-button-hover-bg: #444;
+  --delete-button-bg:   #c0392b;
+  --delete-button-hover-bg: #a93226;
+  --object-tools-fg:    #ffffff;
+  --object-tools-bg:    #c9a96e;
+  --object-tools-hover-bg: #b8954f;
+  --nav-sidebar-width:  260px;
+
+  /* Variáveis próprias */
+  --da-brand:      #0a0a0a;
+  --da-gold:       #c9a96e;
+  --da-gold-light: #e8d5b0;
+  --da-gold-pale:  rgba(201,169,110,0.13);
+  --da-bg:         #f4f4f2;
+  --da-white:      #ffffff;
+  --da-border:     #e4e4e0;
+  --da-text:       #1a1a1a;
+  --da-muted:      #6b6b6b;
+  --da-success:    #2d9e6e;
+  --da-danger:     #c0392b;
+  --da-warning:    #c87a00;
+  --da-info:       #1a6ea8;
+  --da-radius:     7px;
+  --da-radius-lg:  12px;
+  --da-shadow:     0 1px 3px rgba(0,0,0,0.07);
+  --da-shadow-md:  0 4px 16px rgba(0,0,0,0.10);
+  --da-font:       'Jost', -apple-system, sans-serif;
+  --da-header-h:   56px;
+}
+
+/* Forçar color-scheme claro (impede browser de aplicar dark em form controls) */
+html { color-scheme: light !important; forced-color-adjust: none !important; }
+
+/* ---------------------------------------------------------------------------
+   2. BASE
+   --------------------------------------------------------------------------- */
+body {
+  font-family: var(--da-font) !important;
+  background: var(--da-bg) !important;
+  color: var(--da-text) !important;
+  font-size: 14px !important;
+}
+
+/* Todos os inputs/selects sempre claros */
+input, select, textarea, button {
+  color-scheme: light !important;
+  font-family: var(--da-font) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   2b. OCULTAR THEME TOGGLE (removemos dark_mode.css — botão sem estilo aparece branco)
+   --------------------------------------------------------------------------- */
+.theme-toggle { display: none !important; }
+
+/* ---------------------------------------------------------------------------
+   3. HEADER
+   --------------------------------------------------------------------------- */
+#header {
+  background: var(--da-brand) !important;
+  padding: 0 1.75rem !important;
+  height: var(--da-header-h) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35) !important;
+  border-bottom: 1px solid rgba(201,169,110,0.25) !important;
+}
+
+#site-name a, #site-name a:visited {
+  color: var(--da-white) !important;
+  text-decoration: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.della-admin-logo-main {
+  font-family: 'Playfair Display', serif !important;
+  font-size: 1.3rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em !important;
+  color: var(--da-white) !important;
+}
+
+.della-admin-logo-dot {
+  width: 5px; height: 5px;
+  background: var(--da-gold);
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.della-admin-logo-sub {
+  font-family: 'Jost', sans-serif !important;
+  font-size: 0.6rem !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.4em !important;
+  color: var(--da-gold-light) !important;
+  opacity: 0.8 !important;
+  text-transform: uppercase !important;
+}
+
+#user-tools { font-size: 0.78rem !important; color: rgba(255,255,255,0.55) !important; }
+#user-tools a, #user-tools a:visited { color: var(--da-gold-light) !important; text-decoration: none !important; }
+#user-tools a:hover { color: var(--da-white) !important; }
+
+/* ---------------------------------------------------------------------------
+   4. SIDEBAR — BRANCA
+   --------------------------------------------------------------------------- */
+#nav-sidebar {
+  background-color: var(--da-white) !important;
+  border-right: 1px solid var(--da-border) !important;
+  width: 260px !important;
+  min-width: 260px !important;
+}
+
+/* Todos os elementos internos: fundo branco explícito */
+#nav-sidebar * {
+  background-color: transparent !important;
+  color: var(--da-text) !important;
+  border-color: var(--da-border) !important;
+  box-shadow: none !important;
+}
+
+/* Tabela da sidebar: largura total para captions não quebrarem */
+#nav-sidebar table {
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+
+/* Ocultar coluna "+ Adicionar" — ação disponível dentro da própria página */
+#nav-sidebar .module td { display: none !important; }
+
+/* th ocupa toda a largura agora que td está oculto */
+#nav-sidebar .module th {
+  width: 100% !important;
+  overflow-wrap: break-word !important;
+}
+
+/* Campo de busca da sidebar */
+#nav-filter {
+  padding: 0.75rem !important;
+  border-bottom: 1px solid var(--da-border) !important;
+  background-color: var(--da-white) !important;
+}
+
+#nav-filter input {
+  background-color: var(--da-bg) !important;
+  border: 1.5px solid var(--da-border) !important;
+  border-radius: 20px !important;
+  color: var(--da-text) !important;
+  font-size: 0.78rem !important;
+  font-family: var(--da-font) !important;
+  padding: 0.35rem 0.8rem !important;
+  width: 100% !important;
+  outline: none !important;
+}
+
+#nav-filter input:focus { border-color: var(--da-gold) !important; }
+
+/* Cabeçalhos de grupo (captions) */
+#nav-sidebar caption {
+  display: block !important;
+  background-color: var(--da-bg) !important;
+  color: var(--da-muted) !important;
+  font-size: 0.6rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.18em !important;
+  text-transform: uppercase !important;
+  font-family: var(--da-font) !important;
+  padding: 0.65rem 1rem 0.3rem !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  border-top: 1px solid var(--da-border) !important;
+}
+
+/* Links de model */
+#nav-sidebar td a,
+#nav-sidebar th a,
+#nav-sidebar a {
+  color: var(--da-text) !important;
+  font-size: 0.82rem !important;
+  display: block !important;
+  text-decoration: none !important;
+  padding: 0.36rem 0.75rem !important;
+  font-weight: 400 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  border-left: 2px solid transparent !important;
+  transition: all 0.15s !important;
+  word-break: break-word !important;
+}
+
+/* Link "Adicionar" — menor e mais discreto, nunca quebra em células estreitas */
+#nav-sidebar td a {
+  color: var(--da-gold) !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  padding: 0.36rem 0.5rem 0.36rem 0.25rem !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  word-break: normal !important;
+}
+
+#nav-sidebar td a:hover {
+  color: var(--da-brand) !important;
+  background-color: transparent !important;
+}
+
+/* Hover e active nos links de model */
+#nav-sidebar th a:hover {
+  color: var(--da-gold) !important;
+  background-color: var(--da-gold-pale) !important;
+  border-left-color: var(--da-gold) !important;
+}
+
+#nav-sidebar .current-model th a,
+#nav-sidebar .current-model th a:visited {
+  color: var(--da-gold) !important;
+  border-left-color: var(--da-gold) !important;
+  background-color: var(--da-gold-pale) !important;
+  font-weight: 600 !important;
+}
+
+/* Botão toggler da sidebar */
+#toggle-nav-sidebar {
+  background-color: var(--da-bg) !important;
+  border-right: 1px solid var(--da-border) !important;
+  color: var(--da-muted) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   5. CONTEÚDO
+   --------------------------------------------------------------------------- */
+div.breadcrumbs {
+  background: transparent !important;
+  border-bottom: none !important;
+  color: var(--da-muted) !important;
+  font-size: 0.78rem !important;
+  font-family: var(--da-font) !important;
+}
+
+div.breadcrumbs a, div.breadcrumbs a:visited { color: var(--da-gold) !important; text-decoration: none !important; font-weight: 500 !important; }
+
+#content h1 {
+  font-family: 'Playfair Display', serif !important;
+  font-size: 1.45rem !important;
+  font-weight: 600 !important;
+  color: var(--da-brand) !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* ---------------------------------------------------------------------------
+   6. MODULE / CARD
+   --------------------------------------------------------------------------- */
+#content .module, #content-main .module {
+  background-color: var(--da-white) !important;
+  border-radius: var(--da-radius-lg) !important;
+  border: 1px solid var(--da-border) !important;
+  box-shadow: var(--da-shadow) !important;
+  margin-bottom: 1.25rem !important;
+  /* overflow-x: auto permite rolagem horizontal em tabelas largas sem cortar
+     botões (ex: Salvar do changelist list_editable, dropdowns de cor). */
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+}
+
+/* Tabela de resultados e inlines podem rolar horizontalmente sem cortar colunas */
+#changelist-form .results,
+.inline-related .tabular,
+.tabular.inline-related { overflow-x: auto !important; }
+
+/* Submit-row do changelist (botão Salvar do list_editable) — padding extra
+   pra não colar na borda direita quando há scroll horizontal na tabela */
+#changelist-form .submit-row { padding-right: 1.5rem !important; }
+
+/* Date hierarchy — afastar da borda esquerda */
+nav.toplinks { padding: 0.5rem 0.9rem !important; }
+
+#content .module h2, #content .module caption,
+#content-main .module h2, #content-main .module caption,
+.inline-group > .inline-heading {
+  background-color: var(--da-brand) !important;
+  color: var(--da-white) !important;
+  padding: 0.7rem 1.2rem !important;
+  font-family: var(--da-font) !important;
+  font-weight: 600 !important;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+  margin: 0 !important;
+}
+
+/* ---------------------------------------------------------------------------
+   7. TABELA — LINHAS SEMPRE BRANCAS
+   --------------------------------------------------------------------------- */
+#result_list {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 0.85rem !important;
+  background-color: var(--da-white) !important;
+}
+
+#result_list thead th {
+  background-color: #f0f0ec !important;
+  color: var(--da-muted) !important;
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  padding: 0.65rem 0.9rem !important;
+  border-bottom: 2px solid var(--da-border) !important;
+  border-top: none !important;
+  white-space: nowrap !important;
+}
+
+#result_list thead th.sorted { background-color: #e8e8e4 !important; }
+#result_list thead th a, #result_list thead th a:visited { color: var(--da-muted) !important; text-decoration: none !important; }
+#result_list thead th.sorted a { color: var(--da-brand) !important; }
+
+/* Linhas: sempre brancas, nunca escuras */
+#result_list tbody tr {
+  background-color: var(--da-white) !important;
+  border-bottom: 1px solid var(--da-border) !important;
+}
+
+#result_list tbody tr:nth-child(even) {
+  background-color: #fafaf8 !important;
+}
+
+#result_list tbody tr:hover {
+  background-color: rgba(201,169,110,0.09) !important;
+}
+
+#result_list tbody tr.selected {
+  background-color: rgba(201,169,110,0.18) !important;
+}
+
+#result_list td {
+  padding: 0.6rem 0.9rem !important;
+  vertical-align: middle !important;
+  border: none !important;
+  color: var(--da-text) !important;
+  background-color: transparent !important;
+}
+
+#result_list td a, #result_list td a:visited { color: var(--da-brand) !important; font-weight: 500 !important; text-decoration: none !important; }
+#result_list td a:hover { color: var(--da-gold) !important; }
+
+/* ---------------------------------------------------------------------------
+   8. MENSAGENS
+   --------------------------------------------------------------------------- */
+ul.messagelist { padding: 0 !important; margin: 0 0 1rem !important; list-style: none !important; }
+
+ul.messagelist li {
+  border-radius: var(--da-radius) !important;
+  padding: 0.8rem 1rem !important;
+  font-size: 0.85rem !important;
+  font-family: var(--da-font) !important;
+  margin-bottom: 0.5rem !important;
+  list-style: none !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.65rem !important;
+  line-height: 1.45 !important;
+  background-image: none !important;
+}
+
+ul.messagelist li.success { background-color: rgba(45,158,110,0.1) !important; color: var(--da-success) !important; border-left: 3px solid var(--da-success) !important; }
+ul.messagelist li.error   { background-color: rgba(192,57,43,0.09) !important;  color: var(--da-danger) !important;  border-left: 3px solid var(--da-danger) !important; }
+ul.messagelist li.warning { background-color: rgba(200,122,0,0.09) !important;  color: var(--da-warning) !important; border-left: 3px solid var(--da-warning) !important; }
+
+ul.messagelist li::before {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+ul.messagelist li.success::before { content: '✓'; }
+ul.messagelist li.error::before { content: '!'; }
+ul.messagelist li.warning::before { content: '!'; }
+
+/* ---------------------------------------------------------------------------
+   9. OBJECT TOOLS
+   --------------------------------------------------------------------------- */
+ul.object-tools { list-style: none !important; }
+
+ul.object-tools li a, ul.object-tools li a:visited {
+  background-color: transparent !important;
+  border: 1.5px solid var(--da-gold) !important;
+  color: var(--da-gold) !important;
+  border-radius: 20px !important;
+  padding: 0.28rem 0.9rem !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  font-family: var(--da-font) !important;
+  text-decoration: none !important;
+  transition: all 0.15s !important;
+}
+
+ul.object-tools li a:hover { background-color: var(--da-gold) !important; color: var(--da-white) !important; }
+
+/* Remove ícone SVG de "+" que Django aplica via background-image em .addlink */
+ul.object-tools li a.addlink,
+ul.object-tools li a.addlink:visited {
+  background-image: none !important;
+  padding-right: 0.9rem !important;
+}
+
+/* ---------------------------------------------------------------------------
+   10. TOOLBAR / BUSCA
+   --------------------------------------------------------------------------- */
+#toolbar {
+  padding: 0.6rem 1rem 0.75rem !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  flex-wrap: wrap !important;
+  background-color: var(--da-bg) !important;
+}
+
+#toolbar form,
+#changelist-search {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  margin: 0 !important;
+}
+
+#searchbar {
+  border: 1.5px solid var(--da-border) !important;
+  border-radius: 22px !important;
+  padding: 0.42rem 1rem !important;
+  font-size: 0.85rem !important;
+  font-family: var(--da-font) !important;
+  color: var(--da-text) !important;
+  background-color: var(--da-white) !important;
+  outline: none !important;
+  min-width: 220px !important;
+  height: auto !important;
+  vertical-align: middle !important;
+}
+
+#searchbar:focus { border-color: var(--da-gold) !important; box-shadow: 0 0 0 3px rgba(201,169,110,0.15) !important; }
+
+#toolbar input[type="submit"],
+#changelist-search input[type="submit"] {
+  border-radius: 22px !important;
+  padding: 0.42rem 1.1rem !important;
+  vertical-align: middle !important;
+  height: auto !important;
+  background-color: var(--da-brand) !important;
+  color: var(--da-white) !important;
+  border: none !important;
+  font-family: var(--da-font) !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+}
+
+/* ---------------------------------------------------------------------------
+   11. AÇÕES EM MASSA
+   --------------------------------------------------------------------------- */
+#changelist-form .actions {
+  background-color: var(--da-white) !important;
+  border: 1px solid var(--da-border) !important;
+  border-radius: var(--da-radius) !important;
+  padding: 0.5rem 0.85rem !important;
+  margin-bottom: 0.75rem !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.6rem !important;
+}
+
+.actions select { border: 1.5px solid var(--da-border) !important; border-radius: var(--da-radius) !important; padding: 0.3rem 0.6rem !important; font-size: 0.83rem !important; font-family: var(--da-font) !important; background-color: var(--da-white) !important; color: var(--da-text) !important; }
+.actions button, .actions input[type="submit"] { background-color: var(--da-brand) !important; color: var(--da-white) !important; border: none !important; border-radius: var(--da-radius) !important; padding: 0.35rem 0.9rem !important; font-size: 0.83rem !important; font-family: var(--da-font) !important; font-weight: 600 !important; cursor: pointer !important; }
+
+/* ---------------------------------------------------------------------------
+   12. FILTRO LATERAL
+   --------------------------------------------------------------------------- */
+#changelist-filter {
+  background-color: var(--da-white) !important;
+  border-radius: var(--da-radius-lg) !important;
+  border: 1px solid var(--da-border) !important;
+  box-shadow: var(--da-shadow-md) !important;
+  overflow: hidden !important;
+}
+
+#changelist-filter h2 { background-color: var(--da-brand) !important; color: var(--da-white) !important; padding: 0.7rem 1rem !important; font-size: 0.68rem !important; font-weight: 700 !important; letter-spacing: 0.14em !important; text-transform: uppercase !important; margin: 0 !important; font-family: var(--da-font) !important; }
+#changelist-filter h3 { color: var(--da-muted) !important; font-size: 0.68rem !important; font-weight: 700 !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; padding: 0.7rem 1rem 0.2rem !important; margin: 0 !important; font-family: var(--da-font) !important; }
+#changelist-filter ul { list-style: none !important; padding: 0 !important; margin: 0 0 0.4rem !important; }
+#changelist-filter li a, #changelist-filter li a:visited { color: var(--da-text) !important; font-size: 0.83rem !important; padding: 0.28rem 1rem !important; display: block !important; border-left: 2px solid transparent !important; text-decoration: none !important; transition: all 0.15s !important; background-color: transparent !important; }
+#changelist-filter li a:hover, #changelist-filter li.selected a { color: var(--da-gold) !important; border-left-color: var(--da-gold) !important; background-color: var(--da-gold-pale) !important; font-weight: 500 !important; }
+
+/* ---------------------------------------------------------------------------
+   13. PAGINADOR
+   --------------------------------------------------------------------------- */
+.paginator { border-top: 1px solid var(--da-border) !important; padding: 0.75rem 1rem !important; font-size: 0.8rem !important; background-color: #fafaf8 !important; color: var(--da-muted) !important; display: flex !important; align-items: center !important; gap: 0.25rem !important; flex-wrap: wrap !important; }
+.paginator a, .paginator a:visited { color: var(--da-text) !important; text-decoration: none !important; padding: 0.25rem 0.6rem !important; border-radius: 5px !important; border: 1px solid var(--da-border) !important; background-color: var(--da-white) !important; transition: all 0.15s !important; }
+.paginator a:hover { border-color: var(--da-gold) !important; color: var(--da-gold) !important; }
+.paginator .this-page { background-color: var(--da-brand) !important; color: var(--da-white) !important; padding: 0.25rem 0.6rem !important; border-radius: 5px !important; font-weight: 600 !important; }
+
+/* ---------------------------------------------------------------------------
+   14. FORMULÁRIOS
+   --------------------------------------------------------------------------- */
+.form-row { padding: 0.8rem 1.2rem !important; border-bottom: 1px solid var(--da-border) !important; background-color: var(--da-white) !important; }
+.form-row:last-child { border-bottom: none !important; }
+
+label, .required label { font-size: 0.74rem !important; font-weight: 700 !important; color: var(--da-muted) !important; letter-spacing: 0.06em !important; text-transform: uppercase !important; font-family: var(--da-font) !important; }
+
+input[type="text"], input[type="email"], input[type="password"],
+input[type="number"], input[type="url"], input[type="tel"],
+textarea {
+  border: 1.5px solid var(--da-border) !important;
+  border-radius: var(--da-radius) !important;
+  padding: 0.46rem 0.8rem !important;
+  font-family: var(--da-font) !important;
+  font-size: 0.88rem !important;
+  color: var(--da-text) !important;
+  background-color: var(--da-white) !important;
+  outline: none !important;
+}
+
+/* Select separado: sem border-radius para evitar clip vertical do texto em Chrome/Windows */
+select {
+  border: 1.5px solid var(--da-border) !important;
+  border-radius: 5px !important;
+  padding: 0.5rem 0.8rem !important;
+  font-family: var(--da-font) !important;
+  font-size: 0.88rem !important;
+  color: var(--da-text) !important;
+  background-color: var(--da-white) !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  height: auto !important;
+  min-height: 2.2rem !important;
+  line-height: 1.4 !important;
+}
+
+input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus,
+input[type="number"]:focus, input[type="url"]:focus, input[type="tel"]:focus,
+select:focus, textarea:focus {
+  border-color: var(--da-gold) !important;
+  box-shadow: 0 0 0 3px rgba(201,169,110,0.15) !important;
+}
+
+textarea { min-height: 110px !important; resize: vertical !important; }
+input[type="checkbox"] { accent-color: var(--da-gold) !important; }
+.help, p.help { font-size: 0.74rem !important; color: var(--da-muted) !important; font-style: italic !important; }
+
+ul.errorlist li { background-color: rgba(192,57,43,0.09) !important; color: var(--da-danger) !important; border-radius: 4px !important; padding: 0.3rem 0.6rem !important; font-size: 0.8rem !important; list-style: none !important; border-left: 3px solid var(--da-danger) !important; }
+
+/* ---------------------------------------------------------------------------
+   15. SUBMIT ROW
+   --------------------------------------------------------------------------- */
+.submit-row { background-color: #f8f8f6 !important; border-top: 1px solid var(--da-border) !important; padding: 0.85rem 1.2rem !important; display: flex !important; align-items: center !important; gap: 0.75rem !important; flex-wrap: wrap !important; }
+
+input[type="submit"], .default, .button { background-color: var(--da-brand) !important; color: var(--da-white) !important; border: none !important; border-radius: var(--da-radius) !important; padding: 0.5rem 1.35rem !important; font-family: var(--da-font) !important; font-size: 0.85rem !important; font-weight: 600 !important; cursor: pointer !important; text-decoration: none !important; letter-spacing: 0.03em !important; transition: background 0.15s !important; }
+input[type="submit"]:hover, .default:hover, .button:hover { background-color: #333 !important; }
+
+input[name="_continue"], input[name="_addanother"] { background-color: transparent !important; color: var(--da-brand) !important; border: 1.5px solid var(--da-border) !important; }
+input[name="_continue"]:hover, input[name="_addanother"]:hover { border-color: var(--da-gold) !important; color: var(--da-gold) !important; background-color: var(--da-gold-pale) !important; }
+
+.submit-row a.deletelink, .deletelink { background-color: transparent !important; color: var(--da-danger) !important; border: 1.5px solid var(--da-danger) !important; border-radius: var(--da-radius) !important; padding: 0.48rem 1.2rem !important; font-family: var(--da-font) !important; font-size: 0.85rem !important; font-weight: 600 !important; text-decoration: none !important; transition: all 0.15s !important; }
+.submit-row a.deletelink:hover, .deletelink:hover { background-color: var(--da-danger) !important; color: var(--da-white) !important; }
+
+/* ---------------------------------------------------------------------------
+   16. FIELDSETS / INLINES
+   --------------------------------------------------------------------------- */
+fieldset.module { margin-bottom: 1.25rem !important; border: 1px solid var(--da-border) !important; border-radius: var(--da-radius-lg) !important; overflow: visible !important; }
+fieldset.collapsed h2 { background-color: #2a2a2a !important; }
+
+.inline-group { border: 1px solid var(--da-border) !important; border-radius: var(--da-radius-lg) !important; overflow: visible !important; margin-bottom: 1.25rem !important; }
+
+.tabular.inline-related thead th { background-color: #f0f0ec !important; color: var(--da-muted) !important; font-size: 0.68rem !important; font-weight: 700 !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; padding: 0.55rem 0.9rem !important; }
+
+.tabular.inline-related tbody tr { background-color: var(--da-white) !important; }
+.tabular.inline-related tbody tr:nth-child(even) { background-color: #fafaf8 !important; }
+
+.add-row a, .add-row a:visited { color: var(--da-gold) !important; font-size: 0.82rem !important; font-weight: 600 !important; text-decoration: none !important; padding: 0.4rem 0.9rem !important; border: 1.5px dashed var(--da-gold) !important; border-radius: var(--da-radius) !important; display: inline-flex !important; align-items: center !important; gap: 0.35rem !important; transition: all 0.15s !important; margin: 0.75rem !important; }
+.add-row a:hover { background-color: var(--da-gold-pale) !important; }
+
+.inline-deletelink, .inline-deletelink:visited { color: var(--da-danger) !important; font-size: 0.78rem !important; text-decoration: none !important; padding: 0.2rem 0.5rem !important; border: 1px solid var(--da-danger) !important; border-radius: 4px !important; }
+.inline-deletelink:hover { background-color: var(--da-danger) !important; color: var(--da-white) !important; }
+
+/* ── CORREÇÃO DEFINITIVA: selects cortando texto + botões abaixo do select ──
+   Django Admin usa flex-wrap:wrap no .related-widget-wrapper, o que faz os
+   botões de editar/excluir quebrarem para a linha de baixo quando a coluna é
+   estreita. Fixamos: nowrap + align center + tamanho explícito no select.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Formulário principal (Categoria, Gênero, FKs com botões ao lado) */
+.form-row .related-widget-wrapper {
+  display: inline-flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+.form-row .related-widget-wrapper select {
+  width: auto !important;
+  min-width: 200px !important;
+  flex-shrink: 0 !important;
+}
+.form-row select { min-width: 200px !important; }
+
+/* Inlines tabulares (Variações, Fotos por Cor, etc.)
+   — botões INLINE com o select, nunca abaixo */
+.tabular.inline-related td .related-widget-wrapper {
+  display: inline-flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 3px !important;
+}
+/* Select de FK nos inlines — width:auto permite crescer com o conteúdo
+   (nomes de cor longos, __str__ de ProdutoImagem, etc.); min-width mantém
+   uniformidade visual e max-width evita que o select domine a coluna. */
+.tabular.inline-related td .related-widget-wrapper select {
+  width: auto !important;
+  min-width: 170px !important;
+  max-width: 280px !important;
+  flex-shrink: 0 !important;
+}
+/* Select simples nos inlines sem wrapper (ex: Tamanho) */
+.tabular.inline-related td select {
+  min-width: 85px !important;
+}
+/* Garante altura correta de todos os selects nos inlines — evita clip vertical */
+.tabular.inline-related td select,
+.tabular.inline-related td .related-widget-wrapper select,
+.form-row select,
+.form-row .related-widget-wrapper select {
+  height: auto !important;
+  min-height: 2.2rem !important;
+  line-height: 1.4 !important;
+  vertical-align: middle !important;
+}
+/* Células dos inlines: respiro à direita pra não colar nos botões */
+.tabular.inline-related td {
+  padding-right: 0.5rem !important;
+}
+
+#variacoes-group .field-estoque input,
+#variacoes-group .field-preco input,
+#variacoes-group .field-preco_promocional input,
+#variacoes-group .field-sku_variacao input,
+#variacoes-group .field-bling_variacao_id input,
+#variacoes-group .field-ordem input,
+#variacoes-group .field-tamanho select,
+#variacoes-group .field-disponibilidade select,
+#variacoes-group .field-prazo_confeccao_dias input {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+#variacoes-group .field-preco input,
+#variacoes-group .field-preco_promocional input { max-width: 110px !important; }
+#variacoes-group .field-estoque input { max-width: 90px !important; }
+#variacoes-group .field-prazo_confeccao_dias input { max-width: 110px !important; }
+#variacoes-group .field-sku_variacao input { max-width: 170px !important; }
+#variacoes-group .field-bling_variacao_id input { max-width: 210px !important; }
+
+#variacoes-group table {
+  min-width: 1800px !important;
+  width: max-content !important;
+}
+
+#fotos_por_cor-group table {
+  min-width: 1040px !important;
+}
+
+#variacoes-group .field-cor,
+#variacoes-group .field-tamanho,
+#variacoes-group .field-preco,
+#variacoes-group .field-preco_promocional,
+#variacoes-group .field-disponibilidade,
+#variacoes-group .field-prazo_confeccao_dias,
+#variacoes-group .field-estoque,
+#variacoes-group .field-sku_variacao,
+#variacoes-group .field-bling_variacao_id,
+#fotos_por_cor-group .field-cor,
+#fotos_por_cor-group .field-imagem {
+  min-width: 150px !important;
+}
+
+#variacoes-group td.field-preco,
+#variacoes-group td.field-preco_promocional,
+#variacoes-group td.field-disponibilidade,
+#variacoes-group td.field-prazo_confeccao_dias,
+#variacoes-group td.field-estoque,
+#variacoes-group td.field-sku_variacao,
+#variacoes-group td.field-bling_variacao_id {
+  padding-left: 0.85rem !important;
+  padding-right: 0.85rem !important;
+}
+
+#variacoes-group .field-sku_variacao,
+#variacoes-group .field-bling_variacao_id {
+  min-width: 190px !important;
+}
+
+#variacoes-group .field-ativa,
+#variacoes-group td.field-ativa,
+#variacoes-group th.column-ativa {
+  min-width: 78px !important;
+  width: 78px !important;
+  text-align: center !important;
+}
+
+#variacoes-group td.field-ativa {
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+}
+
+#variacoes-group .field-ativa input[type="checkbox"] {
+  display: inline-block !important;
+  margin: 0 auto !important;
+  vertical-align: middle !important;
+}
+
+#imagens-group .tabular.inline-related td.file-upload {
+  min-width: 280px !important;
+}
+
+.inline-group[data-inline-model="produtos-produtoimagem"] .tabular.inline-related td.file-upload,
+.inline-group[data-inline-model="produtos-produtocorfoto"] .tabular.inline-related td.file-upload {
+  min-width: 280px !important;
+}
+
+.della-upload-dropzone {
+  border: 2px dashed rgba(201,169,110,0.45);
+  background: rgba(201,169,110,0.08);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin: 0.35rem 0 1rem;
+  color: var(--da-text);
+  transition: border-color 0.15s ease, background 0.15s ease;
+  cursor: pointer;
+}
+
+.della-upload-dropzone strong {
+  display: block;
+  font-size: 0.92rem;
+  margin-bottom: 0.15rem;
+}
+
+.della-upload-dropzone small {
+  color: var(--da-muted);
+  font-size: 0.78rem;
+}
+
+.della-upload-dropzone.is-dragover {
+  border-color: var(--da-gold);
+  background: rgba(201,169,110,0.14);
+}
+
+.inline-group .della-upload-dropzone {
+  margin: 0.85rem 0 1rem;
+}
+
+.categoria-sort-status {
+  font-size: 0.9rem;
+  color: var(--da-muted);
+}
+
+.categoria-sort-status.is-ok { color: #2e7d32; }
+.categoria-sort-status.is-error { color: #c62828; }
+.categoria-sort-status.is-loading { color: #9c6f19; }
+
+.categoria-sort-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--da-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--da-white);
+}
+
+.categoria-sort-group {
+  border-top: 1px solid var(--da-border);
+  background: var(--da-white);
+  overflow: hidden;
+}
+
+.categoria-sort-group:first-child {
+  border-top: 0;
+}
+
+.categoria-sort-group.is-dragging,
+.categoria-sort-child.is-dragging {
+  opacity: 0.55;
+}
+
+.categoria-sort-item {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.88rem 1rem;
+  background: var(--da-white);
+  border-top: 1px solid rgba(255,255,255,0.03);
+  cursor: pointer;
+}
+
+.categoria-sort-parent {
+  border-left: 3px solid var(--da-gold);
+  background: rgba(201,169,110,0.05);
+}
+
+.categoria-sort-children {
+  background: rgba(201,169,110,0.025);
+}
+
+.categoria-sort-child {
+  padding-left: 2.75rem;
+}
+
+.categoria-sort-children.is-collapsed {
+  display: none;
+}
+
+.categoria-sort-handle {
+  border: 0;
+  background: transparent;
+  color: var(--da-muted);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: grab;
+  padding: 0.25rem;
+}
+
+.categoria-sort-handle:active {
+  cursor: grabbing;
+}
+
+.categoria-sort-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--da-muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.1rem 0.15rem;
+  cursor: pointer;
+}
+
+.categoria-sort-toggle-placeholder {
+  width: 1rem;
+  display: inline-block;
+}
+
+.categoria-sort-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.categoria-sort-toggle[aria-expanded="true"] .categoria-sort-chevron {
+  transform: rotate(90deg);
+}
+
+.categoria-sort-main {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.categoria-sort-name {
+  font-weight: 700;
+  color: var(--da-text);
+}
+
+.categoria-sort-meta {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(201,169,110,0.16);
+  color: #8a6420;
+  font-size: 0.75rem;
+}
+
+.categoria-sort-meta-ativa {
+  background: rgba(46,125,50,0.12);
+  color: #2e7d32;
+}
+
+.categoria-sort-meta-inativa {
+  background: rgba(198,40,40,0.12);
+  color: #b3261e;
+}
+
+.categoria-sort-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.categoria-sort-child-indent {
+  color: var(--da-muted);
+  margin-right: -0.15rem;
+}
+
+.categoria-sort-empty {
+  padding: 0.8rem 1rem 0.9rem 3rem;
+  color: var(--da-muted);
+  font-size: 0.92rem;
+}
+
+.categoria-sort-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+#variacoes-group .related-widget-wrapper a,
+#fotos_por_cor-group .related-widget-wrapper a {
+  display: none !important;
+}
+
+#variacoes-group .related-widget-wrapper select,
+#fotos_por_cor-group .related-widget-wrapper select {
+  min-width: 100% !important;
+  max-width: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   17. BOTÕES POR LINHA
+   --------------------------------------------------------------------------- */
+.della-btn-edit, .della-btn-edit:visited {
+  display: inline-flex !important; align-items: center !important; gap: 0.25rem !important;
+  padding: 0.28rem 0.75rem !important; border-radius: 5px !important;
+  background-color: var(--da-gold) !important; color: var(--da-white) !important;
+  text-decoration: none !important; font-size: 0.75rem !important; font-weight: 600 !important;
+  font-family: var(--da-font) !important; margin-right: 0.35rem !important;
+  transition: opacity 0.15s !important; white-space: nowrap !important;
+}
+
+.della-btn-delete, .della-btn-delete:visited {
+  display: inline-flex !important; align-items: center !important; gap: 0.25rem !important;
+  padding: 0.28rem 0.65rem !important; border-radius: 5px !important;
+  background-color: transparent !important; color: var(--da-danger) !important;
+  border: 1.5px solid var(--da-danger) !important; text-decoration: none !important;
+  font-size: 0.75rem !important; font-weight: 600 !important;
+  font-family: var(--da-font) !important; transition: all 0.15s !important; white-space: nowrap !important;
+}
+
+.della-btn-edit:hover  { opacity: 0.82 !important; color: var(--da-white) !important; }
+.della-btn-delete:hover { background-color: var(--da-danger) !important; color: var(--da-white) !important; }
+
+/* ---------------------------------------------------------------------------
+   18. DASHBOARD
+   --------------------------------------------------------------------------- */
+.da-welcome {
+  background: linear-gradient(135deg, #0a0a0a 0%, #1c1c1c 100%);
+  border-radius: var(--da-radius-lg); padding: 2rem 2.5rem;
+  margin-bottom: 1.75rem; color: var(--da-white);
+  position: relative; overflow: hidden; box-shadow: var(--da-shadow-md);
+}
+
+.da-welcome::before { content: ''; position: absolute; top: -80px; right: -40px; width: 320px; height: 320px; background: radial-gradient(circle, rgba(201,169,110,0.18) 0%, transparent 70%); pointer-events: none; }
+
+.da-welcome-eyebrow { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.25em; text-transform: uppercase; color: var(--da-gold); margin-bottom: 0.4rem; }
+
+.da-welcome h1 { font-family: 'Playfair Display', serif !important; font-size: 1.8rem !important; color: var(--da-white) !important; margin: 0 0 0.35rem !important; }
+
+.da-welcome p { color: rgba(255,255,255,0.5); font-size: 0.88rem; margin: 0; }
+
+.da-welcome-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap; }
+
+.da-welcome-btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.48rem 1.2rem; border-radius: 22px; font-size: 0.82rem; font-weight: 600; font-family: var(--da-font); text-decoration: none !important; transition: all 0.18s; }
+
+.da-welcome-btn-primary { background-color: var(--da-gold); color: var(--da-white) !important; }
+.da-welcome-btn-primary:hover { background-color: #b8954f !important; color: var(--da-white) !important; }
+
+.da-welcome-btn-ghost { background-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8) !important; border: 1px solid rgba(255,255,255,0.15); }
+.da-welcome-btn-ghost:hover { background-color: rgba(255,255,255,0.18) !important; color: var(--da-white) !important; }
+
+.da-section-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--da-muted); margin: 2rem 0 0.85rem; display: flex; align-items: center; gap: 0.6rem; font-family: var(--da-font); }
+.da-section-label::after { content: ''; flex: 1; height: 1px; background: var(--da-border); }
+
+.da-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 0.5rem; }
+
+.da-card { background-color: var(--da-white); border-radius: var(--da-radius-lg); border: 1px solid var(--da-border); padding: 1rem 1.2rem; text-decoration: none !important; display: flex; align-items: center; gap: 0.9rem; transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s; box-shadow: var(--da-shadow); color: var(--da-text) !important; cursor: pointer; }
+.da-card:hover { box-shadow: var(--da-shadow-md); border-color: var(--da-gold); transform: translateY(-2px); }
+
+.da-card-icon { width: 40px; height: 40px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0; }
+
+.da-card-body { flex: 1; min-width: 0; }
+.da-card-body strong { display: block; font-size: 0.86rem; font-weight: 600; color: var(--da-brand); margin-bottom: 0.15rem; font-family: var(--da-font); }
+.da-card-body small  { display: block; font-size: 0.7rem; color: var(--da-muted); line-height: 1.4; }
+
+.da-card-arrow { color: #ccc; font-size: 1rem; flex-shrink: 0; transition: color 0.15s, transform 0.15s; }
+.da-card:hover .da-card-arrow { color: var(--da-gold); transform: translateX(2px); }
+
+.ic-gold   { background-color: rgba(201,169,110,0.14); color: #a07a3e; }
+.ic-dark   { background-color: rgba(10,10,10,0.07);    color: var(--da-brand); }
+.ic-green  { background-color: rgba(45,158,110,0.12);  color: var(--da-success); }
+.ic-blue   { background-color: rgba(26,110,168,0.12);  color: var(--da-info); }
+.ic-red    { background-color: rgba(192,57,43,0.1);    color: var(--da-danger); }
+.ic-purple { background-color: rgba(125,60,152,0.1);   color: #7d3c98; }
+.ic-teal   { background-color: rgba(0,128,128,0.1);    color: teal; }
+.ic-orange { background-color: rgba(200,100,0,0.1);    color: #c86400; }
+
+/* ---------------------------------------------------------------------------
+   19. SCROLLBAR
+   --------------------------------------------------------------------------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #efe7d7; border-radius: 999px; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #d8bb7f 0%, #c9a96e 100%); border-radius: 999px; border: 2px solid #efe7d7; }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #caa45b 0%, #b8954f 100%); }
+
+/* ---------------------------------------------------------------------------
+   20. RESPONSIVO
+   --------------------------------------------------------------------------- */
+@media (max-width: 1200px) {
+  /* Última coluna (Ações: Editar/Excluir) precisa de respiro na direita */
+  #changelist-form .results th:last-child,
+  #changelist-form .results td:last-child { padding-right: 1.25rem !important; }
+  /* Padding-right extra no container do changelist quando há scroll horizontal */
+  #changelist-form { padding-right: 0.5rem !important; }
+}
+
+@media (max-width: 768px) {
+  .da-grid { grid-template-columns: 1fr 1fr; }
+  .da-welcome { padding: 1.5rem; }
+  .da-welcome h1 { font-size: 1.4rem !important; }
+
+  /* Inlines em modo mobile: Django empilha tds verticalmente.
+     Garantir que wrappers de select não sejam cortados. */
+  .tabular.inline-related td .related-widget-wrapper {
+    flex-wrap: wrap !important;
+  }
+  .tabular.inline-related td .related-widget-wrapper select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .tabular.inline-related td {
+    padding-right: 1rem !important;
+  }
+  /* Botões Editar/Excluir embaixo da linha em mobile */
+  .della-btn-edit, .della-btn-delete {
+    margin-bottom: 0.25rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .da-grid { grid-template-columns: 1fr; }
+  /* Submit-row (Salvar) em mobile — ocupa largura total com padding */
+  .submit-row { padding: 0.85rem 1rem !important; }
+}
+
+/* ---------------------------------------------------------------------------
+   21. INLINE VARIAÇÕES — header fixo + larguras de colunas
+   --------------------------------------------------------------------------- */
+
+/* Variações — faixa preta + cabeçalho + scrollbar inferior fixos no viewport
+   da página. O h2.inline-heading vive fora de .tabular.inline-related (template
+   override em templates/admin/edit_inline/tabular.html); .tabular.inline-related
+   só tem overflow-x para o scroll horizontal — sem overflow-y, position: sticky
+   para o eixo vertical é resolvido contra a viewport da página. */
+#variacoes-group {
+  position: relative;
+  --variacoes-heading-h: 38px;
+}
+#variacoes-group > .inline-heading {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 9 !important;
+  background: var(--da-brand) !important;
+  margin: 0 !important;
+}
+#variacoes-group .tabular.inline-related {
+  max-height: none !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  position: relative !important;
+  scrollbar-gutter: auto !important;
+  /* Esconde a barra horizontal nativa — o scroll horizontal acontece via proxy
+     sticky bottom + clone do thead sticky top, ambos sincronizados via JS */
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+#variacoes-group .tabular.inline-related::-webkit-scrollbar {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+}
+/* O fieldset.module interno também recebia overflow-x: auto via regra global
+   (#content .module em "6. MODULE / CARD") — neutralizar aqui para que só
+   .tabular.inline-related tenha scroll horizontal. Sem isso, aparecem 2
+   barras: a do .tabular (oculta) e a do .module (visível) */
+#variacoes-group .tabular.inline-related > fieldset.module,
+#variacoes-group .tabular.inline-related .module {
+  overflow: visible !important;
+}
+#variacoes-group .tabular.inline-related table { border-collapse: separate; border-spacing: 0; }
+
+/* O thead original fica oculto: as larguras das colunas são fixadas via td
+   (regra abaixo) e o cabeçalho visível é o clone sticky construído via JS */
+#variacoes-group .tabular.inline-related > fieldset > table > thead {
+  display: none !important;
+}
+
+/* Wrapper sticky do clone do thead — vive FORA de .tabular.inline-related,
+   filho direto de #variacoes-group, sem ancestral com overflow → o sticky
+   é resolvido contra a viewport da página */
+#variacoes-group .della-thead-clone-wrap {
+  position: sticky !important;
+  top: var(--variacoes-heading-h) !important;
+  z-index: 7 !important;
+  overflow: hidden !important;
+  background: #f0f0ec !important;
+  border-bottom: 1px solid #ddd !important;
+}
+#variacoes-group .della-thead-clone-wrap table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  margin: 0 !important;
+  table-layout: fixed !important;
+}
+#variacoes-group .della-thead-clone-wrap thead th {
+  background: #f0f0ec !important;
+  color: var(--da-muted) !important;
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  padding: 0.55rem 0.9rem !important;
+  text-align: left !important;
+  vertical-align: middle !important;
+  border: 0 !important;
+}
+
+/* Larguras fixas das colunas — aplicam ao clone (filho de #variacoes-group)
+   e à fonte (dentro de .tabular.inline-related) ao mesmo tempo */
+#variacoes-group th:nth-child(1),
+#variacoes-group td:nth-child(1) { width: 36px !important; min-width: 36px !important; max-width: 36px !important; }
+#variacoes-group th:nth-child(2),
+#variacoes-group td:nth-child(2) { width: 250px !important; min-width: 250px !important; max-width: 250px !important; }
+#variacoes-group th:nth-child(3),
+#variacoes-group td:nth-child(3) { width: 60px !important; min-width: 60px !important; max-width: 60px !important; }
+#variacoes-group th:nth-child(4),
+#variacoes-group td:nth-child(4) { width: 130px !important; min-width: 130px !important; max-width: 130px !important; }
+#variacoes-group th:nth-child(5),
+#variacoes-group td:nth-child(5) { width: 140px !important; min-width: 140px !important; max-width: 140px !important; }
+#variacoes-group th:nth-child(6),
+#variacoes-group td:nth-child(6) { width: 150px !important; min-width: 150px !important; max-width: 150px !important; }
+#variacoes-group th:nth-child(7),
+#variacoes-group td:nth-child(7) { width: 200px !important; min-width: 200px !important; max-width: 200px !important; }
+#variacoes-group th:nth-child(8),
+#variacoes-group td:nth-child(8) { width: 140px !important; min-width: 140px !important; max-width: 140px !important; }
+#variacoes-group th:nth-child(9),
+#variacoes-group td:nth-child(9) { width: 110px !important; min-width: 110px !important; max-width: 110px !important; }
+#variacoes-group th:nth-child(10),
+#variacoes-group td:nth-child(10) { width: 190px !important; min-width: 190px !important; max-width: 190px !important; }
+#variacoes-group th:nth-child(11),
+#variacoes-group td:nth-child(11) { width: 230px !important; min-width: 230px !important; max-width: 230px !important; }
+#variacoes-group th:nth-child(12),
+#variacoes-group td:nth-child(12) { width: 78px !important; min-width: 78px !important; max-width: 78px !important; }
+#variacoes-group th:nth-child(13),
+#variacoes-group td:nth-child(13) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; }
+
+.della-inline-clone {
+  border: 0 !important;
+  background: var(--da-gold) !important;
+  color: var(--da-white) !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+  cursor: pointer !important;
+  padding: 0.38rem 0.8rem !important;
+  border-radius: 5px !important;
+  white-space: nowrap !important;
+}
+
+.della-inline-clone:hover {
+  background: #b8954f !important;
+}
+
+.della-inline-scrollbar-proxy {
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 6 !important;
+  height: 16px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  margin: 0 0.65rem 0.65rem !important;
+  background: rgba(255,255,255,0.97) !important;
+  border: 1px solid #eadcbf !important;
+  border-radius: 999px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+}
+
+.della-inline-scrollbar-proxy > div {
+  height: 1px !important;
+}
+
+#variacoes-group .tabular.inline-related::-webkit-scrollbar:horizontal {
+  height: 0 !important;
+}
+
+/* Botão de excluir inline */
+.tabular.inline-related tbody td.delete input[type="checkbox"],
+.tabular.inline-related tbody td.delete label,
+.tabular.inline-related tbody td.delete .inline-deletelink,
+.tabular.inline-related tbody td.delete a,
+.tabular.inline-related .inline-deletelink {
+  display: none !important;
+}
+
+.della-inline-delete-field {
+  display: none !important;
+}
+
+.tabular.inline-related tbody td.delete {
+  text-align: center !important;
+}
+
+.tabular.inline-related tbody td.delete::before,
+.tabular.inline-related tbody td.delete::after {
+  display: none !important;
+  content: none !important;
+}
+
+.della-inline-remove {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--da-danger) !important;
+  font-size: 1.45rem !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.della-inline-remove:hover {
+  color: #992d22 !important;
+}
+
+.della-inline-marked-delete {
+  opacity: 0.45;
+}
+
+/* ---------------------------------------------------------------------------
+   22. PHOTO CARD STRIP — imagens-group visual
+   --------------------------------------------------------------------------- */
+
+/* Oculta a tabela padrão, dropzone antiga e add-row do imagens-group */
+#imagens-group .tabular.inline-related,
+#imagens-group .della-upload-dropzone,
+#imagens-group .add-row {
+  display: none !important;
+}
+
+/* Painel visual */
+.della-fotos-panel {
+  padding: 0.75rem 1.25rem 1.25rem;
+}
+
+/* Header do painel */
+.della-fotos-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+/* Botões do painel */
+.della-strip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.42rem 0.85rem;
+  border: 1.5px solid var(--da-border);
+  border-radius: 8px;
+  background: var(--da-white);
+  color: var(--da-text);
+  font-family: var(--da-font-body);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.della-strip-btn:hover {
+  border-color: var(--da-gold);
+  background: rgba(201,169,110,0.06);
+}
+.della-strip-btn.is-active {
+  border-color: var(--da-gold);
+  background: rgba(201,169,110,0.12);
+  color: #8a6b2f;
+}
+
+/* Carrossel */
+.della-fotos-carousel {
+  position: relative;
+  padding: 0 1.5rem;
+}
+
+/* Setas de navegação */
+.della-fotos-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid var(--da-border);
+  background: var(--da-white);
+  color: var(--da-text);
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.09);
+  transition: border-color 0.15s, opacity 0.15s;
+  padding: 0;
+}
+.della-fotos-nav.prev { left: 0; }
+.della-fotos-nav.next { right: 0; }
+.della-fotos-nav:hover { border-color: var(--da-gold); }
+.della-fotos-nav:disabled { opacity: 0.25; cursor: default; pointer-events: none; }
+
+/* Track de fotos */
+.della-fotos-track {
+  display: flex;
+  gap: 0.65rem;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 0.3rem 0.25rem 0.6rem;
+  min-height: 200px;
+  align-items: flex-start;
+}
+.della-fotos-track::-webkit-scrollbar { display: none; }
+
+/* Card de foto */
+.della-foto-card {
+  position: relative;
+  flex-shrink: 0;
+  width: 148px;
+  height: 188px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1.5px solid var(--da-border);
+  background: #f5f5f3;
+  cursor: grab;
+  transition: box-shadow 0.15s, opacity 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.della-foto-card:active { cursor: grabbing; }
+.della-foto-card.is-dragging { opacity: 0.35; box-shadow: none !important; }
+.della-foto-card.drag-over {
+  border-color: var(--da-gold);
+  box-shadow: 0 0 0 2px rgba(201,169,110,0.35);
+}
+.della-foto-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+/* Handle de drag */
+.della-foto-card-handle {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.della-foto-card:hover .della-foto-card-handle { opacity: 1; }
+
+/* Botão de deletar */
+.della-foto-card-delete {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: rgba(195,30,30,0.82);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  line-height: 1;
+  padding: 0;
+}
+.della-foto-card:hover .della-foto-card-delete { opacity: 1; }
+.della-foto-card-delete:hover { background: rgba(180,20,20,0.95) !important; }
+
+/* Botão de download */
+.della-foto-card-download {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.della-foto-card:hover .della-foto-card-download { opacity: 1; }
+
+/* Badge "Principal" */
+.della-foto-card-principal-badge {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  background: var(--da-gold);
+  color: #000;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Estado vazio */
+.della-fotos-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 120px;
+  border: 2px dashed var(--da-border);
+  border-radius: 8px;
+  color: var(--da-muted);
+  font-size: 0.83rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+/* ---------------------------------------------------------------------------
+   23. FOTO POR COR — PICKER VISUAL (modal de seleção)
+   --------------------------------------------------------------------------- */
+
+/* Oculta o select original de imagem nas linhas de fotos por cor */
+#fotos_por_cor-group .field-imagem select {
+  display: none !important;
+}
+#fotos_por_cor-group .field-imagem .related-widget-wrapper {
+  display: block;
+}
+
+/* Botão visual que abre o picker */
+.della-cor-foto-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  border: 1.5px solid var(--da-border);
+  border-radius: 6px;
+  background: #f5f5f3;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s;
+  padding: 0;
+  flex-shrink: 0;
+}
+.della-cor-foto-btn:hover { border-color: var(--da-gold); }
+.della-cor-foto-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.della-cor-foto-placeholder {
+  font-size: 1.4rem;
+  color: var(--da-muted);
+  pointer-events: none;
+}
+
+/* Overlay do modal */
+.della-foto-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.52);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+/* Modal */
+.della-foto-picker-modal {
+  background: var(--da-white);
+  border-radius: 12px;
+  width: min(820px, 100%);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.22);
+}
+
+.della-foto-picker-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem 0.85rem;
+  border-bottom: 1px solid var(--da-border);
+}
+.della-foto-picker-modal-header h3 {
+  font-family: var(--da-font-titles);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--da-text);
+}
+.della-foto-picker-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--da-muted);
+  line-height: 1;
+  padding: 0.15rem 0.25rem;
+}
+.della-foto-picker-modal-close:hover { color: var(--da-text); }
+
+/* Grid de fotos no modal */
+.della-foto-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.75rem;
+  padding: 1.1rem 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.della-foto-picker-item {
+  position: relative;
+  aspect-ratio: 3/4;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2.5px solid transparent;
+  cursor: pointer;
+  background: #f5f5f3;
+  transition: border-color 0.15s;
+}
+.della-foto-picker-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.della-foto-picker-item:hover { border-color: rgba(201,169,110,0.55); }
+.della-foto-picker-item.selected { border-color: var(--da-gold); }
+.della-foto-picker-item.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--da-gold);
+  color: #000;
+  font-size: 0.7rem;
+  font-weight: 700;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Rodapé do modal */
+.della-foto-picker-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--da-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+.della-foto-picker-save {
+  padding: 0.5rem 1.3rem;
+  background: #1a7f37;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.della-foto-picker-save:hover { background: #156b2e; }
+.della-foto-picker-cancel {
+  padding: 0.5rem 1.3rem;
+  background: var(--da-white);
+  color: var(--da-text);
+  border: 1.5px solid var(--da-border);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.della-foto-picker-cancel:hover { border-color: var(--da-gold); }
+.della-foto-picker-remove {
+  padding: 0.5rem 1.3rem;
+  background: var(--da-white);
+  color: #b91c1c;
+  border: 1.5px solid #b91c1c;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  margin-right: auto;
+}
+.della-foto-picker-remove:hover {
+  background: #b91c1c;
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------------------
+   24. BOTÃO DE FOTO NA LINHA DE VARIAÇÃO + OCULTAR SEÇÃO FOTOS POR COR
+   --------------------------------------------------------------------------- */
+
+/* Oculta a seção separada de fotos por cor — o vínculo é feito direto na variação */
+#fotos_por_cor-group { display: none !important; }
+
+/* Botão de câmera na coluna de cor da variação (inline com o select) */
+.della-var-foto-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid var(--da-border);
+  border-radius: 6px;
+  background: var(--da-white);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s;
+  flex-shrink: 0;
+}
+.della-var-foto-btn:hover { border-color: var(--da-gold); }
+.della-var-foto-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.della-var-foto-btn-placeholder {
+  font-size: 0.95rem;
+  line-height: 1;
+  opacity: 0.45;
+}
+
+/* Célula da cor: botão câmera + dropdown lado a lado, em uma única linha.
+   `flex-wrap:nowrap` impede que a foto vá pra baixo do select. */
+#variacoes-group td.field-cor {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+#variacoes-group td.field-cor .related-widget-wrapper {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+#variacoes-group td.field-cor .related-widget-wrapper select {
+  min-width: 150px !important;
+}
+
+/* Célula cor_preview agora só tem a bolinha — centralizada na célula */
+#variacoes-group td.field-cor_preview {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+#variacoes-group td.field-cor_preview > p {
+  margin: 0;
+  line-height: 1;
+}
+
+/* Feedback visual quando o usuário arrasta arquivo do desktop sobre o track */
+.della-fotos-track.is-file-dragover {
+  border: 2px dashed var(--da-gold);
+  background: rgba(201, 169, 110, 0.06);
+  border-radius: 8px;
+}

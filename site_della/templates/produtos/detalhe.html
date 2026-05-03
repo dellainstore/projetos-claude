@@ -82,13 +82,14 @@
       
       <div class="produto-info-preco">
         {% if produto.em_promocao %}
-          <span class="preco-de">R$ {{ produto.preco|floatformat:"2g" }}</span>
-          <span class="preco-por destaque">R$ {{ produto.preco_promocional|floatformat:"2g" }}</span>
+          <span class="preco-de" id="produto-preco-de">R$ {{ produto.preco_base_exibicao|floatformat:"2g" }}</span>
+          <span class="preco-por destaque" id="produto-preco-por">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
         {% else %}
-          <span class="preco-por destaque">R$ {{ produto.preco|floatformat:"2g" }}</span>
+          <span class="preco-por destaque" id="produto-preco-por">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
         {% endif %}
-        {% if produto.parcelamento_texto %}
-          <span class="preco-parcelamento">{{ produto.parcelamento_texto }}</span>
+        <span class="preco-parcelamento" id="produto-parcelamento"{% if not produto.parcelamento_texto %} style="display:none;"{% endif %}>{{ produto.parcelamento_texto }}</span>
+        {% if not produto.em_promocao %}
+          <span class="preco-de" id="produto-preco-de" style="display:none;"></span>
         {% endif %}
       </div>
 
@@ -109,9 +110,9 @@
                   data-cor="{{ vcor.cor__nome }}"
                   data-cor-id="{{ vcor.cor__id }}"
                   {% if vcor.cor__codigo_hex_secundario %}
-                  style="background: conic-gradient({{ vcor.cor__codigo_hex|default:'#ccc' }} 0deg 180deg, {{ vcor.cor__codigo_hex_secundario }} 180deg 360deg);"
+                  style="background-color:{{ vcor.cor__codigo_hex|default:'#ccc' }};background-image:conic-gradient(from 135deg, {{ vcor.cor__codigo_hex|default:'#ccc' }} 0deg 180deg, {{ vcor.cor__codigo_hex_secundario }} 180deg 360deg);"
                   {% else %}
-                  style="background:{% if vcor.cor__codigo_hex %}{{ vcor.cor__codigo_hex }}{% else %}#ccc{% endif %};"
+                  style="background-color:{% if vcor.cor__codigo_hex %}{{ vcor.cor__codigo_hex }}{% else %}#ccc{% endif %};"
                   {% endif %}
                   title="{{ vcor.cor__nome }}"
                   aria-label="{{ vcor.cor__nome }}">
@@ -149,11 +150,15 @@
         </div>
 
         <p id="aviso-variacao" class="hidden" style="color:#c0392b;font-size:.85rem;margin:.25rem 0 .5rem;font-weight:500;"></p>
+        <p id="info-disponibilidade-variacao" style="display:none;margin:.1rem 0 .7rem;font-size:.84rem;color:#6b6b6b;line-height:1.5;"></p>
 
         <button class="btn-primario btn-comprar"
                 id="btn-adicionar-carrinho"
                 data-produto-id="{{ produto.pk }}"
                 data-preco="{{ produto.preco_atual|unlocalize }}"
+                data-preco-base="{{ produto.preco_base_exibicao|unlocalize }}"
+                data-preco-promocional="{% if produto.preco_promocional_exibicao %}{{ produto.preco_promocional_exibicao|unlocalize }}{% endif %}"
+                data-peso="{{ produto.peso }}"
                 aria-label="Adicionar {{ produto.nome }} ao carrinho">
           <i class="fas fa-bag-shopping"></i>
           Adicionar ao carrinho
@@ -203,7 +208,7 @@
           Composição <i class="fas fa-chevron-down"></i>
         </button>
         <div class="acordeao-conteudo" id="acordeao-comp">
-          <p>{{ produto.composicao }}</p>
+          <p>{{ produto.composicao|linebreaksbr }}</p>
         </div>
       </div>
       {% endif %}
@@ -274,10 +279,28 @@
         <article class="produto-card fade-in">
           <a href="{{ p.get_absolute_url }}" class="produto-card-foto-link">
             <div class="produto-card-foto">
-              {% with img=p.imagem_principal %}
-                <img src="{% if img %}{{ img.imagem.url }}{% else %}{% static 'images/brand/produto-placeholder.jpg' %}{% endif %}"
-                     alt="{% if img %}{{ img.alt|default:p.nome }}{% else %}{{ p.nome }}{% endif %}"
-                     loading="lazy" class="foto-principal">
+              {% with img=p.imagem_principal imgs=p.imagens.all %}
+                {% if img %}
+                  <img src="{{ img.imagem.url }}"
+                       alt="{{ img.alt|default:p.nome }}"
+                       loading="lazy" class="foto-principal">
+                  {% if imgs|length > 1 %}
+                    <img src="{{ imgs.1.imagem.url }}"
+                         alt="{{ p.nome }}"
+                         loading="lazy" class="foto-hover" aria-hidden="true">
+                  {% else %}
+                    <img src="{{ img.imagem.url }}"
+                         alt="{{ img.alt|default:p.nome }}"
+                         loading="lazy" class="foto-hover" aria-hidden="true">
+                  {% endif %}
+                {% else %}
+                  <img src="{% static 'images/brand/produto-placeholder.jpg' %}"
+                       alt="{{ p.nome }}"
+                       loading="lazy" class="foto-principal">
+                  <img src="{% static 'images/brand/produto-placeholder.jpg' %}"
+                       alt="{{ p.nome }}"
+                       loading="lazy" class="foto-hover" aria-hidden="true">
+                {% endif %}
               {% endwith %}
             </div>
           </a>
@@ -285,10 +308,10 @@
             <a href="{{ p.get_absolute_url }}" class="produto-card-nome">{{ p.nome }}</a>
             <div class="produto-card-preco">
               {% if p.em_promocao %}
-                <span class="preco-de">R$ {{ p.preco|floatformat:"2g" }}</span>
-                <span class="preco-por">R$ {{ p.preco_promocional|floatformat:"2g" }}</span>
+                <span class="preco-de">R$ {{ p.preco_base_exibicao|floatformat:"2g" }}</span>
+                <span class="preco-por">R$ {{ p.preco_atual|floatformat:"2g" }}</span>
               {% else %}
-                <span class="preco-por">R$ {{ p.preco|floatformat:"2g" }}</span>
+                <span class="preco-por">R$ {{ p.preco_atual|floatformat:"2g" }}</span>
               {% endif %}
             </div>
           </div>
@@ -302,17 +325,23 @@
 </div>
 
 {% if tabela_medidas %}
-<div id="modal-guia-tamanhos" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-guia-titulo">
+<div id="modal-guia-tamanhos" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Guia de tamanhos">
   <div class="modal-box">
     <button id="btn-fechar-modal-guia" class="modal-fechar" aria-label="Fechar">
       <i class="fas fa-times"></i>
     </button>
-    <h2 class="modal-titulo" id="modal-guia-titulo">Guia de tamanhos</h2>
-    <div class="modal-conteudo">{{ tabela_medidas.conteudo|linebreaksbr }}</div>
+    <div class="modal-conteudo">
+      {% if tabela_medidas.usa_tabela_estruturada %}
+        {% include 'components/tabela_medidas.html' with tabela=tabela_medidas %}
+      {% else %}
+        <h2 class="modal-titulo" id="modal-guia-titulo">Guia de tamanhos</h2>
+        {{ tabela_medidas.conteudo|linebreaksbr }}
+      {% endif %}
+    </div>
   </div>
 </div>
 {% else %}
-<div id="modal-guia-tamanhos" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-guia-titulo">
+<div id="modal-guia-tamanhos" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Guia de tamanhos">
   <div class="modal-box">
     <button id="btn-fechar-modal-guia" class="modal-fechar" aria-label="Fechar">
       <i class="fas fa-times"></i>
@@ -330,6 +359,18 @@
 {% endblock %}
 
 {% block js_extra %}
+{# Meta Pixel: ViewContent — disparado pelo della.js após carregar o pixel #}
+{% load l10n %}
+<script type="application/json" data-meta-event="ViewContent">
+{
+  "content_ids": ["{{ produto.id }}"],
+  "content_type": "product",
+  "content_name": "{{ produto.nome|escapejs }}",
+  "value": {{ produto.preco_atual|unlocalize }},
+  "currency": "BRL",
+  "_event_id": "{{ meta_viewcontent_event_id|escapejs }}"
+}
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -355,9 +396,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const fotosPorCorMap = {{ fotos_cor_json|safe }};  // cor_id → índice na galeria
   const labelCorSel = document.getElementById('label-cor-selecionada');
   const labelTamSel = document.getElementById('label-tamanho-selecionado');
+  const infoDisponibilidade = document.getElementById('info-disponibilidade-variacao');
+  const precoDeEl = document.getElementById('produto-preco-de');
+  const precoPorEl = document.getElementById('produto-preco-por');
+  const parcelamentoEl = document.getElementById('produto-parcelamento');
   let corSelecionadaId  = null;
   let tamSelecionadoId  = null;
   let variacaoSelecionadaId = null;
+  let variacaoSelecionada = null;
 
   const temCores    = document.querySelectorAll('.variacao-cor').length > 0;
   const temTamanhos = document.querySelectorAll('.variacao-tamanho').length > 0;
@@ -368,11 +414,68 @@ document.addEventListener('DOMContentLoaded', () => {
     const tamKey = tamSelecionadoId  || 'null';
     const entry  = variacoesMap[`${corKey}_${tamKey}`];
     variacaoSelecionadaId = entry ? entry.id : null;
+    variacaoSelecionada = entry || null;
+    window.variacaoSelecionada = variacaoSelecionada;
 
     if (qtyInput) {
-      const maxQty = (entry && entry.estoque > 0) ? entry.estoque : 10;
+      const maxQty = (entry && entry.disponibilidade === 'imediata' && entry.estoque > 0) ? entry.estoque : 10;
       qtyInput.max = maxQty;
       if (parseInt(qtyInput.value) > maxQty) qtyInput.value = maxQty;
+    }
+    if (infoDisponibilidade) {
+      if (entry) {
+        infoDisponibilidade.style.display = '';
+        infoDisponibilidade.textContent = entry.disponibilidade_label + '.';
+      } else {
+        infoDisponibilidade.style.display = 'none';
+        infoDisponibilidade.textContent = '';
+      }
+    }
+    atualizarPrecoExibido(entry);
+  }
+
+  function fmtBRL(v) {
+    return Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function atualizarPrecoExibido(entry) {
+    const btn = document.getElementById('btn-adicionar-carrinho');
+    if (!btn || !precoPorEl) return;
+    const precoBase = entry ? entry.preco_base : (btn.dataset.precoBase || btn.dataset.preco || '0');
+    const precoAtual = entry ? entry.preco_atual : (btn.dataset.precoPromocional || btn.dataset.preco || '0');
+    const precoPromocional = entry ? entry.preco_promocional : (btn.dataset.precoPromocional || '');
+    const emPromocao = entry ? entry.em_promocao : !!precoPromocional;
+    const precoUsado = emPromocao ? precoAtual : precoBase;
+    btn.dataset.preco = precoUsado;
+    precoPorEl.textContent = `R$ ${fmtBRL(precoUsado)}`;
+    if (precoDeEl) {
+      if (emPromocao) {
+        precoDeEl.style.display = '';
+        precoDeEl.textContent = `R$ ${fmtBRL(precoBase)}`;
+      } else {
+        precoDeEl.style.display = 'none';
+        precoDeEl.textContent = '';
+      }
+    }
+    if (parcelamentoEl) {
+      const total = Number(precoUsado || 0);
+      let texto = '';
+      if (total >= 300) {
+        for (let n = 5; n >= 2; n -= 1) {
+          const parcela = total / n;
+          if (parcela >= 150) {
+            texto = `ou ${n}x de R$ ${fmtBRL(parcela)} sem juros`;
+            break;
+          }
+        }
+      }
+      if (texto) {
+        parcelamentoEl.style.display = '';
+        parcelamentoEl.textContent = texto;
+      } else {
+        parcelamentoEl.style.display = 'none';
+        parcelamentoEl.textContent = '';
+      }
     }
   }
 
@@ -555,6 +658,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const produtoId  = btnComprar.dataset.produtoId;
     const quantidade = parseInt(qtyInput?.value || 1);
     const csrfToken  = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const precoEvento = variacaoSelecionada && variacaoSelecionada.preco_atual
+      ? parseFloat(variacaoSelecionada.preco_atual)
+      : parseFloat('{{ produto.preco_atual|unlocalize }}');
+    const metaEventId = (window.crypto && window.crypto.randomUUID)
+      ? `addtocart_${window.crypto.randomUUID().replace(/-/g, '')}`
+      : `addtocart_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
     btnComprar.disabled = true;
     const textoOriginal = btnComprar.innerHTML;
@@ -570,6 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({
           variacao_id: variacaoSelecionadaId || '',
           quantidade:  quantidade,
+          meta_event_id: metaEventId,
         }),
       });
 
@@ -577,6 +687,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (dados.status === 'ok') {
         atualizarDrawer(dados);
+        if (window.fbq) {
+          fbq('track', 'AddToCart', {
+            content_ids: [produtoId],
+            content_type: 'product',
+            value: precoEvento * quantidade,
+            currency: 'BRL',
+          }, { eventID: metaEventId });
+        }
         btnComprar.innerHTML = '<i class="fas fa-check"></i> Adicionado!';
         setTimeout(() => {
           btnComprar.innerHTML = textoOriginal;
@@ -616,6 +734,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const produtoId  = btnComprarAgora.dataset.produtoId;
     const quantidade = parseInt(qtyInput?.value || 1);
     const csrfToken  = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const precoEvento = variacaoSelecionada && variacaoSelecionada.preco_atual
+      ? parseFloat(variacaoSelecionada.preco_atual)
+      : parseFloat('{{ produto.preco_atual|unlocalize }}');
+    const metaEventId = (window.crypto && window.crypto.randomUUID)
+      ? `addtocart_${window.crypto.randomUUID().replace(/-/g, '')}`
+      : `addtocart_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
     btnComprarAgora.disabled = true;
     const textoOriginal = btnComprarAgora.innerHTML;
@@ -631,12 +755,21 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({
           variacao_id: variacaoSelecionadaId || '',
           quantidade:  quantidade,
+          meta_event_id: metaEventId,
         }),
       });
 
       const dados = await res.json();
 
       if (dados.status === 'ok') {
+        if (window.fbq) {
+          fbq('track', 'AddToCart', {
+            content_ids: [produtoId],
+            content_type: 'product',
+            value: precoEvento * quantidade,
+            currency: 'BRL',
+          }, { eventID: metaEventId });
+        }
         window.location.href = '/carrinho/checkout/';
       } else {
         const aviso = document.getElementById('aviso-variacao');
@@ -814,13 +947,16 @@ function atualizarDrawerGlobal(dados) {
     resultado.innerHTML = '';
 
     const preco = btnComprar ? (btnComprar.dataset.preco || '0') : '0';
+    const peso  = btnComprar ? (btnComprar.dataset.peso  || '500') : '500';
     const qty   = document.getElementById('qty-input') ? document.getElementById('qty-input').value : '1';
+    const va    = window.variacaoSelecionada;
+    const prazoAdicional = va ? (va.prazo_confeccao_dias || 0) : 0;
 
     try {
       // Busca endereço e frete em paralelo
       const [resEnd, resFrete] = await Promise.all([
         fetch(`/carrinho/cep/${cep}/`),
-        fetch(`/carrinho/frete/?cep=${cep}&preco=${preco}&quantidade=${qty}`),
+        fetch(`/carrinho/frete/?cep=${cep}&preco=${preco}&quantidade=${qty}&peso=${peso}&prazo_adicional=${prazoAdicional}`),
       ]);
       const dadosEnd   = await resEnd.json();
       const dadosFrete = await resFrete.json();
@@ -840,8 +976,9 @@ function atualizarDrawerGlobal(dados) {
           html += `
             <li class="frete-opcao">
               <div>
-                <span class="frete-opcao-nome">${op.empresa} ${op.nome} — Prazo contado a partir da postagem.</span>
+                <span class="frete-opcao-nome">${op.empresa} ${op.nome}</span>
                 <span class="frete-opcao-data">${dataEntrega(op.prazo)}</span>
+                <span class="frete-opcao-data">${op.descricao}</span>
               </div>
               <span class="frete-opcao-preco">R$&nbsp;${preco}</span>
             </li>`;

@@ -1,0 +1,232 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Dashboard de Pedidos — Della Instore{% endblock %}
+
+{% block content %}
+<style>
+  .ped-dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .ped-dashboard-header h1 {
+    margin: 0 0 6px;
+    font-size: 1.45rem;
+  }
+  .ped-dashboard-header p {
+    margin: 0;
+    color: #666;
+    font-size: 13px;
+  }
+  .ped-filtro {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .ped-filtro a {
+    text-decoration: none;
+    color: #666;
+    border: 1px solid #ddd;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .ped-filtro a.ativo {
+    background: #0a0a0a;
+    color: #fff;
+    border-color: #0a0a0a;
+  }
+  .ped-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .ped-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .ped-card .rotulo {
+    color: #777;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .ped-card .valor {
+    color: #0a0a0a;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .ped-card .apoio {
+    margin-top: 8px;
+    color: #666;
+    font-size: 13px;
+  }
+  .ped-card.destaque .valor {
+    color: #c87a00;
+  }
+  .ped-card.verde .valor {
+    color: #2d9e6e;
+  }
+  .ped-card.dourado .valor {
+    color: #c9a96e;
+  }
+  .ped-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+  }
+  .ped-section {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .ped-section h3 {
+    margin: 0;
+    padding: 14px 16px;
+    background: #f8f8f8;
+    border-bottom: 1px solid #ddd;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .ped-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .ped-table th,
+  .ped-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    text-align: left;
+  }
+  .ped-table th {
+    color: #666;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .ped-table tr:last-child td {
+    border-bottom: none;
+  }
+  .ped-vazio {
+    color: #999;
+    padding: 16px;
+    font-size: 13px;
+  }
+</style>
+
+<div class="ped-dashboard-header">
+  <div>
+    <p>Resumo rápido do que precisa enviar agora e do desempenho do período.</p>
+  </div>
+  <div class="ped-filtro">
+    <span style="font-size:12px; color:#666; font-weight:600;">Filtro de dias:</span>
+    {% for opcao in dias_opcoes %}
+      <a href="?dias={{ opcao }}"{% if opcao == dias %} class="ativo"{% endif %}>{{ opcao }} dia{% if opcao > 1 %}s{% endif %}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="ped-grid">
+  <div class="ped-card destaque">
+    <div class="rotulo">Pedidos à Enviar</div>
+    <div class="valor">{{ pedidos_a_enviar }}</div>
+    <div class="apoio">Pedidos pagos e ainda não enviados.</div>
+  </div>
+  <div class="ped-card verde">
+    <div class="rotulo">Pedidos Enviados</div>
+    <div class="valor">{{ pedidos_enviados }}</div>
+    <div class="apoio">Enviados nos últimos {{ dias }} dia{% if dias > 1 %}s{% endif %}.</div>
+  </div>
+  <div class="ped-card dourado">
+    <div class="rotulo">Faturamento Total</div>
+    <div class="valor">R$ {{ faturamento_periodo }}</div>
+    <div class="apoio">Pedidos pagos no período selecionado.</div>
+  </div>
+  <div class="ped-card">
+    <div class="rotulo">Qtd de Clientes</div>
+    <div class="valor">{{ clientes_periodo }}</div>
+    <div class="apoio">Clientes únicos que compraram no período.</div>
+  </div>
+  <div class="ped-card">
+    <div class="rotulo">Qtd de SKU Vendidos</div>
+    <div class="valor">{{ sku_vendidos_periodo }}</div>
+    <div class="apoio">Quantidade total de itens vendidos no período.</div>
+  </div>
+</div>
+
+<div class="ped-sections">
+  <div class="ped-section">
+    <h3>Pedidos para Envio</h3>
+    {% if pedidos_para_envio %}
+      <table class="ped-table">
+        <thead>
+          <tr>
+            <th>Pedido</th>
+            <th>Cliente</th>
+            <th>Status</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pedido in pedidos_para_envio %}
+            <tr>
+              <td><a href="{% url 'admin:pedidos_pedido_change' pedido.pk %}">{{ pedido.numero }}</a></td>
+              <td>{{ pedido.nome_completo }}</td>
+              <td>{{ pedido.get_status_display }}</td>
+              <td>R$ {{ pedido.total }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="ped-vazio">Nenhum pedido aguardando envio agora.</div>
+    {% endif %}
+  </div>
+
+  <div class="ped-section">
+    <h3>Últimos Pedidos Enviados</h3>
+    {% if enviados_recentes %}
+      <table class="ped-table">
+        <thead>
+          <tr>
+            <th>Pedido</th>
+            <th>Cliente</th>
+            <th>Status</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pedido in enviados_recentes %}
+            <tr>
+              <td><a href="{% url 'admin:pedidos_pedido_change' pedido.pk %}">{{ pedido.numero }}</a></td>
+              <td>{{ pedido.nome_completo }}</td>
+              <td>{{ pedido.get_status_display }}</td>
+              <td>R$ {{ pedido.total }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="ped-vazio">Nenhum pedido marcado como enviado neste período.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

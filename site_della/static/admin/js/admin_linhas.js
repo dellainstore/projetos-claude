@@ -76,6 +76,49 @@
   function init() {
     initLinhas();
     initSidebarScroll();
+    initInlineDeleteButtons();
+  }
+
+  function initInlineDeleteButtons() {
+    // Renderiza o botão × em células ainda sem ele
+    document.querySelectorAll('.tabular.inline-related tbody td.delete').forEach(function (cell) {
+      if (cell.querySelector('.della-inline-remove')) return;
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'della-inline-remove';
+      button.setAttribute('aria-label', 'Remover linha');
+      button.textContent = '×';
+      cell.appendChild(button);
+    });
+
+    if (window.__dellaInlineDeleteObserverStarted) return;
+    window.__dellaInlineDeleteObserverStarted = true;
+
+    // Observer só para criar botões em linhas novas — o clique é tratado por delegação
+    var observer = new MutationObserver(function () {
+      initInlineDeleteButtons();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Delegação de evento: um único listener no document captura cliques em qualquer botão ×,
+    // independentemente de quando ele foi criado
+    document.addEventListener('click', function (e) {
+      if (!e.target.matches('.della-inline-remove')) return;
+      var cell = e.target.closest('td.delete');
+      if (!cell) return;
+      var row = e.target.closest('tr');
+      if (!row) return;
+      var checkbox = cell.querySelector('input[type="checkbox"]');
+      if (checkbox) checkbox.checked = true;
+      var deleteLink = cell.querySelector('.inline-deletelink');
+      if (deleteLink) {
+        row.classList.add('della-inline-marked-delete');
+        deleteLink.click();
+        return;
+      }
+      row.classList.add('della-inline-marked-delete');
+      row.style.display = 'none';
+    });
   }
 
   if (document.readyState === 'loading') {
