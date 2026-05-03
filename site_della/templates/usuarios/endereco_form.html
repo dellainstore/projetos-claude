@@ -37,6 +37,13 @@
     </aside>
 
     <section class="conta-conteudo">
+      {% if cadastro_incompleto %}
+        <div class="conta-alerta conta-alerta--warning">
+          Favor atualizar seu cadastro. Ainda faltam: {{ campos_pendentes_cadastro|join:", " }}.
+          <a href="{% url 'usuarios:editar_perfil' %}" class="conta-link">Atualizar agora</a>
+        </div>
+      {% endif %}
+
       <h2 class="conta-secao-titulo">{{ titulo }}</h2>
 
       <div class="conta-card">
@@ -123,26 +130,53 @@
 
 {% block js_extra %}
 <script>
+const cepInput = document.getElementById('id_end_cep');
+const btnBuscar = document.getElementById('btn-buscar-cep');
+
 // Máscara CEP
-document.getElementById('id_end_cep')?.addEventListener('input', function(){
+cepInput?.addEventListener('input', function(){
   let v = this.value.replace(/\D/g,'').slice(0,8);
   if(v.length > 5) v = v.replace(/(\d{5})(\d{1,3})/,'$1-$2');
   this.value = v;
 });
 
-// Buscar CEP via ViaCEP
-document.getElementById('btn-buscar-cep')?.addEventListener('click', async function(){
-  const cep = document.getElementById('id_end_cep').value.replace(/\D/g,'');
-  if(cep.length !== 8){ alert('CEP inválido.'); return; }
-  this.textContent = 'Buscando...';
+async function buscarCep() {
+  const cep = cepInput.value.replace(/\D/g,'');
+  if(cep.length !== 8) return;
+  if(btnBuscar) btnBuscar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
   try {
     const r = await fetch(`/carrinho/cep/${cep}/`);
     const d = await r.json();
-    if(d.erro){ alert('CEP não encontrado.'); return; }
+    if(d.status === 'erro') return;
     document.getElementById('id_end_logradouro').value = d.logradouro || '';
     document.getElementById('id_end_bairro').value = d.bairro || '';
-    document.getElementById('id_end_cidade').value = d.localidade || '';
-    document.getElementById('id_end_estado').value = d.uf || '';
+    document.getElementById('id_end_cidade').value = d.cidade || '';
+    document.getElementById('id_end_estado').value = d.estado || '';
+    document.getElementById('campos-endereco').style.display = 'block';
+    document.querySelector('[name="numero"]')?.focus();
+  } catch(e) {
+    // falha silenciosa no blur; só alerta no clique manual
+  } finally {
+    if(btnBuscar) btnBuscar.innerHTML = '<i class="fas fa-magnifying-glass"></i> Buscar';
+  }
+}
+
+// Auto-busca ao sair do campo (tab / clique fora)
+cepInput?.addEventListener('blur', buscarCep);
+
+// Buscar ao clicar no botão (com feedback de erro)
+btnBuscar?.addEventListener('click', async function(){
+  const cep = cepInput.value.replace(/\D/g,'');
+  if(cep.length !== 8){ alert('CEP inválido.'); return; }
+  this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
+  try {
+    const r = await fetch(`/carrinho/cep/${cep}/`);
+    const d = await r.json();
+    if(d.status === 'erro'){ alert('CEP não encontrado.'); return; }
+    document.getElementById('id_end_logradouro').value = d.logradouro || '';
+    document.getElementById('id_end_bairro').value = d.bairro || '';
+    document.getElementById('id_end_cidade').value = d.cidade || '';
+    document.getElementById('id_end_estado').value = d.estado || '';
     document.getElementById('campos-endereco').style.display = 'block';
     document.querySelector('[name="numero"]')?.focus();
   } catch(e) {

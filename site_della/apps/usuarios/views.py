@@ -7,12 +7,21 @@ from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
 from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 
 from .models import Cliente, Endereco
 from .forms import (
     LoginForm, CadastroForm, EditarPerfilForm,
-    EnderecoForm, RecuperarSenhaForm, NovaSenhaForm,
+    EnderecoForm, RecuperarSenhaForm, NovaSenhaForm, AtivacaoForm,
 )
+
+
+def _contexto_cadastro_pendente(usuario):
+    campos_pendentes = usuario.campos_pendentes_cadastro() if usuario.is_authenticated else []
+    return {
+        'campos_pendentes_cadastro': campos_pendentes,
+        'cadastro_incompleto': bool(campos_pendentes),
+    }
 
 
 # ─── Autenticação ─────────────────────────────────────────────────────────────
@@ -49,6 +58,24 @@ def cadastro(request):
 
     form = CadastroForm(request.POST or None)
     if request.method == 'POST':
+        # Verifica CPF antes da validação completa do form — assim funciona mesmo
+        # que o e-mail já exista no banco (cliente importado tentando se cadastrar)
+        import re as _re
+        cpf_raw = _re.sub(r'\D', '', request.POST.get('cpf', ''))
+        if cpf_raw:
+            try:
+                cliente_existente = Cliente.objects.get(cpf=cpf_raw, precisa_ativar=True)
+                uid = urlsafe_base64_encode(force_bytes(cliente_existente.pk))
+                token = default_token_generator.make_token(cliente_existente)
+                messages.info(
+                    request,
+                    'Identificamos que você já tem cadastro conosco! '
+                    'Confirme seu e-mail e crie uma senha para ativar sua conta.'
+                )
+                return redirect('usuarios:ativar_conta', uidb64=uid, token=token)
+            except Cliente.DoesNotExist:
+                pass
+
         if form.is_valid():
             usuario = form.save()
             login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
@@ -56,6 +83,45 @@ def cadastro(request):
             return redirect('usuarios:minha_conta')
 
     return render(request, 'usuarios/cadastro.html', {'form': form})
+
+
+def ativar_conta(request, uidb64, token):
+    """Ativação de conta para clientes importados do site antigo."""
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        cliente = Cliente.objects.get(pk=uid, precisa_ativar=True)
+    except (TypeError, ValueError, OverflowError, Cliente.DoesNotExist):
+        cliente = None
+
+    token_valido = cliente is not None and default_token_generator.check_token(cliente, token)
+
+    if not token_valido:
+        return render(request, 'usuarios/ativar_conta.html', {'token_invalido': True})
+
+    form = AtivacaoForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        email_informado = form.cleaned_data['email']
+        if email_informado != cliente.email:
+            form.add_error('email', 'E-mail não confere com o cadastro. Tente o e-mail que você usava antes.')
+        else:
+            cliente.set_password(form.cleaned_data['senha'])
+            cliente.precisa_ativar = False
+            cliente.telefone = ''
+            cliente.save(update_fields=['password', 'precisa_ativar', 'telefone'])
+            cliente.enderecos.all().delete()
+            update_session_auth_hash(request, cliente)
+            login(request, cliente, backend='django.contrib.auth.backends.ModelBackend')
+            messages.success(
+                request,
+                f'Bem-vinda de volta, {cliente.nome}! '
+                'Por favor, atualize seu telefone e endereço de entrega antes de fazer um pedido.'
+            )
+            return redirect('usuarios:editar_perfil')
+
+    return render(request, 'usuarios/ativar_conta.html', {
+        'form': form,
+        'cliente': cliente,
+    })
 
 
 # ─── Área do cliente ──────────────────────────────────────────────────────────
@@ -68,6 +134,7 @@ def minha_conta(request):
         'pedidos': pedidos,
         'enderecos': enderecos,
     }
+    context.update(_contexto_cadastro_pendente(request.user))
     return render(request, 'usuarios/minha_conta.html', context)
 
 
@@ -80,7 +147,9 @@ def editar_perfil(request):
             messages.success(request, 'Perfil atualizado com sucesso.')
             return redirect('usuarios:editar_perfil')
 
-    return render(request, 'usuarios/editar_perfil.html', {'form': form})
+    context = {'form': form}
+    context.update(_contexto_cadastro_pendente(request.user))
+    return render(request, 'usuarios/editar_perfil.html', context)
 
 
 # ─── Endereços ────────────────────────────────────────────────────────────────
@@ -88,12 +157,15 @@ def editar_perfil(request):
 @login_required
 def enderecos(request):
     lista = request.user.enderecos.all()
-    return render(request, 'usuarios/enderecos.html', {'enderecos': lista})
+    context = {'enderecos': lista}
+    context.update(_contexto_cadastro_pendente(request.user))
+    return render(request, 'usuarios/enderecos.html', context)
 
 
 @login_required
 def novo_endereco(request):
     form = EnderecoForm(request.POST or None)
+    form.instance.cliente = request.user
     if request.method == 'POST':
         if form.is_valid():
             end = form.save(commit=False)
@@ -102,7 +174,9 @@ def novo_endereco(request):
             messages.success(request, 'Endereço adicionado.')
             return redirect('usuarios:enderecos')
 
-    return render(request, 'usuarios/endereco_form.html', {'form': form, 'titulo': 'Novo endereço'})
+    context = {'form': form, 'titulo': 'Novo endereço'}
+    context.update(_contexto_cadastro_pendente(request.user))
+    return render(request, 'usuarios/endereco_form.html', context)
 
 
 @login_required
@@ -115,11 +189,13 @@ def editar_endereco(request, pk):
             messages.success(request, 'Endereço atualizado.')
             return redirect('usuarios:enderecos')
 
-    return render(request, 'usuarios/endereco_form.html', {
+    context = {
         'form': form,
         'titulo': 'Editar endereço',
         'endereco': endereco,
-    })
+    }
+    context.update(_contexto_cadastro_pendente(request.user))
+    return render(request, 'usuarios/endereco_form.html', context)
 
 
 @login_required
@@ -197,6 +273,29 @@ def detalhe_pedido(request, numero):
         'pix_payload':          pix_payload,
         'pagseguro_public_key': pagseguro_public_key,
     })
+
+
+@login_required
+@require_POST
+def confirmar_entrega(request, numero):
+    """Cliente confirma o recebimento do pedido — muda status para 'entregue'."""
+    from apps.pedidos.models import Pedido, HistoricoPedido
+
+    pedido = get_object_or_404(request.user.pedidos, numero=numero)
+    if pedido.status != 'enviado':
+        messages.error(request, 'Este pedido não pode ser marcado como entregue agora.')
+        return redirect('usuarios:detalhe_pedido', numero=numero)
+
+    HistoricoPedido.objects.create(
+        pedido=pedido,
+        status_anterior=pedido.status,
+        status_novo='entregue',
+        observacao=f'Recebimento confirmado pelo cliente ({request.user.email})',
+    )
+    pedido.status = 'entregue'
+    pedido.save(update_fields=['status', 'atualizado_em'])
+    messages.success(request, 'Recebimento confirmado! Obrigada por comprar com a gente.')
+    return redirect('usuarios:detalhe_pedido', numero=numero)
 
 
 # ─── Recuperação de senha ─────────────────────────────────────────────────────

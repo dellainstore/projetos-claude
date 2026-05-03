@@ -46,6 +46,13 @@
         {% endfor %}
       {% endif %}
 
+      {% if cadastro_incompleto %}
+        <div class="conta-alerta conta-alerta--warning">
+          Favor atualizar seu cadastro. Ainda faltam: {{ campos_pendentes_cadastro|join:", " }}.
+          <a href="{% url 'usuarios:editar_perfil' %}" class="conta-link">Atualizar agora</a>
+        </div>
+      {% endif %}
+
       <h2 class="conta-secao-titulo">Olá, {{ request.user.nome }}!</h2>
 
       

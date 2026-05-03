@@ -7,15 +7,15 @@ from apps.core_utils.sanitize import sanitize_name, sanitize_phone, sanitize_tex
 
 
 class LoginForm(forms.Form):
-    email = forms.EmailField(
+    identificador = forms.CharField(
         max_length=254,
-        widget=forms.EmailInput(attrs={
-            'placeholder': 'Seu e-mail',
-            'autocomplete': 'email',
+        widget=forms.TextInput(attrs={
+            'placeholder': 'E-mail ou CPF',
+            'autocomplete': 'username',
             'class': 'conta-input',
             'autofocus': True,
         }),
-        error_messages={'required': 'Informe seu e-mail.'},
+        error_messages={'required': 'Informe seu e-mail ou CPF.'},
     )
     senha = forms.CharField(
         widget=forms.PasswordInput(attrs={
@@ -33,12 +33,12 @@ class LoginForm(forms.Form):
         super().__init__(*args, **kwargs)
 
     def clean(self):
-        email = self.cleaned_data.get('email', '').lower()
+        identificador = (self.cleaned_data.get('identificador') or '').strip().lower()
         senha = self.cleaned_data.get('senha', '')
-        if email and senha:
-            self.usuario = authenticate(self.request, username=email, password=senha)
+        if identificador and senha:
+            self.usuario = authenticate(self.request, username=identificador, password=senha)
             if self.usuario is None:
-                raise forms.ValidationError('E-mail ou senha incorretos.')
+                raise forms.ValidationError('E-mail/CPF ou senha incorretos.')
             if not self.usuario.is_active:
                 raise forms.ValidationError('Esta conta está desativada.')
         return self.cleaned_data
@@ -67,21 +67,44 @@ class CadastroForm(forms.ModelForm):
     aceitar_termos = forms.BooleanField(
         error_messages={'required': 'Você precisa aceitar os termos para continuar.'},
     )
+    # CPF declarado explicitamente para sobrescrever max_length=11 do model
+    # (Django usa field.max_length para renderizar o atributo maxlength no HTML,
+    # ignorando o maxlength colocado em Meta.widgets)
+    cpf = forms.CharField(
+        required=True,
+        max_length=14,
+        widget=forms.TextInput(attrs={
+            'placeholder': '000.000.000-00',
+            'inputmode': 'numeric',
+            'class': 'conta-input',
+            'id': 'id_cadastro_cpf',
+        }),
+        error_messages={'required': 'Informe seu CPF.'},
+    )
 
     class Meta:
         model = Cliente
-        fields = ['nome', 'sobrenome', 'email', 'cpf', 'telefone']
+        fields = ['nome', 'email', 'cpf', 'telefone', 'data_nascimento', 'genero']
         widgets = {
-            'nome':      forms.TextInput(attrs={'placeholder': 'Nome', 'autocomplete': 'given-name', 'class': 'conta-input'}),
-            'sobrenome': forms.TextInput(attrs={'placeholder': 'Sobrenome', 'autocomplete': 'family-name', 'class': 'conta-input'}),
-            'email':     forms.EmailInput(attrs={'placeholder': 'E-mail', 'autocomplete': 'email', 'class': 'conta-input'}),
-            'cpf':       forms.TextInput(attrs={'placeholder': '000.000.000-00', 'inputmode': 'numeric', 'class': 'conta-input', 'id': 'id_cadastro_cpf'}),
-            'telefone':  forms.TextInput(attrs={'placeholder': '(11) 99999-9999', 'inputmode': 'tel', 'class': 'conta-input'}),
+            'nome':     forms.TextInput(attrs={'placeholder': 'Nome completo', 'autocomplete': 'name', 'class': 'conta-input'}),
+            'email':    forms.EmailInput(attrs={'placeholder': 'E-mail', 'autocomplete': 'email', 'class': 'conta-input'}),
+            'telefone': forms.TextInput(attrs={'placeholder': '(11) 99999-9999', 'inputmode': 'tel', 'class': 'conta-input'}),
+            'data_nascimento': forms.DateInput(attrs={'class': 'conta-input', 'type': 'date'}),
+            'genero': forms.Select(attrs={'class': 'conta-input conta-select'}),
         }
         error_messages = {
-            'nome':  {'required': 'Informe seu nome.'},
+            'nome':  {'required': 'Informe seu nome completo.'},
             'email': {'required': 'Informe seu e-mail.', 'unique': 'Já existe uma conta com este e-mail.'},
+            'telefone': {'required': 'Informe seu telefone.'},
+            'data_nascimento': {'required': 'Informe sua data de nascimento.'},
+            'genero': {'required': 'Selecione seu gênero.'},
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['telefone'].required = True
+        self.fields['data_nascimento'].required = True
+        self.fields['genero'].required = True
 
     def clean_cpf(self):
         cpf = self.cleaned_data.get('cpf', '')
@@ -94,9 +117,6 @@ class CadastroForm(forms.ModelForm):
 
     def clean_nome(self):
         return sanitize_name(self.cleaned_data.get('nome', ''))
-
-    def clean_sobrenome(self):
-        return sanitize_name(self.cleaned_data.get('sobrenome', ''))
 
     def clean_telefone(self):
         return sanitize_phone(self.cleaned_data.get('telefone', ''))
@@ -121,6 +141,9 @@ class CadastroForm(forms.ModelForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
+        partes = self.cleaned_data.get('nome', '').split()
+        user.nome = partes[0] if partes else ''
+        user.sobrenome = ' '.join(partes[1:]) if len(partes) > 1 else ''
         user.set_password(self.cleaned_data['senha'])
         if commit:
             user.save()
@@ -128,28 +151,64 @@ class CadastroForm(forms.ModelForm):
 
 
 class EditarPerfilForm(forms.ModelForm):
+    nome_completo = forms.CharField(
+        label='Nome completo',
+        widget=forms.TextInput(attrs={'class': 'conta-input', 'autocomplete': 'name'}),
+        error_messages={'required': 'Informe seu nome completo.'},
+    )
+
     class Meta:
         model = Cliente
-        fields = ['nome', 'sobrenome', 'telefone', 'data_nascimento', 'genero']
+        fields = ['nome_completo', 'telefone', 'data_nascimento', 'genero']
         widgets = {
-            'nome':            forms.TextInput(attrs={'class': 'conta-input', 'autocomplete': 'given-name'}),
-            'sobrenome':       forms.TextInput(attrs={'class': 'conta-input', 'autocomplete': 'family-name'}),
-            'telefone':        forms.TextInput(attrs={'class': 'conta-input', 'inputmode': 'tel', 'placeholder': '(11) 99999-9999'}),
+            'telefone':        forms.TextInput(attrs={'class': 'conta-input', 'inputmode': 'tel', 'placeholder': '(11) 9 9999-9999'}),
             'data_nascimento': forms.DateInput(attrs={'class': 'conta-input', 'type': 'date'}, format='%Y-%m-%d'),
             'genero':          forms.Select(attrs={'class': 'conta-input conta-select'}),
         }
 
-    def clean_nome(self):
-        return sanitize_name(self.cleaned_data.get('nome', ''))
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['nome_completo'].initial = self.instance.get_full_name()
+        self.fields['telefone'].required = True
+        self.fields['data_nascimento'].required = True
+        self.fields['genero'].required = True
+        self.fields['telefone'].error_messages['required'] = 'Informe seu telefone.'
+        self.fields['data_nascimento'].error_messages['required'] = 'Informe sua data de nascimento.'
+        self.fields['genero'].error_messages['required'] = 'Selecione seu gênero.'
 
-    def clean_sobrenome(self):
-        return sanitize_name(self.cleaned_data.get('sobrenome', ''))
+    def clean_nome_completo(self):
+        nome_completo = sanitize_name(self.cleaned_data.get('nome_completo', ''))
+        if not nome_completo:
+            raise forms.ValidationError('Informe seu nome completo.')
+        return nome_completo
 
     def clean_telefone(self):
         return sanitize_phone(self.cleaned_data.get('telefone', ''))
 
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        partes = self.cleaned_data.get('nome_completo', '').split()
+        user.nome = partes[0] if partes else ''
+        user.sobrenome = ' '.join(partes[1:]) if len(partes) > 1 else ''
+        if commit:
+            user.save()
+        return user
+
 
 class EnderecoForm(forms.ModelForm):
+    # CEP declarado explicitamente para sobrescrever max_length=8 do model
+    # (Django usaria maxlength="8" via Meta.widgets, mas o formato 00000-000 tem 9 chars)
+    cep = forms.CharField(
+        max_length=9,
+        widget=forms.TextInput(attrs={
+            'class': 'conta-input',
+            'placeholder': '00000-000',
+            'inputmode': 'numeric',
+            'id': 'id_end_cep',
+        }),
+        error_messages={'required': 'Informe o CEP.'},
+    )
+
     class Meta:
         model = Endereco
         fields = ['apelido', 'tipo', 'cep', 'logradouro', 'numero', 'complemento',
@@ -157,7 +216,6 @@ class EnderecoForm(forms.ModelForm):
         widgets = {
             'apelido':     forms.TextInput(attrs={'class': 'conta-input', 'placeholder': 'Ex: Casa, Trabalho'}),
             'tipo':        forms.Select(attrs={'class': 'conta-input conta-select'}),
-            'cep':         forms.TextInput(attrs={'class': 'conta-input', 'placeholder': '00000-000', 'inputmode': 'numeric', 'id': 'id_end_cep', 'maxlength': '9'}),
             'logradouro':  forms.TextInput(attrs={'class': 'conta-input', 'placeholder': 'Rua / Avenida', 'id': 'id_end_logradouro'}),
             'numero':      forms.TextInput(attrs={'class': 'conta-input', 'placeholder': 'Número'}),
             'complemento': forms.TextInput(attrs={'class': 'conta-input', 'placeholder': 'Apto, bloco, etc.'}),
@@ -175,6 +233,54 @@ class EnderecoForm(forms.ModelForm):
 
     def clean_estado(self):
         return self.cleaned_data.get('estado', '').upper()[:2]
+
+
+class AtivacaoForm(forms.Form):
+    """Formulário usado por clientes importados para confirmar e-mail e criar senha."""
+    email = forms.EmailField(
+        max_length=254,
+        widget=forms.EmailInput(attrs={
+            'placeholder': 'Seu e-mail cadastrado',
+            'autocomplete': 'email',
+            'class': 'conta-input',
+            'autofocus': True,
+        }),
+        error_messages={'required': 'Informe seu e-mail.'},
+    )
+    senha = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Crie uma senha (mínimo 8 caracteres)',
+            'autocomplete': 'new-password',
+            'class': 'conta-input',
+        }),
+        error_messages={'required': 'Crie uma senha.'},
+    )
+    confirmar_senha = forms.CharField(
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Repita a senha',
+            'autocomplete': 'new-password',
+            'class': 'conta-input',
+        }),
+        error_messages={'required': 'Confirme sua senha.'},
+    )
+
+    def clean_email(self):
+        return self.cleaned_data.get('email', '').lower()
+
+    def clean_senha(self):
+        senha = self.cleaned_data.get('senha', '')
+        try:
+            validate_password(senha)
+        except Exception as e:
+            raise forms.ValidationError(list(e.messages))
+        return senha
+
+    def clean(self):
+        cd = super().clean()
+        if cd.get('senha') and cd.get('confirmar_senha'):
+            if cd['senha'] != cd['confirmar_senha']:
+                self.add_error('confirmar_senha', 'As senhas não coincidem.')
+        return cd
 
 
 class RecuperarSenhaForm(forms.Form):

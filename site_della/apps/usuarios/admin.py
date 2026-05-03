@@ -1,8 +1,29 @@
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin, GroupAdmin
 from django.contrib.auth.models import Group
 from django.utils.html import format_html
+from django.urls import reverse
 from .models import Cliente, Endereco, Wishlist
+
+
+class ClienteAdminForm(forms.ModelForm):
+    nome_completo = forms.CharField(label='Nome completo', max_length=200, widget=forms.TextInput(attrs={'style': 'width: 100%'}))
+
+    class Meta:
+        model = Cliente
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['nome_completo'].initial = f'{self.instance.nome} {self.instance.sobrenome}'.strip()
+
+    def save(self, commit=True):
+        partes = self.cleaned_data.get('nome_completo', '').strip().split(' ', 1)
+        self.instance.nome = partes[0]
+        self.instance.sobrenome = partes[1] if len(partes) > 1 else ''
+        return super().save(commit)
 
 # Remove "Grupos" da seção Autenticação e Autorização padrão do Django
 # e move para cá com nome em português
@@ -22,7 +43,8 @@ class EnderecoInline(admin.TabularInline):
 
 @admin.register(Cliente)
 class ClienteAdmin(UserAdmin):
-    list_display = ('email', 'nome', 'sobrenome', 'telefone', 'is_active', 'recebe_newsletter', 'criado_em', 'acoes_linha')
+    form = ClienteAdminForm
+    list_display = ('email', 'nome_completo_fmt', 'telefone', 'is_active', 'recebe_newsletter', 'criado_em', 'acoes_linha')
     list_display_links = ('email',)
     list_filter = ('is_active', 'is_staff', 'recebe_newsletter', 'genero')
     search_fields = ('email', 'nome', 'sobrenome', 'cpf', 'telefone')
@@ -41,19 +63,19 @@ class ClienteAdmin(UserAdmin):
         edit_url   = reverse('admin:usuarios_cliente_change', args=[obj.pk])
         delete_url = reverse('admin:usuarios_cliente_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este cliente?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este cliente?\')">✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
 
+    def nome_completo_fmt(self, obj):
+        return f'{obj.nome} {obj.sobrenome}'.strip() or '—'
+    nome_completo_fmt.short_description = 'Nome completo'
+
     fieldsets = (
-        ('Acesso', {'fields': ('email', 'password')}),
-        ('Dados pessoais', {'fields': ('nome', 'sobrenome', 'cpf', 'telefone', 'data_nascimento', 'genero')}),
+        ('Acesso', {'fields': ('email', 'senha_display')}),
+        ('Dados pessoais', {'fields': ('nome_completo', 'cpf', 'telefone', 'data_nascimento', 'genero')}),
         ('Permissões', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Preferências', {'fields': ('recebe_newsletter',)}),
         ('Datas', {'fields': ('criado_em', 'atualizado_em'), 'classes': ('collapse',)}),
@@ -64,7 +86,18 @@ class ClienteAdmin(UserAdmin):
             'fields': ('email', 'nome', 'sobrenome', 'password1', 'password2'),
         }),
     )
-    readonly_fields = ('criado_em', 'atualizado_em')
+    readonly_fields = ('criado_em', 'atualizado_em', 'senha_display')
+    filter_horizontal = ('groups', 'user_permissions')
+
+    def senha_display(self, obj):
+        if obj.pk:
+            url = reverse('admin:auth_user_password_change', args=[obj.pk])
+            return format_html(
+                '<a href="{}" class="della-btn-edit" style="font-size:13px;">🔑 Alterar senha</a>',
+                url,
+            )
+        return '—'
+    senha_display.short_description = 'Senha'
 
     inlines = [EnderecoInline]
 
@@ -94,12 +127,8 @@ class EnderecoAdmin(admin.ModelAdmin):
         edit_url   = reverse('admin:usuarios_endereco_change', args=[obj.pk])
         delete_url = reverse('admin:usuarios_endereco_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este endereço?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este endereço?\')" >✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
@@ -125,12 +154,8 @@ class WishlistAdmin(admin.ModelAdmin):
         edit_url   = reverse('admin:usuarios_wishlist_change', args=[obj.pk])
         delete_url = reverse('admin:usuarios_wishlist_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este item?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este item?\')" >✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'

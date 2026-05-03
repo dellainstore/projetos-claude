@@ -23,8 +23,12 @@ urlpatterns = [
     # Pedidos
     path('minha-conta/pedidos/', views.meus_pedidos, name='meus_pedidos'),
     path('minha-conta/pedidos/<str:numero>/', views.detalhe_pedido, name='detalhe_pedido'),
+    path('minha-conta/pedidos/<str:numero>/confirmar-entrega/', views.confirmar_entrega, name='confirmar_entrega'),
 
     # Recuperação de senha
     path('recuperar-senha/', views.recuperar_senha, name='recuperar_senha'),
     path('recuperar-senha/confirmar/<uidb64>/<token>/', views.confirmar_senha, name='confirmar_senha'),
+
+    # Ativação de conta (clientes importados)
+    path('ativar/<uidb64>/<token>/', views.ativar_conta, name='ativar_conta'),
 ]

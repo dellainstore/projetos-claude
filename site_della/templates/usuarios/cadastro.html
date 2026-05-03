@@ -34,13 +34,27 @@
 
       <div class="conta-grid-2">
         <div class="conta-campo">
-          <label class="conta-label">CPF</label>
+          <label class="conta-label">CPF *</label>
           {{ form.cpf }}
           {% if form.cpf.errors %}<span class="conta-erro">{{ form.cpf.errors.0 }}</span>{% endif %}
         </div>
         <div class="conta-campo">
-          <label class="conta-label">Telefone</label>
+          <label class="conta-label">Telefone *</label>
           {{ form.telefone }}
+          {% if form.telefone.errors %}<span class="conta-erro">{{ form.telefone.errors.0 }}</span>{% endif %}
+        </div>
+      </div>
+
+      <div class="conta-grid-2">
+        <div class="conta-campo">
+          <label class="conta-label">Data de nascimento *</label>
+          {{ form.data_nascimento }}
+          {% if form.data_nascimento.errors %}<span class="conta-erro">{{ form.data_nascimento.errors.0 }}</span>{% endif %}
+        </div>
+        <div class="conta-campo">
+          <label class="conta-label">Gênero *</label>
+          {{ form.genero }}
+          {% if form.genero.errors %}<span class="conta-erro">{{ form.genero.errors.0 }}</span>{% endif %}
         </div>
       </div>
 

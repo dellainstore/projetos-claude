@@ -44,6 +44,12 @@
         {% endfor %}
       {% endif %}
 
+      {% if cadastro_incompleto %}
+        <div class="conta-alerta conta-alerta--warning">
+          Favor atualizar seu cadastro. Ainda faltam: {{ campos_pendentes_cadastro|join:", " }}.
+        </div>
+      {% endif %}
+
       <h2 class="conta-secao-titulo">Editar Perfil</h2>
 
       <div class="conta-card">
@@ -51,30 +57,29 @@
           {% csrf_token %}
 
           <div class="conta-grid-2">
-            <div class="conta-campo">
-              <label class="conta-label">Nome</label>
-              {{ form.nome }}
-              {% if form.nome.errors %}<span class="conta-erro">{{ form.nome.errors.0 }}</span>{% endif %}
-            </div>
-            <div class="conta-campo">
-              <label class="conta-label">Sobrenome</label>
-              {{ form.sobrenome }}
+            <div class="conta-campo {% if form.nome_completo.errors %}conta-campo--erro{% endif %}" style="grid-column: 1 / -1;">
+              <label class="conta-label">Nome completo</label>
+              {{ form.nome_completo }}
+              {% if form.nome_completo.errors %}<span class="conta-erro">{{ form.nome_completo.errors.0 }}</span>{% endif %}
             </div>
           </div>
 
-          <div class="conta-campo">
+          <div class="conta-campo {% if form.telefone.errors %}conta-campo--erro{% endif %}">
             <label class="conta-label">Telefone</label>
             {{ form.telefone }}
+            {% if form.telefone.errors %}<span class="conta-erro">{{ form.telefone.errors.0 }}</span>{% endif %}
           </div>
 
           <div class="conta-grid-2">
-            <div class="conta-campo">
+            <div class="conta-campo {% if form.data_nascimento.errors %}conta-campo--erro{% endif %}">
               <label class="conta-label">Data de nascimento</label>
               {{ form.data_nascimento }}
+              {% if form.data_nascimento.errors %}<span class="conta-erro">{{ form.data_nascimento.errors.0 }}</span>{% endif %}
             </div>
-            <div class="conta-campo">
+            <div class="conta-campo {% if form.genero.errors %}conta-campo--erro{% endif %}">
               <label class="conta-label">Gênero</label>
               {{ form.genero }}
+              {% if form.genero.errors %}<span class="conta-erro">{{ form.genero.errors.0 }}</span>{% endif %}
             </div>
           </div>
 
@@ -100,7 +105,8 @@
 <script>
 document.querySelector('[name="telefone"]')?.addEventListener('input', function(){
   let v = this.value.replace(/\D/g,'').slice(0,11);
-  if(v.length > 6) v = v.replace(/(\d{2})(\d{4,5})(\d{4})/,'($1) $2-$3');
+  if (v.length > 7) v = v.replace(/(\d{2})(\d{1})(\d{4})(\d{0,4}).*/, '($1) $2 $3-$4');
+  else if (v.length > 3) v = v.replace(/(\d{2})(\d{1})(\d+)/, '($1) $2 $3');
   else if(v.length > 2) v = v.replace(/(\d{2})(\d+)/,'($1) $2');
   this.value = v;
 });

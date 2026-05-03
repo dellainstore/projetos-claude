@@ -39,6 +39,7 @@ class Cliente(AbstractBaseUser, PermissionsMixin):
     )
     is_active = models.BooleanField('Ativo', default=True)
     is_staff = models.BooleanField('Admin', default=False)
+    precisa_ativar = models.BooleanField('Precisa ativar conta', default=False)
     recebe_newsletter = models.BooleanField('Newsletter', default=False)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -61,6 +62,16 @@ class Cliente(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.nome
+
+    def campos_pendentes_cadastro(self):
+        pendentes = []
+        if not self.telefone:
+            pendentes.append('telefone')
+        if not self.data_nascimento:
+            pendentes.append('data de nascimento')
+        if not self.genero:
+            pendentes.append('gênero')
+        return pendentes
 
     def clean(self):
         self.nome = sanitize_name(self.nome)
@@ -105,7 +116,7 @@ class Endereco(models.Model):
         self.bairro = sanitize_text(self.bairro, max_length=100)
         self.cidade = sanitize_text(self.cidade, max_length=100)
         self.apelido = sanitize_text(self.apelido, max_length=50)
-        if self.principal:
+        if self.principal and self.cliente_id:
             Endereco.objects.filter(
                 cliente=self.cliente, principal=True
             ).exclude(pk=self.pk).update(principal=False)
