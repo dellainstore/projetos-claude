@@ -5,6 +5,7 @@ Referência: https://developer.bling.com.br/referencia
 """
 
 import logging
+import time
 
 import requests
 
@@ -13,6 +14,8 @@ from .oauth import get_valid_access_token
 logger = logging.getLogger(__name__)
 
 BASE_URL = 'https://api.bling.com.br/Api/v3'
+RETRY_STATUS_CODES = {429}
+RETRY_DELAYS_SECONDS = (0.6, 1.2, 2.0)
 
 
 class BlingAPIError(Exception):
@@ -47,14 +50,34 @@ class BlingAPI:
 
     def _request(self, method: str, endpoint: str, **kwargs) -> dict:
         url = f'{BASE_URL}{endpoint}'
-        resp = requests.request(method, url, headers=self._headers(), timeout=20, **kwargs)
-        try:
-            data = resp.json()
-        except ValueError:
-            data = {'raw': resp.text}
+        last_resp = None
 
-        if not resp.ok:
-            raise BlingAPIError(resp.status_code, data)
+        for tentativa in range(len(RETRY_DELAYS_SECONDS) + 1):
+            resp = requests.request(method, url, headers=self._headers(), timeout=20, **kwargs)
+            last_resp = resp
+
+            if resp.status_code not in RETRY_STATUS_CODES or tentativa == len(RETRY_DELAYS_SECONDS):
+                break
+
+            atraso = RETRY_DELAYS_SECONDS[tentativa]
+            logger.warning(
+                'Bling API %s em %s %s; retry em %.1fs (%s/%s)',
+                resp.status_code,
+                method,
+                endpoint,
+                atraso,
+                tentativa + 1,
+                len(RETRY_DELAYS_SECONDS),
+            )
+            time.sleep(atraso)
+
+        try:
+            data = last_resp.json()
+        except ValueError:
+            data = {'raw': last_resp.text}
+
+        if not last_resp.ok:
+            raise BlingAPIError(last_resp.status_code, data)
         return data
 
     # ── Pedidos de Venda ──────────────────────────────────────────────────────
@@ -70,6 +93,10 @@ class BlingAPI:
     def atualizar_situacao_pedido(self, bling_id: str, situacao_id: int) -> dict:
         """PATCH /pedidos/vendas/{id}/situacoes/{idSituacao} — altera situação."""
         return self._request('PATCH', f'/pedidos/vendas/{bling_id}/situacoes/{situacao_id}')
+
+    def atualizar_pedido_venda(self, bling_id: str, payload: dict) -> dict:
+        """PUT /pedidos/vendas/{id} — substitui o pedido (payload completo)."""
+        return self._request('PUT', f'/pedidos/vendas/{bling_id}', json=payload)
 
     # ── NF-e ──────────────────────────────────────────────────────────────────
 
@@ -97,3 +124,65 @@ class BlingAPI:
     def consultar_produto(self, bling_produto_id: str) -> dict:
         """GET /produtos/{id} — consulta produto do Bling."""
         return self._request('GET', f'/produtos/{bling_produto_id}')
+
+    # ── Logísticas ───────────────────────────────────────────────────────────
+
+    def listar_logisticas(self, pagina: int = 1, limite: int = 100) -> dict:
+        """GET /logisticas — lista logísticas configuradas na conta."""
+        return self._request('GET', '/logisticas', params={'pagina': pagina, 'limite': limite})
+
+    def consultar_logistica(self, logistica_id: int | str) -> dict:
+        """GET /logisticas/{id} — consulta uma logística e seus serviços."""
+        return self._request('GET', f'/logisticas/{logistica_id}')
+
+    # ── Contatos ──────────────────────────────────────────────────────────────
+
+    def atualizar_contato(self, contato_id: int, payload: dict) -> dict:
+        """PUT /contatos/{id} — atualiza dados de um contato existente."""
+        return self._request('PUT', f'/contatos/{contato_id}', json=payload)
+
+    def buscar_contato_por_cpf(self, cpf: str) -> 'int | None':
+        """
+        GET /contatos?criterio=3&pesquisa={cpf} — busca por CPF/CNPJ.
+
+        O filtro não garante match exato: o Bling faz busca textual e pode
+        retornar contatos cujos campos (nome/razão social) contenham a string.
+        Por isso validamos cada resultado comparando o numeroDocumento real.
+        """
+        cpf_clean = ''.join(c for c in (cpf or '') if c.isdigit())
+        if not cpf_clean:
+            return None
+        try:
+            data = self._request('GET', '/contatos', params={
+                'criterio': 3, 'pesquisa': cpf_clean, 'limite': 20,
+            })
+            for item in data.get('data', []) or []:
+                doc = ''.join(c for c in (item.get('numeroDocumento') or '') if c.isdigit())
+                if doc == cpf_clean:
+                    return item.get('id')
+        except BlingAPIError:
+            pass
+        return None
+
+    def buscar_contato_por_telefone(self, telefone: str) -> 'int | None':
+        """
+        Busca contato por telefone. O Bling v3 não expõe filtro direto por
+        telefone, então usamos criterio=1 (nome) + pesquisa — inviável — ou
+        confiamos apenas no CPF. Como fallback, listamos pela pesquisa geral
+        e validamos telefone no retorno. Se não encontrar match exato → None.
+        """
+        tel_clean = ''.join(c for c in (telefone or '') if c.isdigit())
+        if not tel_clean or len(tel_clean) < 8:
+            return None
+        try:
+            data = self._request('GET', '/contatos', params={
+                'pesquisa': tel_clean, 'limite': 20,
+            })
+            for item in data.get('data', []) or []:
+                tel = ''.join(c for c in (item.get('telefone') or '') if c.isdigit())
+                cel = ''.join(c for c in (item.get('celular') or '') if c.isdigit())
+                if tel_clean in (tel, cel):
+                    return item.get('id')
+        except BlingAPIError:
+            pass
+        return None

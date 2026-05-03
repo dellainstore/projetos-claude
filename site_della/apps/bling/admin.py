@@ -51,15 +51,13 @@ class BlingTokenAdmin(admin.ModelAdmin):
 
     def acoes(self, obj):
         return format_html(
-            '<div style="display:flex;flex-direction:column;gap:4px;min-width:130px;">'
-            '<a href="/bling/refresh-token/" '
-            'style="background:#27ae60;color:#fff;padding:3px 10px;'
-            'border-radius:3px;font-size:11px;text-decoration:none;white-space:nowrap;text-align:center;" '
-            'title="Força renovação do access_token agora">Atualizar Token</a>'
-            '<a href="/bling/autorizar/" '
-            'style="background:#c9a96e;color:#fff;padding:3px 10px;'
-            'border-radius:3px;font-size:11px;text-decoration:none;white-space:nowrap;text-align:center;" '
-            'title="Re-autoriza do zero (use se Atualizar Token falhar)">Re-autorizar</a>'
+            '<div style="display:flex;flex-direction:column;gap:5px;min-width:140px;">'
+            '<a href="/bling/refresh-token/" class="della-btn-edit" '
+            'style="background:#2d9e6e;justify-content:center;" '
+            'title="Força renovação do access_token agora">↻ Atualizar Token</a>'
+            '<a href="/bling/autorizar/" class="della-btn-edit" '
+            'style="justify-content:center;" '
+            'title="Re-autoriza do zero (use se Atualizar Token falhar)">⚡ Re-autorizar</a>'
             '</div>'
         )
     acoes.short_description = 'Ações'

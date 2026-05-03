@@ -10,11 +10,21 @@ Funções principais:
 
 import logging
 from datetime import date
+from functools import lru_cache
 
 from .api import BlingAPI, BlingAPIError
 from .models import BlingLog
 
 logger = logging.getLogger(__name__)
+
+OBSERVACAO_INTERNA_PADRAO = (
+    "EMPRESA OPTANTE PELO SIMPLES NACIONAL, NAO GERA DIREITO AO CREDITO DE ISS, ICMS E IPI.\n\n"
+    "Banco Santander\n"
+    "Ag 2200\n"
+    "Cc 1300 2879 8\n"
+    "Adriana Simoes Machado Confeccoes Me\n"
+    "CNPJ 29 049 870 0001 37 - PIX"
+)
 
 
 # ── Mapeamento serviço Melhor Envio → transportadora + modalidade Bling ──────
@@ -97,7 +107,9 @@ def enviar_pedido_bling(pedido) -> bool:
     except BlingAPIError as exc:
         BlingLog.objects.create(
             tipo='pedido', pedido=pedido, sucesso=False,
-            payload_enviado=_redact_payload_pii(payload), resposta={}, erro=str(exc),
+            payload_enviado=_redact_payload_pii(payload),
+            resposta=getattr(exc, 'data', {}) or {},
+            erro=str(exc),
         )
         logger.error('Bling: erro ao enviar pedido %s: %s', pedido.numero, exc)
         return False
@@ -122,14 +134,19 @@ def enviar_pedido_bling(pedido) -> bool:
         pedido.save(update_fields=['bling_pedido_id', 'atualizado_em'])
         logger.info('Pedido %s enviado ao Bling (id=%s)', pedido.numero, bling_id)
 
-        # Força "Em andamento - Site" — o Bling costuma ignorar o campo situacao
-        # no POST de criação e deixa o pedido como "Em aberto".
+        # Garantia idempotente: força "Em andamento - Site" caso o Bling tenha
+        # ignorado o campo situacao no POST de criação. Se já estiver na situação
+        # correta, o Bling responde 400 com code 50 ("mesma situação") — ignoramos.
         try:
             api.atualizar_situacao_pedido(bling_id, SITUACAO_EM_ANDAMENTO_SITE)
             logger.info('Bling: pedido %s → Em andamento - Site', pedido.numero)
         except BlingAPIError as exc:
-            logger.warning('Bling: falha ao forçar situação inicial no pedido %s: %s',
-                           pedido.numero, exc)
+            campos = (getattr(exc, 'data', {}) or {}).get('error', {}).get('fields', []) or []
+            if any(f.get('code') == 50 for f in campos):
+                logger.info('Bling: pedido %s já estava em Em andamento - Site', pedido.numero)
+            else:
+                logger.warning('Bling: falha ao forçar situação inicial no pedido %s: %s',
+                               pedido.numero, exc)
 
     return True
 
@@ -336,6 +353,16 @@ def _redact_payload_pii(payload: dict) -> dict:
     return redacted
 
 
+def _montar_observacoes_internas(pedido) -> str:
+    """Garante a mensagem operacional/fiscal fixa em todos os pedidos do Bling."""
+    observacao_extra = (pedido.observacao_interna or '').strip()
+    if not observacao_extra:
+        return OBSERVACAO_INTERNA_PADRAO
+    if OBSERVACAO_INTERNA_PADRAO in observacao_extra:
+        return observacao_extra
+    return f"{OBSERVACAO_INTERNA_PADRAO}\n\n{observacao_extra}"
+
+
 # ── Payload ───────────────────────────────────────────────────────────────────
 
 def _resolver_vendedor_id(pedido) -> int:
@@ -388,6 +415,104 @@ def _montar_parcelas(pedido) -> list:
     }]
 
 
+@lru_cache(maxsize=1)
+def _obter_logistica_melhor_envio() -> dict:
+    """
+    Resolve a logística "Melhor Envio - Correios" e seus serviços reais na conta.
+
+    O Bling ignora parcialmente payloads com apenas nomes textuais em alguns campos.
+    Por isso buscamos os IDs cadastrados na própria conta e os usamos no pedido.
+    """
+    api = BlingAPI()
+    resposta = api.listar_logisticas()
+
+    for item in resposta.get('data', []) or []:
+        if (item.get('descricao') or '').strip() != LOGISTICA_NOME_PADRAO:
+            continue
+
+        logistica_id = item.get('id')
+        detalhes = api.consultar_logistica(logistica_id).get('data', {}) if logistica_id else {}
+        servicos = detalhes.get('servicos') or item.get('servicos') or []
+
+        servicos_por_codigo = {}
+        for servico in servicos:
+            codigo = str(servico.get('codigo') or '').strip()
+            descricao = (servico.get('descricao') or '').strip().upper()
+            transportador_id = servico.get('transportador', {}).get('id')
+            if codigo:
+                servicos_por_codigo[codigo] = {
+                    'id': servico.get('id'),
+                    'codigo': codigo,
+                    'descricao': descricao,
+                    'transportador_id': transportador_id,
+                }
+            if descricao == 'PAC':
+                servicos_por_codigo.setdefault('1', {
+                    'id': servico.get('id'),
+                    'codigo': codigo,
+                    'descricao': descricao,
+                    'transportador_id': transportador_id,
+                })
+            elif descricao == 'SEDEX':
+                servicos_por_codigo.setdefault('2', {
+                    'id': servico.get('id'),
+                    'codigo': codigo,
+                    'descricao': descricao,
+                    'transportador_id': transportador_id,
+                })
+
+        return {
+            'id': logistica_id,
+            'descricao': item.get('descricao') or LOGISTICA_NOME_PADRAO,
+            'integracao_id': detalhes.get('integracao', {}).get('id') or item.get('integracao', {}).get('id'),
+            'servicos': servicos_por_codigo,
+        }
+
+    raise BlingAPIError(404, {'error': {'description': f'Logística "{LOGISTICA_NOME_PADRAO}" não encontrada na conta Bling.'}})
+
+
+def _resolver_servico_logistico(pedido) -> dict:
+    """
+    Combina o serviço escolhido no checkout com os IDs reais da logística do Bling.
+    """
+    servico_id = (pedido.frete_servico_id or '').strip()
+    info = dict(MELHOR_ENVIO_SERVICOS.get(servico_id, {}))
+
+    try:
+        logistica = _obter_logistica_melhor_envio()
+    except BlingAPIError as exc:
+        logger.warning('Bling: não foi possível resolver logística Melhor Envio para o pedido %s: %s',
+                       pedido.numero, exc)
+        return {
+            'logistica_id': None,
+            'logistica_nome': LOGISTICA_NOME_PADRAO,
+            'integracao_id': None,
+            'nome_servico': info.get('nome_servico') or (pedido.transportadora or 'PAC'),
+            'modalidade': info.get('modalidade') or 1,
+            'servico_logistico_id': None,
+            'transportador_id': None,
+            'transportador_nome': TRANSPORTADORA_NOME,
+        }
+
+    servico = logistica.get('servicos', {}).get(servico_id, {})
+    nome_servico = (
+        servico.get('descricao')
+        or info.get('nome_servico')
+        or (pedido.transportadora or 'PAC')
+    )
+
+    return {
+        'logistica_id': logistica.get('id'),
+        'logistica_nome': logistica.get('descricao') or LOGISTICA_NOME_PADRAO,
+        'integracao_id': logistica.get('integracao_id'),
+        'nome_servico': nome_servico,
+        'modalidade': info.get('modalidade') or 1,
+        'servico_logistico_id': servico.get('id'),
+        'transportador_id': servico.get('transportador_id'),
+        'transportador_nome': TRANSPORTADORA_NOME,
+    }
+
+
 def _montar_transporte(pedido) -> dict:
     """
     Monta o bloco transporte do payload Bling v3.
@@ -397,29 +522,63 @@ def _montar_transporte(pedido) -> dict:
     """
     from apps.pagamentos.services.melhorenvio import DIMENSOES_PADRAO
 
-    servico_id = (pedido.frete_servico_id or '').strip()
-    info = MELHOR_ENVIO_SERVICOS.get(servico_id, {})
-    nome_servico = info.get('nome_servico') or (pedido.transportadora or 'PAC')
-    modalidade   = info.get('modalidade') or 1
+    servico_logistico = _resolver_servico_logistico(pedido)
+    nome_servico = servico_logistico['nome_servico']
+    modalidade = servico_logistico['modalidade']
+    quantidade_itens = sum(int(item.quantidade) for item in pedido.itens.all()) or 1
 
     # FOB quando cliente paga frete; CIF quando frete é gratuito (≥R$800 ou promoção)
     frete_valor = float(pedido.frete)
     frete_por_conta = 1 if frete_valor > 0 else 0
+    peso_bruto = round(DIMENSOES_PADRAO['weight'] * quantidade_itens, 3)
 
-    return {
-        'fretePorConta': frete_por_conta,
-        'frete':         frete_valor,
-        'transportador': {'nome': TRANSPORTADORA_NOME},
-        'logistica':     {'nome': LOGISTICA_NOME_PADRAO},
-        'volumes': [{
-            'servico':    nome_servico,
-            'modalidade': modalidade,
-            'peso':        DIMENSOES_PADRAO['weight'],
-            'altura':      DIMENSOES_PADRAO['height'],
-            'largura':     DIMENSOES_PADRAO['width'],
-            'comprimento': DIMENSOES_PADRAO['length'],
-        }],
+    volume = {
+        'servico':     nome_servico,
+        'modalidade':  modalidade,
+        'peso':        peso_bruto,
+        'altura':      DIMENSOES_PADRAO['height'],
+        'largura':     DIMENSOES_PADRAO['width'],
+        'comprimento': DIMENSOES_PADRAO['length'],
     }
+    if servico_logistico['servico_logistico_id']:
+        volume['idServicoLogistico'] = servico_logistico['servico_logistico_id']
+    if pedido.codigo_rastreio:
+        volume['codigoRastreamento'] = pedido.codigo_rastreio
+
+    transporte = {
+        'fretePorConta':    frete_por_conta,
+        'frete':            frete_valor,
+        'quantidadeVolumes': 1,
+        'pesoBruto':        peso_bruto,
+        'transportador':    {'nome': servico_logistico['transportador_nome']},
+        'logistica':        {
+            'nome': servico_logistico['logistica_nome'],
+        },
+        'contato':          {'nome': servico_logistico['transportador_nome']},
+        'etiqueta': {
+            'nome':        pedido.nome_completo,
+            'endereco':    pedido.logradouro,
+            'numero':      pedido.numero_entrega,
+            'complemento': pedido.complemento or '',
+            'municipio':   pedido.cidade,
+            'uf':          pedido.estado,
+            'cep':         pedido.cep_entrega,
+            'bairro':      pedido.bairro,
+            'nomePais':    'Brasil',
+        },
+        'volumes': [volume],
+    }
+    if servico_logistico['logistica_id']:
+        transporte['logistica']['id'] = servico_logistico['logistica_id']
+    if servico_logistico['integracao_id']:
+        transporte['logistica']['integracao'] = {'id': servico_logistico['integracao_id']}
+    if servico_logistico['servico_logistico_id']:
+        transporte['idServicoLogistico'] = servico_logistico['servico_logistico_id']
+    if servico_logistico['transportador_id']:
+        transporte['transportador']['id'] = servico_logistico['transportador_id']
+        transporte['contato']['id'] = servico_logistico['transportador_id']
+
+    return transporte
 
 
 def _montar_payload_pedido(pedido, contato: dict) -> dict:
@@ -482,13 +641,17 @@ def _montar_payload_pedido(pedido, contato: dict) -> dict:
         itens.append(item_payload)
 
     payload = {
-        'numero':            pedido.numero,
+        # 'numero' é auto-incrementado pelo Bling (sequencial interno).
+        # Enviá-lo causa colisão com pedidos antigos. Usamos 'numeroLoja' para
+        # vincular ao número do site e localizar o pedido depois.
         'numeroLoja':        pedido.numero,
         'data':              hoje,
         'dataSaida':         hoje,
+        'totalProdutos':     float(pedido.subtotal),
         'total':             float(pedido.total),
         'desconto':          float(pedido.desconto),
         'observacoes':       pedido.observacao_cliente or '',
+        'observacoesInternas': _montar_observacoes_internas(pedido),
         'situacao':          {'id': SITUACAO_EM_ANDAMENTO_SITE},
         'loja': {
             'id': LOJA_ID,

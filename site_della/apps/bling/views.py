@@ -135,33 +135,36 @@ def token_refresh_manual(request):
 @require_POST
 def webhook(request):
     """
-    Recebe notificações de eventos do Bling (pedidos, NF-e).
-    Configurar no painel Bling → Integrações → Webhooks.
-    URL: https://seudominio.com.br/bling/webhook/
+    Recebe notificações de eventos do Bling v3 (estoque, pedidos, NF-e).
+    Cadastrar o servidor no app OAuth em https://developer.bling.com.br/aplicativos
+    → aba Webhooks → URL: https://seudominio.com.br/bling/webhook/
 
-    Validação de origem: se BLING_WEBHOOK_SECRET estiver configurado no .env,
-    o header X-Bling-Signature é verificado como HMAC-SHA256 do body em hex.
-    Configure o mesmo valor no painel Bling → Webhooks → Chave de assinatura.
-    Enquanto BLING_WEBHOOK_SECRET estiver vazio, a validação é ignorada com
-    aviso no log — isso é um risco (C2) até a chave ser configurada.
+    Validação de origem (doc oficial Bling v3):
+      • Header:     X-Bling-Signature-256
+      • Formato:    "sha256=<hex>"
+      • Algoritmo:  HMAC-SHA256
+      • Chave:      o próprio BLING_CLIENT_SECRET do app OAuth (não é segredo
+                    separado — o Bling v3 assina com o client_secret).
+    Requests sem assinatura válida são rejeitados com 401.
     """
-    secret = getattr(settings, 'BLING_WEBHOOK_SECRET', '')
-    if secret:
-        assinatura_recebida = request.headers.get('X-Bling-Signature', '')
+    client_secret = getattr(settings, 'BLING_CLIENT_SECRET', '')
+    if client_secret:
+        header = request.headers.get('X-Bling-Signature-256', '')
+        # O header sempre chega como "sha256=<hex>" — remove o prefixo.
+        assinatura_recebida = header[7:] if header.startswith('sha256=') else header
         mac_esperado = hmac.new(
-            secret.encode('utf-8'), request.body, hashlib.sha256
+            client_secret.encode('utf-8'), request.body, hashlib.sha256
         ).hexdigest()
-        if not hmac.compare_digest(assinatura_recebida, mac_esperado):
+        if not (assinatura_recebida and hmac.compare_digest(assinatura_recebida, mac_esperado)):
             logger.warning(
-                'Bling webhook: assinatura inválida — request rejeitado '
+                'Bling webhook: assinatura X-Bling-Signature-256 inválida — rejeitado '
                 '(recebida=%r)',
-                assinatura_recebida[:16] + '…' if assinatura_recebida else '(vazia)',
+                header[:24] + '…' if header else '(vazia)',
             )
             return HttpResponse(status=401)
     else:
         logger.warning(
-            'Bling webhook: BLING_WEBHOOK_SECRET não configurado — '
-            'validação de origem desativada. Configure no .env e no painel Bling.'
+            'Bling webhook: BLING_CLIENT_SECRET ausente — validação HMAC desativada.'
         )
 
     try:
@@ -207,27 +210,31 @@ def _processar_webhook_pedido(data: dict):
         pedido.save(update_fields=['codigo_rastreio', 'atualizado_em'])
         logger.info('Pedido %s: rastreio atualizado → %s', pedido.numero, rastreio)
 
-    # Mapeia situação do Bling → status interno
+    # Status do site só é alterado quando o Bling cancela o pedido. Outras transições
+    # (Em andamento → Atendido) refletem etapas internas do Bling (NF, etiqueta) que
+    # não significam que o cliente já recebeu — o controle de "Enviado" é feito
+    # pelo operador no admin após postar nos Correios. Usamos `situacao.valor`
+    # (categoria padrão Bling: 0=Em aberto, 1=Atendido, 2=Cancelado, 3=Em andamento)
+    # em vez de IDs específicos para funcionar com qualquer situação custom da loja.
+    valor = data.get('situacao', {}).get('valor')
     situacao_id = data.get('situacao', {}).get('id')
-    _MAPA_SITUACAO = {
-        9:  'pagamento_confirmado',
-        11: 'em_separacao',
-        10: 'enviado',
-        7:  'entregue',
-        12: 'cancelado',
-    }
-    novo_status = _MAPA_SITUACAO.get(situacao_id)
-    if novo_status and novo_status != pedido.status:
+    if valor == 2 and pedido.status != 'cancelado':
         HistoricoPedido.objects.create(
             pedido=pedido,
             status_anterior=pedido.status,
-            status_novo=novo_status,
-            observacao=f'Atualizado pelo webhook Bling (situacao={situacao_id})',
+            status_novo='cancelado',
+            observacao=f'Cancelado pelo webhook Bling (situacao_id={situacao_id})',
         )
-        pedido.status = novo_status
+        pedido.status = 'cancelado'
         pedido.save(update_fields=['status', 'atualizado_em'])
-        logger.info('Pedido %s: status atualizado → %s (Bling situacao=%s)',
-                    pedido.numero, novo_status, situacao_id)
+        logger.info('Pedido %s cancelado pelo webhook Bling (situacao_id=%s)',
+                    pedido.numero, situacao_id)
+        try:
+            from apps.bling.services import restaurar_estoque_pedido
+            restaurar_estoque_pedido(pedido)
+        except Exception as exc:
+            logger.warning('Estoque: falha ao restaurar pedido %s após cancelamento Bling: %s',
+                           pedido.numero, exc)
 
 
 def _processar_webhook_nfe(data: dict):
