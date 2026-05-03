@@ -57,6 +57,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',       # proteção CSRF ativa
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.core_utils.maintenance.manutencao_middleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # anti-clickjacking
     'axes.middleware.AxesMiddleware',                  # brute force protection
@@ -165,7 +166,7 @@ EMAIL_BACKEND  = 'anymail.backends.brevo.EmailBackend'
 ANYMAIL = {
     'BREVO_API_KEY': config('BREVO_API_KEY', default=''),
 }
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Della Instore <contato@dellainstore.com.br>')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default="D'ELLA Instore <contato@dellainstore.com.br>")
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 # ─── django-axes: bloqueio de brute force ─────────────────────────────────────
@@ -179,6 +180,7 @@ AXES_LOCKOUT_PARAMETERS = ['ip_address', 'username']
 
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',
+    'apps.usuarios.backends.EmailOuCPFBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
 
@@ -191,16 +193,17 @@ CONTENT_SECURITY_POLICY = {
         'default-src': ("'self'",),
         'script-src': (
             "'self'",
-            "'unsafe-inline'",          # necessário para Tailwind CDN
-            "cdn.tailwindcss.com",
+            "'unsafe-inline'",          # ainda necessário (snippets inline GA4/cleanup); remover quando migrar para nonce
             "cdnjs.cloudflare.com",
             "www.instagram.com",
             "connect.facebook.net",
             "assets.pagseguro.com.br",  # SDK de encriptação de cartão
+            "www.googletagmanager.com", # Google Analytics (GA4)
+            "www.google-analytics.com",
         ),
         'style-src': (
             "'self'",
-            "'unsafe-inline'",          # inline styles do Tailwind
+            "'unsafe-inline'",          # estilos inline em alguns templates
             "fonts.googleapis.com",
             "cdnjs.cloudflare.com",
         ),
@@ -213,16 +216,27 @@ CONTENT_SECURITY_POLICY = {
         'img-src': (
             "'self'",
             "data:",
+            "blob:",
             "*.instagram.com",
             "cdninstagram.com",
             "*.cdninstagram.com",
+            "www.facebook.com",         # Meta Pixel <noscript> tracking pixel
+            "www.google-analytics.com", # GA4 beacons
+            "www.googletagmanager.com",
         ),
         'frame-src': (
             "'self'",
             "www.instagram.com",
             "www.youtube.com",
         ),
-        'connect-src': ("'self'",),
+        'connect-src': (
+            "'self'",
+            "api.pagseguro.com",        # chamadas do SDK de cartão
+            "sandbox.api.pagseguro.com",
+            "www.google-analytics.com", # GA4 hits
+            "analytics.google.com",
+            "www.googletagmanager.com",
+        ),
         'object-src': ("'none'",),      # bloqueia Flash e plugins antigos
     }
 }
@@ -231,6 +245,7 @@ CONTENT_SECURITY_POLICY = {
 
 PAGSEGURO_EMAIL = config('PAGSEGURO_EMAIL', default='')
 PAGSEGURO_TOKEN = config('PAGSEGURO_TOKEN', default='')
+PAGSEGURO_TOKEN_SANDBOX = config('PAGSEGURO_TOKEN_SANDBOX', default='')
 PAGSEGURO_SANDBOX = config('PAGSEGURO_SANDBOX', default=True, cast=bool)
 
 STONE_CLIENT_ID = config('STONE_CLIENT_ID', default='')
@@ -242,21 +257,24 @@ SITE_URL = config('SITE_URL', default='http://159.203.101.232:8000')
 BLING_CLIENT_ID      = config('BLING_CLIENT_ID', default='')
 BLING_CLIENT_SECRET  = config('BLING_CLIENT_SECRET', default='')
 BLING_REDIRECT_URI   = config('BLING_REDIRECT_URI', default='http://localhost:8000/bling/callback/')
-# Segredo HMAC para validar assinatura dos webhooks do Bling.
-# Configure também no painel Bling → Integrações → Webhooks → Chave de assinatura.
-# Enquanto vazio, o webhook é processado com aviso no log (compatibilidade retroativa).
-BLING_WEBHOOK_SECRET = config('BLING_WEBHOOK_SECRET', default='')
 
 WHATSAPP_NUMBER_1 = config('WHATSAPP_NUMBER_1', default='')
 WHATSAPP_NUMBER_2 = config('WHATSAPP_NUMBER_2', default='')
+
+META_PIXEL_ID = config('META_PIXEL_ID', default='')
+GA_MEASUREMENT_ID = config('GA_MEASUREMENT_ID', default='')
+META_CONVERSIONS_API_TOKEN = config('META_CONVERSIONS_API_TOKEN', default='')
+META_CONVERSIONS_TEST_EVENT_CODE = config('META_CONVERSIONS_TEST_EVENT_CODE', default='')
+META_GRAPH_API_VERSION = config('META_GRAPH_API_VERSION', default='v19.0')
 
 INSTAGRAM_ACCESS_TOKEN = config('INSTAGRAM_ACCESS_TOKEN', default='')
 INSTAGRAM_ACCOUNT_ID   = config('INSTAGRAM_ACCOUNT_ID', default='')
 INSTAGRAM_APP_ID       = config('INSTAGRAM_APP_ID', default='')
 INSTAGRAM_APP_SECRET   = config('INSTAGRAM_APP_SECRET', default='')
 
-MELHOR_ENVIO_TOKEN   = config('MELHOR_ENVIO_TOKEN', default='')
-MELHOR_ENVIO_SANDBOX = config('MELHOR_ENVIO_SANDBOX', default=True, cast=bool)
+MELHOR_ENVIO_TOKEN       = config('MELHOR_ENVIO_TOKEN', default='')
+MELHOR_ENVIO_SANDBOX     = config('MELHOR_ENVIO_SANDBOX', default=True, cast=bool)
+MELHOR_ENVIO_CEP_ORIGEM  = config('MELHOR_ENVIO_CEP_ORIGEM', default='')
 
 # Chave Pix (CPF, CNPJ, e-mail, telefone ou chave aleatória)
 PIX_CHAVE = config('PIX_CHAVE', default='')
