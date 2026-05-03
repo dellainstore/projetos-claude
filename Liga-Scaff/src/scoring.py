@@ -18,7 +18,10 @@ def calcular_pontos_jogo(games_vencedor: int, games_perdedor: int) -> tuple[int,
     - Vitória normal: 10 x (games do perdedor)
     - Vitória 6x0: 12 x (-5)
     - Tiebreak (7x6): 10 x 6
+    - Jogo interrompido (7x7): 7 x 7
     """
+    if games_vencedor == games_perdedor == 7:
+        return 7, 7
     if games_vencedor > games_perdedor:
         if games_vencedor == 6 and games_perdedor == 0:
             return 12, -5
@@ -34,7 +37,9 @@ def eh_vitoria_dupla1(games_d1: int, games_d2: int) -> bool:
 def validar_placar(games_d1: int, games_d2: int) -> tuple[bool, str]:
     """Valida se o placar é válido nas regras de beach tennis."""
     if games_d1 == games_d2:
-        return False, "Placar não pode ser empate (exceto 6x6 que vira 7x6 no tiebreak)."
+        if games_d1 == 7:
+            return True, ""
+        return False, "Placar não pode ser empate (exceto 7x7 em jogo interrompido)."
     # Resultados válidos: 6x0–6x4, 7x5 (empate em 5x5 → continua), 7x6 (tiebreak)
     vencedor = max(games_d1, games_d2)
     perdedor = min(games_d1, games_d2)
@@ -42,7 +47,7 @@ def validar_placar(games_d1: int, games_d2: int) -> tuple[bool, str]:
         return True, ""  # 7x5 ou 7x6 (tiebreak)
     if vencedor == 6 and 0 <= perdedor <= 4:
         return True, ""
-    return False, f"Placar inválido: {games_d1}x{games_d2}. Válidos: 6-0 a 6-4, 7-5 ou 7-6."
+    return False, f"Placar inválido: {games_d1}x{games_d2}. Válidos: 6-0 a 6-4, 7-5, 7-6 ou 7-7."
 
 
 def calcular_pontuacao_rodada(rodada_id: int) -> dict[int, dict]:
@@ -63,6 +68,7 @@ def calcular_pontuacao_rodada(rodada_id: int) -> dict[int, dict]:
                 "pontos": 0,
                 "jogos_ganhos": 0,
                 "jogos_perdidos": 0,
+                "jogos_empatados": 0,
                 "levou_6x0": False,
             }
         return pontuacao[jid]
@@ -73,10 +79,14 @@ def calcular_pontuacao_rodada(rodada_id: int) -> dict[int, dict]:
             continue  # resultado não lançado
 
         g1, g2 = res["games_dupla1"], res["games_dupla2"]
+        empatou = g1 == g2 == 7
         d1_ganhou = g1 > g2
-        pts_d1, pts_d2 = (
-            calcular_pontos_jogo(g1, g2) if d1_ganhou else calcular_pontos_jogo(g2, g1)[::-1]
-        )
+        if empatou:
+            pts_d1, pts_d2 = calcular_pontos_jogo(g1, g2)
+        else:
+            pts_d1, pts_d2 = (
+                calcular_pontos_jogo(g1, g2) if d1_ganhou else calcular_pontos_jogo(g2, g1)[::-1]
+            )
 
         dupla1 = [jogo["dupla1_j1"], jogo["dupla1_j2"]]
         dupla2 = [jogo["dupla2_j1"], jogo["dupla2_j2"]]
@@ -86,7 +96,9 @@ def calcular_pontuacao_rodada(rodada_id: int) -> dict[int, dict]:
                 continue
             p = get_ou_criar(jid)
             p["pontos"] += pts_d1
-            if d1_ganhou:
+            if empatou:
+                p["jogos_empatados"] += 1
+            elif d1_ganhou:
                 p["jogos_ganhos"] += 1
                 if g1 == 6 and g2 == 0:
                     pass  # venceu 6x0, não precisa marcar para cerveja
@@ -100,7 +112,9 @@ def calcular_pontuacao_rodada(rodada_id: int) -> dict[int, dict]:
                 continue
             p = get_ou_criar(jid)
             p["pontos"] += pts_d2
-            if not d1_ganhou:
+            if empatou:
+                p["jogos_empatados"] += 1
+            elif not d1_ganhou:
                 p["jogos_ganhos"] += 1
                 if g2 == 6 and g1 == 0:
                     pass
@@ -111,7 +125,10 @@ def calcular_pontuacao_rodada(rodada_id: int) -> dict[int, dict]:
 
     # Determina quem deve cerveja e persiste
     for jid, dados in pontuacao.items():
-        deve_beer = int(dados["levou_6x0"] or dados["jogos_ganhos"] == 0)
+        deve_beer = int(
+            dados["levou_6x0"] or
+            (dados["jogos_ganhos"] == 0 and dados["jogos_empatados"] == 0)
+        )
         db.upsert_pontuacao(
             jogador_id=jid,
             rodada_id=rodada_id,
@@ -147,10 +164,13 @@ def calcular_detalhe_por_jogo(rodada_id: int) -> list[dict]:
         if res is None:
             continue
         g1, g2 = res["games_dupla1"], res["games_dupla2"]
-        d1_ganhou = g1 > g2
-        pts_d1, pts_d2 = (
-            calcular_pontos_jogo(g1, g2) if d1_ganhou else calcular_pontos_jogo(g2, g1)[::-1]
-        )
+        if g1 == g2 == 7:
+            pts_d1, pts_d2 = calcular_pontos_jogo(g1, g2)
+        else:
+            d1_ganhou = g1 > g2
+            pts_d1, pts_d2 = (
+                calcular_pontos_jogo(g1, g2) if d1_ganhou else calcular_pontos_jogo(g2, g1)[::-1]
+            )
         ri = jogo["rodada_interna"]
         for jid in [jogo["dupla1_j1"], jogo["dupla1_j2"]]:
             if jid is not None:

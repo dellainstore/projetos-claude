@@ -117,6 +117,26 @@ def init_db() -> None:
                 status TEXT DEFAULT 'pendente'
             );
 
+            CREATE TABLE IF NOT EXISTS sorteio_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rodada_id INTEGER NOT NULL UNIQUE REFERENCES rodadas_liga(id),
+                status TEXT NOT NULL DEFAULT 'idle',
+                progress REAL DEFAULT 0,
+                message TEXT,
+                attempt INTEGER DEFAULT 0,
+                max_attempts INTEGER DEFAULT 0,
+                valid_found INTEGER DEFAULT 0,
+                max_valid_found INTEGER DEFAULT 0,
+                eta_seconds REAL DEFAULT 0,
+                elapsed_seconds REAL DEFAULT 0,
+                best_rule2 INTEGER,
+                best_history INTEGER,
+                error_text TEXT,
+                started_at TIMESTAMP,
+                finished_at TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS jogos_final (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 final_id INTEGER REFERENCES finais_liga(id),
@@ -129,6 +149,12 @@ def init_db() -> None:
                 games_d1 INTEGER,
                 games_d2 INTEGER,
                 vencedor INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS final_indisponiveis (
+                temporada_id INTEGER REFERENCES temporadas(id),
+                jogador_id INTEGER REFERENCES jogadores(id),
+                PRIMARY KEY (temporada_id, jogador_id)
             );
         """)
         # Migração: adiciona colunas de nomes para visitantes se não existirem
@@ -330,6 +356,7 @@ def delete_rodada(rodada_id: int) -> None:
         conn.execute("DELETE FROM sorteios WHERE rodada_id = ?", (rodada_id,))
         conn.execute("DELETE FROM pontuacao_rodada WHERE rodada_id = ?", (rodada_id,))
         conn.execute("DELETE FROM visitantes WHERE rodada_id = ?", (rodada_id,))
+        conn.execute("DELETE FROM sorteio_jobs WHERE rodada_id = ?", (rodada_id,))
         conn.execute("DELETE FROM rodadas_liga WHERE id = ?", (rodada_id,))
 
 
@@ -349,6 +376,7 @@ def delete_temporada(temporada_id: int) -> None:
             conn.execute("DELETE FROM sorteios WHERE rodada_id = ?", (r["id"],))
             conn.execute("DELETE FROM pontuacao_rodada WHERE rodada_id = ?", (r["id"],))
             conn.execute("DELETE FROM visitantes WHERE rodada_id = ?", (r["id"],))
+            conn.execute("DELETE FROM sorteio_jobs WHERE rodada_id = ?", (r["id"],))
         conn.execute("DELETE FROM rodadas_liga WHERE temporada_id = ?", (temporada_id,))
         conn.execute("DELETE FROM jogadores_temporada WHERE temporada_id = ?", (temporada_id,))
         conn.execute("DELETE FROM temporadas WHERE id = ?", (temporada_id,))
@@ -380,10 +408,15 @@ def get_historico_jogos_rodadas(rodada_id: int, n: int = 2) -> list[dict]:
         ids = [r["id"] for r in rodadas_ant]
         placeholders = ",".join("?" * len(ids))
         return conn.execute(f"""
-            SELECT j.dupla1_j1, j.dupla1_j2, j.dupla2_j1, j.dupla2_j2
+            SELECT
+                j.dupla1_j1, j.dupla1_j2, j.dupla2_j1, j.dupla2_j2,
+                s.rodada_id,
+                rl.numero AS rodada_numero
             FROM jogos j
             JOIN sorteios s ON j.sorteio_id = s.id
+            JOIN rodadas_liga rl ON rl.id = s.rodada_id
             WHERE s.rodada_id IN ({placeholders}) AND s.ativo = 1
+            ORDER BY rl.numero DESC, j.rodada_interna, j.quadra
         """, ids).fetchall()
 
 
@@ -407,6 +440,41 @@ def add_visitante(rodada_id: int, nome: str) -> int:
 def delete_visitante(visitante_id: int) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM visitantes WHERE id = ?", (visitante_id,))
+
+
+# ── JOBS DE SORTEIO ───────────────────────────────────────────────────────────
+
+def get_sorteio_job(rodada_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM sorteio_jobs WHERE rodada_id = ?",
+            (rodada_id,),
+        ).fetchone()
+
+
+def upsert_sorteio_job(rodada_id: int, **fields) -> None:
+    allowed = {
+        "status", "progress", "message", "attempt", "max_attempts",
+        "valid_found", "max_valid_found", "eta_seconds", "elapsed_seconds",
+        "best_rule2", "best_history", "error_text", "started_at",
+        "finished_at", "updated_at",
+    }
+    data = {k: v for k, v in fields.items() if k in allowed}
+    if not data:
+        return
+
+    cols = ["rodada_id", *data.keys()]
+    placeholders = ",".join("?" for _ in cols)
+    updates = ", ".join(f"{col}=excluded.{col}" for col in data.keys())
+    values = [rodada_id, *data.values()]
+    with get_conn() as conn:
+        conn.execute(
+            f"""INSERT INTO sorteio_jobs ({", ".join(cols)})
+                VALUES ({placeholders})
+                ON CONFLICT(rodada_id) DO UPDATE SET
+                    {updates}""",
+            values,
+        )
 
 
 # ── SORTEIOS ──────────────────────────────────────────────────────────────────
@@ -709,3 +777,28 @@ def delete_final(final_id: int) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM jogos_final WHERE final_id = ?", (final_id,))
         conn.execute("DELETE FROM finais_liga WHERE id = ?", (final_id,))
+
+
+def list_final_indisponiveis(temporada_id: int) -> list[dict]:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT fi.jogador_id, j.nome
+            FROM final_indisponiveis fi
+            JOIN jogadores j ON j.id = fi.jogador_id
+            WHERE fi.temporada_id = ?
+            ORDER BY j.nome
+            """,
+            (temporada_id,),
+        ).fetchall()
+
+
+def set_final_indisponiveis(temporada_id: int, jogador_ids: list[int]) -> None:
+    ids = sorted({int(jid) for jid in jogador_ids})
+    with get_conn() as conn:
+        conn.execute("DELETE FROM final_indisponiveis WHERE temporada_id = ?", (temporada_id,))
+        for jid in ids:
+            conn.execute(
+                "INSERT INTO final_indisponiveis (temporada_id, jogador_id) VALUES (?, ?)",
+                (temporada_id, jid),
+            )

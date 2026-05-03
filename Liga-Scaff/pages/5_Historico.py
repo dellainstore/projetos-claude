@@ -38,6 +38,8 @@ if not rodadas_concluidas:
     st.stop()
 
 import pandas as pd
+todos_jogadores = db.list_jogadores(apenas_ativos=False)
+nomes_map = {j["id"]: j["nome"] for j in todos_jogadores}
 
 # ── Resumo por temporada ──────────────────────────────────────────────────────
 st.subheader(f"Resumo — {temporada['nome']}")
@@ -69,12 +71,42 @@ if todas_pontuacoes:
     ]
     st.dataframe(pd.DataFrame(dados_resumo), use_container_width=True, hide_index=True)
 
+final = db.get_final(tid)
+if final:
+    jogos_final = db.get_jogos_final(final["id"])
+    jogos_map = {(j["serie"], j["fase"]): j for j in jogos_final}
+
+    def _dupla_nome(jogo: dict, vencedor: int | None) -> str:
+        if not jogo or vencedor not in (1, 2):
+            return "—"
+        if vencedor == 1:
+            return f"{nomes_map.get(jogo['dupla1_p1'], '?')} / {nomes_map.get(jogo['dupla1_p2'], '?')}"
+        return f"{nomes_map.get(jogo['dupla2_p1'], '?')} / {nomes_map.get(jogo['dupla2_p2'], '?')}"
+
+    def _vice_nome(jogo: dict, vencedor: int | None) -> str:
+        if not jogo or vencedor not in (1, 2):
+            return "—"
+        if vencedor == 2:
+            return f"{nomes_map.get(jogo['dupla1_p1'], '?')} / {nomes_map.get(jogo['dupla1_p2'], '?')}"
+        return f"{nomes_map.get(jogo['dupla2_p1'], '?')} / {nomes_map.get(jogo['dupla2_p2'], '?')}"
+
+    resumo_final = []
+    for serie in ("ouro", "prata"):
+        jf = jogos_map.get((serie, "final"))
+        resumo_final.append({
+            "Série": "Ouro" if serie == "ouro" else "Prata",
+            "Campeão": _dupla_nome(jf, jf["vencedor"] if jf else None),
+            "Vice": _vice_nome(jf, jf["vencedor"] if jf else None),
+            "Placar Final": (f"{jf['games_d1']} × {jf['games_d2']}" if jf and jf["games_d1"] is not None else "—"),
+        })
+
+    st.divider()
+    st.subheader("Final da Temporada")
+    st.dataframe(pd.DataFrame(resumo_final), use_container_width=True, hide_index=True)
+
 # ── Histórico por rodada ──────────────────────────────────────────────────────
 st.divider()
 st.subheader("Rodadas Concluídas")
-
-todos_jogadores = db.list_jogadores(apenas_ativos=False)
-nomes_map = {j["id"]: j["nome"] for j in todos_jogadores}
 
 def nome_jogo(jogo: dict, slot: str) -> str:
     jid = jogo.get(slot)

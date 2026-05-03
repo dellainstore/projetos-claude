@@ -187,11 +187,52 @@ def _dashboard():
             st.page_link(page, label=label, use_container_width=True)
 
 
+def _render_sorteio_job_global() -> None:
+    temporada = db.get_temporada_ativa()
+    if not temporada:
+        return
+
+    rodadas = db.list_rodadas(temporada["id"])
+    jobs_ativos = []
+    for rodada in rodadas:
+        job = db.get_sorteio_job(rodada["id"])
+        if job and job["status"] in ("queued", "running", "finalizing"):
+            jobs_ativos.append((rodada, job))
+
+    if not jobs_ativos:
+        return
+
+    with st.sidebar:
+        st.divider()
+        st.markdown("**Sorteio em andamento**")
+        for rodada, job in jobs_ativos:
+            pct = max(0, min(int((job.get("progress") or 0) * 100), 100))
+            st.caption(
+                f"Rodada {rodada['numero']} · tentativa {job.get('attempt') or 0}/{job.get('max_attempts') or 0}"
+            )
+            st.progress(pct)
+            st.caption(
+                f"Validos {job.get('valid_found') or 0}/{job.get('max_valid_found') or 0} · "
+                f"restante ~{_fmt_sidebar_duracao(job.get('eta_seconds') or 0)}"
+            )
+
+def _fmt_sidebar_duracao(segundos: float) -> str:
+    total = max(int(round(segundos)), 0)
+    minutos, segs = divmod(total, 60)
+    horas, mins = divmod(minutos, 60)
+    if horas:
+        return f"{horas}h {mins:02d}m"
+    if mins:
+        return f"{mins}m {segs:02d}s"
+    return f"{segs}s"
+
+
 # ── Navegação condicional por papel ───────────────────────────────────────────
 if not _logado:
     pg = st.navigation([st.Page(_pagina_login, title="Login", url_path="login")])
 else:
     auth.render_sidebar_user()
+    _render_sorteio_job_global()
     role = auth.get_role()
 
     pg_inicial = st.Page(_dashboard, title="Inicial", icon="🏠", default=True)

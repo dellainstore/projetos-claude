@@ -24,6 +24,7 @@ src/
   auth.py           — autenticação (login/logout, bcrypt)
   database.py       — init e queries SQLite
   draw_engine.py    — lógica de sorteio
+  sorteio_job.py    — execução do sorteio em segundo plano
   email_sender.py   — envio de e-mails
   pdf_generator.py  — geração de PDF com ReportLab
   ranking.py        — cálculo de ranking
@@ -49,9 +50,24 @@ start.sh            — script para iniciar o app
 - Nome completo da temporada exibido sem truncamento
 
 ## Motor de Sorteio (src/draw_engine.py)
-- **Regra obrigatória:** no mesmo dia, nenhum jogador repete parceiro ou adversário (backtracking com rejeição imediata)
-- **Regra soft (histórico):** aceita parâmetro `historico_jogos` com jogos dos últimos N sorteios concluídos. Avalia até 150 soluções válidas, pontua cada uma (parceiro repetido = 2 pts, adversário repetido = 1 pt) e retorna a de menor penalidade. Sai imediatamente se encontrar score 0.
+- **Regra obrigatória master:** no mesmo dia, nenhum jogador repete parceiro ou adversário e também não pode enfrentar alguém com quem já fez dupla naquela noite (backtracking com rejeição imediata).
+- **Regra obrigatória secundária:** ninguém pode repetir parceiro da rodada oficial imediatamente anterior.
+- **Regra soft (histórico):** aceita parâmetro `historico_jogos` com jogos dos últimos N sorteios concluídos. Avalia até 500 soluções válidas, pontua cada uma e retorna a de menor penalidade. Sai imediatamente se encontrar score 0.
+- **Peso por recência:** a rodada imediatamente anterior é usada principalmente para reduzir adversários repetidos (`40` pts por confronto repetido). A penúltima rodada mantém parceiro repetido = `60` pts e adversário repetido = `10` pts como desempate histórico.
 - Função `db.get_historico_jogos_rodadas(rodada_id, n=2)` retorna jogos das últimas N rodadas concluídas da temporada para alimentar o histórico.
+- **Resultado observado nos testes recentes (rodadas 6 × 7):** parceiros repetidos entre rodadas consecutivas ficaram em `0`. Adversários repetidos ainda ficaram na faixa de `24-25`, então os próximos ajustes devem focar só em reduzir confrontos repetidos sem perder tempo de geração.
+
+## Geração em Segundo Plano (pages/2_Sorteio.py + src/sorteio_job.py)
+- O sorteio oficial pode ser iniciado em segundo plano e continua rodando no servidor mesmo se o usuário trocar de página ou fechar a aba.
+- O progresso é persistido em SQLite (`sorteio_jobs`) com status, tentativas, válidos, ETA e erro.
+- Enquanto houver job em andamento, a rodada fica com status `gerando_sorteio`.
+- Na página `2_Sorteio.py`, o progresso da rodada atual aparece logo abaixo do botão de gerar sorteio.
+- Na navegação geral, a sidebar mostra um resumo do sorteio em andamento quando houver job ativo.
+- Atualização manual com `F5` pode quebrar a sessão do Streamlit e pedir login novamente; o fluxo esperado é deixar a própria página de Sorteio se autoatualizar enquanto o job roda.
+
+## Datas e Horários
+- **Datas exibidas como DD/MM/AAAA** — usar `fmt_data()` de `src/utils.py`
+- **Timestamps de criação de sorteio exibidos em horário de Brasília** — usar `fmt_datetime_brasilia()` de `src/utils.py` para converter `created_at` do SQLite (UTC) antes de mostrar na interface.
 
 ## Download de PDF (Sorteio)
 - O botão "Baixar Planilha PDF" na aba Sorteio é um `st.download_button` com o PDF pré-gerado — um clique já baixa sem precisar rolar a página.
@@ -90,6 +106,12 @@ Gerados em `gerar_email_rodada_pdf()`, `gerar_ranking_pdf()` e `gerar_ranking_se
 - Tabela na tela: coluna "Total" logo após "Jogador" (antes das colunas de rodadas)
 - Rodadas descartadas exibidas entre parênteses `(valor)` com célula destacada
 - Seção "Gerenciar Usuários" visível apenas para `admin` (no mesmo arquivo, ao final da página)
+
+## Placar especial 7x7 (src/scoring.py + pages/3_Resultados.py)
+- **7x7 é permitido** quando o jogo é interrompido (ex.: chuva).
+- **Ninguém vence nem perde** no `7x7`; cada jogador recebe **7 pontos** naquela partida.
+- O `7x7` **não conta como derrota** para a regra da cerveja.
+- A regra da cerveja continua valendo normalmente para quem **levou 6x0**, mesmo que também tenha algum `7x7` na rodada.
 
 ## Como rodar
 ```bash

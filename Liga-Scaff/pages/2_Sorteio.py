@@ -7,14 +7,15 @@ import streamlit as st
 import sys
 from pathlib import Path
 from datetime import date
+import time
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src import database as db, auth
-from src.draw_engine import gerar_sorteio, sorteio_para_tabela, validar_sorteio
 from src.pdf_generator import gerar_planilha_pdf
 from src.scoring import calcular_pontuacao_rodada, get_beer_list, validar_placar
-from src.utils import parse_lista_whatsapp, validar_nome_jogador, fmt_data
+from src.sorteio_job import is_job_running, start_sorteio_job
+from src.utils import parse_lista_whatsapp, validar_nome_jogador, fmt_data, fmt_datetime_brasilia
 
 auth.require_organizer()
 
@@ -33,6 +34,17 @@ temporada = st.selectbox(
     index=next((i for i, t in enumerate(temporadas) if t["ativa"]), 0),
 )
 tid = temporada["id"]
+
+
+def _fmt_duracao(segundos: float) -> str:
+    total = max(int(round(segundos)), 0)
+    minutos, segs = divmod(total, 60)
+    horas, mins = divmod(minutos, 60)
+    if horas:
+        return f"{horas}h {mins:02d}m {segs:02d}s"
+    if mins:
+        return f"{mins}m {segs:02d}s"
+    return f"{segs}s"
 
 
 def nome_jogo(jogo: dict, slot: str, nomes_map: dict) -> str:
@@ -64,7 +76,7 @@ if tab_criar is not None:
             st.subheader("Rodadas da Temporada")
             if rodadas:
                 for r in rodadas:
-                    status_icon = {"pendente": "⏳", "sorteio_feito": "🎲", "concluida": "✅"}.get(r["status"], "?")
+                    status_icon = {"pendente": "⏳", "gerando_sorteio": "⚙️", "sorteio_feito": "🎲", "concluida": "✅"}.get(r["status"], "?")
                     with st.container(border=True):
                         c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
                         with c1:
@@ -159,7 +171,7 @@ if tab_criar is not None:
 # ── ABA 2: Gerar Sorteio ─────────────────────────────────────────────────────
 with tab_sorteio:
     rodadas = db.list_rodadas(tid)
-    rodadas_pendentes = [r for r in rodadas if r["status"] in ("pendente", "sorteio_feito")]
+    rodadas_pendentes = [r for r in rodadas if r["status"] in ("pendente", "gerando_sorteio", "sorteio_feito")]
 
     if not rodadas_pendentes:
         st.info("Nenhuma rodada pendente de sorteio.")
@@ -244,6 +256,11 @@ with tab_sorteio:
                            f"{abs(n_total - total_confirmados)} jogadores para completar as {n_total // 4} quadras.")
 
         sorteio_ativo = db.get_sorteio_ativo(rid)
+        sorteio_job = db.get_sorteio_job(rid)
+        job_em_andamento = (
+            bool(sorteio_job and sorteio_job["status"] in ("queued", "running", "finalizing"))
+            or is_job_running(rid)
+        )
 
         # Pré-gera o PDF se já existe sorteio, para o download ser direto no 1º clique
         pdf_data = None
@@ -264,7 +281,7 @@ with tab_sorteio:
         with col_b1:
             gerar = st.button(
                 "🎲 Gerar Sorteio",
-                disabled=not pode_sortear,
+                disabled=(not pode_sortear) or job_em_andamento,
                 use_container_width=True,
                 type="primary",
             )
@@ -280,42 +297,47 @@ with tab_sorteio:
             else:
                 st.button("🖨️ Baixar Planilha PDF", disabled=True, use_container_width=True)
 
+        if sorteio_job:
+            pct = max(0, min(int((sorteio_job.get("progress") or 0) * 100), 100))
+            st.progress(pct)
+            st.caption(
+                f"{sorteio_job.get('message') or 'Aguardando...'} "
+                f"Tentativa {sorteio_job.get('attempt') or 0}/{sorteio_job.get('max_attempts') or 0} · "
+                f"validos {sorteio_job.get('valid_found') or 0}/{sorteio_job.get('max_valid_found') or 0}"
+            )
+            if sorteio_job.get("status") in ("queued", "running", "finalizing"):
+                st.caption(
+                    f"Tempo restante estimado: ~{_fmt_duracao(sorteio_job.get('eta_seconds') or 0)} · "
+                    f"tempo decorrido: ~{_fmt_duracao(sorteio_job.get('elapsed_seconds') or 0)}"
+                )
+                st.info("O sorteio segue em segundo plano. Você pode trocar de página ou fechar a aba e acompanhar o tempo pela sidebar.")
+            elif sorteio_job.get("status") == "completed":
+                st.success("Sorteio em segundo plano concluído.")
+            elif sorteio_job.get("status") == "error":
+                st.error(sorteio_job.get("error_text") or "Falha ao gerar sorteio.")
+
         if gerar and pode_sortear:
-            with st.spinner("Gerando sorteio..."):
-                try:
-                    visitantes_reload = db.list_visitantes(rid)
-                    ids_vis = [-(v["id"]) for v in visitantes_reload]
-                    ids_finais = [j["id"] for j in jogadores_confirmados] + ids_vis
+            visitantes_reload = db.list_visitantes(rid)
+            ids_vis = [-(v["id"]) for v in visitantes_reload]
+            ids_finais = [j["id"] for j in jogadores_confirmados] + ids_vis
+            historico = db.get_historico_jogos_rodadas(rid, n=2)
+            nomes_map = {j["id"]: j["nome"] for j in todos_jogadores}
+            nomes_map.update({-(v["id"]): v["nome"] for v in visitantes_reload})
+            iniciou = start_sorteio_job(
+                rid,
+                ids_finais,
+                nomes_map,
+                historico_jogos=historico,
+            )
+            if iniciou:
+                st.success("Sorteio iniciado em segundo plano.")
+                st.rerun()
+            else:
+                st.warning("Já existe um sorteio em andamento para esta rodada.")
 
-                    historico = db.get_historico_jogos_rodadas(rid, n=2)
-                    resultado = gerar_sorteio(ids_finais, historico_jogos=historico)
-                    erros = validar_sorteio(resultado, ids_finais)
-
-                    if erros:
-                        st.error(f"Sorteio inválido: {erros[0]}")
-                    else:
-                        sorteio_id = db.create_sorteio(rid)
-                        nomes_map = {j["id"]: j["nome"] for j in todos_jogadores}
-                        nomes_map.update({-(v["id"]): v["nome"] for v in visitantes_reload})
-                        tabela = sorteio_para_tabela(resultado, nomes_map)
-
-                        for jogo in tabela:
-                            def _id(v): return v if v > 0 else None
-                            def _nv(v): return nomes_map.get(v) if v < 0 else None
-                            db.insert_jogo(
-                                sorteio_id, jogo["rodada_interna"], jogo["quadra"],
-                                _id(jogo["dupla1_j1"]), _id(jogo["dupla1_j2"]),
-                                _id(jogo["dupla2_j1"]), _id(jogo["dupla2_j2"]),
-                                _nv(jogo["dupla1_j1"]), _nv(jogo["dupla1_j2"]),
-                                _nv(jogo["dupla2_j1"]), _nv(jogo["dupla2_j2"]),
-                            )
-                        db.set_sorteio_ativo(sorteio_id, rid)
-                        db.update_rodada_status(rid, "sorteio_feito")
-                        st.success("Sorteio gerado!")
-                        st.rerun()
-
-                except ValueError as e:
-                    st.error(str(e))
+        if sorteio_job and sorteio_job.get("status") in ("queued", "running", "finalizing"):
+            time.sleep(2)
+            st.rerun()
 
         # Exibe sorteio ativo
         sorteio_ativo = db.get_sorteio_ativo(rid)
@@ -352,7 +374,7 @@ with tab_sorteio:
                 outro = st.selectbox(
                     "Trocar sorteio oficial:",
                     options=[s for s in sorteios_todos if s["id"] != sorteio_ativo["id"]],
-                    format_func=lambda s: f"Sorteio #{s['numero']} — {s['created_at']}",
+                    format_func=lambda s: f"Sorteio #{s['numero']} — {fmt_datetime_brasilia(s['created_at'])}",
                 )
                 if st.button("Definir como oficial", type="secondary"):
                     db.set_sorteio_ativo(outro["id"], rid)
@@ -607,7 +629,7 @@ with tab_auditoria:
 
             for s in sorteios:
                 badge = "🟢 OFICIAL" if s["id"] == ativo_id else "⚫ Não oficial"
-                with st.expander(f"Sorteio #{s['numero']} — {s['created_at']}  [{badge}]"):
+                with st.expander(f"Sorteio #{s['numero']} — {fmt_datetime_brasilia(s['created_at'])}  [{badge}]"):
                     jogos = db.list_jogos_sorteio(s["id"])
                     nomes_map_a = {j["id"]: j["nome"] for j in db.list_jogadores(False)}
 

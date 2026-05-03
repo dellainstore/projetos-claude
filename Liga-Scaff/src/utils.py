@@ -5,6 +5,11 @@ Utilitários gerais da Liga Quarta Scaff.
 import re
 import unicodedata
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+
+TZ_UTC = ZoneInfo("UTC")
+TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
 
 
 def _normalizar(texto: str) -> str:
@@ -20,6 +25,16 @@ def fmt_data(data_str: str) -> str:
         return datetime.strptime(str(data_str), "%Y-%m-%d").strftime("%d/%m/%Y")
     except (ValueError, TypeError):
         return str(data_str)
+
+
+def fmt_datetime_brasilia(datetime_str: str) -> str:
+    """Converte timestamp UTC do SQLite para DD/MM/YYYY HH:MM em horário de Brasília."""
+    try:
+        dt = datetime.strptime(str(datetime_str), "%Y-%m-%d %H:%M:%S")
+        dt = dt.replace(tzinfo=TZ_UTC).astimezone(TZ_BRASILIA)
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except (ValueError, TypeError):
+        return str(datetime_str)
 
 
 def parse_lista_whatsapp(texto: str, jogadores: list[dict]) -> tuple[list[dict], list[str]]:

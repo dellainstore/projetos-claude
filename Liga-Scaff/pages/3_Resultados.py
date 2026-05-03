@@ -156,7 +156,7 @@ for ri in rodadas_internas:
                             if not nomes_ok:
                                 st.error("Preencha todos os 4 nomes.")
                             elif not valido_e:
-                                st.error(f"Placar inválido: {eg1}×{eg2}. Válidos: 6-0 a 6-4 ou 7-6.")
+                                st.error(erro_e)
                             else:
                                 def _resolve(nome_str):
                                     j_r = nomes_cad_edit.get(_normalizar(nome_str))

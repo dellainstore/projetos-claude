@@ -4,6 +4,7 @@ Gerador de PDFs da Liga Quarta Scaff.
 Gera dois tipos de PDF:
 1. Planilha física para anotar resultados (por quadra)
 2. Ranking completo para enviar por e-mail
+3. Planilha da final (Ouro e Prata)
 """
 
 import io
@@ -28,6 +29,181 @@ COR_CINZA = colors.HexColor("#cccccc")
 COR_VERDE = colors.HexColor("#27ae60")
 COR_VERMELHO = colors.HexColor("#e74c3c")
 COR_AMARELO = colors.HexColor("#f39c12")
+
+
+def _score_box_table(*, final_mode: bool = False) -> Table:
+    box = Table([[""]], colWidths=[1.3 * cm], rowHeights=[0.9 * cm])
+    box.setStyle(TableStyle([
+        ("BOX", (0, 0), (0, 0), 1.0, colors.black),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (0, 0), 7 if final_mode else 3),
+        ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+    ]))
+    return box
+
+
+def _linha_dupla_em_branco() -> Table:
+    t = Table([[""]], colWidths=[6.8 * cm], rowHeights=[1.05 * cm])
+    t.setStyle(TableStyle([
+        ("LINEBELOW", (0, 0), (0, 0), 1.0, colors.black),
+        ("TOPPADDING", (0, 0), (0, 0), 0),
+        ("BOTTOMPADDING", (0, 0), (0, 0), 14),
+    ]))
+    return t
+
+
+def _dupla_para_paragraph(txt: str, style: ParagraphStyle, blank_if_placeholder: bool = False):
+    limpo = str(txt or "").strip()
+    if blank_if_placeholder and (not limpo or "_" in limpo):
+        return _linha_dupla_em_branco()
+
+    parts = limpo.split(" / ")
+    if len(parts) > 1:
+        conteudo = f"{_html.escape(parts[0])}<br/>{_html.escape(parts[1])}"
+    else:
+        conteudo = _html.escape(limpo)
+    return Paragraph(conteudo, style)
+
+
+def _final_match_table(title: str, dupla1: str, dupla2: str, *, blank_lines: bool = False) -> Table:
+    styles = getSampleStyleSheet()
+    title_s = ParagraphStyle(
+        "final_match_title",
+        parent=styles["Normal"],
+        fontSize=11,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+        textColor=COR_PRIMARIA,
+    )
+    name_s = ParagraphStyle(
+        "final_match_name",
+        parent=styles["Normal"],
+        fontSize=10,
+        fontName="Helvetica-Bold",
+        leading=13,
+    )
+    x_s = ParagraphStyle(
+        "final_match_x",
+        parent=styles["Normal"],
+        fontSize=12,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+    )
+
+    data = [
+        [Paragraph(_html.escape(title), title_s), "", ""],
+        [_dupla_para_paragraph(dupla1, name_s, blank_if_placeholder=blank_lines), _score_box_table(final_mode=blank_lines), ""],
+        [Paragraph("×", x_s), "", ""],
+        [_dupla_para_paragraph(dupla2, name_s, blank_if_placeholder=blank_lines), _score_box_table(final_mode=blank_lines), ""],
+    ]
+    row_heights = [0.9 * cm, 1.35 * cm, 0.75 * cm, 1.35 * cm] if blank_lines else [0.9 * cm, 1.08 * cm, 0.5 * cm, 1.08 * cm]
+    t = Table(data, colWidths=[6.8 * cm, 1.5 * cm, 0.6 * cm], rowHeights=row_heights)
+    t.setStyle(TableStyle([
+        ("SPAN", (0, 0), (2, 0)),
+        ("BACKGROUND", (0, 0), (2, 0), COR_CINZA_CLARO),
+        ("BOX", (0, 0), (-1, -1), 1.2, COR_PRIMARIA),
+        ("LINEBELOW", (0, 0), (2, 0), 1.2, COR_PRIMARIA),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("ALIGN", (1, 1), (1, 3), "CENTER"),
+        ("ALIGN", (2, 1), (2, 3), "CENTER"),
+        ("ALIGN", (0, 2), (0, 2), "CENTER"),
+        ("LEFTPADDING", (0, 2), (0, 2), 0),
+        ("RIGHTPADDING", (0, 2), (0, 2), 0),
+        ("TOPPADDING", (0, 2), (0, 2), 0),
+        ("BOTTOMPADDING", (0, 2), (0, 2), 0),
+    ]))
+    return t
+
+
+def gerar_final_pdf(
+    temporada_nome: str,
+    series: list[dict],
+    subtitulo: str = "",
+) -> bytes:
+    """Gera PDF da final com Ouro e Prata, contendo semis e final de cada série."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        topMargin=0.8 * cm,
+        bottomMargin=0.8 * cm,
+        leftMargin=0.8 * cm,
+        rightMargin=0.8 * cm,
+    )
+    styles = getSampleStyleSheet()
+    titulo_s = ParagraphStyle(
+        "final_titulo",
+        parent=styles["Heading1"],
+        fontSize=16,
+        alignment=TA_CENTER,
+        textColor=COR_PRIMARIA,
+        spaceAfter=3,
+    )
+    sub_s = ParagraphStyle(
+        "final_sub",
+        parent=styles["Normal"],
+        fontSize=10,
+        alignment=TA_CENTER,
+        textColor=colors.grey,
+        spaceAfter=6,
+    )
+    sec_s = ParagraphStyle(
+        "final_sec",
+        parent=styles["Heading2"],
+        fontSize=13,
+        alignment=TA_CENTER,
+        textColor=COR_ACENTO,
+        spaceAfter=4,
+    )
+
+    elements = [
+        Paragraph("Liga Quarta Scaff — Final", titulo_s),
+        Paragraph(_html.escape(temporada_nome), sub_s),
+    ]
+    if subtitulo:
+        elements.append(Paragraph(_html.escape(subtitulo), sub_s))
+    elements.append(HRFlowable(width="100%", thickness=2, color=COR_ACENTO, spaceAfter=8))
+
+    for idx, serie in enumerate(series):
+        semis = Table(
+            [[
+                _final_match_table("Semifinal 1", serie["semi1"][0], serie["semi1"][1]),
+                _final_match_table("Semifinal 2", serie["semi2"][0], serie["semi2"][1]),
+            ]],
+            colWidths=[8.9 * cm, 8.9 * cm],
+        )
+        semis.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+
+        final_box = _final_match_table(
+            "Final",
+            serie["final"][0],
+            serie["final"][1],
+            blank_lines=True,
+        )
+        blocos = [
+            Paragraph(_html.escape(serie["nome"]), sec_s),
+            semis,
+            Spacer(1, 0.35 * cm),
+            final_box,
+        ]
+        elements.append(KeepTogether(blocos))
+        if idx < len(series) - 1:
+            elements.append(Spacer(1, 0.45 * cm))
+            elements.append(HRFlowable(width="100%", thickness=1.5, color=COR_CINZA, spaceAfter=8, spaceBefore=6))
+
+    doc.build(elements)
+    return buf.getvalue()
 
 
 def _celula_jogo(dupla1: str, dupla2: str, cell_w: float) -> Table:
