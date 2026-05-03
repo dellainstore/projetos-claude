@@ -127,12 +127,9 @@ def pagseguro_notificacao(request):
         try:
             from apps.bling.services import (
                 atualizar_situacao_bling,
-                SITUACAO_ATENDIDO_SITE,
                 SITUACAO_CANCELADO,
             )
-            if novo_status == 'pagamento_confirmado':
-                atualizar_situacao_bling(pedido, SITUACAO_ATENDIDO_SITE)
-            elif novo_status == 'cancelado':
+            if novo_status == 'cancelado':
                 from apps.bling.services import restaurar_estoque_pedido
                 restaurar_estoque_pedido(pedido)
                 atualizar_situacao_bling(pedido, SITUACAO_CANCELADO)

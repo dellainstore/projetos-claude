@@ -33,12 +33,8 @@ class PagamentoAdmin(admin.ModelAdmin):
         edit_url   = reverse('admin:pagamentos_pagamento_change', args=[obj.pk])
         delete_url = reverse('admin:pagamentos_pagamento_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este pagamento?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este pagamento?\')" >✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'

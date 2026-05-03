@@ -32,12 +32,29 @@ def _base_url() -> str:
 
 
 def _headers() -> dict:
-    token = (settings.PAGSEGURO_TOKEN or '').strip()
+    token = (
+        settings.PAGSEGURO_TOKEN_SANDBOX
+        if settings.PAGSEGURO_SANDBOX and getattr(settings, 'PAGSEGURO_TOKEN_SANDBOX', '').strip()
+        else settings.PAGSEGURO_TOKEN
+    )
+    token = (token or '').strip()
     return {
         'Authorization': f'Bearer {token}',
         'Content-Type':  'application/json',
         'Accept':        'application/json',
     }
+
+
+def _telefone_payload(telefone: str) -> list[dict]:
+    tel_digits = ''.join(c for c in (telefone or '') if c.isdigit())
+    if len(tel_digits) < 10:
+        return []
+    return [{
+        'country': '55',
+        'area':    tel_digits[:2],
+        'number':  tel_digits[2:],
+        'type':    'MOBILE',
+    }]
 
 
 # ─── Chave pública ────────────────────────────────────────────────────────────
@@ -90,6 +107,30 @@ def criar_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1) -> dict:
         requests.HTTPError  se a API retornar 4xx/5xx
         requests.Timeout    se a API não responder em 30 s
     """
+    payload = montar_payload_ordem_cartao(pedido, encrypted_card, parcelas)
+
+    url = f'{_base_url()}/orders'
+    try:
+        r = requests.post(url, json=payload, headers=_headers(), timeout=30)
+        if not r.ok:
+            logger.error(
+                'PagSeguro: erro %s ao criar ordem %s: %s',
+                r.status_code, pedido.numero, r.text[:500],
+            )
+            r.raise_for_status()
+        return r.json()
+    except requests.HTTPError:
+        raise
+    except Exception as exc:
+        logger.error(
+            'PagSeguro: falha de comunicação ao criar ordem %s: %s',
+            pedido.numero, exc,
+        )
+        raise
+
+
+def montar_payload_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1) -> dict:
+    """Monta o payload de criação de ordem de cartão sem chamar a API."""
     valor_centavos = int(round(float(pedido.total) * 100))
     cpf_limpo      = ''.join(c for c in (pedido.cpf or '') if c.isdigit())
 
@@ -149,51 +190,24 @@ def criar_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1) -> dict:
     }
 
     # Telefone (opcional, mas melhora aprovação no antifraude)
-    tel_digits = ''.join(c for c in (pedido.telefone or '') if c.isdigit())
-    if len(tel_digits) >= 10:
-        payload['customer']['phones'] = [{
-            'country': '55',
-            'area':    tel_digits[:2],
-            'number':  tel_digits[2:],
-            'type':    'MOBILE',
-        }]
+    phones = _telefone_payload(pedido.telefone)
+    if phones:
+        payload['customer']['phones'] = phones
 
-    url = f'{_base_url()}/orders'
-    try:
-        r = requests.post(url, json=payload, headers=_headers(), timeout=30)
-        if not r.ok:
-            logger.error(
-                'PagSeguro: erro %s ao criar ordem %s: %s',
-                r.status_code, pedido.numero, r.text[:500],
-            )
-            r.raise_for_status()
-        return r.json()
-    except requests.HTTPError:
-        raise
-    except Exception as exc:
-        logger.error(
-            'PagSeguro: falha de comunicação ao criar ordem %s: %s',
-            pedido.numero, exc,
-        )
-        raise
+    return payload
 
 
 # ─── Criação de ordem PIX ────────────────────────────────────────────────────
 
-def criar_ordem_pix(pedido) -> dict:
-    """
-    Cria uma ordem de pagamento PIX via PagBank API.
-    Retorna dict com o QR code text e image_link (ou levanta HTTPError).
-    Resposta inclui qr_codes[0].text (payload copia-e-cola) e links para PNG.
-    """
+def montar_payload_ordem_pix(pedido) -> dict:
+    """Monta o payload de criação de ordem PIX sem chamar a API."""
     from datetime import datetime, timezone, timedelta
 
     valor_centavos = int(round(float(pedido.total) * 100))
     cpf_limpo      = ''.join(c for c in (pedido.cpf or '') if c.isdigit())
+    expira         = (datetime.now(timezone.utc) + timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S-03:00')
+    site_url       = settings.SITE_URL.rstrip('/')
 
-    expira = (datetime.now(timezone.utc) + timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%S-03:00')
-
-    site_url = settings.SITE_URL.rstrip('/')
     payload: dict = {
         'reference_id': pedido.numero,
         'customer': {
@@ -216,14 +230,19 @@ def criar_ordem_pix(pedido) -> dict:
         ],
     }
 
-    tel_digits = ''.join(c for c in (pedido.telefone or '') if c.isdigit())
-    if len(tel_digits) >= 10:
-        payload['customer']['phones'] = [{
-            'country': '55',
-            'area':    tel_digits[:2],
-            'number':  tel_digits[2:],
-            'type':    'MOBILE',
-        }]
+    phones = _telefone_payload(pedido.telefone)
+    if phones:
+        payload['customer']['phones'] = phones
+
+    return payload
+
+def criar_ordem_pix(pedido) -> dict:
+    """
+    Cria uma ordem de pagamento PIX via PagBank API.
+    Retorna dict com o QR code text e image_link (ou levanta HTTPError).
+    Resposta inclui qr_codes[0].text (payload copia-e-cola) e links para PNG.
+    """
+    payload = montar_payload_ordem_pix(pedido)
 
     url = f'{_base_url()}/orders'
     try:
@@ -265,6 +284,98 @@ _DECLINE_MESSAGES: dict[str, str] = {
     '20008': 'Número de tentativas excedido. Aguarde e tente novamente.',
     '20009': 'Transação suspeita de fraude.',
 }
+
+
+def cancelar_pedido_pagseguro(pedido) -> tuple[bool, str]:
+    """
+    Estorna a cobrança do PagBank associada ao pedido (cartão pago ou PIX recebido).
+    Para cartão: POST /charges/{charge_id}/cancel
+    Para PIX: tenta o mesmo endpoint com o ID do qr_code (PagBank aceita para PIX pago).
+    Retorna (sucesso, info). Em sucesso, info é o charge_id estornado.
+    Em falha, info é a mensagem de erro.
+
+    Não altera o status do pedido — quem chama decide o que fazer no banco.
+    """
+    if pedido.gateway != 'pagseguro':
+        return False, f'Pedido pago via {pedido.gateway or "(nenhum)"}, não PagBank.'
+    if not pedido.gateway_id:
+        return False, 'Pedido sem gateway_id (ordem PagBank não registrada).'
+
+    ordem = consultar_ordem(pedido.gateway_id)
+    if not ordem:
+        return False, 'Falha ao consultar ordem no PagBank.'
+
+    # Tenta primeiro charges (cartão de crédito)
+    charges = ordem.get('charges') or []
+    charge = next(
+        (c for c in charges if (c.get('status') or '').upper() in ('PAID', 'AUTHORIZED')),
+        None,
+    )
+
+    # Fallback: PIX — PagBank não retorna charges para QR code; usa qr_codes
+    if not charge:
+        qr_codes = ordem.get('qr_codes') or []
+        qr_pago = next(
+            (qr for qr in qr_codes if (qr.get('status') or '').upper() == 'PAID'),
+            None,
+        )
+        if qr_pago:
+            # Para PIX pago, tenta cancelar via ID do qr_code no endpoint de charges
+            qr_id = qr_pago.get('id', '')
+            valor_centavos = (qr_pago.get('amount') or {}).get('value')
+            if qr_id and valor_centavos:
+                ok, info = _tentar_cancelar_charge(qr_id, valor_centavos, pedido.numero)
+                if ok:
+                    return True, qr_id
+                # Se o endpoint de charges não aceitar qr_id para PIX, orienta o operador
+                logger.warning(
+                    'PagSeguro estorno PIX: não foi possível estornar automaticamente '
+                    'o pedido %s (qr_code %s). Realize o estorno manualmente no painel PagBank.',
+                    pedido.numero, qr_id,
+                )
+                return False, (
+                    f'PIX pago (QR {qr_id}) — estorno automático não disponível para este meio. '
+                    'Acesse o painel PagBank e realize o estorno manualmente antes de cancelar o pedido.'
+                )
+        return False, 'Nenhuma cobrança paga/autorizada para estornar nesta ordem.'
+
+    charge_id = charge.get('id', '')
+    if not charge_id:
+        return False, 'Cobrança encontrada sem id.'
+
+    valor_centavos = (charge.get('amount') or {}).get('value')
+    if not valor_centavos:
+        return False, 'Cobrança sem amount.value para estornar.'
+
+    return _tentar_cancelar_charge(charge_id, valor_centavos, pedido.numero)
+
+
+def _tentar_cancelar_charge(charge_id: str, valor_centavos: int, numero_pedido: str) -> tuple[bool, str]:
+    """
+    Chama POST /charges/{charge_id}/cancel no PagBank.
+    PagBank exige body com amount.value mesmo para estorno total (sem body retorna 40002).
+    """
+    url = f'{_base_url()}/charges/{charge_id}/cancel'
+    body = {'amount': {'value': valor_centavos}}
+    try:
+        r = requests.post(url, headers=_headers(), json=body, timeout=30)
+    except Exception as exc:
+        logger.error('PagSeguro estorno: exceção ao cancelar charge %s (pedido %s): %s',
+                     charge_id, numero_pedido, exc)
+        return False, f'Erro de comunicação: {exc}'
+
+    if not r.ok:
+        logger.error('PagSeguro estorno: HTTP %s ao cancelar charge %s (pedido %s): %s',
+                     r.status_code, charge_id, numero_pedido, r.text[:500])
+        try:
+            erros = r.json().get('error_messages', [])
+            descricao = '; '.join(f'{e.get("code","")}: {e.get("description","")}' for e in erros)
+        except Exception:
+            descricao = r.text[:200]
+        return False, f'PagBank HTTP {r.status_code}: {descricao or "(sem detalhes)"}'
+
+    logger.info('PagSeguro estorno: charge %s cancelado (pedido %s)', charge_id, numero_pedido)
+    return True, charge_id
 
 
 def consultar_ordem(order_id: str) -> dict | None:

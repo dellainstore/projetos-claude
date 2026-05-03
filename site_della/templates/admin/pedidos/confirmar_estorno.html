@@ -1,0 +1,66 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }} — Painel D'ELLA{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block content %}
+<div style="max-width:900px;">
+  <h1>{{ title }}</h1>
+
+  <div style="background:#fdecea;border:1px solid #f5b7b1;border-radius:6px;padding:1.1rem 1.25rem;margin:1rem 0 1.5rem;">
+    <strong style="display:block;margin-bottom:.4rem;color:#922b21;">⚠ Ação irreversível</strong>
+    <p style="margin:0;font-size:.92rem;line-height:1.5;color:#4a1f1c;">
+      Você está prestes a <strong>solicitar estorno na PagBank</strong> e marcar
+      como <strong>Cancelado</strong> os pedidos abaixo. O valor pago volta para
+      o cliente automaticamente — não há como desfazer pelo painel.
+      O estoque será restaurado e a situação no Bling será atualizada para
+      "Cancelado".
+    </p>
+  </div>
+
+  <div style="background:#fff;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;margin-bottom:1.25rem;">
+    <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+      <thead>
+        <tr style="background:#f5f5f3;">
+          <th style="text-align:left;padding:.7rem 1rem;border-bottom:1px solid #e5e5e5;">Pedido</th>
+          <th style="text-align:left;padding:.7rem 1rem;border-bottom:1px solid #e5e5e5;">Cliente</th>
+          <th style="text-align:left;padding:.7rem 1rem;border-bottom:1px solid #e5e5e5;">Pagamento</th>
+          <th style="text-align:left;padding:.7rem 1rem;border-bottom:1px solid #e5e5e5;">Status atual</th>
+          <th style="text-align:right;padding:.7rem 1rem;border-bottom:1px solid #e5e5e5;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pedidos %}
+        <tr>
+          <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;font-weight:600;">{{ p.numero }}</td>
+          <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;">{{ p.nome_completo }}</td>
+          <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;">{{ p.get_forma_pagamento_display }}</td>
+          <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;">{{ p.get_status_display }}</td>
+          <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;text-align:right;">R$ {{ p.total|floatformat:"2g" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" style="padding:1rem;text-align:center;color:#777;">Nenhum pedido selecionado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form method="post" action="">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="cancelar_e_estornar_pagseguro">
+    <input type="hidden" name="confirmar" value="yes">
+    <input type="hidden" name="index" value="0">
+    {% for p in pedidos %}
+      <input type="hidden" name="_selected_action" value="{{ p.pk }}">
+    {% endfor %}
+
+    <div style="display:flex;gap:.75rem;align-items:center;">
+      <button type="submit"
+              style="background:#c0392b;color:#fff;padding:.7rem 1.4rem;border:none;
+                     border-radius:4px;font-size:.92rem;cursor:pointer;font-weight:600;">
+        ✕ Confirmar Estorno
+      </button>
+      <a href="../" style="color:#666;font-size:.9rem;">Voltar sem alterar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
