@@ -82,6 +82,27 @@ Restaurar (exemplo banco): `rclone copy onedrive:Della/Backups/site_della/della_
 
 Restaurar (exemplo código): `rclone copy onedrive:Della/Backups/codigo/codigo_YYYYMMDD_HHMM.tar.gz /tmp/ && tar -xzf /tmp/codigo_*.tar.gz -C /tmp/restore/`
 
+### Token GitHub (acesso da VPS)
+
+- **Tipo:** Personal Access Token Fine-grained (escopo limitado a 1 repo: `dellainstore/projetos-claude`)
+- **Permissões:** Contents=Read+Write, Metadata=Read-only, resto=No access
+- **Expiração atual:** `2026-08-01` (90 dias a partir de 2026-05-03)
+- **Lembrete automático:** `site_della/scripts/enviar_lembrete_token.sh` envia e-mail via Brevo para `neto.giacomelli@outlook.com` 14 dias antes da expiração (cron diário 09:00, dispara só no dia certo)
+- **A cada renovação:** atualizar `TOKEN_EXPIRY` no script com `sed -i "s/^TOKEN_EXPIRY=.*/TOKEN_EXPIRY=\"$(date -d '+90 days' +%Y-%m-%d)\"/" site_della/scripts/enviar_lembrete_token.sh`
+- **Substituir token na VPS:** `git remote set-url origin https://dellainstore:NOVO_TOKEN@github.com/dellainstore/projetos-claude.git`
+- **Histórico:** token anterior era OAuth do GitHub CLI (`gho_*`), revogado em 2026-05-03 por estar com escopo amplo demais
+
+### Cron jobs (resumo consolidado)
+
+| Quando | O que |
+|---|---|
+| `0 * * * *` (a cada hora) | `cancelar_pedidos_expirados` + `enviar_emails_carrinho_abandonado` |
+| `0 */6 * * *` | `verificar_cache` (compara cache vs banco) |
+| `0 2 * * *` | Backup banco PostgreSQL → OneDrive |
+| `0 3 * * *` | `marcar_entrega_automatica` (auto-entrega após 7 dias) |
+| `30 3 * * *` | Backup código fonte → OneDrive |
+| `0 9 * * *` | Verifica se é dia de lembrar renovação do token GitHub |
+
 ---
 
 ## Estrutura
@@ -529,6 +550,10 @@ GA_MEASUREMENT_ID=G-ELSG6BRW0M
 | Bugs de CEP, estorno PIX, ativação de conta | ✅ |
 | Remover registro `novo.dellainstore.com.br` do DNS da UOL | ✅ |
 | Compilar Tailwind local (remove dependência do CDN; `cdn.tailwindcss.com` removido do CSP) | ✅ |
+| Token GitHub migrado de OAuth (`gho_*`, escopo amplo) para Fine-grained (escopo 1 repo, 90 dias) | ✅ |
+| Lembrete automático por e-mail 14 dias antes do token GitHub expirar (Brevo + cron) | ✅ |
+| `.gitignore` reforçado: PII (CSV/clientes), logs PagSeguro não mascarados, dumps, builds | ✅ |
+| Branch `feature/cache-system` mergeada em `main` (fast-forward) | ✅ |
 
 ---
 
@@ -561,6 +586,9 @@ GA_MEASUREMENT_ID=G-ELSG6BRW0M
 | Middleware modo manutenção | `apps/core_utils/maintenance.py` |
 | Template página manutenção | `templates/manutencao.html` |
 | Toggle manutenção no admin | `Admin → Configurações da Loja → Modo manutenção` |
+| Backup banco PostgreSQL | `scripts/backup_db.sh` |
+| Backup código fonte | `scripts/backup_codigo.sh` |
+| Lembrete renovação token GitHub | `scripts/enviar_lembrete_token.sh` |
 
 ---
 
