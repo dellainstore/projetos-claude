@@ -5,6 +5,23 @@ from django.conf import settings
 CHAVE_SESSAO = 'carrinho_della'
 
 
+def _desc_variacao(variacao):
+    """Retorna descrição curta da variação: 'PRETO / Tam. P'"""
+    if not variacao:
+        return ''
+    partes = []
+    if variacao.cor_id:
+        partes.append(variacao.cor.nome.title())
+    if variacao.tamanho_id:
+        partes.append(f'Tam. {variacao.tamanho.nome}')
+    if variacao.sob_demanda:
+        prazo = variacao.prazo_total_adicional_dias
+        partes.append(f'Sob demanda (+{prazo} dia{"s" if prazo != 1 else ""} úteis)')
+    else:
+        partes.append('Pronta entrega')
+    return ' / '.join(partes)
+
+
 class Carrinho:
     """
     Carrinho de compras baseado em sessão.
@@ -38,7 +55,14 @@ class Carrinho:
 
         if chave not in self.carrinho:
             imagem = ''
-            if produto.imagem_principal:
+            if variacao and variacao.cor_id:
+                try:
+                    from apps.produtos.models import ProdutoCorFoto
+                    cor_foto = ProdutoCorFoto.objects.get(produto=produto, cor_id=variacao.cor_id)
+                    imagem = cor_foto.imagem.imagem.url
+                except Exception:
+                    pass
+            if not imagem and produto.imagem_principal:
                 try:
                     imagem = produto.imagem_principal.imagem.url
                 except Exception:
@@ -48,8 +72,9 @@ class Carrinho:
                 'produto_id': produto.id,
                 'variacao_id': variacao.id if variacao else None,
                 'nome': produto.nome,
-                'variacao_desc': str(variacao) if variacao else '',
-                'preco': str(produto.preco_atual),
+                'variacao_desc': _desc_variacao(variacao),
+                'preco': str(variacao.preco_atual if variacao else produto.preco_atual),
+                'peso': produto.peso,
                 'quantidade': 0,
                 'imagem': imagem,
             }

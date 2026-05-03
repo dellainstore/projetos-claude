@@ -5,22 +5,75 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from apps.core_utils.sanitize import sanitize_text, sanitize_address, sanitize_phone
-
-
-def gerar_numero_pedido():
-    """Gera número legível: DI-2024-XXXX"""
-    ano = timezone.now().year
-    aleatorio = uuid.uuid4().hex[:6].upper()
-    return f'DI-{ano}-{aleatorio}'
+import json
 
 
 def gerar_codigo_vendedor():
-    """Gera código aleatório de 8 caracteres maiúsculos para CodigoVendedor."""
+    """Mantido para compatibilidade com migrations antigas."""
     chars = string.ascii_uppercase + string.digits
     while True:
         codigo = ''.join(random.choices(chars, k=8))
         if not CodigoVendedor.objects.filter(codigo=codigo).exists():
             return codigo
+
+
+def gerar_numero_pedido():
+    """Gera número sequencial: YYYY-0001, YYYY-0002, ..."""
+    ano = timezone.now().year
+    prefix = f'{ano}-'
+    numeros_ano = Pedido.objects.filter(numero__startswith=prefix).values_list('numero', flat=True)
+    nums_usados = set()
+    for n in numeros_ano:
+        try:
+            parte = n[len(prefix):]
+            if parte.isdigit():
+                nums_usados.add(int(parte))
+        except (IndexError, ValueError):
+            pass
+    seq = 1
+    while seq in nums_usados:
+        seq += 1
+    return f'{ano}-{seq:04d}'
+
+
+class CarrinhoAbandonado(models.Model):
+    """
+    Snapshot do carrinho de um cliente autenticado que não finalizou a compra.
+    Gerado/atualizado cada vez que um item é adicionado ao carrinho.
+    Deletado quando o checkout é concluído com sucesso.
+    """
+    cliente = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='carrinhos_abandonados', verbose_name='Cliente',
+    )
+    email = models.EmailField('E-mail', max_length=254)
+    nome  = models.CharField('Nome', max_length=240, blank=True)
+    itens_json = models.JSONField('Itens do carrinho')
+    total = models.DecimalField('Total', max_digits=10, decimal_places=2, default=0)
+
+    email_enviado    = models.BooleanField('E-mail enviado', default=False)
+    email_enviado_em = models.DateTimeField('E-mail enviado em', null=True, blank=True)
+    recuperado       = models.BooleanField('Recuperado (compra feita)', default=False)
+
+    criado_em     = models.DateTimeField('Criado em', auto_now_add=True)
+    atualizado_em = models.DateTimeField('Atualizado em', auto_now=True)
+
+    class Meta:
+        verbose_name        = 'Carrinho Abandonado'
+        verbose_name_plural = 'Carrinhos Abandonados'
+        ordering            = ['-atualizado_em']
+        unique_together     = [('cliente',)]
+
+    def __str__(self):
+        return f'{self.email} — R$ {self.total} ({self.atualizado_em.strftime("%d/%m/%Y %H:%M")})'
+
+    @property
+    def itens(self):
+        return self.itens_json or []
+
+    @property
+    def quantidade_itens(self):
+        return sum(item.get('quantidade', 1) for item in self.itens)
 
 
 class Cupom(models.Model):
@@ -84,8 +137,9 @@ class Cupom(models.Model):
 
 
 class CodigoVendedor(models.Model):
-    codigo = models.CharField('Código', max_length=20, unique=True, default=gerar_codigo_vendedor)
-    nome   = models.CharField('Nome do vendedor', max_length=120)
+    codigo = models.CharField('Código / Nome', max_length=50, unique=True,
+                              help_text='Nome ou palavra-chave que identifica o vendedor. Ex: TINA')
+    nome   = models.CharField('Nome completo', max_length=120)
     ativo  = models.BooleanField('Ativo', default=True)
 
     class Meta:
@@ -169,6 +223,10 @@ class Pedido(models.Model):
     # Entrega
     codigo_rastreio = models.CharField('Código de rastreio', max_length=50, blank=True)
     transportadora = models.CharField('Transportadora', max_length=80, blank=True)
+    # Serviço Melhor Envio escolhido no checkout — usado para montar
+    # transporte.volumes no payload do Bling (modalidade PAC=1 / SEDEX=2)
+    frete_servico_id = models.CharField('ID serviço frete', max_length=20, blank=True)
+    frete_prazo_dias = models.PositiveSmallIntegerField('Prazo frete (dias)', null=True, blank=True)
 
     # Integração Bling
     bling_pedido_id = models.CharField('ID pedido Bling', max_length=50, blank=True)
@@ -203,6 +261,54 @@ class Pedido(models.Model):
     @property
     def pode_cancelar(self):
         return self.status in ('aguardando_pagamento',)
+
+    # ── Display e timeline pro cliente ───────────────────────────────────────
+    STATUS_PUBLICO = {
+        'aguardando_pagamento': 'Aguardando pagamento',
+        'pagamento_confirmado': 'Em separação',
+        'em_separacao':         'Em separação',
+        'enviado':              'Enviado',
+        'entregue':             'Entregue',
+        'cancelado':            'Cancelado',
+        'estornado':            'Estornado',
+    }
+
+    @property
+    def status_publico(self):
+        """Display amigável do status pro cliente (mais simples que o interno)."""
+        return self.STATUS_PUBLICO.get(self.status, self.get_status_display())
+
+    def _data_primeira_transicao_para(self, status):
+        h = self.historico.filter(status_novo=status).order_by('criado_em').first()
+        return h.criado_em if h else None
+
+    @property
+    def data_pago(self):
+        return self._data_primeira_transicao_para('pagamento_confirmado')
+
+    @property
+    def data_envio(self):
+        return self._data_primeira_transicao_para('enviado')
+
+    @property
+    def data_entrega(self):
+        return self._data_primeira_transicao_para('entregue')
+
+    @property
+    def data_cancelamento(self):
+        return self._data_primeira_transicao_para('cancelado')
+
+    @property
+    def pode_confirmar_entrega(self):
+        """Cliente pode marcar como entregue se já foi enviado."""
+        return self.status == 'enviado'
+
+    @property
+    def link_rastreio(self):
+        """URL para rastreamento via linkcorreios.com.br."""
+        if not self.codigo_rastreio:
+            return ''
+        return f'https://www.linkcorreios.com.br/?id={self.codigo_rastreio}'
 
     def calcular_total(self):
         self.total = self.subtotal - self.desconto + self.frete

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedido cancelado — Della Instore</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f3;padding:32px 0;">
+  <tr>
+    <td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- HEADER -->
+        <tr>
+          <td style="background:#0a0a0a;padding:32px 40px;text-align:center;">
+            <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;
+                        color:#c9a96e;letter-spacing:3px;">DELLA INSTORE</div>
+            <div style="font-size:11px;color:#888;letter-spacing:2px;margin-top:4px;text-transform:uppercase;">
+              Moda Feminina Premium
+            </div>
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td style="background:#2c2c2c;padding:32px 40px;text-align:center;
+                      border-top:3px solid #c9a96e;">
+            <div style="font-size:40px;margin-bottom:12px;">❌</div>
+            <div style="font-size:22px;font-weight:700;color:#fafafa;letter-spacing:1px;">
+              Pedido cancelado
+            </div>
+            <div style="font-size:14px;color:#aaa;margin-top:8px;">
+              Pedido {{ pedido.numero }}
+            </div>
+          </td>
+        </tr>
+
+        <!-- BODY -->
+        <tr>
+          <td style="background:#ffffff;padding:36px 40px;">
+
+            <p style="margin:0 0 20px;font-size:15px;color:#333;line-height:1.6;">
+              Olá, <strong>{{ pedido.nome_completo.split.0 }}</strong>!<br>
+              Seu pedido <strong>{{ pedido.numero }}</strong> foi cancelado.
+              {% if estornado %}
+              O valor de <strong>R$ {{ pedido.total|floatformat:"2g" }}</strong> será
+              estornado automaticamente ao meio de pagamento utilizado em até
+              <strong>5 dias úteis</strong>.
+              {% endif %}
+            </p>
+
+            {% if not estornado %}
+            <div style="background:#fff8e1;border-left:4px solid #f39c12;padding:14px 18px;
+                         border-radius:0 4px 4px 0;margin-bottom:24px;">
+              <p style="margin:0;font-size:14px;color:#7d5a00;line-height:1.5;">
+                Caso você já tenha realizado o pagamento e não tenha recebido informações
+                sobre o estorno, entre em contato conosco pelo WhatsApp ou
+                pelo e-mail <a href="mailto:contato@dellainstore.com.br"
+                style="color:#c9a96e;">contato@dellainstore.com.br</a>.
+              </p>
+            </div>
+            {% endif %}
+
+            <!-- Itens cancelados -->
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;
+                         letter-spacing:1px;color:#666;margin-bottom:12px;">
+              Itens Cancelados
+            </div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              {% for item in pedido.itens.all %}
+              <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:10px 0;font-size:14px;color:#888;">
+                  {{ item.quantidade }}x {{ item.nome_produto }}
+                  {% if item.variacao_desc %}
+                    <span style="font-size:12px;">— {{ item.variacao_desc }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </table>
+
+            <p style="margin:0 0 28px;font-size:14px;color:#666;line-height:1.6;text-align:center;">
+              Sentimos muito pelo inconveniente. Esperamos vê-la em breve!
+            </p>
+
+            <!-- CTA -->
+            <div style="text-align:center;">
+              <a href="{{ site_url }}/loja/"
+                 style="display:inline-block;background:#0a0a0a;color:#c9a96e;
+                         padding:14px 36px;border-radius:3px;text-decoration:none;
+                         font-size:13px;font-weight:700;letter-spacing:1.5px;
+                         text-transform:uppercase;">
+                Continuar Comprando
+              </a>
+            </div>
+
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background:#0a0a0a;padding:28px 40px;text-align:center;">
+            <div style="font-size:11px;color:#555;line-height:1.8;">
+              Dúvidas? Fale conosco pelo WhatsApp ou pelo e-mail<br>
+              <a href="mailto:contato@dellainstore.com.br"
+                 style="color:#c9a96e;text-decoration:none;">
+                contato@dellainstore.com.br
+              </a>
+            </div>
+            <div style="margin-top:16px;font-size:10px;color:#444;letter-spacing:1px;">
+              DELLA INSTORE — MODA FEMININA PREMIUM
+            </div>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

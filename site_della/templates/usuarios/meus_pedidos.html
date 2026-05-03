@@ -57,7 +57,7 @@
               </div>
               <div class="conta-pedido-col">
                 <span class="conta-pedido-label">Status</span>
-                <span class="conta-status conta-status--{{ pedido.status }}">{{ pedido.get_status_display }}</span>
+                <span class="conta-status conta-status--{{ pedido.status }}">{{ pedido.status_publico }}</span>
               </div>
               <div class="conta-pedido-col">
                 <a href="{% url 'usuarios:detalhe_pedido' pedido.numero %}" class="btn-conta-secundario btn-conta-secundario--sm">

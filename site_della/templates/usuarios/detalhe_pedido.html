@@ -43,15 +43,94 @@
           <h2 class="conta-secao-titulo">Pedido {{ pedido.numero }}</h2>
           <p class="conta-pedido-data">Realizado em {{ pedido.criado_em|date:"d \d\e F \d\e Y" }}</p>
         </div>
-        <span class="conta-status conta-status--{{ pedido.status }}">{{ pedido.get_status_display }}</span>
+        <span class="conta-status conta-status--{{ pedido.status }}">{{ pedido.status_publico }}</span>
       </div>
 
-      
+      {% if messages %}
+        {% for msg in messages %}
+          <div class="conta-card" style="border-left:4px solid {% if msg.tags == 'success' %}#27ae60{% elif msg.tags == 'error' %}#c0392b{% else %}#c9a96e{% endif %};background:#fafafa;">
+            <p style="margin:0;font-size:.92rem;">{{ msg }}</p>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      {% if pedido.status == 'cancelado' %}
+        <div class="conta-card pedido-timeline pedido-timeline--cancelado">
+          <i class="fas fa-circle-xmark" aria-hidden="true"></i>
+          <div>
+            <strong>Pedido cancelado</strong>
+            {% if pedido.data_cancelamento %}<small>Em {{ pedido.data_cancelamento|date:"d/m/Y H:i" }}</small>{% endif %}
+            <p style="margin:.4rem 0 0;font-size:.88rem;color:#666;">Se houve pagamento, o estorno é processado automaticamente em sua conta/fatura.</p>
+          </div>
+        </div>
+      {% else %}
+        <div class="conta-card pedido-timeline">
+          <h3 class="conta-card-titulo">Acompanhamento</h3>
+          <ol class="timeline">
+            <li class="timeline-step {% if pedido.status != 'aguardando_pagamento' %}timeline-step--ativo{% endif %}">
+              <span class="timeline-marker"><i class="fas {% if pedido.status != 'aguardando_pagamento' %}fa-check{% else %}fa-clock{% endif %}"></i></span>
+              <div class="timeline-corpo">
+                <strong>Pagamento confirmado</strong>
+                {% if pedido.data_pago %}<small>{{ pedido.data_pago|date:"d/m/Y \à\s H:i" }}</small>{% endif %}
+              </div>
+            </li>
+            <li class="timeline-step {% if pedido.status == 'pagamento_confirmado' or pedido.status == 'em_separacao' or pedido.status == 'enviado' or pedido.status == 'entregue' %}timeline-step--ativo{% endif %}">
+              <span class="timeline-marker"><i class="fas {% if pedido.status == 'enviado' or pedido.status == 'entregue' %}fa-check{% elif pedido.status == 'pagamento_confirmado' or pedido.status == 'em_separacao' %}fa-box{% else %}fa-circle-notch{% endif %}"></i></span>
+              <div class="timeline-corpo">
+                <strong>Em separação</strong>
+                {% if pedido.status == 'pagamento_confirmado' or pedido.status == 'em_separacao' %}
+                  <small>Estamos preparando seu pedido</small>
+                {% elif pedido.data_pago %}
+                  <small>Iniciada em {{ pedido.data_pago|date:"d/m/Y" }}</small>
+                {% endif %}
+              </div>
+            </li>
+            <li class="timeline-step {% if pedido.status == 'enviado' or pedido.status == 'entregue' %}timeline-step--ativo{% endif %}">
+              <span class="timeline-marker"><i class="fas {% if pedido.status == 'entregue' %}fa-check{% elif pedido.status == 'enviado' %}fa-truck{% else %}fa-circle-notch{% endif %}"></i></span>
+              <div class="timeline-corpo">
+                <strong>Enviado</strong>
+                {% if pedido.data_envio %}<small>{{ pedido.data_envio|date:"d/m/Y" }}</small>{% endif %}
+              </div>
+            </li>
+            <li class="timeline-step {% if pedido.status == 'entregue' %}timeline-step--ativo{% endif %}">
+              <span class="timeline-marker"><i class="fas {% if pedido.status == 'entregue' %}fa-check{% else %}fa-circle-notch{% endif %}"></i></span>
+              <div class="timeline-corpo">
+                <strong>Entregue</strong>
+                {% if pedido.data_entrega %}<small>{{ pedido.data_entrega|date:"d/m/Y" }}</small>{% endif %}
+              </div>
+            </li>
+          </ol>
+        </div>
+      {% endif %}
+
       {% if pedido.codigo_rastreio %}
         <div class="conta-card conta-rastreio">
-          <p><i class="fas fa-truck"></i> <strong>Código de rastreio:</strong>
-            {{ pedido.transportadora }} — <strong>{{ pedido.codigo_rastreio }}</strong>
+          <p style="margin:0;">
+            <i class="fas fa-truck"></i>
+            <strong>Rastreamento:</strong>
+            {{ pedido.transportadora|default:"Correios" }} —
+            <a href="{{ pedido.link_rastreio }}" target="_blank" rel="noopener" class="link-rastreio">
+              <strong>{{ pedido.codigo_rastreio }}</strong> <i class="fas fa-up-right-from-square" style="font-size:.75rem;"></i>
+            </a>
           </p>
+        </div>
+      {% endif %}
+
+      {% if pedido.pode_confirmar_entrega %}
+        <div class="conta-card" style="background:#fafaf6;border:1px dashed #c9a96e;">
+          <h3 class="conta-card-titulo" style="margin-top:0;">
+            <i class="fas fa-box-open" style="color:#c9a96e;"></i> Você já recebeu seu pedido?
+          </h3>
+          <p style="font-size:.9rem;color:#555;margin-bottom:1rem;">
+            Confirme o recebimento para finalizarmos seu pedido. Caso não confirme,
+            ele será marcado como entregue automaticamente após 7 dias do envio.
+          </p>
+          <form method="post" action="{% url 'usuarios:confirmar_entrega' pedido.numero %}" style="margin:0;">
+            {% csrf_token %}
+            <button type="submit" class="btn-conta-primario">
+              <i class="fas fa-check"></i> Confirmar entrega
+            </button>
+          </form>
         </div>
       {% endif %}
 
@@ -62,102 +141,12 @@
           Pagamento pendente — R$ {{ pedido.total|floatformat:"2g" }}
         </h3>
 
-        <div class="pagar-tabs" style="display:flex;gap:.5rem;margin-bottom:1.25rem;flex-wrap:wrap;">
-          <button type="button" class="pagar-tab pagar-tab--ativa" data-painel="pix"
-                  onclick="mostrarPainel('pix',this)"
-                  style="padding:.5rem 1rem;border:2px solid #c9a96e;background:#c9a96e;color:#fff;border-radius:6px;font-family:inherit;font-size:.85rem;cursor:pointer;">
-            <i class="fas fa-qrcode"></i> Pix
-          </button>
-          <button type="button" class="pagar-tab" data-painel="cartao"
-                  onclick="mostrarPainel('cartao',this)"
-                  style="padding:.5rem 1rem;border:2px solid #ddd;background:#fff;color:#555;border-radius:6px;font-family:inherit;font-size:.85rem;cursor:pointer;">
-            <i class="far fa-credit-card"></i> Cartão de crédito
-          </button>
-        </div>
-
-        <div id="painel-pix">
-          {% if pix_qrcode %}
-          <p style="font-size:.88rem;color:#666;margin-bottom:1rem;">
-            Escaneie o QR Code ou copie o código Pix abaixo.
+        <div style="padding:1rem 0;color:#666;line-height:1.7;">
+          <i class="fas fa-tools" style="font-size:1.6rem;display:block;margin-bottom:.75rem;color:#c9a96e;"></i>
+          <p style="font-size:.95rem;font-weight:500;color:#333;">Pagamento temporariamente indisponível</p>
+          <p style="font-size:.88rem;margin-top:.4rem;">
+            Os pagamentos por Pix e cartão estão temporariamente indisponíveis enquanto finalizamos a liberação e validação do gateway.
           </p>
-          <div style="text-align:center;margin-bottom:1.25rem;">
-            <img src="data:image/png;base64,{{ pix_qrcode }}"
-                 alt="QR Code Pix" class="pix-qrcode-img" style="max-width:220px;">
-            <div class="pix-valor">R$ {{ pedido.total|floatformat:"2g" }}</div>
-          </div>
-          {% if pix_payload %}
-          <div class="pix-copiar-bloco">
-            <p class="pix-copiar-label">Copie o código Pix:</p>
-            <div class="pix-copiar-input-wrapper">
-              <input type="text" id="pix-payload-detalhe" value="{{ pix_payload }}"
-                     readonly class="pix-copiar-input">
-              <button type="button" id="btn-copiar-pix-det" class="btn-copiar-pix"
-                      onclick="copiarPixDetalhe()">
-                <i class="far fa-copy"></i> Copiar
-              </button>
-            </div>
-          </div>
-          {% endif %}
-          <div class="pix-aviso" style="margin-top:1rem;">
-            <i class="fas fa-info-circle"></i>
-            Após pagar, aguarde alguns instantes e recarregue a página para ver a confirmação.
-          </div>
-          {% else %}
-          <p style="font-size:.88rem;color:#666;line-height:1.7;">
-            Pague via Pix para nossa chave CNPJ e informe o número do pedido
-            <strong>{{ pedido.numero }}</strong> na descrição.<br>
-            Entre em contato pelo WhatsApp para receber os dados de pagamento.
-          </p>
-          {% endif %}
-        </div>
-
-        <div id="painel-cartao" style="display:none;">
-          {% if pagseguro_public_key %}
-          <div class="cartao-form">
-            <div class="checkout-campo">
-              <label for="det-card-number">Número do cartão</label>
-              <input type="text" id="det-card-number" placeholder="0000 0000 0000 0000"
-                     maxlength="19" inputmode="numeric" autocomplete="cc-number" class="checkout-input checkout-input--card">
-            </div>
-            <div class="checkout-campo">
-              <label for="det-card-holder">Nome impresso no cartão</label>
-              <input type="text" id="det-card-holder" placeholder="NOME COMO NO CARTÃO"
-                     autocomplete="cc-name" style="text-transform:uppercase" class="checkout-input">
-            </div>
-            <div class="checkout-grid-2">
-              <div class="checkout-campo">
-                <label for="det-card-expiry">Validade</label>
-                <input type="text" id="det-card-expiry" placeholder="MM/AA"
-                       maxlength="5" inputmode="numeric" autocomplete="cc-exp" class="checkout-input">
-              </div>
-              <div class="checkout-campo">
-                <label for="det-card-cvv">CVV</label>
-                <input type="text" id="det-card-cvv" placeholder="123"
-                       maxlength="4" inputmode="numeric" autocomplete="cc-csc" class="checkout-input">
-              </div>
-            </div>
-            <div class="checkout-campo">
-              <label for="det-parcelas">Parcelas</label>
-              <select id="det-parcelas" class="checkout-input">
-                <option value="1">1x</option>
-              </select>
-            </div>
-            <div id="det-cartao-erro" class="cartao-erro hidden" style="margin-top:.75rem;"></div>
-            <button type="button" id="btn-pagar-cartao"
-                    style="margin-top:1rem;width:100%;padding:.8rem;background:#c9a96e;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.95rem;cursor:pointer;font-weight:500;">
-              <i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:"2g" }}
-            </button>
-            <p class="cartao-seguranca" style="margin-top:.75rem;font-size:.78rem;color:#888;text-align:center;">
-              <i class="fas fa-lock"></i> Dados encriptados pelo PagSeguro — nunca chegam ao nosso servidor.
-            </p>
-          </div>
-          {% else %}
-          <div style="text-align:center;padding:1.5rem 0;color:#888;">
-            <i class="far fa-credit-card" style="font-size:2rem;display:block;margin-bottom:.75rem;color:#c9a96e;"></i>
-            <p style="font-size:.9rem;font-weight:500;color:#333;">Cartão de crédito</p>
-            <p style="font-size:.82rem;margin-top:.4rem;">Temporariamente indisponível. Use o Pix.</p>
-          </div>
-          {% endif %}
         </div>
       </div>
       {% endif %}
@@ -173,8 +162,8 @@
             {% endif %}
             <div class="conta-item-info">
               <p class="conta-item-nome">{{ item.nome_produto }}</p>
-              {% if item.variacao %}
-                <p class="conta-item-var">{{ item.variacao.get_tipo_display }}: {{ item.variacao.nome }}</p>
+              {% if item.variacao_desc %}
+                <p class="conta-item-var">{{ item.variacao_desc }}</p>
               {% endif %}
               <p class="conta-item-qty">Qtd: {{ item.quantidade }}</p>
             </div>
@@ -243,135 +232,6 @@ function copiarPixDetalhe() {
     setTimeout(() => { btn.innerHTML = '<i class="far fa-copy"></i> Copiar'; }, 2500);
   }).catch(() => { input.select(); document.execCommand('copy'); });
 }
-</script>
-{% endif %}
-<script>
-function mostrarPainel(painel, btn) {
-  document.getElementById('painel-pix').style.display    = painel === 'pix'    ? '' : 'none';
-  document.getElementById('painel-cartao').style.display = painel === 'cartao' ? '' : 'none';
-  document.querySelectorAll('.pagar-tab').forEach(b => {
-    const ativa = b.dataset.painel === painel;
-    b.style.background   = ativa ? '#c9a96e' : '#fff';
-    b.style.color        = ativa ? '#fff'     : '#555';
-    b.style.borderColor  = ativa ? '#c9a96e'  : '#ddd';
-  });
-}
-</script>
-
-{% load static %}
-{% if pagseguro_public_key %}
-<script src="{% static 'js/parcelas.js' %}"></script>
-<script src="https://assets.pagseguro.com.br/checkout-sdk/js/direct-checkout.js"></script>
-<script>
-// Popula parcelas ao abrir a aba cartão
-(function() {
-  var total = parseFloat('{{ pedido.total|floatformat:2 }}'.replace(',', '.'));
-  var sel   = document.getElementById('det-parcelas');
-  DellaParcelas.gerarParcelas(sel, total, 1);
-  document.querySelectorAll('.pagar-tab').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      if (btn.dataset.painel === 'cartao') DellaParcelas.gerarParcelas(sel, total, sel.value);
-    });
-  });
-})();
-</script>
-<script>
-(function() {
-  // Máscaras
-  const numEl = document.getElementById('det-card-number');
-  numEl?.addEventListener('input', () => {
-    let v = numEl.value.replace(/\D/g,'').slice(0,16);
-    v = v.replace(/(.{4})/g,'$1 ').trim();
-    numEl.value = v;
-  });
-  document.getElementById('det-card-holder')?.addEventListener('input', function() {
-    this.value = this.value.toUpperCase();
-  });
-  const expEl = document.getElementById('det-card-expiry');
-  expEl?.addEventListener('input', () => {
-    let v = expEl.value.replace(/\D/g,'').slice(0,4);
-    if (v.length > 2) v = v.slice(0,2) + '/' + v.slice(2);
-    expEl.value = v;
-  });
-
-  document.getElementById('btn-pagar-cartao')?.addEventListener('click', async function() {
-    const btn   = this;
-    const erroEl = document.getElementById('det-cartao-erro');
-    erroEl.classList.add('hidden');
-
-    const holder = (document.getElementById('det-card-holder')?.value || '').trim().toUpperCase();
-    const number = (document.getElementById('det-card-number')?.value || '').replace(/\s/g,'');
-    const expiry = (document.getElementById('det-card-expiry')?.value || '');
-    const cvv    = (document.getElementById('det-card-cvv')?.value || '').trim();
-    const parc   = document.getElementById('det-parcelas')?.value || '1';
-
-    if (!holder || !number || !expiry || !cvv) {
-      erroEl.textContent = 'Preencha todos os dados do cartão.';
-      erroEl.classList.remove('hidden');
-      return;
-    }
-
-    const partes   = expiry.split('/');
-    const expMonth = (partes[0] || '').trim();
-    const expYear  = '20' + (partes[1] || '').trim();
-
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando…';
-
-    try {
-      const { hasErrors, errors, encryptedCard } = PagSeguro.encryptCard({
-        publicKey: '{{ pagseguro_public_key|escapejs }}',
-        holder, number, expMonth, expYear, securityCode: cvv,
-      });
-
-      if (hasErrors) {
-        const msgs = {
-          'INVALID_NUMBER': 'Número do cartão inválido.',
-          'INVALID_SECURITY_CODE': 'CVV inválido.',
-          'INVALID_EXPIRATION_MONTH': 'Mês de validade inválido.',
-          'INVALID_EXPIRATION_YEAR': 'Ano de validade inválido.',
-          'INVALID_PUBLIC_KEY': 'Erro de configuração. Tente mais tarde.',
-        };
-        erroEl.textContent = (errors||[]).map(c => msgs[c]||c).join(' ') || 'Dados inválidos.';
-        erroEl.classList.remove('hidden');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:"2g" }}';
-        return;
-      }
-
-      const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-      const form = new FormData();
-      form.append('pagseguro_card_encrypted', encryptedCard);
-      form.append('parcelas', parc);
-
-      const res  = await fetch('/pagamento/cartao/pagar/{{ pedido.numero }}/', {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrf },
-        body: form,
-      });
-      const data = await res.json();
-
-      if (data.status === 'ok') {
-        window.location.href = data.redirect || window.location.pathname;
-      } else if (data.status === 'analise') {
-        btn.innerHTML = '<i class="fas fa-check"></i> Em análise — aguarde';
-        erroEl.textContent = data.mensagem || 'Pagamento em análise.';
-        erroEl.classList.remove('hidden');
-        erroEl.style.color = '#c9a96e';
-      } else {
-        erroEl.textContent = data.erro || 'Erro ao processar. Tente novamente.';
-        erroEl.classList.remove('hidden');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:"2g" }}';
-      }
-    } catch(e) {
-      erroEl.textContent = 'Erro de comunicação. Tente novamente.';
-      erroEl.classList.remove('hidden');
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-lock"></i> Pagar com cartão — R$ {{ pedido.total|floatformat:"2g" }}';
-    }
-  });
-})();
 </script>
 {% endif %}
 {% endblock %}

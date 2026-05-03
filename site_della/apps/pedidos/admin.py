@@ -1,9 +1,10 @@
 import logging
 
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.template.response import TemplateResponse
 from django.utils.html import format_html
 
-from .models import Pedido, ItemPedido, HistoricoPedido, Cupom, CodigoVendedor
+from .models import Pedido, ItemPedido, HistoricoPedido, Cupom, CodigoVendedor, CarrinhoAbandonado
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,29 @@ class PedidoAdmin(admin.ModelAdmin):
 
     def get_actions(self, request):
         actions = super().get_actions(request)
-        return {k: v for k, v in actions.items() if k == 'delete_selected'}
+        # Mantém delete_selected + apenas as actions custom declaradas em self.actions
+        permitidas = {'delete_selected', *(self.actions or [])}
+        return {k: v for k, v in actions.items() if k in permitidas}
+
+    def delete_model(self, request, obj):
+        self._restaurar_estoque_se_aplicavel(obj)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        for pedido in queryset:
+            self._restaurar_estoque_se_aplicavel(pedido)
+        super().delete_queryset(request, queryset)
+
+    def _restaurar_estoque_se_aplicavel(self, pedido):
+        # Pedidos cancelados/estornados já devolveram o estoque no webhook/cron
+        if pedido.status in ('cancelado', 'estornado'):
+            return
+        try:
+            from apps.bling.services import restaurar_estoque_pedido
+            restaurar_estoque_pedido(pedido)
+        except Exception as exc:
+            logger.error('Falha ao restaurar estoque ao excluir pedido %s: %s',
+                         pedido.numero, exc)
 
     readonly_fields = (
         'numero', 'nome_completo', 'email', 'cpf', 'telefone',
@@ -81,7 +104,7 @@ class PedidoAdmin(admin.ModelAdmin):
         'subtotal', 'desconto', 'frete', 'total',
         'gateway', 'gateway_id', 'parcelas', 'forma_pagamento',
         'cupom_codigo', 'codigo_vendedor_str',
-        'bling_pedido_id', 'bling_nfe_id', 'nfe_chave',
+        'bling_pedido_id',
         'criado_em', 'atualizado_em',
     )
 
@@ -112,8 +135,8 @@ class PedidoAdmin(admin.ModelAdmin):
         ('Entrega', {
             'fields': ('codigo_rastreio', 'transportadora'),
         }),
-        ('Bling / NF-e', {
-            'fields': ('bling_pedido_id', 'bling_nfe_id', 'nfe_chave'),
+        ('Bling', {
+            'fields': ('bling_pedido_id',),
             'classes': ('collapse',),
         }),
         ('Observações', {
@@ -128,6 +151,7 @@ class PedidoAdmin(admin.ModelAdmin):
         'marcar_enviado',
         'marcar_entregue',
         'marcar_cancelado',
+        'cancelar_e_estornar_pagseguro',
         'enviar_ao_bling',
         'emitir_nfe',
     ]
@@ -137,12 +161,8 @@ class PedidoAdmin(admin.ModelAdmin):
         edit_url   = reverse('admin:pedidos_pedido_change', args=[obj.pk])
         delete_url = reverse('admin:pedidos_pedido_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este pedido?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este pedido?\')" >✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
@@ -198,10 +218,44 @@ class PedidoAdmin(admin.ModelAdmin):
                 if enviar_bling and novo_status == 'pagamento_confirmado':
                     self._tentar_enviar_bling(request, pedido)
 
+                if novo_status == 'pagamento_confirmado':
+                    self._tentar_enviar_email_pagamento_confirmado(request, pedido)
+
                 if enviar_email_envio and novo_status == 'enviado':
                     self._tentar_enviar_email_envio(request, pedido)
 
+                if novo_status == 'cancelado':
+                    self._tentar_enviar_email_cancelamento(request, pedido, estornado=False)
+
         self.message_user(request, f'{atualizados} pedido(s) marcado(s) como "{label}".')
+
+    def _tentar_enviar_email_pagamento_confirmado(self, request, pedido):
+        """Envia e-mail informando que o pagamento foi confirmado e o pedido está em separação."""
+        try:
+            from apps.pedidos.emails import enviar_confirmacao_pagamento
+            ok = enviar_confirmacao_pagamento(pedido)
+            if not ok:
+                self.message_user(
+                    request,
+                    f'Não foi possível enviar e-mail de confirmação de pagamento para {pedido.email}.',
+                    level='WARNING',
+                )
+        except Exception as exc:
+            logger.error('Erro ao enviar e-mail de pagamento confirmado do pedido %s: %s', pedido.numero, exc)
+
+    def _tentar_enviar_email_cancelamento(self, request, pedido, estornado=False):
+        """Envia e-mail informando o cancelamento do pedido."""
+        try:
+            from apps.pedidos.emails import enviar_cancelamento
+            ok = enviar_cancelamento(pedido, estornado=estornado)
+            if not ok:
+                self.message_user(
+                    request,
+                    f'Não foi possível enviar e-mail de cancelamento para {pedido.email}.',
+                    level='WARNING',
+                )
+        except Exception as exc:
+            logger.error('Erro ao enviar e-mail de cancelamento do pedido %s: %s', pedido.numero, exc)
 
     def _tentar_enviar_email_envio(self, request, pedido):
         """Envia e-mail de notificação de envio com rastreio."""
@@ -262,6 +316,73 @@ class PedidoAdmin(admin.ModelAdmin):
     @admin.action(description='→ Cancelado')
     def marcar_cancelado(self, request, queryset):
         self._mudar_status(request, queryset, 'cancelado', 'Cancelado')
+
+    @admin.action(description='⚠ Cancelar + Estornar PagBank (irreversível)')
+    def cancelar_e_estornar_pagseguro(self, request, queryset):
+        """
+        Cancela o pedido E solicita estorno da cobrança no PagBank.
+        Mostra página de confirmação antes de executar (ação irreversível).
+        Após estorno: muda status para 'cancelado', restaura estoque e
+        atualiza situação no Bling.
+        """
+        if request.POST.get('confirmar') == 'yes':
+            from apps.pagamentos.services.pagseguro import cancelar_pedido_pagseguro
+            from apps.bling.services import (
+                restaurar_estoque_pedido, atualizar_situacao_bling, SITUACAO_CANCELADO,
+            )
+
+            sucessos, falhas = [], []
+            for pedido in queryset:
+                ok, info = cancelar_pedido_pagseguro(pedido)
+                if not ok:
+                    falhas.append((pedido.numero, info))
+                    continue
+
+                if pedido.status != 'cancelado':
+                    HistoricoPedido.objects.create(
+                        pedido=pedido,
+                        status_anterior=pedido.status,
+                        status_novo='cancelado',
+                        observacao=f'Estorno PagBank (charge {info}) solicitado por {request.user.email}',
+                    )
+                    pedido.status = 'cancelado'
+                    pedido.save(update_fields=['status', 'atualizado_em'])
+
+                    try:
+                        restaurar_estoque_pedido(pedido)
+                    except Exception as exc:
+                        logger.warning('Estoque: falha ao restaurar pedido %s após estorno: %s',
+                                       pedido.numero, exc)
+                    if pedido.bling_pedido_id:
+                        try:
+                            atualizar_situacao_bling(pedido, SITUACAO_CANCELADO)
+                        except Exception as exc:
+                            logger.warning('Bling: falha ao cancelar pedido %s após estorno: %s',
+                                           pedido.numero, exc)
+
+                    self._tentar_enviar_email_cancelamento(request, pedido, estornado=True)
+
+                sucessos.append(pedido.numero)
+
+            if sucessos:
+                self.message_user(
+                    request,
+                    f'{len(sucessos)} pedido(s) estornado(s) no PagBank: {", ".join(sucessos)}.',
+                    level=messages.SUCCESS,
+                )
+            for numero, motivo in falhas:
+                self.message_user(
+                    request,
+                    f'Falha ao estornar {numero}: {motivo}',
+                    level=messages.ERROR,
+                )
+            return None
+
+        return TemplateResponse(request, 'admin/pedidos/confirmar_estorno.html', {
+            'pedidos': queryset,
+            'opts':    self.model._meta,
+            'title':   'Confirmar Cancelamento + Estorno PagBank',
+        })
 
     # ── Ações Bling ────────────────────────────────────────────────────────────
 
@@ -376,12 +497,8 @@ class CupomAdmin(admin.ModelAdmin):
         edit_url   = reverse('admin:pedidos_cupom_change', args=[obj.pk])
         delete_url = reverse('admin:pedidos_cupom_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este cupom?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este cupom?\')" >✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
@@ -395,11 +512,10 @@ class CupomAdmin(admin.ModelAdmin):
 class CodigoVendedorAdmin(admin.ModelAdmin):
     list_display  = ('codigo', 'nome', 'total_pedidos', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
-    list_display_links = ('codigo', 'nome')
+    list_display_links = ('codigo',)
     search_fields = ('codigo', 'nome')
     list_filter   = ('ativo',)
     ordering      = ('nome',)
-    readonly_fields = ('codigo',)
 
     class Media:
         js = ('admin/js/admin_linhas.js',)
@@ -410,7 +526,6 @@ class CodigoVendedorAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {
             'fields': ('codigo', 'nome', 'ativo'),
-            'description': 'O código é gerado automaticamente e não pode ser alterado.',
         }),
     )
 
@@ -424,12 +539,124 @@ class CodigoVendedorAdmin(admin.ModelAdmin):
         edit_url   = reverse('admin:pedidos_codigovendedor_change', args=[obj.pk])
         delete_url = reverse('admin:pedidos_codigovendedor_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este código de vendedor?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este código de vendedor?\')" >✕ Excluir</a>',
+            edit_url, delete_url,
+        )
+    acoes_linha.short_description = 'Ações'
+
+
+# ---------------------------------------------------------------------------
+# CarrinhoAbandonado
+# ---------------------------------------------------------------------------
+
+@admin.register(CarrinhoAbandonado)
+class CarrinhoAbandonadoAdmin(admin.ModelAdmin):
+    list_display = (
+        'email', 'nome', 'quantidade_itens_display', 'total_formatado',
+        'badge_status', 'atualizado_em', 'acoes_linha',
+    )
+    list_display_links = ('email',)
+    list_filter = ('email_enviado', 'recuperado')
+    search_fields = ('email', 'nome', 'cliente__cpf')
+    date_hierarchy = 'atualizado_em'
+    ordering = ('-atualizado_em',)
+    readonly_fields = (
+        'cliente', 'email', 'nome', 'total', 'itens_resumo',
+        'email_enviado', 'email_enviado_em', 'recuperado',
+        'criado_em', 'atualizado_em',
+    )
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions_filtradas = {k: v for k, v in actions.items() if k == 'delete_selected'}
+        actions_filtradas['enviar_email_agora'] = (
+            self._action_enviar_email,
+            'enviar_email_agora',
+            'Enviar e-mail de lembrete agora',
+        )
+        return actions_filtradas
+
+    def _action_enviar_email(self, request, queryset):
+        from .emails import enviar_email_carrinho_abandonado
+        enviados = 0
+        for ca in queryset.filter(recuperado=False):
+            if enviar_email_carrinho_abandonado(ca):
+                enviados += 1
+        from django.contrib import messages as msgs
+        msgs.success(request, f'{enviados} e-mail(s) de lembrete enviado(s).')
+    _action_enviar_email.short_description = 'Enviar e-mail de lembrete agora'
+
+    def has_add_permission(self, request):
+        return False
+
+    fieldsets = (
+        ('Cliente', {
+            'fields': ('cliente', 'email', 'nome'),
+        }),
+        ('Carrinho', {
+            'fields': ('total', 'itens_resumo'),
+        }),
+        ('Status', {
+            'fields': ('email_enviado', 'email_enviado_em', 'recuperado'),
+        }),
+        ('Datas', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def quantidade_itens_display(self, obj):
+        return f'{obj.quantidade_itens} item(s)'
+    quantidade_itens_display.short_description = 'Itens'
+
+    def total_formatado(self, obj):
+        valor = f'{obj.total:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return format_html('<strong style="color:#c9a96e;">R$ {}</strong>', valor)
+    total_formatado.short_description = 'Total'
+
+    def badge_status(self, obj):
+        if obj.recuperado:
+            cor, label = '#27ae60', 'Recuperado'
+        elif obj.email_enviado:
+            cor, label = '#2980b9', 'E-mail enviado'
+        else:
+            cor, label = '#f39c12', 'Aguardando'
+        return format_html(
+            '<span style="background:{};color:#fff;padding:3px 10px;border-radius:12px;'
+            'font-size:11px;font-weight:700;letter-spacing:.5px;white-space:nowrap;">{}</span>',
+            cor, label,
+        )
+    badge_status.short_description = 'Status'
+
+    def itens_resumo(self, obj):
+        linhas = []
+        for item in obj.itens:
+            nome = item.get('nome', '')
+            var  = item.get('variacao_desc', '')
+            qtd  = item.get('quantidade', 1)
+            sub  = item.get('subtotal', '')
+            desc = f'{qtd}x {nome}'
+            if var:
+                desc += f' — {var}'
+            desc += f' &nbsp; <strong>R$ {sub}</strong>'
+            linhas.append(f'<li style="padding:4px 0;font-size:13px;">{desc}</li>')
+        return format_html(
+            '<ul style="margin:0;padding:0;list-style:none;">{}</ul>',
+            ''.join(linhas),
+        )
+    itens_resumo.short_description = 'Itens do carrinho'
+
+    def acoes_linha(self, obj):
+        from django.urls import reverse
+        edit_url   = reverse('admin:pedidos_carrinhoabandonado_change', args=[obj.pk])
+        delete_url = reverse('admin:pedidos_carrinhoabandonado_delete', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="della-btn-edit">✎ Ver</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este registro?\')" >✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'

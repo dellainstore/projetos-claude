@@ -59,10 +59,8 @@
 
       {% else %}
       <div class="pix-sem-chave">
-        <p>Realize o pagamento via Pix para nossa chave e informe o número do pedido
-           <strong>{{ pedido.numero }}</strong> na descrição.</p>
-        <p>Valor: <strong>R$ {{ pedido.total|floatformat:"2g" }}</strong></p>
-        <p>Entre em contato pelo WhatsApp para receber a chave Pix.</p>
+        <p>O pagamento via Pix está temporariamente indisponível para este pedido.</p>
+        <p>Assim que o gateway for liberado, a cobrança voltará a funcionar com confirmação adequada.</p>
       </div>
       {% endif %}
     </section>

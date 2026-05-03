@@ -12,8 +12,53 @@ from django.db import models, transaction
 
 from .carrinho import Carrinho
 from .forms import CheckoutForm
+from apps.core_utils.meta import enviar_evento_meta, enviar_evento_purchase, gerar_evento_id
 
 logger = logging.getLogger(__name__)
+
+
+def _salvar_carrinho_abandonado(request, cart):
+    """Persiste (ou atualiza) o snapshot do carrinho no banco para o usuário logado."""
+    if not request.user.is_authenticated:
+        return
+    if len(cart) == 0:
+        return
+    try:
+        from .models import CarrinhoAbandonado
+        itens = [
+            {
+                'nome':         item['nome'],
+                'variacao_desc': item.get('variacao_desc', ''),
+                'preco':        str(item['preco_decimal']),
+                'quantidade':   item['quantidade'],
+                'subtotal':     str(item['subtotal']),
+                'imagem':       item.get('imagem', ''),
+            }
+            for item in cart
+        ]
+        CarrinhoAbandonado.objects.update_or_create(
+            cliente=request.user,
+            defaults={
+                'email':       request.user.email,
+                'nome':        request.user.get_full_name(),
+                'itens_json':  itens,
+                'total':       cart.get_total(),
+                'recuperado':  False,
+            },
+        )
+    except Exception as exc:
+        logger.debug('Não foi possível salvar carrinho abandonado: %s', exc)
+
+
+def _limpar_carrinho_abandonado(request):
+    """Marca o carrinho como recuperado após checkout bem-sucedido."""
+    if not request.user.is_authenticated:
+        return
+    try:
+        from .models import CarrinhoAbandonado
+        CarrinhoAbandonado.objects.filter(cliente=request.user).update(recuperado=True)
+    except Exception as exc:
+        logger.debug('Não foi possível marcar carrinho como recuperado: %s', exc)
 
 
 class _PagamentoRecusado(Exception):
@@ -22,6 +67,59 @@ class _PagamentoRecusado(Exception):
 
 class _EstoqueInsuficiente(Exception):
     """Levantada quando o estoque é insuficiente para o item no momento do checkout."""
+
+
+def _gerar_dados_pix(pedido):
+    """
+    Gera dados de Pix para um pedido.
+
+    Prioriza Pix dinâmico via gateway (com webhook e confirmação automática).
+    Se a API não estiver disponível/liberada, faz fallback para Pix estático local.
+    """
+    pix_qrcode = None
+    pix_payload = None
+    pix_via = None
+
+    try:
+        from apps.pagamentos.services.pagseguro import criar_ordem_pix
+        from apps.pagamentos.pix import gerar_qrcode_base64
+
+        resposta = criar_ordem_pix(pedido)
+        qr_codes = resposta.get('qr_codes', [])
+        order_id = resposta.get('id', '')
+
+        if qr_codes and order_id:
+            pix_payload = qr_codes[0].get('text', '')
+            if pix_payload:
+                pix_qrcode = gerar_qrcode_base64(pix_payload)
+                pix_via = 'pagseguro'
+                if pedido.gateway != 'pagseguro' or pedido.gateway_id != order_id:
+                    pedido.gateway = 'pagseguro'
+                    pedido.gateway_id = order_id
+                    pedido.save(update_fields=['gateway', 'gateway_id'])
+                return pix_qrcode, pix_payload, pix_via
+    except Exception as exc:
+        logger.warning('PIX do gateway indisponível para pedido %s: %s', pedido.numero, exc)
+
+    try:
+        from apps.pagamentos.pix import gerar_payload_pix, gerar_qrcode_base64
+
+        chave_pix = getattr(settings, 'PIX_CHAVE', '')
+        if chave_pix:
+            pix_payload = gerar_payload_pix(
+                chave=chave_pix,
+                valor=float(pedido.total),
+                nome_recebedor='DELLA INSTORE',
+                cidade='SAO PAULO',
+                txid=pedido.numero.replace('-', ''),
+                descricao=f'Pedido {pedido.numero}',
+            )
+            pix_qrcode = gerar_qrcode_base64(pix_payload)
+            pix_via = 'estatico'
+    except Exception as exc:
+        logger.error('Erro ao gerar QR Code Pix estático para pedido %s: %s', pedido.numero, exc)
+
+    return pix_qrcode, pix_payload, pix_via
 
 
 # ─── Carrinho ─────────────────────────────────────────────────────────────────
@@ -73,7 +171,7 @@ def adicionar_ao_carrinho(request, produto_id):
         chave = cart._chave(produto.id, variacao.id)
         qtd_no_carrinho = cart.carrinho.get(chave, {}).get('quantidade', 0)
         estoque = variacao.estoque
-        if qtd_no_carrinho + quantidade > estoque:
+        if variacao.pronta_entrega and qtd_no_carrinho + quantidade > estoque:
             # Limita silenciosamente ao estoque restante
             quantidade = max(0, estoque - qtd_no_carrinho)
             if quantidade <= 0:
@@ -82,6 +180,34 @@ def adicionar_ao_carrinho(request, produto_id):
                                      'itens': _itens_para_drawer(cart)})
 
     cart.adicionar(produto, variacao=variacao, quantidade=quantidade)
+    _salvar_carrinho_abandonado(request, cart)
+
+    meta_event_id = (dados.get('meta_event_id') or '').strip()
+    if meta_event_id:
+        preco_item = variacao.preco_atual if variacao else produto.preco_atual
+        try:
+            enviar_evento_meta(
+                request,
+                event_name='AddToCart',
+                event_id=meta_event_id,
+                event_source_url=request.build_absolute_uri(produto.get_absolute_url()),
+                custom_data={
+                    'content_ids': [str(produto.id)],
+                    'content_type': 'product',
+                    'content_name': produto.nome,
+                    'currency': 'BRL',
+                    'value': float(preco_item) * quantidade,
+                    'contents': [
+                        {
+                            'id': str(produto.id),
+                            'quantity': quantidade,
+                            'item_price': float(preco_item),
+                        }
+                    ],
+                },
+            )
+        except Exception as exc:
+            logger.warning('Meta CAPI: não foi possível enviar AddToCart do produto %s: %s', produto.id, exc)
 
     itens_drawer = _itens_para_drawer(cart)
     return JsonResponse({
@@ -126,7 +252,8 @@ def atualizar_carrinho(request):
             from apps.produtos.models import Variacao
             try:
                 variacao = Variacao.objects.get(pk=cart_item['variacao_id'])
-                quantidade = min(quantidade, variacao.estoque)
+                if variacao.pronta_entrega:
+                    quantidade = min(quantidade, variacao.estoque)
             except Variacao.DoesNotExist:
                 pass
         if quantidade <= 0:
@@ -202,21 +329,42 @@ def checkout(request):
 
     itens = list(cart)
     subtotal = cart.get_total()
-
-    # Chave pública PagSeguro para o JS SDK de cartão (falha silenciosa)
     pagseguro_public_key = ''
+    cartao_habilitado = False
+
     try:
         from apps.pagamentos.services.pagseguro import obter_chave_publica
         pagseguro_public_key = obter_chave_publica()
     except Exception:
-        pass
+        pagseguro_public_key = ''
+
+    cartao_habilitado = bool(pagseguro_public_key)
+    meta_initiatecheckout_event_id = gerar_evento_id('initiatecheckout')
 
     context = {
         'form':                  form,
         'itens':                 itens,
         'subtotal':              subtotal,
+        'total_itens':           sum(item['quantidade'] for item in itens),
         'pagseguro_public_key':  pagseguro_public_key,
+        'cartao_habilitado':     cartao_habilitado,
+        'pagseguro_sandbox':     bool(settings.PAGSEGURO_SANDBOX),
+        'meta_initiatecheckout_event_id': meta_initiatecheckout_event_id,
     }
+    try:
+        enviar_evento_meta(
+            request,
+            event_name='InitiateCheckout',
+            event_id=meta_initiatecheckout_event_id,
+            event_source_url=request.build_absolute_uri('/carrinho/checkout/'),
+            custom_data={
+                'value': float(subtotal),
+                'currency': 'BRL',
+                'num_items': sum(item['quantidade'] for item in itens),
+            },
+        )
+    except Exception:
+        pass
     return render(request, 'checkout/index.html', context)
 
 
@@ -305,15 +453,16 @@ def _processar_checkout(request, form, cart):
             if variacao_obj:
                 from django.db.models import F
                 variacao_locked = Variacao.objects.select_for_update().get(pk=variacao_obj.pk)
-                if variacao_locked.estoque < item['quantidade']:
-                    raise _EstoqueInsuficiente(
-                        f'Estoque insuficiente para "{item["nome"]}". '
-                        f'Disponível: {variacao_locked.estoque}, '
-                        f'solicitado: {item["quantidade"]}.'
+                if variacao_locked.pronta_entrega:
+                    if variacao_locked.estoque < item['quantidade']:
+                        raise _EstoqueInsuficiente(
+                            f'Estoque insuficiente para "{item["nome"]}". '
+                            f'Disponível: {variacao_locked.estoque}, '
+                            f'solicitado: {item["quantidade"]}.'
+                        )
+                    Variacao.objects.filter(pk=variacao_obj.pk).update(
+                        estoque=F('estoque') - item['quantidade']
                     )
-                Variacao.objects.filter(pk=variacao_obj.pk).update(
-                    estoque=F('estoque') - item['quantidade']
-                )
 
     try:
         with transaction.atomic():
@@ -338,6 +487,7 @@ def _processar_checkout(request, form, cart):
                 parcelas              = parcelas,
                 transportadora        = cd.get('servico_frete_nome', ''),
                 frete_servico_id      = (cd.get('opcao_frete') or '').strip(),
+                frete_prazo_dias      = cd.get('prazo_frete') or None,
                 observacao_cliente    = cd.get('observacao', ''),
                 gateway               = 'pagseguro' if forma_pagamento == 'cartao_credito' else '',
                 cupom                 = cupom_obj,
@@ -405,6 +555,7 @@ def _processar_checkout(request, form, cart):
         _Cupom.objects.filter(pk=cupom_obj.pk).update(vezes_usado=models.F('vezes_usado') + 1)
 
     cart.limpar()
+    _limpar_carrinho_abandonado(request)
 
     request.session['ultimo_pedido'] = pedido.numero
     pedidos_guest = request.session.get('pedidos_guest', [])
@@ -420,13 +571,15 @@ def _processar_checkout(request, form, cart):
 
     # Envio ao Bling — fora do atomic para não afetar o checkout se o Bling falhar
     try:
-        from apps.bling.services import enviar_pedido_bling, atualizar_situacao_bling, SITUACAO_ATENDIDO_SITE
+        from apps.bling.services import enviar_pedido_bling
         enviar_pedido_bling(pedido)
-        # Se pagamento já confirmado (cartão aprovado na hora), passa direto para Atendido
-        if pedido.status == 'pagamento_confirmado':
-            atualizar_situacao_bling(pedido, SITUACAO_ATENDIDO_SITE)
     except Exception as exc:
         logger.warning('Bling: não foi possível enviar pedido %s: %s', pedido.numero, exc)
+
+    try:
+        enviar_evento_purchase(pedido, request)
+    except Exception as exc:
+        logger.warning('Meta CAPI: não foi possível enviar Purchase do pedido %s: %s', pedido.numero, exc)
 
     return redirect('pedidos:confirmacao', numero=pedido.numero)
 
@@ -449,49 +602,21 @@ def confirmacao_pedido(request, numero):
     if not autorizado:
         return redirect('produtos:home')
 
-    # Gera QR Code Pix: tenta PagBank (webhook automático), fallback estático
+    # Gera QR Code Pix apenas via gateway dinâmico (sem fallback estático).
+    # Pula a geração se o pedido já foi pago/cancelado — evita criar nova ordem
+    # no PagBank ao recarregar a página de confirmação.
     pix_qrcode = None
     pix_payload = None
-    if pedido.forma_pagamento == 'pix':
-        try:
-            from apps.pagamentos.services.pagseguro import criar_ordem_pix
-            from apps.pagamentos.pix import gerar_qrcode_base64
-            resposta = criar_ordem_pix(pedido)
-            qr_codes = resposta.get('qr_codes', [])
-            order_id = resposta.get('id', '')
-            if qr_codes and order_id:
-                pix_payload = qr_codes[0].get('text', '')
-                if pix_payload:
-                    pix_qrcode = gerar_qrcode_base64(pix_payload)
-                    if order_id and pedido.gateway_id != order_id:
-                        pedido.gateway    = 'pagseguro'
-                        pedido.gateway_id = order_id
-                        pedido.save(update_fields=['gateway', 'gateway_id'])
-        except Exception as exc:
-            logger.warning('PIX PagBank na confirmação falhou, usando estático: %s', exc)
-        # Fallback estático
-        if not pix_qrcode:
-            try:
-                from apps.pagamentos.pix import gerar_payload_pix, gerar_qrcode_base64
-                chave_pix = getattr(settings, 'PIX_CHAVE', '')
-                if chave_pix:
-                    pix_payload = gerar_payload_pix(
-                        chave          = chave_pix,
-                        valor          = float(pedido.total),
-                        nome_recebedor = 'DELLA INSTORE',
-                        cidade         = 'SAO PAULO',
-                        txid           = pedido.numero.replace('-', ''),
-                        descricao      = f'Pedido {pedido.numero}',
-                    )
-                    pix_qrcode = gerar_qrcode_base64(pix_payload)
-            except Exception as e:
-                logger.error('Erro ao gerar QR Code Pix estático: %s', e)
+    pix_via = None
+    if pedido.forma_pagamento == 'pix' and pedido.status not in ('pagamento_confirmado', 'cancelado'):
+        pix_qrcode, pix_payload, pix_via = _gerar_dados_pix(pedido)
 
     context = {
         'pedido':      pedido,
         'itens':       pedido.itens.select_related('produto').all(),
         'pix_qrcode':  pix_qrcode,
         'pix_payload': pix_payload,
+        'pix_via':     pix_via,
     }
     return render(request, 'checkout/confirmacao.html', context)
 
@@ -564,27 +689,38 @@ def calcular_frete(request):
     # Quando a página de produto passa preco+quantidade, usa esses valores diretamente
     # (ignora o carrinho) para que o frete calculado no produto seja idêntico ao do checkout.
     preco_param = request.GET.get('preco', '').strip()
+    prazo_adicional = 0
     if preco_param:
         try:
             preco_unit = float((preco_param or '0').replace(',', '.'))
             qtd        = max(1, int(request.GET.get('quantidade', '1') or 1))
+            peso       = max(1, int(request.GET.get('peso', '500') or 500))
+            prazo_adicional = max(0, int(request.GET.get('prazo_adicional', '0') or 0))
         except (ValueError, TypeError):
-            preco_unit, qtd = 0.0, 1
-        itens           = [{'quantidade': qtd, 'preco': str(preco_unit or 1)}]
-        valor_declarado = preco_unit * qtd
+            preco_unit, qtd, peso, prazo_adicional = 0.0, 1, 500, 0
+        itens = [{'quantidade': qtd, 'preco': str(preco_unit or 1), 'peso': peso}]
     else:
         cart  = Carrinho(request)
         itens = [
-            {'quantidade': item['quantidade'], 'preco': item['preco']}
+            {'quantidade': item['quantidade'], 'preco': item['preco'], 'peso': item.get('peso', 500)}
             for item in cart
         ]
-        valor_declarado = float(cart.get_total())
+        from apps.produtos.models import Variacao
+        variacao_ids = [item.get('variacao_id') for item in cart if item.get('variacao_id')]
+        if variacao_ids:
+            from django.db.models import Max
+            prazo_adicional = (
+                Variacao.objects
+                .filter(pk__in=variacao_ids)
+                .aggregate(maior=Max('prazo_confeccao_dias'))
+                .get('maior')
+                or 0
+            )
         if not itens:
-            itens           = [{'quantidade': 1, 'preco': '1'}]
-            valor_declarado = 1.0
+            itens = [{'quantidade': 1, 'preco': '1', 'peso': 500}]
 
     from apps.pagamentos.services.melhorenvio import calcular
-    opcoes = calcular(cep, itens, valor_declarado)
+    opcoes = calcular(cep, itens)
 
     return JsonResponse({
         'status': 'ok',
@@ -594,8 +730,11 @@ def calcular_frete(request):
                 'nome':      o['nome'],
                 'empresa':   o['empresa'],
                 'preco':     str(o['preco']),
-                'prazo':     o['prazo'],
-                'descricao': o['descricao'],
+                'prazo':     (o['prazo'] or 0) + prazo_adicional,
+                'descricao': (
+                    f'Entrega em até {(o["prazo"] or 0) + prazo_adicional} dias úteis'
+                    + (f' ({prazo_adicional} de confecção + {(o["prazo"] or 0)} de frete)' if prazo_adicional else '')
+                ),
             }
             for o in opcoes
         ],
@@ -639,7 +778,6 @@ def meus_pedidos(request):
 def detalhe_pedido(request, numero):
     from .models import Pedido
     from apps.pagamentos.views import _pode_acessar_pedido
-    from django.conf import settings as _settings
 
     pedido = get_object_or_404(Pedido, numero=numero)
 
@@ -649,28 +787,16 @@ def detalhe_pedido(request, numero):
     # Gera QR Code Pix se o pedido está aguardando pagamento via Pix
     pix_qrcode = None
     pix_payload = None
+    pix_via = None
     if pedido.forma_pagamento == 'pix' and pedido.status == 'aguardando_pagamento':
-        try:
-            from apps.pagamentos.pix import gerar_payload_pix, gerar_qrcode_base64
-            chave_pix = getattr(_settings, 'PIX_CHAVE', '')
-            if chave_pix:
-                pix_payload = gerar_payload_pix(
-                    chave=chave_pix,
-                    valor=float(pedido.total),
-                    nome_recebedor='DELLA INSTORE',
-                    cidade='SAO PAULO',
-                    txid=pedido.numero.replace('-', ''),
-                    descricao=f'Pedido {pedido.numero}',
-                )
-                pix_qrcode = gerar_qrcode_base64(pix_payload)
-        except Exception as e:
-            logger.error('Erro ao gerar QR Code Pix no detalhe: %s', e)
+        pix_qrcode, pix_payload, pix_via = _gerar_dados_pix(pedido)
 
     return render(request, 'pedidos/detalhe_pedido.html', {
         'pedido':      pedido,
         'itens':       pedido.itens.select_related('produto').all(),
         'pix_qrcode':  pix_qrcode,
         'pix_payload': pix_payload,
+        'pix_via':     pix_via,
     })
 
 
