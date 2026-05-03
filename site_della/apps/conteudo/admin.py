@@ -1,16 +1,17 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from django.urls import path
+from django.urls import path, reverse
 from django.shortcuts import redirect
 from django.contrib import messages
+from django.db import transaction
 from .models import BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, ConfiguracaoLoja, InstagramPost
 
 
 @admin.register(BannerPrincipal)
 class BannerPrincipalAdmin(admin.ModelAdmin):
-    list_display = ('ordem', 'tipo_badge', 'titulo', 'preview_midia', 'ativo', 'acoes_linha')
+    list_display = ('ordem', 'tipo_badge', 'preview_midia', 'url_botao', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
-    list_display_links = ('titulo',)
+    list_display_links = ('ordem',)
     ordering = ('ordem',)
 
     class Media:
@@ -50,25 +51,18 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
                 'Recomendado: 1080×1920px. Vídeo até 30 MB.'
             ),
         }),
-        ('Textos sobre o banner', {
-            'fields': ('pretitulo', 'titulo', 'titulo_italico', 'subtitulo'),
-        }),
-        ('Botão de ação', {
-            'fields': ('texto_botao', 'url_botao'),
+        ('Link do banner', {
+            'fields': ('url_botao',),
+            'description': 'Ao clicar em qualquer parte do banner, o cliente é redirecionado para este link.',
         }),
     )
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:conteudo_bannerprincipal_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_bannerprincipal_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este banner?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este banner?\')">✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
@@ -105,10 +99,10 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
 
 @admin.register(MiniBanner)
 class MiniBannerAdmin(admin.ModelAdmin):
-    list_display = ('posicao_label', 'titulo', 'preview_foto', 'url', 'ativo', 'acoes_linha')
-    list_editable = ('ativo',)
-    list_display_links = ('titulo',)
-    ordering = ('posicao',)
+    list_display = ('posicao_label', 'posicao', 'preview_foto', 'url', 'ativo', 'acoes_linha')
+    list_editable = ('posicao', 'ativo')
+    list_display_links = ('posicao_label',)
+    ordering = ('-posicao',)
 
     class Media:
         js = ('admin/js/admin_linhas.js',)
@@ -127,35 +121,85 @@ class MiniBannerAdmin(admin.ModelAdmin):
         actions = super().get_actions(request)
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
+    def changelist_view(self, request, extra_context=None):
+        if request.method == 'POST' and '_save' in request.POST:
+            total_forms = int(request.POST.get('form-TOTAL_FORMS', 0) or 0)
+            ids = []
+            payload = []
+
+            for index in range(total_forms):
+                obj_id = request.POST.get(f'form-{index}-id')
+                posicao = request.POST.get(f'form-{index}-posicao')
+                ativo_raw = request.POST.get(f'form-{index}-ativo')
+                if not obj_id:
+                    continue
+                ids.append(int(obj_id))
+                payload.append({
+                    'id': int(obj_id),
+                    'posicao': posicao,
+                    'ativo': bool(ativo_raw),
+                })
+
+            if payload:
+                posicoes = [item['posicao'] for item in payload]
+                if sorted(posicoes) != ['dir', 'esq']:
+                    self.message_user(
+                        request,
+                        'Nao foi possivel salvar: deve existir exatamente um mini banner na Esquerda e um na Direita.',
+                        level=messages.ERROR,
+                    )
+                    return redirect(request.get_full_path())
+
+                banners = {
+                    banner.pk: banner
+                    for banner in MiniBanner.objects.filter(pk__in=ids)
+                }
+                temp_values = {item['id']: f'x{idx}' for idx, item in enumerate(payload, start=1)}
+
+                with transaction.atomic():
+                    for item in payload:
+                        banner = banners.get(item['id'])
+                        if not banner:
+                            continue
+                        if banner.posicao != item['posicao']:
+                            MiniBanner.objects.filter(pk=banner.pk).update(posicao=temp_values[banner.pk])
+
+                    for item in payload:
+                        banner = banners.get(item['id'])
+                        if not banner:
+                            continue
+                        MiniBanner.objects.filter(pk=banner.pk).update(
+                            posicao=item['posicao'],
+                            ativo=item['ativo'],
+                        )
+
+                from apps.core_utils.cache_utils import invalidar_banners
+                invalidar_banners()
+                self.message_user(request, 'Mini banners atualizados com sucesso.', level=messages.SUCCESS)
+                return redirect(request.get_full_path())
+
+        return super().changelist_view(request, extra_context=extra_context)
+
     fieldsets = (
         ('Posição e visibilidade', {
             'fields': ('posicao', 'ativo'),
             'description': (
-                'Esquerda = primeiro mini banner. Direita = segundo. '
+                'Esquerda = primeiro mini banner (lado esquerdo). '
+                'Direita = segundo (lado direito). '
                 'Cada posição aceita apenas um banner ativo por vez.'
             ),
         }),
         ('Conteúdo', {
             'fields': ('foto', 'url'),
-            'description': 'O título e pré-título são opcionais — deixe em branco se o banner já tem o texto na imagem.',
-        }),
-        ('Texto sobre o banner (opcional)', {
-            'fields': ('pretitulo', 'titulo'),
-            'classes': ('collapse',),
         }),
     )
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:conteudo_minibanner_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_minibanner_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este mini banner?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este mini banner?\')">✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
@@ -204,16 +248,11 @@ class PaginaEstaticaAdmin(admin.ModelAdmin):
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:conteudo_paginaestatica_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_paginaestatica_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir esta página?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta página?\')">✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
@@ -245,15 +284,24 @@ class ConfiguracaoLojaAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        from apps.core_utils.cache_utils import invalidar_config_loja
+        from apps.core_utils.cache_utils import invalidar_config_loja, invalidar_manutencao
         invalidar_config_loja()
+        invalidar_manutencao()
 
     fieldsets = (
+        ('🚧 Modo Manutenção', {
+            'fields': ('modo_manutencao',),
+            'description': (
+                '<strong style="color:#c9a96e">ATIVADO</strong>: somente o admin acessa o site — '
+                'visitantes veem uma página "Em breve / Manutenção". '
+                'Leva até 30 segundos para propagar após salvar.'
+            ),
+        }),
         ('Frete grátis', {
             'fields': ('frete_gratis_acima',),
             'description': (
-                'Se preenchido, um aviso de frete grátis aparece no produto quando '
-                'o valor está acima desse limite. Deixe em branco para desativar.'
+                'Se preenchido, um aviso de frete grátis aparece no site quando '
+                'o valor do carrinho está acima desse limite. Deixe em branco para desativar.'
             ),
         }),
     )
@@ -263,6 +311,19 @@ class ConfiguracaoLojaAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    def changelist_view(self, request, extra_context=None):
+        """Redireciona direto para o único registro (ou para criação se não existir)."""
+        obj = ConfiguracaoLoja.objects.first()
+        if obj:
+            return redirect(reverse('admin:conteudo_configuracaoloja_change', args=[obj.pk]))
+        return redirect(reverse('admin:conteudo_configuracaoloja_add'))
+
+    def response_change(self, request, obj):
+        """Após salvar, fica na tela de edição."""
+        from django.contrib import messages as msg_module
+        msg_module.success(request, 'Configuração de frete grátis salva com sucesso.')
+        return redirect(reverse('admin:conteudo_configuracaoloja_change', args=[obj.pk]))
 
 
 @admin.register(LookDaSemana)
@@ -299,19 +360,26 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
             ),
         }),
         ('Ponto "+" 1', {
-            'fields': ('produto_ponto1', ('ponto1_top', 'ponto1_esq')),
+            'fields': ('produto_ponto1', 'foto_ponto1', ('ponto1_top', 'ponto1_esq')),
             'description': (
                 'Selecione o produto e use o editor visual (acima) para clicar na foto e posicionar o ponto. '
+                'Salve o look após escolher o produto para que as fotos disponíveis apareçam no campo "Foto do ponto". '
                 'Deixe o produto em branco para não exibir este ponto.'
             ),
         }),
         ('Ponto "+" 2', {
-            'fields': ('produto_ponto2', ('ponto2_top', 'ponto2_esq')),
-            'description': 'Deixe o produto em branco para não exibir este ponto.',
+            'fields': ('produto_ponto2', 'foto_ponto2', ('ponto2_top', 'ponto2_esq')),
+            'description': (
+                'Salve o look após escolher o produto para que as fotos disponíveis apareçam no campo "Foto do ponto". '
+                'Deixe o produto em branco para não exibir este ponto.'
+            ),
         }),
         ('Ponto "+" 3', {
-            'fields': ('produto_ponto3', ('ponto3_top', 'ponto3_esq')),
-            'description': 'Deixe o produto em branco para não exibir este ponto.',
+            'fields': ('produto_ponto3', 'foto_ponto3', ('ponto3_top', 'ponto3_esq')),
+            'description': (
+                'Salve o look após escolher o produto para que as fotos disponíveis apareçam no campo "Foto do ponto". '
+                'Deixe o produto em branco para não exibir este ponto.'
+            ),
         }),
         ('Datas', {
             'fields': ('criado_em',),
@@ -319,17 +387,28 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
         }),
     )
 
+    def get_form(self, request, obj=None, **kwargs):
+        from apps.produtos.models import ProdutoImagem
+        form = super().get_form(request, obj, **kwargs)
+        if obj:
+            for n in (1, 2, 3):
+                produto = getattr(obj, f'produto_ponto{n}', None)
+                field = form.base_fields.get(f'foto_ponto{n}')
+                if field:
+                    if produto:
+                        field.queryset = ProdutoImagem.objects.filter(
+                            produto=produto
+                        ).order_by('-principal', 'ordem')
+                    else:
+                        field.queryset = ProdutoImagem.objects.none()
+        return form
+
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:conteudo_lookdasemana_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_lookdasemana_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir este look?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este look?\')">✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'
@@ -349,7 +428,6 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
             return '—'
         return format_html('<br>'.join(nomes))
     lista_produtos.short_description = 'Produtos'
-
 
 
 @admin.register(InstagramPost)
@@ -420,7 +498,6 @@ class InstagramPostAdmin(admin.ModelAdmin):
             data.extend(novos_na_pagina)
             url = payload.get('paging', {}).get('next')
             paginas += 1
-            # Só para cedo no modo "atualizar" (posts recentes já importados = nada novo)
             if parar_se_sem_novos and not novos_na_pagina:
                 break
 
@@ -491,16 +568,11 @@ class InstagramPostAdmin(admin.ModelAdmin):
     preview_grande.short_description = 'Preview'
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:conteudo_instagrampost_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_instagrampost_delete', args=[obj.pk])
         return format_html(
-            '<a href="{}" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#c9a96e;color:#fff;border-radius:4px;'
-            'text-decoration:none;margin-right:4px;font-size:14px;">✎</a>'
-            '<a href="{}" title="Excluir" style="display:inline-flex;align-items:center;justify-content:center;'
-            'width:28px;height:28px;background:#e74c3c;color:#fff;border-radius:4px;'
-            'text-decoration:none;font-size:14px;" onclick="return confirm(\'Excluir?\')">✕</a>',
+            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
+            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir?\')">✕ Excluir</a>',
             edit_url, delete_url,
         )
     acoes_linha.short_description = 'Ações'

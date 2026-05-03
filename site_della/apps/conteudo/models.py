@@ -54,17 +54,8 @@ class BannerPrincipal(models.Model):
         'Poster do vídeo', upload_to=banner_upload_path, blank=True,
         help_text='Imagem exibida enquanto o vídeo carrega. Ideal: 1920×1080px.')
 
-    pretitulo  = models.CharField('Pré-título', max_length=80, blank=True,
-                    help_text='Opcional. Ex: "Nova Coleção 2025"')
-    titulo     = models.CharField('Título', max_length=120, blank=True,
-                    help_text='Opcional — deixe vazio se o vídeo/foto já tem o texto na imagem.')
-    titulo_italico = models.CharField('Trecho em itálico', max_length=80, blank=True,
-                    help_text='Parte final do título que aparece em itálico/dourado.')
-    subtitulo  = models.CharField('Subtítulo', max_length=200, blank=True)
-    texto_botao = models.CharField('Texto do botão', max_length=60, blank=True,
-                    help_text='Opcional. Ex: "Explorar coleção". Deixe vazio para não exibir botão.')
-    url_botao   = models.CharField('Link do botão', max_length=200, blank=True, default='/loja/',
-                    help_text='Caminho relativo. Ex: /loja/ ou /loja/bodies/')
+    url_botao   = models.CharField('Link do banner (ao clicar)', max_length=200, blank=True, default='/loja/',
+                    help_text='Caminho relativo. Ao clicar em qualquer parte do banner, redireciona para este link. Ex: /loja/ ou /loja/bodies/')
 
     ativo = models.BooleanField('Ativo', default=True)
 
@@ -74,7 +65,7 @@ class BannerPrincipal(models.Model):
         ordering = ['ordem']
 
     def __str__(self):
-        return f'Slide {self.ordem} — {self.titulo}'
+        return f'Slide {self.ordem} ({self.get_tipo_display()})'
 
     def clean(self):
         # Valida somente ao criar (pk ainda não existe)
@@ -97,11 +88,7 @@ class MiniBanner(models.Model):
 
     posicao   = models.CharField('Posição', max_length=3, choices=POSICOES, unique=True)
     foto      = models.ImageField('Foto', upload_to=mini_banner_upload_path,
-                    help_text='Ideal: 900×1200px (retrato). Foco no assunto na parte inferior.')
-    pretitulo = models.CharField('Pré-título', max_length=80, blank=True,
-                    help_text='Ex: "Combinação de Shapes + Cores"')
-    titulo    = models.CharField('Título', max_length=80, blank=True,
-                    help_text='Opcional — o banner já pode ter o texto na própria imagem.')
+                    help_text='Ideal: 900×1200px (retrato). Foco no assunto na parte superior.')
     url       = models.CharField('Link', max_length=200, default='/loja/',
                     help_text='Caminho relativo. Ex: /loja/bodies/')
     ativo     = models.BooleanField('Ativo', default=True)
@@ -109,7 +96,8 @@ class MiniBanner(models.Model):
     class Meta:
         verbose_name = 'Mini banner'
         verbose_name_plural = 'Mini banners'
-        ordering = ['posicao']
+        # 'esq' > 'dir' em ordem descendente → Esquerda primeiro (fix do swap visual)
+        ordering = ['-posicao']
 
     def __str__(self):
         return f'Mini banner — {self.get_posicao_display()}'
@@ -137,6 +125,11 @@ class LookDaSemana(models.Model):
         verbose_name='Produto do ponto 1',
         limit_choices_to={'ativo': True},
         help_text='Produto que o "+" 1 aponta.')
+    foto_ponto1 = models.ForeignKey(
+        'produtos.ProdutoImagem', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+        verbose_name='Foto do ponto 1',
+        help_text='Foto específica para exibir. Se vazio, usa a foto principal do produto.')
     ponto1_top = models.DecimalField('Topo (%)', max_digits=5, decimal_places=1, default=30)
     ponto1_esq = models.DecimalField('Esquerda (%)', max_digits=5, decimal_places=1, default=42)
 
@@ -147,6 +140,11 @@ class LookDaSemana(models.Model):
         verbose_name='Produto do ponto 2',
         limit_choices_to={'ativo': True},
         help_text='Produto que o "+" 2 aponta.')
+    foto_ponto2 = models.ForeignKey(
+        'produtos.ProdutoImagem', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+        verbose_name='Foto do ponto 2',
+        help_text='Foto específica para exibir. Se vazio, usa a foto principal do produto.')
     ponto2_top = models.DecimalField('Topo (%)', max_digits=5, decimal_places=1, default=55)
     ponto2_esq = models.DecimalField('Esquerda (%)', max_digits=5, decimal_places=1, default=55)
 
@@ -157,6 +155,11 @@ class LookDaSemana(models.Model):
         verbose_name='Produto do ponto 3',
         limit_choices_to={'ativo': True},
         help_text='Produto que o "+" 3 aponta.')
+    foto_ponto3 = models.ForeignKey(
+        'produtos.ProdutoImagem', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+        verbose_name='Foto do ponto 3',
+        help_text='Foto específica para exibir. Se vazio, usa a foto principal do produto.')
     ponto3_top = models.DecimalField('Topo (%)', max_digits=5, decimal_places=1, default=70)
     ponto3_esq = models.DecimalField('Esquerda (%)', max_digits=5, decimal_places=1, default=30)
 
@@ -226,9 +229,26 @@ class ConfiguracaoLoja(models.Model):
         help_text='Deixe em branco para desativar. Ex: 500.00 para frete grátis acima de R$ 500.'
     )
 
+    modo_manutencao = models.BooleanField(
+        'Modo manutenção',
+        default=False,
+        help_text=(
+            'Ativado: somente o admin consegue acessar o site. '
+            'Visitantes veem uma página "Em breve". '
+            'Desativado: site funciona normalmente.'
+        ),
+    )
+
     class Meta:
-        verbose_name = 'Configuração da loja'
-        verbose_name_plural = 'Configurações da loja'
+        verbose_name = 'Configurações da Loja'
+        verbose_name_plural = 'Configurações da Loja'
+
+    def __str__(self):
+        return 'Configurações da Loja'
+
+    @classmethod
+    def get_config(cls):
+        return cls.objects.first()
 
 
 class InstagramPost(models.Model):
