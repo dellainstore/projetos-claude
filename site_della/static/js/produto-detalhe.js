@@ -58,12 +58,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function atualizarVisibilidadeNavegacao() {
-    const mostrar = galeriaAtual.length > 1;
+    const mostrarNav = galeriaAtual.length > 1;
     if (thumbsWrap) {
-      thumbsWrap.style.display = mostrar ? '' : 'none';
+      thumbsWrap.style.display = galeriaAtual.length >= 1 ? '' : 'none';
     }
-    if (btnPrev) btnPrev.style.display = mostrar ? '' : 'none';
-    if (btnNext) btnNext.style.display = mostrar ? '' : 'none';
+    if (btnPrev) btnPrev.style.display = mostrarNav ? '' : 'none';
+    if (btnNext) btnNext.style.display = mostrarNav ? '' : 'none';
   }
 
   function ativarThumb(idx) {

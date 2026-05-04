@@ -1067,7 +1067,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 .manifesto {
   background: var(--preto);
   color: white;
-  padding: 5rem 2rem;
+  padding: 3rem 2rem;
   text-align: center;
 }
 
@@ -1106,6 +1106,10 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 }
 
 /* ─── Depoimentos ────────────────────────────────────────────────────────────*/
+#titulo-depoimentos {
+  font-size: clamp(1.3rem, 2vw, 1.9rem);
+}
+
 .depoimentos-slider {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2802,7 +2806,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   .newsletter-form  { flex-direction: column; }
   .newsletter-btn   { width: 100%; text-align: center; padding: 1rem; }
   .footer-bottom    { flex-direction: column; text-align: center; }
-  .manifesto        { padding: 5rem 1.25rem; }
+  .manifesto        { padding: 2.5rem 1.25rem; }
 }
 
 @media (max-width: 480px) {

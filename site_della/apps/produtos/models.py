@@ -99,6 +99,15 @@ class Categoria(models.Model):
 class Produto(models.Model):
 
     categoria = models.ForeignKey(Categoria, on_delete=models.PROTECT, related_name='produtos')
+    cor_principal = models.ForeignKey(
+        'CorPadrao',
+        verbose_name='Cor principal',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='produtos_capa',
+        help_text='Define qual cor abre a vitrine pública e fornece a foto de capa do produto.',
+    )
     nome = models.CharField('Nome', max_length=200)
     slug = models.SlugField('Slug', max_length=220, unique=True, blank=True)
     descricao = models.TextField('Descrição', max_length=2000)
@@ -206,14 +215,57 @@ class Produto(models.Model):
                 return f'ou {n}x de R$ {parcela_fmt} sem juros'
         return ''
 
+    def _imagens_cache(self):
+        cache = getattr(self, '_prefetched_objects_cache', {})
+        if 'imagens' in cache:
+            return list(cache['imagens'])
+        return list(self.imagens.select_related('cor').all())
+
+    def _variacoes_cache(self):
+        cache = getattr(self, '_prefetched_objects_cache', {})
+        if 'variacoes' in cache:
+            return list(cache['variacoes'])
+        return list(self.variacoes.select_related('cor').all())
+
+    def imagens_da_cor(self, cor_id=None):
+        imagens = self._imagens_cache()
+        if cor_id is None:
+            filtradas = [img for img in imagens if img.cor_id is None]
+            return sorted(filtradas, key=lambda img: (img.ordem, img.pk or 0))
+        filtradas = [img for img in imagens if img.cor_id == cor_id]
+        return sorted(filtradas, key=lambda img: (img.ordem, img.pk or 0))
+
+    @property
+    def cor_capa_efetiva_id(self):
+        if self.cor_principal_id and self.imagens_da_cor(self.cor_principal_id):
+            return self.cor_principal_id
+
+        for img in self._imagens_cache():
+            if img.cor_id:
+                return img.cor_id
+
+        vistas = set()
+        for variacao in self._variacoes_cache():
+            if variacao.ativa and variacao.cor_id and variacao.cor_id not in vistas:
+                vistas.add(variacao.cor_id)
+                return variacao.cor_id
+        return None
+
     @property
     def imagem_principal(self):
-        return self.imagens.filter(principal=True).first() or self.imagens.first()
+        cor_id = self.cor_capa_efetiva_id
+        imagens_cor = self.imagens_da_cor(cor_id) if cor_id else []
+        if imagens_cor:
+            return imagens_cor[0]
+        return self.imagens.filter(principal=True).first() or self.imagens.order_by('ordem', 'id').first()
 
     @property
     def imagem_hover(self):
-        imagens = list(self.imagens.order_by('-principal', 'ordem', 'id'))
-        return imagens[1] if len(imagens) > 1 else None
+        cor_id = self.cor_capa_efetiva_id
+        imagens_cor = self.imagens_da_cor(cor_id) if cor_id else []
+        if len(imagens_cor) > 1:
+            return imagens_cor[1]
+        return None
 
     def get_absolute_url(self):
         from django.urls import reverse
@@ -249,6 +301,15 @@ class Produto(models.Model):
 class ProdutoImagem(models.Model):
     produto = models.ForeignKey(Produto, on_delete=models.CASCADE, related_name='imagens')
     imagem = models.ImageField('Imagem', upload_to=produto_imagem_path)
+    cor = models.ForeignKey(
+        'CorPadrao',
+        verbose_name='Cor do produto',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='imagens_produto',
+        help_text='Cada foto pertence a uma cor. A primeira foto da cor vira a principal daquela cor.',
+    )
     alt = models.CharField('Texto alternativo', max_length=200, blank=True)
     principal = models.BooleanField('Principal', default=False)
     ordem = models.PositiveSmallIntegerField('Ordem', default=0)
@@ -256,7 +317,7 @@ class ProdutoImagem(models.Model):
     class Meta:
         verbose_name = 'Imagem do produto'
         verbose_name_plural = 'Imagens do produto'
-        ordering = ['-principal', 'ordem']
+        ordering = ['ordem', 'id']
 
     def __str__(self):
         arquivo = os.path.basename(self.imagem.name) if self.imagem else ''
