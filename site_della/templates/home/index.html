@@ -37,6 +37,12 @@
   </div>
 
   {% if banners|length > 1 %}
+  <button class="hero-arrow hero-arrow-prev" id="hero-arrow-prev" aria-label="Banner anterior">
+    <i class="fas fa-chevron-left"></i>
+  </button>
+  <button class="hero-arrow hero-arrow-next" id="hero-arrow-next" aria-label="Próximo banner">
+    <i class="fas fa-chevron-right"></i>
+  </button>
   <div class="hero-dots" role="tablist" aria-label="Navegar entre slides">
     {% for banner in banners %}
     <button class="hero-dot {% if forloop.first %}ativo{% endif %}"

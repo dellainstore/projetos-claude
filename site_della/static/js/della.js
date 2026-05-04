@@ -1,6 +1,24 @@
 /* ─── Della Instore — JavaScript Principal ────────────────────────────────── */
 
 document.addEventListener('DOMContentLoaded', () => {
+  const gaMeasurementId = document.body.dataset.gaMeasurementId || '';
+
+  function carregarGA() {
+    if (!gaMeasurementId || window._gaCarregado) return;
+    window._gaCarregado = true;
+
+    const script = document.createElement('script');
+    script.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaMeasurementId;
+    script.async = true;
+    document.head.appendChild(script);
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function gtag() {
+      window.dataLayer.push(arguments);
+    };
+    window.gtag('js', new Date());
+    window.gtag('config', gaMeasurementId);
+  }
 
   // ─── Navbar: transparente no hero, sólida ao rolar ─────────────────────────
   const navbar = document.getElementById('navbar');
@@ -168,6 +186,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }, { passive: true });
     }
 
+    const heroPrev = document.getElementById('hero-arrow-prev');
+    const heroNext = document.getElementById('hero-arrow-next');
+    if (heroPrev) {
+      heroPrev.addEventListener('click', () => {
+        const prev = (slideAtual - 1 + heroSlides.length) % heroSlides.length;
+        irParaSlide(prev);
+        iniciarTimer();
+      });
+    }
+    if (heroNext) {
+      heroNext.addEventListener('click', () => {
+        irParaSlide((slideAtual + 1) % heroSlides.length);
+        iniciarTimer();
+      });
+    }
+
     iniciarTimer();
   }
 
@@ -266,6 +300,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.overflow = '';
   }
 
+  window.abrirCarrinho = abrirCarrinho;
+  window.fecharCarrinho = fecharCarrinho;
+
   btnAbrirCarrinho.forEach(btn => btn.addEventListener('click', abrirCarrinho));
   btnFecharCarrinho?.addEventListener('click', fecharCarrinho);
 
@@ -283,6 +320,46 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') fecharCarrinho();
   });
+
+  document.addEventListener('click', (e) => {
+    const dismissBtn = e.target.closest('[data-dismiss-parent]');
+    if (dismissBtn?.parentElement) {
+      dismissBtn.parentElement.remove();
+      return;
+    }
+
+    if (e.target.closest('[data-fechar-carrinho]')) {
+      fecharCarrinho();
+      return;
+    }
+
+    const copyBtn = e.target.closest('[data-copy-target]');
+    if (copyBtn) {
+      const targetId = copyBtn.dataset.copyTarget || '';
+      const input = document.getElementById(targetId);
+      if (!input) return;
+
+      const successHtml = copyBtn.dataset.copySuccessHtml || '<i class="fas fa-check"></i> Copiado!';
+      const defaultHtml = copyBtn.dataset.copyDefaultHtml || copyBtn.innerHTML;
+
+      navigator.clipboard?.writeText(input.value).then(() => {
+        copyBtn.innerHTML = successHtml;
+        setTimeout(() => {
+          copyBtn.innerHTML = defaultHtml;
+        }, 2500);
+      }).catch(() => {
+        input.select();
+        document.execCommand('copy');
+      });
+    }
+  });
+
+  const mensagensSistema = document.getElementById('mensagens-sistema');
+  if (mensagensSistema) {
+    setTimeout(() => {
+      mensagensSistema.remove();
+    }, 5000);
+  }
 
   // ─── Adicionar ao carrinho (AJAX) ──────────────────────────────────────────
   // Delegação de eventos: captura cliques em [data-produto-id] exceto no detalhe do produto
@@ -378,12 +455,12 @@ document.addEventListener('DOMContentLoaded', () => {
               ${item.variacao ? `<p class="drawer-item-variacao">${item.variacao}</p>` : ''}
               <p class="drawer-item-preco">R$ ${parseFloat(item.subtotal).toFixed(2).replace('.', ',')}</p>
               <div class="drawer-item-qty">
-                <button class="drawer-qty-btn" onclick="window.drawerAlterarQty('${item.chave}', ${item.quantidade - 1})">−</button>
+                <button class="drawer-qty-btn" data-drawer-action="alterar" data-chave="${item.chave}" data-quantidade="${item.quantidade - 1}">−</button>
                 <span>${item.quantidade}</span>
-                <button class="drawer-qty-btn" onclick="window.drawerAlterarQty('${item.chave}', ${item.quantidade + 1})">+</button>
+                <button class="drawer-qty-btn" data-drawer-action="alterar" data-chave="${item.chave}" data-quantidade="${item.quantidade + 1}">+</button>
               </div>
             </div>
-            <button class="drawer-item-remover" onclick="window.drawerRemover('${item.chave}')" aria-label="Remover item">
+            <button class="drawer-item-remover" data-drawer-action="remover" data-chave="${item.chave}" aria-label="Remover item">
               <i class="fas fa-times"></i>
             </button>
           </div>
@@ -419,6 +496,26 @@ document.addEventListener('DOMContentLoaded', () => {
       if (dados.status === 'ok') window.atualizarDrawerConteudo(dados);
     } catch(e) {}
   };
+
+  document.addEventListener('click', (e) => {
+    const drawerBtn = e.target.closest('[data-drawer-action]');
+    if (!drawerBtn) return;
+
+    const chave = drawerBtn.dataset.chave || '';
+    if (!chave) return;
+
+    if (drawerBtn.dataset.drawerAction === 'remover') {
+      window.drawerRemover(chave);
+      return;
+    }
+
+    if (drawerBtn.dataset.drawerAction === 'alterar') {
+      const quantidade = parseInt(drawerBtn.dataset.quantidade || '', 10);
+      if (!Number.isNaN(quantidade)) {
+        window.drawerAlterarQty(chave, quantidade);
+      }
+    }
+  });
 
   // ─── Wishlist toggle (AJAX) ────────────────────────────────────────────────
   document.addEventListener('click', async (e) => {
@@ -552,8 +649,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const galeriaPrincipal = document.querySelector('.galeria-principal');
   const galeriaFoto      = document.getElementById('foto-principal');
   const galeriaThumbs    = document.querySelectorAll('.galeria-thumb');
+  const galeriaDinamicaPorCor = document.getElementById('produto-detalhe-config');
 
-  if (galeriaThumbs.length > 1 && galeriaPrincipal) {
+  if (!galeriaDinamicaPorCor && galeriaThumbs.length > 1 && galeriaPrincipal) {
     let indexAtual = 0;
 
     function irParaFoto(idx) {
@@ -689,7 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const popupFechar     = document.getElementById('popup-newsletter-fechar');
   const formPopup       = document.getElementById('form-popup-newsletter');
 
-  if (popupNewsletter) {
+    if (popupNewsletter) {
     const POPUP_KEY = 'della_newsletter_popup';
 
     if (!sessionStorage.getItem(POPUP_KEY)) {
@@ -742,6 +840,14 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   }
+
+  document.querySelectorAll('[data-auto-submit-form]').forEach((field) => {
+    field.addEventListener('change', () => {
+      const formId = field.dataset.autoSubmitForm;
+      if (!formId) return;
+      document.getElementById(formId)?.submit();
+    });
+  });
 
   // ─── Meta Pixel — carregamento condicional respeitando consent ────────────
   function carregarMetaPixel() {
@@ -853,6 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const existente = lerConsent();
     if (existente) {
       window.dellaConsent = existente;
+      if (existente.analytics) carregarGA();
       if (existente.marketing) carregarMetaPixel();
     } else {
       abrirBanner();
@@ -860,7 +967,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Quando o usuário consentir marketing pela 1ª vez, carrega o Pixel
     document.addEventListener('della:consent', function (e) {
-      if (e.detail && e.detail.marketing) carregarMetaPixel();
+      if (!e.detail) return;
+      if (e.detail.analytics) carregarGA();
+      if (e.detail.marketing) carregarMetaPixel();
     });
 
     const btnAceitarTudo = document.getElementById('della-cookie-aceitar-tudo');
@@ -908,5 +1017,26 @@ document.addEventListener('DOMContentLoaded', () => {
       abrirModal(lerConsent() || { analytics: true, marketing: true });
     });
   })();
+
+  // ─── data-confirm delegation (substitui onclick/onsubmit inline) ───────────
+  document.addEventListener('click', function (e) {
+    const el = e.target.closest('[data-confirm]');
+    if (!el || el.tagName === 'FORM') return;
+    const msg = el.getAttribute('data-confirm');
+    if (msg && !window.confirm(msg)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+
+  document.addEventListener('submit', function (e) {
+    const form = e.target.closest('form[data-confirm]');
+    if (!form) return;
+    const msg = form.getAttribute('data-confirm');
+    if (msg && !window.confirm(msg)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 
 });

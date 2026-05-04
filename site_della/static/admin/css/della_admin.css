@@ -1512,6 +1512,103 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
   padding: 1rem;
 }
 
+.della-fotos-cor-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem 1.25rem 1.25rem;
+}
+
+.della-fotos-cor-section {
+  border: 1px solid var(--da-border);
+  border-radius: 12px;
+  background: var(--da-white);
+  padding: 0.95rem 1rem 1rem;
+  box-shadow: var(--da-shadow);
+}
+
+.della-fotos-cor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.della-fotos-cor-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.della-fotos-cor-title {
+  margin: 0;
+  font-family: var(--da-font-titles);
+  font-size: 1rem;
+  color: var(--da-text);
+}
+
+.della-fotos-cor-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(201,169,110,0.18);
+  color: #8a6420;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.della-fotos-cor-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.della-cor-principal-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--da-text);
+  cursor: pointer;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--da-border);
+  background: var(--da-white);
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.della-cor-principal-label:has(.della-cor-principal-radio:checked) {
+  border-color: var(--da-gold);
+  background: rgba(201,169,110,0.12);
+  color: #7a5a18;
+}
+
+.della-cor-principal-radio {
+  accent-color: var(--da-gold);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.della-fotos-track-por-cor {
+  min-height: 190px;
+  border: 1px dashed rgba(201,169,110,0.34);
+  border-radius: 10px;
+  background: rgba(201,169,110,0.03);
+}
+
+.della-foto-card-principal-badge-alt {
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+}
+
 /* ---------------------------------------------------------------------------
    23. FOTO POR COR — PICKER VISUAL (modal de seleção)
    --------------------------------------------------------------------------- */
@@ -1702,7 +1799,7 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
 
 /* Botão de câmera na coluna de cor da variação (inline com o select) */
 .della-var-foto-btn {
-  display: inline-flex;
+  display: none !important;
   align-items: center;
   justify-content: center;
   width: 30px;
