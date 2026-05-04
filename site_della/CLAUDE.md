@@ -10,7 +10,7 @@ Loja virtual de moda feminina premium **D'ELLA Instore**.
 | | |
 |---|---|
 | Stack | Django 5.1 + PostgreSQL + Gunicorn + Nginx |
-| Frontend | HTML/CSS/JS + Tailwind CDN |
+| Frontend | HTML/CSS/JS + Tailwind local (`static/css/tailwind.css`) |
 | VPS | `159.203.101.232` (Ubuntu, 1 vCore, 1.9GB RAM) |
 | Domínio principal | `www.dellainstore.com` (HTTPS, Let's Encrypt — **PRODUÇÃO**) |
 | Redirecionamentos | `dellainstore.com`, `www.dellainstore.com.br`, `dellainstore.com.br` → `www.dellainstore.com` |
@@ -111,7 +111,7 @@ Restaurar (exemplo código): `rclone copy onedrive:Della/Backups/codigo/codigo_Y
 site_della/
 ├── core/settings/{base,production,development}.py
 ├── apps/
-│   ├── produtos/         # Categoria, Produto, Variacao, CorPadrao, TamanhoPadrao, ProdutoCorFoto, Avaliacao, TabelaMedidas
+│   ├── produtos/         # Categoria, Produto, Variacao, CorPadrao, TamanhoPadrao, ProdutoImagem (com cor), Avaliacao, TabelaMedidas
 │   ├── conteudo/         # BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, InstagramPost
 │   ├── pedidos/          # Pedido, ItemPedido, Cupom, CodigoVendedor, CarrinhoAbandonado
 │   ├── pagamentos/       # PagSeguro, Stone, Pix
@@ -129,12 +129,12 @@ site_della/
 
 ### `produtos`
 - **Categoria**: `nome, slug, parent (FK self), ordem, ativa`. Dois níveis (mãe + filhas). Ao salvar, **se ativa muda no pai → propaga para todas as subs** (cascata em `Categoria.save()`).
-- **Produto**: `categoria (FK), nome, slug, descricao, composicao, preco, preco_promocional, peso (gramas), bling_id, sku`. Nome salvo **uppercase**. Descrição/composição preservam quebras de linha.
+- **Produto**: `categoria (FK), cor_principal (FK opcional), nome, slug, descricao, composicao, preco, preco_promocional, peso (gramas), bling_id, sku`. Nome salvo **uppercase**. `cor_principal` define a capa da vitrine e a cor inicial ao abrir o produto no site.
 - **CorPadrao**: `nome (único), codigo_hex, codigo_hex_secundario` (bolinha bicolor via conic-gradient).
 - **TamanhoPadrao**: `nome, ordem`.
 - **Variacao**: `produto, cor (FK), tamanho (FK), estoque, sku_variacao, bling_variacao_id, ativa, preco, preco_promocional, disponibilidade (imediata/sob_demanda), prazo_confeccao_dias`.
-- **ProdutoImagem**: `produto, imagem (validada por magic bytes), alt, principal, ordem`. 1ª foto do strip = principal.
-- **ProdutoCorFoto**: `produto, cor (FK), imagem (FK→ProdutoImagem)` — vincula foto a cor; ao clicar bolinha no site, galeria troca.
+- **ProdutoImagem**: `produto, cor (FK opcional), imagem (validada por magic bytes), alt, principal, ordem`. Agora cada foto pertence a uma cor. A **1ª foto de cada cor** é a principal daquela cor; a **2ª** vira o hover da mesma cor na vitrine. O campo `principal=True` fica reservado para a foto de capa efetiva do produto (1ª foto da `cor_principal`).
+- **ProdutoCorFoto**: legado. Não é mais o fluxo ativo do admin/vitrine; foi mantido só por compatibilidade histórica do banco.
 
 ### `pedidos`
 - **Pedido**: `numero (YYYY-NNNN sequencial), cliente, dados copiados, subtotal, desconto, frete, total, status, gateway, codigo_rastreio, bling_pedido_id, cupom (FK), codigo_vendedor (FK), frete_servico_id, frete_prazo_dias, observacao_interna`.
@@ -204,14 +204,19 @@ JS em `produto_admin.js → initCategoriaPaiFiltro()` filtra dinamicamente o dro
 
 Faixa "VARIAÇÕES" + cabeçalho de colunas + scrollbar horizontal são sticky no viewport. Override em `templates/admin/edit_inline/tabular.html` move o `<h2>` para fora do `.tabular.inline-related`. JS constrói clone de thead em `.della-thead-clone-wrap`. **Bug crítico evitado:** `#variacoes-group .tabular.inline-related > fieldset.module { overflow: visible }` — sem isso aparece scrollbar dupla.
 
-### Fotos do produto — card strip + foto por cor
+### Fotos do produto — galeria por cor
 
-- **Strip de cards** arrastáveis (`della-fotos-panel`) substitui tabela numérica
-- 1ª foto na ordem = `principal=True` automaticamente no save
-- Upload via "Escolher imagens" ou drag-and-drop sobre o strip
-- **Foto por Cor**: botão câmera (`della-var-foto-btn`) na linha de variação abre picker visual. Modal tem botão "Remover vínculo" (vermelho) quando já existe vínculo
-- Inline `fotos_por_cor-group` é oculto via CSS — vínculo gerenciado por JS, Django processa no save
-- Backend: `ProdutoAdmin.save_related` salva imagens primeiro → resolve refs `pending:imagens-N` → salva fotos por cor
+- O admin de produto organiza as fotos em **blocos por cor do produto**, derivados das cores usadas nas variações
+- Cada bloco aceita: upload por botão "Escolher imagens", drag-and-drop, reordenação e mover entre cores
+- A **1ª foto** de cada cor é a principal daquela cor; a **2ª** vira o hover na vitrine
+- A `cor_principal` define: capa do card na vitrine + cor inicial ao abrir o produto
+- **Seletor de cor principal**: cada bloco tem um radio button "Cor principal" no cabeçalho — ao clicar, atualiza o campo `cor_principal` do produto em tempo real (sem precisar encontrar o select escondido no form)
+- **Bloco some ao deletar variação**: ao marcar DELETE em todas as variações de uma cor, o bloco de fotos daquela cor desaparece imediatamente do painel de fotos (antes era necessário salvar para sumir)
+- **Seção "Arquivo / Fotos sem cor vinculada"**: aparece sempre ao final de todos os blocos. Recebe automaticamente fotos sem cor ou de variações excluídas. Tag "Não aparece no site". Suporta drag-and-drop para mover fotos de/para o arquivo. As fotos ficam com `cor=NULL` — invisíveis no site público mas preservadas no banco para reutilização futura
+- No site público, ao clicar na bolinha de cor: foto principal troca para 1ª foto daquela cor; miniaturas passam a mostrar apenas as fotos daquela cor
+- **Miniaturas**: aparece mesmo quando a cor tem apenas 1 foto (antes ficava oculta); botões prev/next continuam exigindo 2+ fotos
+- **Zoom na foto**: ao passar o mouse sobre a foto principal, zoom de 1.55× que **segue o cursor** sem delay (transform-origin sem transição, apenas transform tem transição de 0.18s na entrada/saída). Desabilitado em touch devices
+- Migração aplicada em 2026-05-03: produtos cadastrados receberam `cor_principal` = primeira cor ativa da variação; fotos com `cor=NULL` foram movidas para essa primeira cor para ajuste manual posterior
 
 ---
 
@@ -292,8 +297,8 @@ Cron de verificação a cada 6h: `python manage.py verificar_cache --settings=co
 ### Google Analytics (GA4)
 
 - `GA_MEASUREMENT_ID=G-ELSG6BRW0M` no `.env`
-- Injetado condicionalmente em `templates/base.html` — só carrega quando `della_consent.analytics === true`
-- Leitura do cookie via regex no `DOMContentLoaded` (mesmo timing que della.js seta `window.dellaConsent`)
+- Carregado condicionalmente por `static/js/della.js` via `data-ga-measurement-id` no `<body>` — só inicia quando `della_consent.analytics === true`
+- `della.js` lê o cookie no boot, popula `window.dellaConsent` e pode iniciar o GA sem depender de `<script>` inline
 - Evento `della:consent` escutado para carregar GA quando usuário aceita durante a visita
 - CSP liberado em `core/settings/base.py`: `script-src`, `img-src` e `connect-src` com `www.googletagmanager.com`, `www.google-analytics.com`, `analytics.google.com`
 - Troca de domínio futura: apenas atualizar a URL no painel GA — o `G-ELSG6BRW0M` permanece o mesmo
@@ -350,9 +355,27 @@ Cron de verificação a cada 6h: `python manage.py verificar_cache --settings=co
 | `enviar_confirmacao_pagamento(pedido)` | Status → `pagamento_confirmado` | `emails/pagamento_confirmado.html` |
 | `enviar_notificacao_envio(pedido)` | Status → `enviado` | `emails/envio_rastreio.html` |
 | `enviar_cancelamento(pedido, estornado=False)` | Status → `cancelado` | `emails/cancelamento_pedido.html` |
+| `enviar_confirmacao_entrega(pedido)` | Status → `entregue` (webhook ME ou cron 7 dias) | `emails/entregue_avaliacao.html` |
 | `enviar_email_carrinho_abandonado(ca)` | Admin action / cron | `emails/carrinho_abandonado.html` |
 
 Todas as transições de status do `PedidoAdmin._mudar_status` disparam o e-mail correspondente automaticamente. A action `cancelar_e_estornar_pagseguro` chama `enviar_cancelamento(..., estornado=True)`.
+
+⚠️ **Pendente (próximos passos):** confirmar o fluxo atual dos e-mails recebidos pelo cliente e ajustar conteúdo/layout conforme necessário. Há itens a revisar nos e-mails transacionais.
+
+### Melhor Envio — Webhook de Rastreio
+
+- App cadastrado na Área Dev do ME: **"Della Instore Site"** (Client ID: `24542`)
+- `MELHOR_ENVIO_WEBHOOK_SECRET` no `.env` = Secret do app (usado para validar HMAC-SHA256 via header `x-me-signature`)
+- Webhook URL registrada: `https://www.dellainstore.com/carrinho/webhook/melhorenvio/`
+- Endpoint: `apps/pedidos/views.py → webhook_melhorenvio`
+
+**⚠️ Limitação conhecida:** o webhook ME só dispara para etiquetas criadas pelo mesmo app. Como as etiquetas são geradas via integração **Bling → ME** (não pelo app "Della Instore Site"), o webhook **não dispara automaticamente**. Para funcionar 100% seria necessário gerar etiquetas diretamente pelo app, mudando o fluxo operacional.
+
+**Fallback atual:** `marcar_entrega_automatica` (cron diário às 03:00) muda status para `entregue` após **7 dias** do envio e envia e-mail `entregue_avaliacao.html`.
+
+**Modelo `RastreioEvento`** (`apps/pedidos/models.py`) armazena todos os eventos recebidos pelo webhook para auditoria.
+
+**Middleware manutenção:** rotas `/bling/`, `/pagamento/` e `/carrinho/webhook/` são isentas do modo manutenção (webhooks de integração sempre passam).
 
 ### PIX (chave própria, fallback)
 
@@ -435,6 +458,15 @@ Config em `scripts/nginx_producao.conf`. Domínios e redirecionamentos:
 
 ---
 
+## Bugs corrigidos (sessão 2026-05-04)
+
+- **Mute button aparecia em slides de foto**: `.hero-mute-btn` tem `display:flex` no CSS, que sobrescrevia o atributo `hidden`. Corrigido com `.hero-mute-btn[hidden] { display:none !important; }`. Se adicionar outro botão do hero com `display:flex` e precisar ocultar via `hidden`, aplicar o mesmo padrão
+- **Página de produto travava ao adicionar zoom**: `div#galeria-zoom-wrap` criado como wrapper interno causava conflito de layout e bloqueava cliques em toda a página (botões de cor, tamanho, carrinho). Removido. O zoom agora usa diretamente `.galeria-principal` que já tem `overflow:hidden`
+- **Zoom não seguia o cursor**: `transition: transform 0.25s` aplicado ao `transform-origin` causava delay no rastreamento. Corrigido: `transition:none` durante o `mousemove` (origin atualiza instantâneo), transição só na entrada/saída
+- **Tabela de medidas — label duplicado**: "Tabela de Medidas" aparecia duas vezes (label pequeno + título). Label menor removido; layout invertido (logo à esquerda, título à direita)
+- **`imagem_hover` puxava foto de outra cor**: quando a cor principal do produto tinha só 1 foto, o fallback `imagens.order_by('ordem','id')[1]` retornava qualquer 2ª foto do produto (de outra cor). Corrigido para retornar `None` — sem hover é melhor que hover errado
+- **Miniaturas com 1 foto permaneciam ocultas**: `atualizarVisibilidadeNavegacao()` usava uma única variável para thumbs E nav. Separado: thumbs aparecem com `>= 1` foto, setas prev/next só com `> 1`
+
 ## Bugs corrigidos (sessão 2025-04-30)
 
 - **Título duplicado no estorno**: `confirmar_estorno.html` agora tem `{% block content_title %}{% endblock %}` para suprimir o título automático do Django admin
@@ -473,6 +505,11 @@ Config em `scripts/nginx_producao.conf`. Domínios e redirecionamentos:
 - **GA4 — chave do consent é `analytics`** (não `analise`). Verificar em `della.js → salvarConsent()` se implementar outro tracking
 - **GA4 — carregar no `DOMContentLoaded`**: della.js seta `window.dellaConsent` dentro do DOMContentLoaded — qualquer script que dependa disso deve usar o mesmo evento, não rodar inline imediatamente
 - **CEP — endpoint `/carrinho/cep/{cep}/` retorna `cidade` e `estado`** (não `localidade`/`uf` da ViaCEP). Nunca usar os nomes ViaCEP diretamente no frontend
+- **`imagem_hover` NÃO deve fazer fallback para qualquer 2ª foto**: retornar `None` quando a cor principal tem só 1 imagem. Fallback para `imagens.order_by(...)[1]` mostrava foto de cor diferente no hover dos cards
+- **`.hero-mute-btn` tem `display:flex`** — `hidden` attribute sozinho não oculta. Sempre manter `.hero-mute-btn[hidden] { display:none !important; }` no CSS. Aplicar o mesmo padrão a outros elementos do hero que usem `display:flex` e precisem de `hidden`
+- **Zoom na galeria: NÃO criar wrapper `div` dentro de `.galeria-principal`** — causa conflito de layout e pode bloquear cliques em toda a página. Usar `.galeria-principal` diretamente (já tem `overflow:hidden`). O `transform-origin` deve ser atualizado com `transition:none` durante `mousemove` para o zoom seguir o cursor
+- **Setas do banner hero**: ficam dentro do bloco `if (heroSlides.length > 1)` no `della.js`. Se adicionar slides depois, as setas aparecem automaticamente. Sempre chamar `iniciarTimer()` após `irParaSlide()` nos handlers das setas
+- **Clientes — normalização de nomes**: command `normalizar_nomes_clientes --dry-run` disponível. Em 2026-05-04 foram normalizados 13 de 98 clientes. Novos cadastros já normalizam via `sanitize_name()` no `clean()`
 
 ---
 
@@ -524,9 +561,10 @@ GA_MEASUREMENT_ID=G-ELSG6BRW0M
 | **Google Search Console** — verificar propriedade `https://www.dellainstore.com` via GA4 | Fazer quando abrir o site |
 | **Meta Business** — verificar domínio `dellainstore.com` | Fazer quando abrir o site — meta tag já está no `base.html` e `manutencao.html` |
 | **Estoque Bling → site** (sync automático) | Aguardar saneamento do estoque no Bling |
-| **Polling automático tracking Correios** | Só fazer se o acompanhamento manual não bastar na prática |
+| **Contrato Bronze Correios (API de rastreio)** | Necessário para tracking automático em tempo real. Exige CNPJ + cadastro em correios.com.br/atendimento/developers. Quando ativado: implementar cron que consulta API e dispara e-mails por evento (postado, saiu para entrega, entregue). Linketrack foi encerrado em 03/2025; BrasilAPI não tem endpoint de rastreio. |
+| **Confirmar e ajustar e-mails transacionais** | Revisar fluxo completo de e-mails recebidos pelo cliente (conteúdo, layout, ordem). Há ajustes a fazer — a combinar no próximo passo. |
 | Webhook Stone HMAC (`X-Stone-Signature`) | Quando ativar Stone |
-| Remover `'unsafe-inline'` do CSP (mover scripts inline para arquivos / nonce) | Melhoria futura — Tailwind já saiu do CDN, restam scripts GA4 e cleanup inline em `base.html` |
+| Remover `style-src 'unsafe-inline'` do CSP | Exige migrar 525 `style="..."` em templates + estilos dinâmicos JS. Avaliar `nonce` como alternativa |
 | LGPD — anonimização de pedidos > 5 anos (prazo fiscal) | Melhoria futura |
 ---
 
@@ -554,6 +592,16 @@ GA_MEASUREMENT_ID=G-ELSG6BRW0M
 | Lembrete automático por e-mail 14 dias antes do token GitHub expirar (Brevo + cron) | ✅ |
 | `.gitignore` reforçado: PII (CSV/clientes), logs PagSeguro não mascarados, dumps, builds | ✅ |
 | Branch `feature/cache-system` mergeada em `main` (fast-forward) | ✅ |
+| Site público sem `script-src 'unsafe-inline'` (CSP endurecido; exceção temporária só no admin `/painel/`) | ✅ |
+| Admin `/painel/` sem `script-src 'unsafe-inline'` — `<script>` IIFE migrados pra arquivos externos, 23 `onclick="return confirm()"` substituídos por `data-confirm=` + delegation | ✅ |
+| Fotos admin: seletor de cor principal por radio button em cada bloco | ✅ |
+| Fotos admin: bloco de cor some ao deletar variação (sem precisar salvar) | ✅ |
+| Fotos admin: seção "Arquivo / Fotos sem cor vinculada" com drag-and-drop e tag "Não aparece no site" | ✅ |
+| Zoom na foto principal do produto (segue cursor, 1.55×, desabilitado em touch) | ✅ |
+| Miniaturas aparecem com 1 foto (antes só com 2+) | ✅ |
+| Banner home: setas prev/next discretas (hover, ocultas em mobile) | ✅ |
+| Tabela de medidas: logo D'ELLA Instore tipografada (branca, D'ELLA + Instore), logo à esquerda e título à direita | ✅ |
+| Management command `normalizar_nomes_clientes` (--dry-run); 13 clientes normalizados em 2026-05-04 | ✅ |
 
 ---
 
@@ -562,12 +610,13 @@ GA_MEASUREMENT_ID=G-ELSG6BRW0M
 | O que | Arquivo |
 |---|---|
 | JS principal do site | `static/js/della.js` |
+| JS checkout / produto / carrinho sem inline | `static/js/checkout-index.js`, `static/js/checkout-confirmacao.js`, `static/js/produto-detalhe.js`, `static/js/pedidos-carrinho.js` |
 | CSS principal do site | `static/css/della.css` |
 | Tailwind config + entrada | `tailwind.config.js` + `static/src/tailwind.css` |
 | Tailwind CSS gerado (gitignored) | `static/css/tailwind.css` (rodar `npm run build:css`) |
-| JS admin de produto | `static/admin/js/produto_admin.js` |
+| JS admin de produto | `static/admin/js/produto_admin.js`, `static/admin/js/produto_admin_por_cor.js` |
 | CSS admin | `static/admin/css/della_admin.css` |
-| Form admin produto (CategoriaSubSelect, ProdutoCorFotoForm) | `apps/produtos/forms.py` |
+| Form admin produto | `apps/produtos/forms.py` |
 | ProdutoAdmin (importação CSV/ZIP, exportar, save_related) | `apps/produtos/admin.py` |
 | Bling services | `apps/bling/services.py` |
 | Bling webhook (situacao.valor) | `apps/bling/views.py` (`_processar_webhook_pedido`) |
@@ -577,18 +626,27 @@ GA_MEASUREMENT_ID=G-ELSG6BRW0M
 | Sanitize / magic bytes | `apps/core_utils/sanitize.py` |
 | Context processor (categorias, WhatsApp, META_PIXEL_ID, GA_MEASUREMENT_ID) | `apps/produtos/context_processors.py` |
 | Settings produção (CSP, integrations) | `core/settings/{base,production}.py` |
+| Sidebar scroll + `data-confirm` delegation (admin) | `static/admin/js/admin_inline_replacements.js` |
 | Storage WhiteNoise leniente | `core/storage.py` |
 | Painel cliente — detalhe pedido (timeline) | `templates/usuarios/detalhe_pedido.html` |
 | View confirmar entrega cliente | `apps/usuarios/views.py:confirmar_entrega` |
 | Admin action estorno PagBank + intermediate | `apps/pedidos/admin.py:cancelar_e_estornar_pagseguro` + `templates/admin/pedidos/confirmar_estorno.html` |
 | Mascarar PII em logs PagBank | `scripts/mascarar_logs_pagseguro.py` |
-| Auto-entrega após 7 dias | `apps/pedidos/management/commands/marcar_entrega_automatica.py` |
+| Auto-entrega após 7 dias + e-mail entregue+avalie | `apps/pedidos/management/commands/marcar_entrega_automatica.py` |
+| Webhook Melhor Envio (rastreio) | `apps/pedidos/views.py → webhook_melhorenvio` + `_processar_postagem` + `_processar_entrega` |
+| Eventos de rastreio recebidos (log/auditoria) | `apps/pedidos/models.py → RastreioEvento` |
+| E-mail entregue + avalie a loja | `apps/pedidos/emails.py → enviar_confirmacao_entrega` + `templates/emails/entregue_avaliacao.html` |
 | Middleware modo manutenção | `apps/core_utils/maintenance.py` |
 | Template página manutenção | `templates/manutencao.html` |
 | Toggle manutenção no admin | `Admin → Configurações da Loja → Modo manutenção` |
 | Backup banco PostgreSQL | `scripts/backup_db.sh` |
 | Backup código fonte | `scripts/backup_codigo.sh` |
 | Lembrete renovação token GitHub | `scripts/enviar_lembrete_token.sh` |
+| Zoom na foto principal (segue cursor) | `static/js/produto-detalhe.js` → listener `mouseenter/mousemove/mouseleave` em `#galeria-principal` |
+| Seção arquivo de fotos no admin | `static/admin/js/produto_admin_por_cor.js` → `buildGroupedPanels()` (bloco ao final) |
+| Setas prev/next do banner home | `templates/home/index.html` (HTML) + `static/js/della.js` (JS) + `static/css/della.css` (`.hero-arrow`) |
+| Logo D'ELLA Instore na tabela de medidas | `templates/components/tabela_medidas.html` + CSS `.tabela-medidas-logo-text/della/instore` |
+| Normalizar nomes de clientes (bulk) | `apps/usuarios/management/commands/normalizar_nomes_clientes.py` |
 
 ---
 
