@@ -21,15 +21,13 @@
 
     
     <div class="produto-galeria" id="produto-galeria">
-      <div class="galeria-principal">
-        <div class="galeria-zoom-wrap" id="galeria-zoom-wrap">
-          {% with img=produto.imagem_principal %}
-            <img id="foto-principal"
-                 src="{% if img %}{{ img.imagem.url }}{% else %}{% static 'images/brand/produto-placeholder.jpg' %}{% endif %}"
-                 alt="{{ img.alt|default:produto.nome }}"
-                 class="galeria-foto-principal">
-          {% endwith %}
-        </div>
+      <div class="galeria-principal" id="galeria-principal">
+        {% with img=produto.imagem_principal %}
+          <img id="foto-principal"
+               src="{% if img %}{{ img.imagem.url }}{% else %}{% static 'images/brand/produto-placeholder.jpg' %}{% endif %}"
+               alt="{{ img.alt|default:produto.nome }}"
+               class="galeria-foto-principal">
+        {% endwith %}
 
         {% if produto.em_promocao %}
           <span class="produto-badge promo galeria-badge">-{{ produto.percentual_desconto }}%</span>

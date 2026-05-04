@@ -524,6 +524,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 }
 
 .hero-mute-btn:hover { background: rgba(255,255,255,0.2); }
+.hero-mute-btn[hidden] { display: none !important; }
 
 /* ─── Mini Banners ───────────────────────────────────────────────────────────*/
 .mini-banners {
@@ -2029,26 +2030,19 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   overflow: hidden;
   background: var(--cinza-claro);
   aspect-ratio: 4/5;
+  cursor: zoom-in;
 }
 
-.galeria-zoom-wrap {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  cursor: zoom-in;
+.galeria-principal.zoom-ativo {
+  cursor: crosshair;
 }
 
 .galeria-foto-principal {
   width: 100%; height: 100%;
   object-fit: cover;
-  transition: opacity 0.3s ease, transform 0.25s ease;
+  transition: opacity 0.3s ease;
   transform-origin: 50% 50%;
-  will-change: transform;
   display: block;
-}
-
-.galeria-zoom-wrap:hover .galeria-foto-principal {
-  transform: scale(1.55);
 }
 
 .galeria-badge {
@@ -4569,8 +4563,8 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 2rem 1.1rem;
+  gap: 1.5rem;
+  padding: 1.1rem 2rem;
   background: #000;
   color: #fff;
   border-bottom: 12px solid #d3d3d3;
@@ -4596,13 +4590,10 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 }
 
 .tabela-medidas-marca {
-  width: clamp(4.2rem, 7.2vw, 5.6rem);
-  height: clamp(2.9rem, 5vw, 3.7rem);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 0.95rem;
 }
 
 .tabela-medidas-marca-img {
@@ -4613,16 +4604,6 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   width: auto;
   object-fit: contain;
   object-position: center;
-}
-
-.tabela-medidas-label {
-  margin: 0 0 0.2rem;
-  font-family: 'Jost', sans-serif;
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.65);
 }
 
 .tabela-medidas-logo-text {

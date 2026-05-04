@@ -1568,6 +1568,30 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
   gap: 0.55rem;
 }
 
+.della-fotos-arquivo-section {
+  border-style: dashed;
+  border-color: rgba(150,150,150,0.45);
+  background: rgba(245,245,245,0.5);
+  margin-top: 0.5rem;
+}
+
+.della-fotos-arquivo-tag {
+  background: rgba(100,100,100,0.12);
+  color: #666;
+  border: 1px solid rgba(100,100,100,0.22);
+}
+
+.della-fotos-arquivo-track {
+  border-color: rgba(150,150,150,0.3);
+  background: rgba(245,245,245,0.4);
+  min-height: 120px;
+}
+
+.della-fotos-arquivo-empty {
+  color: #999;
+  font-size: 0.8rem;
+}
+
 .della-cor-principal-label {
   display: inline-flex;
   align-items: center;

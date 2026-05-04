@@ -454,6 +454,84 @@
         root.appendChild(section);
       });
 
+      // ── Seção "Arquivo / Fotos sem produto" ──────────────────────────────────
+      // Reúne fotos sem cor (cor='') ou com cor que não existe mais nas variações.
+      // Não afeta o site público (essas fotos não têm cor vinculada).
+      var validCorIds = {};
+      colors.forEach(function (c) { if (c.id) validCorIds[String(c.id)] = true; });
+
+      var looseRows = getImageRows().filter(function (row) {
+        if (isDeletedRow(row)) return false;
+        var corId = getRowColor(row);
+        return !corId || !validCorIds[corId];
+      });
+
+      var arquivoSection = document.createElement('section');
+      arquivoSection.className = 'della-fotos-cor-section della-fotos-arquivo-section';
+      arquivoSection.dataset.corId = '';
+
+      var arquivoHeader = document.createElement('div');
+      arquivoHeader.className = 'della-fotos-cor-header';
+
+      var arquivoTitleWrap = document.createElement('div');
+      arquivoTitleWrap.className = 'della-fotos-cor-title-wrap';
+
+      var arquivoTitle = document.createElement('h3');
+      arquivoTitle.className = 'della-fotos-cor-title';
+      arquivoTitle.textContent = 'Arquivo — Fotos sem cor vinculada';
+      arquivoTitleWrap.appendChild(arquivoTitle);
+
+      var arquivoTag = document.createElement('span');
+      arquivoTag.className = 'della-fotos-cor-tag della-fotos-arquivo-tag';
+      arquivoTag.textContent = 'Não aparece no site';
+      arquivoTitleWrap.appendChild(arquivoTag);
+
+      arquivoHeader.appendChild(arquivoTitleWrap);
+      arquivoSection.appendChild(arquivoHeader);
+
+      var arquivoTrack = document.createElement('div');
+      arquivoTrack.className = 'della-fotos-track della-fotos-track-por-cor della-fotos-arquivo-track';
+      arquivoTrack.dataset.corId = '';
+
+      looseRows.forEach(function (row, index) {
+        var card = createCard(row, index, false);
+        if (card) arquivoTrack.appendChild(card);
+      });
+
+      if (!looseRows.length) {
+        var arquivoEmpty = document.createElement('div');
+        arquivoEmpty.className = 'della-fotos-empty della-fotos-arquivo-empty';
+        arquivoEmpty.textContent = 'Nenhuma foto no arquivo. Fotos de variações excluídas aparecerão aqui automaticamente.';
+        arquivoTrack.appendChild(arquivoEmpty);
+      }
+
+      arquivoTrack.addEventListener('dragover', function (event) {
+        event.preventDefault();
+        var targetCard = event.target.closest('.della-foto-card');
+        if (draggingCard) {
+          if (targetCard && targetCard !== draggingCard) {
+            var rect = targetCard.getBoundingClientRect();
+            if (event.clientX < rect.left + (rect.width / 2)) {
+              arquivoTrack.insertBefore(draggingCard, targetCard);
+            } else {
+              arquivoTrack.insertBefore(draggingCard, targetCard.nextSibling);
+            }
+          } else if (!targetCard && draggingCard.parentNode !== arquivoTrack) {
+            arquivoTrack.appendChild(draggingCard);
+          }
+        }
+      });
+      arquivoTrack.addEventListener('drop', function (event) {
+        event.preventDefault();
+        if (draggingCard) {
+          syncRowsFromDom();
+          buildGroupedPanels();
+        }
+      });
+
+      arquivoSection.appendChild(arquivoTrack);
+      root.appendChild(arquivoSection);
+
       syncPrincipalCheckboxes();
     }
 

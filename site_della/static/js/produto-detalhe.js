@@ -519,18 +519,29 @@ document.addEventListener('DOMContentLoaded', () => {
   atualizarDisponibilidadeCores();
   resolverVariacao();
 
-  // ─── Zoom na foto principal ────────────────────────────────────────────────
-  const zoomWrap = document.getElementById('galeria-zoom-wrap');
-  const fotoPrincipal = document.getElementById('foto-principal');
-  if (zoomWrap && fotoPrincipal) {
-    zoomWrap.addEventListener('mousemove', (e) => {
-      const rect = zoomWrap.getBoundingClientRect();
+  // ─── Zoom na foto principal (segue o cursor) ──────────────────────────────
+  const galeriaPrincipalEl = document.getElementById('galeria-principal');
+  const fotoPrincipalEl = document.getElementById('foto-principal');
+  if (galeriaPrincipalEl && fotoPrincipalEl && window.matchMedia('(hover: hover)').matches) {
+    galeriaPrincipalEl.addEventListener('mouseenter', () => {
+      galeriaPrincipalEl.classList.add('zoom-ativo');
+      fotoPrincipalEl.style.transition = 'transform 0.18s ease';
+      fotoPrincipalEl.style.transform = 'scale(1.55)';
+    });
+    galeriaPrincipalEl.addEventListener('mousemove', (e) => {
+      const rect = galeriaPrincipalEl.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
-      fotoPrincipal.style.transformOrigin = `${x}% ${y}%`;
+      // sem transição no origin para que siga o mouse sem delay
+      fotoPrincipalEl.style.transition = 'none';
+      fotoPrincipalEl.style.transformOrigin = `${x}% ${y}%`;
+      fotoPrincipalEl.style.transform = 'scale(1.55)';
     });
-    zoomWrap.addEventListener('mouseleave', () => {
-      fotoPrincipal.style.transformOrigin = '50% 50%';
+    galeriaPrincipalEl.addEventListener('mouseleave', () => {
+      galeriaPrincipalEl.classList.remove('zoom-ativo');
+      fotoPrincipalEl.style.transition = 'transform 0.18s ease';
+      fotoPrincipalEl.style.transform = '';
+      fotoPrincipalEl.style.transformOrigin = '50% 50%';
     });
   }
 });
