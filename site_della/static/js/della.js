@@ -374,7 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const produtoId   = btn.dataset.produtoId;
     const variacaoId  = btn.dataset.variacaoId || '';
     const produtoUrl  = btn.dataset.produtoUrl || '';
-    const csrfToken   = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const csrfToken   = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
     const metaEventId = (window.crypto && window.crypto.randomUUID)
       ? `addtocart_${window.crypto.randomUUID().replace(/-/g, '')}`
       : `addtocart_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -471,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Remover item pelo drawer
   window.drawerRemover = async function(chave) {
-    const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
     try {
       const res   = await fetch(`/carrinho/remover/${chave}/`, {
         method: 'POST',
@@ -485,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Alterar quantidade pelo drawer
   window.drawerAlterarQty = async function(chave, quantidade) {
     if (quantidade < 1) { window.drawerRemover(chave); return; }
-    const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
     try {
       const res   = await fetch('/carrinho/atualizar/', {
         method: 'POST',
@@ -523,7 +523,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!btn) return;
 
     const produtoId = btn.dataset.wishlistId;
-    const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
 
     try {
       const res = await fetch(`/wishlist/toggle/${produtoId}/`, {
@@ -549,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     formNewsletter.addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = formNewsletter.querySelector('input[type="email"]').value.trim();
-      const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
       const btn = formNewsletter.querySelector('button[type="submit"]');
       const aviso = document.getElementById('newsletter-aviso');
 
@@ -814,7 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
       formPopup.addEventListener('submit', async e => {
         e.preventDefault();
         const email = formPopup.querySelector('input[type="email"]').value.trim();
-        const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
         const btn = formPopup.querySelector('button[type="submit"]');
         if (!email) return;
         btn.disabled = true;
