@@ -5,6 +5,20 @@ from django.conf import settings
 CHAVE_SESSAO = 'carrinho_della'
 
 
+def calcular_qtd_disponivel(variacao, qtd_desejada, qtd_no_carrinho=0):
+    """Retorna a quantidade que pode ser adicionada/definida no carrinho.
+
+    Para pronta_entrega limita ao estoque restante (estoque - qtd_no_carrinho).
+    Para sob_demanda não há limite de estoque, retorna qtd_desejada.
+    qtd_no_carrinho deve ser 0 ao atualizar (quantidade absoluta) e a
+    quantidade atual quando somando ao que já está no carrinho.
+    """
+    if not variacao.pronta_entrega:
+        return qtd_desejada
+    disponivel = max(0, variacao.estoque - qtd_no_carrinho)
+    return min(qtd_desejada, disponivel)
+
+
 def _desc_variacao(variacao):
     """Retorna descrição curta da variação: 'PRETO / Tam. P'"""
     if not variacao:

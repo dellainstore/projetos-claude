@@ -10,8 +10,9 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.db import models, transaction
 
-from .carrinho import Carrinho
+from .carrinho import Carrinho, calcular_qtd_disponivel
 from .forms import CheckoutForm
+from .services.checkout import CalculadorPedido, criar_itens_pedido, EstoqueInsuficiente as _EstoqueInsuficiente
 from apps.core_utils.meta import enviar_evento_meta, enviar_evento_purchase, gerar_evento_id
 
 logger = logging.getLogger(__name__)
@@ -63,10 +64,6 @@ def _limpar_carrinho_abandonado(request):
 
 class _PagamentoRecusado(Exception):
     """Levantada quando o gateway recusa o cartão dentro do bloco atômico."""
-
-
-class _EstoqueInsuficiente(Exception):
-    """Levantada quando o estoque é insuficiente para o item no momento do checkout."""
 
 
 def _gerar_dados_pix(pedido):
@@ -170,14 +167,11 @@ def adicionar_ao_carrinho(request, produto_id):
     if variacao:
         chave = cart._chave(produto.id, variacao.id)
         qtd_no_carrinho = cart.carrinho.get(chave, {}).get('quantidade', 0)
-        estoque = variacao.estoque
-        if variacao.pronta_entrega and qtd_no_carrinho + quantidade > estoque:
-            # Limita silenciosamente ao estoque restante
-            quantidade = max(0, estoque - qtd_no_carrinho)
-            if quantidade <= 0:
-                return JsonResponse({'status': 'ok', 'total_itens': len(cart),
-                                     'total_valor': str(cart.get_total()),
-                                     'itens': _itens_para_drawer(cart)})
+        quantidade = calcular_qtd_disponivel(variacao, quantidade, qtd_no_carrinho)
+        if quantidade <= 0:
+            return JsonResponse({'status': 'ok', 'total_itens': len(cart),
+                                 'total_valor': str(cart.get_total()),
+                                 'itens': _itens_para_drawer(cart)})
 
     cart.adicionar(produto, variacao=variacao, quantidade=quantidade)
     _salvar_carrinho_abandonado(request, cart)
@@ -252,8 +246,7 @@ def atualizar_carrinho(request):
             from apps.produtos.models import Variacao
             try:
                 variacao = Variacao.objects.get(pk=cart_item['variacao_id'])
-                if variacao.pronta_entrega:
-                    quantidade = min(quantidade, variacao.estoque)
+                quantidade = calcular_qtd_disponivel(variacao, quantidade)
             except Variacao.DoesNotExist:
                 pass
         if quantidade <= 0:
@@ -301,7 +294,7 @@ def checkout(request):
         initial['nome_completo'] = u.get_full_name()
         initial['email']         = u.email
         initial['cpf']           = u.cpf
-        initial['telefone']      = u.telefone
+        initial['telefone']      = u.get_telefone_formatado()
 
         # Endereço principal salvo
         try:
@@ -377,10 +370,7 @@ def _processar_checkout(request, form, cart):
     atômico. Se o cartão for recusado, o pedido é revertido (rollback) e o
     cliente fica no checkout com mensagem de erro — carrinho preservado.
     """
-    from .models import Pedido, ItemPedido
-    from apps.produtos.models import Produto, Variacao
-
-    from .models import Cupom, CodigoVendedor
+    from .models import Pedido
 
     cd              = form.cleaned_data
     subtotal        = cart.get_total()
@@ -388,32 +378,17 @@ def _processar_checkout(request, form, cart):
     forma_pagamento = cd['forma_pagamento']
     parcelas        = int(cd.get('parcelas') or 1)
 
-    # Cupom
-    cupom_obj     = None
-    desconto      = Decimal('0')
-    cupom_codigo_str = (cd.get('cupom_codigo') or '').strip().upper()
-    if cupom_codigo_str:
-        try:
-            cupom_obj = Cupom.objects.get(codigo__iexact=cupom_codigo_str, ativo=True)
-            cpf_check = cd.get('cpf', '')
-            ok, _ = cupom_obj.esta_valido(cpf=cpf_check)
-            if ok:
-                desconto = cupom_obj.calcular_desconto(subtotal)
-            else:
-                cupom_obj = None
-        except Cupom.DoesNotExist:
-            pass
-
-    # Código do vendedor
-    vendedor_obj     = None
-    vendedor_codigo_str = (cd.get('codigo_vendedor_codigo') or '').strip().upper()
-    if vendedor_codigo_str:
-        try:
-            vendedor_obj = CodigoVendedor.objects.get(codigo__iexact=vendedor_codigo_str, ativo=True)
-        except CodigoVendedor.DoesNotExist:
-            pass
-
-    total = subtotal - desconto + frete
+    calculo = CalculadorPedido().calcular(
+        subtotal=subtotal,
+        cupom_codigo=cd.get('cupom_codigo', ''),
+        cpf=cd.get('cpf', ''),
+        valor_frete=frete,
+        vendedor_codigo=cd.get('codigo_vendedor_codigo', ''),
+    )
+    cupom_obj   = calculo.cupom_obj
+    vendedor_obj = calculo.vendedor_obj
+    desconto    = calculo.desconto
+    total       = calculo.total
 
     # Campo enviado pelo SDK PagSeguro JS (apenas para cartão)
     encrypted_card = request.POST.get('pagseguro_card_encrypted', '').strip()
@@ -421,48 +396,6 @@ def _processar_checkout(request, form, cart):
     if forma_pagamento == 'cartao_credito' and not encrypted_card:
         messages.error(request, 'Dados do cartão não recebidos. Tente novamente.')
         return redirect('pedidos:checkout')
-
-    def _criar_itens(pedido):
-        for item in cart:
-            try:
-                produto_obj = Produto.objects.get(pk=item['produto_id'])
-            except Produto.DoesNotExist:
-                continue
-            variacao_obj = None
-            if item.get('variacao_id'):
-                try:
-                    variacao_obj = Variacao.objects.get(pk=item['variacao_id'])
-                except Variacao.DoesNotExist:
-                    pass
-            # SKU da variação tem prioridade — é o código que casa com o produto
-            # cadastrado no Bling. Cai no SKU do produto pai apenas se não houver variação.
-            sku_item = (variacao_obj.sku_variacao if variacao_obj and variacao_obj.sku_variacao
-                        else produto_obj.sku)
-            ItemPedido.objects.create(
-                pedido         = pedido,
-                produto        = produto_obj,
-                variacao       = variacao_obj,
-                nome_produto   = item['nome'],
-                sku            = sku_item,
-                variacao_desc  = item.get('variacao_desc', ''),
-                preco_unitario = Decimal(item['preco']),
-                quantidade     = item['quantidade'],
-            )
-            # Verifica e decrementa estoque de forma atômica (select_for_update evita
-            # condição de corrida quando dois clientes compram o último item ao mesmo tempo)
-            if variacao_obj:
-                from django.db.models import F
-                variacao_locked = Variacao.objects.select_for_update().get(pk=variacao_obj.pk)
-                if variacao_locked.pronta_entrega:
-                    if variacao_locked.estoque < item['quantidade']:
-                        raise _EstoqueInsuficiente(
-                            f'Estoque insuficiente para "{item["nome"]}". '
-                            f'Disponível: {variacao_locked.estoque}, '
-                            f'solicitado: {item["quantidade"]}.'
-                        )
-                    Variacao.objects.filter(pk=variacao_obj.pk).update(
-                        estoque=F('estoque') - item['quantidade']
-                    )
 
     try:
         with transaction.atomic():
@@ -498,7 +431,7 @@ def _processar_checkout(request, form, cart):
             pedido.full_clean()
             pedido.save()
 
-            _criar_itens(pedido)
+            criar_itens_pedido(pedido, cart)
 
             # ── Processamento de cartão via PagSeguro ─────────────────────────
             if forma_pagamento == 'cartao_credito':
@@ -812,3 +745,160 @@ def checkout_entrega(request):
 
 def checkout_pagamento(request):
     return redirect('pedidos:checkout')
+
+
+# ─── Webhook Melhor Envio ─────────────────────────────────────────────────────
+
+import hashlib
+import hmac
+import base64
+
+from django.views.decorators.csrf import csrf_exempt
+
+
+def _validar_assinatura_me(raw_body: bytes, assinatura: str) -> bool:
+    secret = getattr(settings, 'MELHOR_ENVIO_WEBHOOK_SECRET', '')
+    if not secret:
+        logger.warning('MELHOR_ENVIO_WEBHOOK_SECRET não configurado — rejeitando webhook ME')
+        return False
+    chave = secret.encode('utf-8')
+    esperado = base64.b64encode(
+        hmac.new(chave, raw_body, hashlib.sha256).digest()
+    ).decode('utf-8')
+    return hmac.compare_digest(esperado, assinatura)
+
+
+@csrf_exempt
+@require_POST
+def webhook_melhorenvio(request):
+    """Recebe e processa eventos de rastreio do Melhor Envio."""
+    from .models import Pedido, HistoricoPedido, RastreioEvento
+    from .emails import enviar_notificacao_envio, enviar_confirmacao_entrega
+
+    assinatura = request.headers.get('x-me-signature', '')
+    if not _validar_assinatura_me(request.body, assinatura):
+        # ME envia um POST sem assinatura ao registrar/validar o webhook.
+        # Retornamos 200 mas não processamos o evento — seguro porque sem
+        # assinatura válida nenhuma ação real é executada.
+        logger.warning('Webhook ME: assinatura inválida ou ping de validação — ignorando')
+        return JsonResponse({'status': 'recebido'})
+
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'erro': 'payload inválido'}, status=400)
+
+    evento      = payload.get('event', '')
+    data        = payload.get('data', {})
+    me_order_id = data.get('id', '')
+    tracking    = (data.get('tracking') or '').strip()
+
+    logger.info('Webhook ME recebido: %s | ME ID: %s | tracking: %s', evento, me_order_id, tracking or '—')
+
+    # Persiste o evento para auditoria antes de qualquer processamento
+    rastreio_evt = RastreioEvento(
+        me_order_id=me_order_id,
+        evento=evento,
+        tracking=tracking,
+        dados_raw=payload,
+    )
+
+    # Tenta encontrar o pedido: primeiro pelo me_order_id já salvo, depois pelo tracking
+    pedido = None
+    if me_order_id:
+        pedido = Pedido.objects.filter(me_order_id=me_order_id).first()
+    if pedido is None and tracking:
+        pedido = Pedido.objects.filter(codigo_rastreio=tracking).first()
+
+    rastreio_evt.pedido = pedido
+    rastreio_evt.save()
+
+    if pedido is None:
+        logger.warning('Webhook ME: pedido não encontrado para ME ID=%s tracking=%s', me_order_id, tracking or '—')
+        return JsonResponse({'status': 'pedido_nao_encontrado'})
+
+    # Armazena me_order_id para correlacionar eventos futuros
+    if me_order_id and not pedido.me_order_id:
+        pedido.me_order_id = me_order_id
+        pedido.save(update_fields=['me_order_id', 'atualizado_em'])
+
+    with transaction.atomic():
+        if evento == 'order.posted':
+            _processar_postagem(pedido, data)
+
+        elif evento == 'order.delivered':
+            _processar_entrega(pedido, data)
+
+        elif evento == 'order.undelivered':
+            logger.warning('Webhook ME: tentativa de entrega falhou | pedido %s', pedido.numero)
+            HistoricoPedido.objects.create(
+                pedido=pedido,
+                status_anterior=pedido.status,
+                status_novo=pedido.status,
+                observacao='Tentativa de entrega falhou (Melhor Envio webhook order.undelivered).',
+            )
+
+    return JsonResponse({'status': 'ok'})
+
+
+def _processar_postagem(pedido, data):
+    """order.posted — pacote postado nos Correios → marca enviado + e-mail."""
+    from .models import HistoricoPedido
+    from .emails import enviar_notificacao_envio
+
+    status_aptos = ('pagamento_confirmado', 'em_separacao')
+    if pedido.status not in status_aptos:
+        logger.info('Webhook ME order.posted: pedido %s já em status=%s, ignorando mudança',
+                    pedido.numero, pedido.status)
+        return
+
+    status_anterior = pedido.status
+    pedido.status = 'enviado'
+    campos = ['status', 'atualizado_em']
+
+    # Atualiza código de rastreio se ainda não tiver (pode ter vindo antes via Bling)
+    tracking = (data.get('tracking') or '').strip()
+    if tracking and not pedido.codigo_rastreio:
+        pedido.codigo_rastreio = tracking
+        campos.append('codigo_rastreio')
+
+    pedido.save(update_fields=campos)
+
+    HistoricoPedido.objects.create(
+        pedido=pedido,
+        status_anterior=status_anterior,
+        status_novo='enviado',
+        observacao='Pacote postado nos Correios (Melhor Envio webhook order.posted).',
+    )
+
+    logger.info('Webhook ME: pedido %s → enviado (postagem automática)', pedido.numero)
+    enviar_notificacao_envio(pedido)
+
+
+def _processar_entrega(pedido, data):
+    """order.delivered — entregue → marca entregue + e-mail com pedido de avaliação."""
+    from .models import HistoricoPedido
+    from .emails import enviar_confirmacao_entrega
+
+    if pedido.status == 'entregue':
+        logger.info('Webhook ME order.delivered: pedido %s já entregue, ignorando', pedido.numero)
+        return
+
+    if pedido.status not in ('enviado', 'pagamento_confirmado', 'em_separacao'):
+        logger.warning('Webhook ME order.delivered: pedido %s em status=%s inesperado',
+                       pedido.numero, pedido.status)
+        return
+
+    status_anterior = pedido.status
+    pedido.status = 'entregue'
+    pedido.save(update_fields=['status', 'atualizado_em'])
+
+    HistoricoPedido.objects.create(
+        pedido=pedido,
+        status_anterior=status_anterior,
+        status_novo='entregue',
+        observacao='Entrega confirmada pelos Correios (Melhor Envio webhook order.delivered).',
+    )
+
+    logger.info('Webhook ME: pedido %s → entregue (confirmação automática)', pedido.numero)
+    enviar_confirmacao_entrega(pedido)
