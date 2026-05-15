@@ -25,6 +25,9 @@ urlpatterns = [
     path('minha-conta/pedidos/<str:numero>/', views.detalhe_pedido, name='detalhe_pedido'),
     path('minha-conta/pedidos/<str:numero>/confirmar-entrega/', views.confirmar_entrega, name='confirmar_entrega'),
 
+    # Meios de pagamento
+    path('minha-conta/meios-pagamento/', views.meios_pagamento, name='meios_pagamento'),
+
     # Recuperação de senha
     path('recuperar-senha/', views.recuperar_senha, name='recuperar_senha'),
     path('recuperar-senha/confirmar/<uidb64>/<token>/', views.confirmar_senha, name='confirmar_senha'),

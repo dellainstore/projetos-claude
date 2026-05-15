@@ -202,7 +202,22 @@ def editar_endereco(request, pk):
 def excluir_endereco(request, pk):
     endereco = get_object_or_404(Endereco, pk=pk, cliente=request.user)
     if request.method == 'POST':
+        if request.user.enderecos.count() <= 1:
+            messages.error(
+                request,
+                'Você precisa ter pelo menos um endereço cadastrado. '
+                'Cadastre um novo antes de deletar o atual.'
+            )
+            return redirect('usuarios:enderecos')
+
+        era_principal = endereco.principal
         endereco.delete()
+        # Se removeu o principal, promove o primeiro endereço restante.
+        if era_principal:
+            substituto = request.user.enderecos.order_by('-criado_em', 'pk').first()
+            if substituto:
+                substituto.principal = True
+                substituto.save(update_fields=['principal'])
         messages.success(request, 'Endereço removido.')
     return redirect('usuarios:enderecos')
 
@@ -280,6 +295,7 @@ def detalhe_pedido(request, numero):
 def confirmar_entrega(request, numero):
     """Cliente confirma o recebimento do pedido — muda status para 'entregue'."""
     from apps.pedidos.models import Pedido, HistoricoPedido
+    from apps.pedidos.emails import enviar_confirmacao_entrega
 
     pedido = get_object_or_404(request.user.pedidos, numero=numero)
     if pedido.status != 'enviado':
@@ -294,8 +310,20 @@ def confirmar_entrega(request, numero):
     )
     pedido.status = 'entregue'
     pedido.save(update_fields=['status', 'atualizado_em'])
+    enviar_confirmacao_entrega(pedido)
     messages.success(request, 'Recebimento confirmado! Obrigada por comprar com a gente.')
     return redirect('usuarios:detalhe_pedido', numero=numero)
+
+
+# ─── Meios de pagamento ───────────────────────────────────────────────────────
+
+@login_required
+def meios_pagamento(request):
+    from apps.pagamentos.models import CartaoSalvo
+    cartoes = CartaoSalvo.objects.filter(cliente=request.user, ativo=True)
+    context = {'cartoes': cartoes}
+    context.update(_contexto_cadastro_pendente(request.user))
+    return render(request, 'usuarios/meios_pagamento.html', context)
 
 
 # ─── Recuperação de senha ─────────────────────────────────────────────────────

@@ -25,9 +25,9 @@ Banco: `della_site` / `della_user`
 npm run build:css          # se mudou classes Tailwind (obrigatório antes do collectstatic)
 python manage.py collectstatic --noinput --settings=core.settings.production
 python manage.py makemigrations && python manage.py migrate --settings=core.settings.production
-kill -HUP $(ps aux | grep gunicorn | grep della_site | grep -v grep | head -1 | awk '{print $2}')
 
-# Restart completo:
+# ⚠️ SEMPRE usar systemctl para reiniciar — NUNCA kill -HUP manual
+# kill -HUP acumula masters antigos que ficam servindo código desatualizado
 sudo systemctl restart gunicorn_della_site && sudo nginx -t && sudo systemctl reload nginx
 
 # Validar:
@@ -115,7 +115,7 @@ Pastas em `apps/`:
 | `bling/` | Integração com Bling ERP — OAuth, tokens, sync de pedidos/produtos/estoque, webhooks, logs |
 | `conteudo/` | Conteúdo editorial — banners da home, mini banners, look da semana, páginas estáticas, configuração da loja, Instagram |
 | `core_utils/` | Utilitários compartilhados — cache helpers, sanitização, Meta CAPI, modo manutenção, template tags, admin views |
-| `pagamentos/` | Gateways e meios de pagamento — PagBank/PagSeguro, PIX, cupons, carrinho abandonado, código de vendedor |
+| `pagamentos/` | Gateways e meios de pagamento — PagBank/PagSeguro, PIX, cupons, cartões salvos (tokenização), carrinho abandonado, código de vendedor |
 | `pedidos/` | Carrinho, checkout, pedidos, histórico, eventos de rastreio Correios e e-mails transacionais |
 | `produtos/` | Catálogo — categorias, produtos, variações (cor/tamanho), fotos, tabela de medidas, avaliações, wishlist, newsletter |
 | `usuarios/` | Cliente customizado (`AbstractBaseUser`), endereços e autenticação |
@@ -151,6 +151,11 @@ Pastas em `apps/`:
 | `enviar_confirmacao_entrega` | Status → `entregue` |
 | `enviar_saiu_para_entrega` | Correios: saiu para entrega |
 | `enviar_email_carrinho_abandonado` | Admin action / cron |
+
+**Carrinho abandonado — quirks:**
+- `item.imagem` no carrinho é URL relativa (`/media/...`) — em `enviar_email_carrinho_abandonado` converter para absoluta com `SITE_URL + url` antes de passar ao template
+- Logo no email: usar `static/images/brand/logo-della.png` (PNG preto, 500×106px) — NÃO o webp (Outlook não suporta)
+- Template `emails/carrinho_abandonado.html`: apenas **uma** linha separadora entre itens e total (não duplicar)
 
 ```bash
 python manage.py enviar_emails_teste --email SEU@EMAIL --tipo saiu_entrega --settings=core.settings.production
@@ -270,7 +275,7 @@ BLING_DEPOSITO_ID=7521173180   # Show Room - Della (depósito padrão)
 
 ## Decisões — NÃO Regredir
 
-- **Logo D'ELLA = imagem** `static/images/brand/logo-della.webp` — não usar texto tipografado
+- **Logo D'ELLA = imagem** `static/images/brand/logo-della.webp` — não usar texto tipografado. Para e-mails usar `logo-della.png` (PNG convertido do webp via Pillow — melhor compatibilidade com clientes de email como Outlook).
 - **Tailwind = build local, NÃO CDN** — sempre `npm run build:css` antes de `collectstatic`
 - **Meta Pixel: NÃO no HTML** — sempre JS condicional (LGPD)
 - **Estoque oficial = `Variacao.estoque` local** — importador Bling não sincroniza estoque automático (sync seletivo via `usa_sync_bling=True` por variação)
@@ -300,10 +305,13 @@ BLING_DEPOSITO_ID=7521173180   # Show Room - Della (depósito padrão)
 ## Admin — Padrão
 
 - Coluna `acoes_linha` (Editar/Excluir) com classes `della-btn-edit` / `della-btn-delete` — referência: qualquer `ModelAdmin` em `apps/*/admin.py`
+- **`DellaAdminMixin`** em `apps/core_utils/admin_mixin.py` — obrigatório em **todos** os ModelAdmin que têm `acoes_linha`. Fornece `_render_acoes(obj, edit_url, delete_url, delete_confirm)` que verifica `has_delete_permission` / `has_change_permission` antes de renderizar os botões. Se sem permissão, exibe `.della-btn-no-perm` (acinzentado, `cursor:not-allowed`) em vez do botão funcional. Usa thread-local para acessar `request` nos métodos de display.
 - `Media.js = ('admin/js/admin_linhas.js',)` no admin que usar o padrão
 - Nunca estilos inline nos botões — sempre as classes acima
 - Todo admin que afeta cache deve implementar `save_model`/`delete_model` chamando `cache_utils.py`
 - Após mudar CSS/JS do admin: `collectstatic` + HUP
+- **Header fixo (sticky)** — implementado via `html { overflow:hidden; height:100% }` + `body { overflow-y:auto; height:100% }` + `#header { position:sticky; top:0; z-index:1000 }`. NÃO usar `position:fixed` no header (fica "largo" — cobre a sidebar). NÃO usar apenas `position:sticky` sem tornar o `body` o scroll container (não funciona quando elemento pai tem `overflow`).
+- **Actions de admin** — ao registrar action via `get_actions`, usar referência **não-ligada** (`MinhaAdmin._action_metodo`) e nunca `self._action_metodo` (bound method causa `TypeError: takes 3 positional arguments but 4 were given`).
 
 ---
 
@@ -324,65 +332,54 @@ Helper: `apps/core_utils/cache_utils.py`. Nunca hardcodar chaves.
 
 ---
 
+## Cartões Salvos (Tokenização PagBank) — 2026-05-15
+
+### Modelo `CartaoSalvo` (`apps/pagamentos/models.py`)
+
+Salva apenas: `token_pagbank`, `ultimos_4`, `nome_titular`, `bandeira`, `mes_expiracao`, `ano_expiracao`, `ativo`, `criado_em`.
+**Nunca salva**: PAN completo, CVV, data de validade completa, nada em log/print/WhatsApp.
+
+Migration: `apps/pagamentos/migrations/0003_cartaosalvo.py`
+
+### Fluxo de tokenização
+
+1. Checkout: cliente marca o checkbox **"Salvar este cartão"** (desmarcado por padrão) → `store=True` enviado ao PagBank
+2. PagBank devolve `card.id` (token) na resposta do charge → `salvar_cartao_do_charge(cliente, charge)` persiste no banco
+3. Próximo checkout: cartões salvos aparecem como seleção (igual endereços). Cartão selecionado → `criar_ordem_cartao_token(pedido, token)` (sem encrypted_card)
+4. Cartão vencido: bloqueado no checkout + aviso na página "Meios de pagamento"
+
+### Funções em `apps/pagamentos/services/pagseguro.py`
+
+| Função | Uso |
+|---|---|
+| `criar_ordem_cartao(..., store=False)` | Checkout novo — `store=True` quando cliente quer salvar |
+| `criar_ordem_cartao_token(pedido, card_token)` | Checkout com cartão já salvo |
+| `extrair_dados_cartao_da_resposta(charge)` | Extrai token/metadados do charge (nunca PAN) |
+| `salvar_cartao_do_charge(cliente, charge)` | Persiste `CartaoSalvo`, idempotente (mesmo token não duplica) |
+
+### URLs e views adicionadas
+
+- `GET /conta/minha-conta/meios-pagamento/` → `usuarios:meios_pagamento` — lista cartões do cliente
+- `POST /pagamento/cartao/<pk>/excluir/` → `pagamentos:excluir_cartao` — soft delete (`ativo=False`)
+
+### Decisões — NÃO regredir
+
+- **Checkbox desmarcado por padrão** — cliente precisa optar ativamente para salvar
+- **Soft delete**: `ativo=False`, nunca excluir fisicamente (PagBank pode ainda referenciar o token)
+- **Cartão salvo no checkout usa `card.id` direto, sem CVV** — PagBank aceita token sem CVV para cobranças subsequentes
+- **`esta_vencido`** é property calculada em runtime, não campo — nunca salvar status de validade no banco
+
+---
+
 ## Pendências Ativas
 
 | Item | Observação |
 |---|---|
 | **Google Search Console** | Verificar propriedade `https://www.dellainstore.com` via GA4 |
 | **Meta Business** | Verificar domínio `dellainstore.com` — meta tag já está no `base.html` |
-| **Webhooks Bling v1** | Implementado e funcionando (formato plano). Sync em segundos. Logs: `logs/bling_webhook.log` |
 | **Testar rastreio Correios** | Validar cron com pedido real. `--dry-run` disponível |
 | **Webhook Stone HMAC** | Quando ativar Stone |
 | **Remover `style-src 'unsafe-inline'`** | Exige migrar 525+ `style="..."`. Avaliar `nonce` |
-| **[PENDENTE] Sync Fotos Drive ↔ Site** | Ver seção abaixo |
-
-### [PENDENTE] Sync Fotos Drive ↔ Site
-
-**Objetivo:** Gerenciar fotos dos produtos no Google Drive e sincronizar com o site.
-
-**Estrutura criada no Drive (2026-05-09):**
-```
-Projetos Claude/
-└── FOTOS SITE/
-    ├── BODY ADRIANA/
-    │   ├── PRETO/
-    │   ├── MARROM/
-    │   └── MARINHO/
-    ├── BIQUINI FRANZIDO/
-    │   ├── MARROM/
-    │   ├── VERDE/
-    │   └── PRETO/
-    ... (68 produtos × N cores = ~170 pastas de cor)
-```
-
-**Workflow pretendido:**
-1. Adicionar/substituir fotos diretamente nas pastas de cor no Drive
-2. Rodar `python manage.py sync_fotos_drive` para importar para o site
-3. O comando atualiza `ProdutoImagem` no banco automaticamente
-
-**O que falta desenvolver:**
-
-**Etapa A — Upload inicial (Site → Drive): [PENDENTE]**
-- 317 fotos / 112 MB em `/media/produtos/` prontas para upload
-- Manifest gerado em `/tmp/fotos_drive_manifest.json` com mapeamento `{produto, cor, produto_folder_id, file_path, filename}`
-- Estrutura de pastas temporária criada em `/tmp/fotos_upload/` com as 315 fotos organizadas (exceto BODY VELUDO C/TULE — 2 fotos separadas)
-- **Método definido:** usar MCP Google Drive (`mcp__claude_ai_Google_Drive__create_file` com `base64Content`) — rclone com service account não funciona (erro 403 `storageQuotaExceeded`; service account não tem cota no Drive pessoal)
-- **IDs de subpastas de cor:** parcialmente coletados via `search_files` (continuar de onde parou)
-- **BODY VELUDO C/TULE:** o "/" no nome quebra path local; tratar separadamente. Pasta MARSALA ID: `1TxdYweiFxYu4facALjukK8q8T3OCDeQF`
-
-**Etapa B — Importação (Drive → Site):**
-- Management command `sync_fotos_drive` que:
-  - Lista arquivos em cada pasta produto/cor no Drive
-  - Compara com `ProdutoImagem` existentes (por nome de arquivo ou hash)
-  - Baixa arquivos novos/modificados para `/media/produtos/{slug}/`
-  - Cria/atualiza registros `ProdutoImagem` no banco
-  - Associa cor automaticamente pela pasta pai (ex: pasta `PRETO` → `CorPadrao.objects.get(nome='PRETO')`)
-- Opção `--dry-run` para verificar sem salvar
-- Logar resultados em `logs/sync_fotos_drive.log`
-
-**IDs Drive (referência):**
-- Pasta raiz FOTOS SITE: `1epmiXgDToKffzg5_R-B59wHYmYI_TI5G`
-- Pasta pai Projetos Claude: `1vsu44CENG30PCXenBjoNEnOC_SXxls4f`
 
 ---
 

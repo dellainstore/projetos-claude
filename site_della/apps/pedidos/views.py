@@ -334,6 +334,15 @@ def checkout(request):
     cartao_habilitado = bool(pagseguro_public_key)
     meta_initiatecheckout_event_id = gerar_evento_id('initiatecheckout')
 
+    enderecos = list(request.user.enderecos.all()) if request.user.is_authenticated else []
+
+    cartoes_salvos = []
+    if request.user.is_authenticated and cartao_habilitado:
+        from apps.pagamentos.models import CartaoSalvo
+        cartoes_salvos = list(CartaoSalvo.objects.filter(
+            cliente=request.user, ativo=True,
+        ))
+
     context = {
         'form':                  form,
         'itens':                 itens,
@@ -343,6 +352,8 @@ def checkout(request):
         'cartao_habilitado':     cartao_habilitado,
         'pagseguro_sandbox':     bool(settings.PAGSEGURO_SANDBOX),
         'meta_initiatecheckout_event_id': meta_initiatecheckout_event_id,
+        'enderecos':             enderecos,
+        'cartoes_salvos':        cartoes_salvos,
     }
     try:
         enviar_evento_meta(
@@ -390,12 +401,33 @@ def _processar_checkout(request, form, cart):
     desconto    = calculo.desconto
     total       = calculo.total
 
-    # Campo enviado pelo SDK PagSeguro JS (apenas para cartão)
-    encrypted_card = request.POST.get('pagseguro_card_encrypted', '').strip()
+    # Campo enviado pelo SDK PagSeguro JS (apenas para cartão novo)
+    encrypted_card   = request.POST.get('pagseguro_card_encrypted', '').strip()
+    # ID de cartão já salvo (quando cliente seleciona um cartão da carteira)
+    cartao_salvo_id  = request.POST.get('cartao_salvo_id', '').strip()
+    # Checkbox "salvar cartão para compras futuras"
+    salvar_cartao    = request.POST.get('salvar_cartao') == 'on'
 
-    if forma_pagamento == 'cartao_credito' and not encrypted_card:
+    if forma_pagamento == 'cartao_credito' and not encrypted_card and not cartao_salvo_id:
         messages.error(request, 'Dados do cartão não recebidos. Tente novamente.')
         return redirect('pedidos:checkout')
+
+    # Valida cartão salvo pertence ao usuário logado
+    cartao_salvo_obj = None
+    if cartao_salvo_id and request.user.is_authenticated:
+        from apps.pagamentos.models import CartaoSalvo
+        try:
+            cartao_salvo_obj = CartaoSalvo.objects.get(
+                pk=int(cartao_salvo_id),
+                cliente=request.user,
+                ativo=True,
+            )
+            if cartao_salvo_obj.esta_vencido:
+                messages.error(request, f'O cartão {cartao_salvo_obj.descricao} está vencido. Por favor, use outro cartão.')
+                return redirect('pedidos:checkout')
+        except (CartaoSalvo.DoesNotExist, ValueError):
+            messages.error(request, 'Cartão selecionado inválido. Tente novamente.')
+            return redirect('pedidos:checkout')
 
     try:
         with transaction.atomic():
@@ -436,9 +468,17 @@ def _processar_checkout(request, form, cart):
             # ── Processamento de cartão via PagSeguro ─────────────────────────
             if forma_pagamento == 'cartao_credito':
                 from apps.pagamentos.services.pagseguro import (
-                    criar_ordem_cartao, status_interno, mensagem_recusa,
+                    criar_ordem_cartao, criar_ordem_cartao_token,
+                    status_interno, mensagem_recusa,
                 )
-                resultado    = criar_ordem_cartao(pedido, encrypted_card, parcelas)
+
+                if cartao_salvo_obj:
+                    # Usa token do cartão já salvo — sem encrypted_card
+                    resultado = criar_ordem_cartao_token(pedido, cartao_salvo_obj.token_pagbank, parcelas)
+                else:
+                    # Cartão novo: solicita store=True se o cliente marcou o checkbox
+                    resultado = criar_ordem_cartao(pedido, encrypted_card, parcelas, store=salvar_cartao)
+
                 charges      = resultado.get('charges', [])
                 charge       = charges[0] if charges else {}
                 charge_status = (charge.get('status') or '').upper()
@@ -449,6 +489,14 @@ def _processar_checkout(request, form, cart):
 
                 # PAID, AUTHORIZED ou IN_ANALYSIS → pedido criado
                 novo_status = status_interno(charge_status) or 'aguardando_pagamento'
+                if novo_status != pedido.status:
+                    from apps.pedidos.models import HistoricoPedido
+                    HistoricoPedido.objects.create(
+                        pedido=pedido,
+                        status_anterior=pedido.status,
+                        status_novo=novo_status,
+                        observacao=f'PagSeguro checkout: charge {gateway_order_id} → {charge_status}',
+                    )
                 pedido.status     = novo_status
                 pedido.gateway_id = gateway_order_id
                 pedido.save(update_fields=['status', 'gateway_id'])
@@ -483,6 +531,22 @@ def _processar_checkout(request, form, cart):
         return redirect('pedidos:checkout')
 
     # ── Fora do atomic: só executa se o pedido foi commitado ──────────────────
+
+    # Salvar cartão tokenizado (apenas se checkout teve sucesso e cliente pediu)
+    if (
+        forma_pagamento == 'cartao_credito'
+        and salvar_cartao
+        and not cartao_salvo_obj
+        and request.user.is_authenticated
+    ):
+        try:
+            from apps.pagamentos.services.pagseguro import salvar_cartao_do_charge
+            charges_resp = resultado.get('charges', [])
+            if charges_resp:
+                salvar_cartao_do_charge(request.user, charges_resp[0])
+        except Exception as exc:
+            logger.warning('Não foi possível salvar cartão para %s: %s', request.user.email, exc)
+
     if cupom_obj:
         from .models import Cupom as _Cupom
         _Cupom.objects.filter(pk=cupom_obj.pk).update(vezes_usado=models.F('vezes_usado') + 1)
@@ -497,8 +561,10 @@ def _processar_checkout(request, form, cart):
         request.session['pedidos_guest'] = pedidos_guest[-20:]
 
     try:
-        from .emails import enviar_confirmacao_pedido
+        from .emails import enviar_confirmacao_pedido, enviar_confirmacao_pagamento
         enviar_confirmacao_pedido(pedido)
+        if pedido.status == 'pagamento_confirmado':
+            enviar_confirmacao_pagamento(pedido)
     except Exception as exc:
         logger.warning('Não foi possível enviar e-mail de confirmação: %s', exc)
 

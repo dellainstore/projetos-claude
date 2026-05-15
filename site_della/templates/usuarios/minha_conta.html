@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load della_filters %}
 {% block titulo %}Minha Conta — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
@@ -25,6 +26,9 @@
         <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
           <i class="fas fa-location-dot"></i> Endereços
         </a>
+        <a href="{% url 'usuarios:meios_pagamento' %}" class="conta-nav-link">
+          <i class="far fa-credit-card"></i> Meios de pagamento
+        </a>
         <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
           <i class="far fa-heart"></i> Lista de desejos
         </a>
@@ -37,7 +41,7 @@
       </nav>
     </aside>
 
-    
+
     <section class="conta-conteudo">
 
       {% if messages %}
@@ -73,7 +77,7 @@
                   <span class="conta-status conta-status--{{ pedido.status }}">{{ pedido.get_status_display }}</span>
                 </div>
                 <div class="conta-pedido-valor">
-                  R$ {{ pedido.total|floatformat:"2g" }}
+                  R$ {{ pedido.total|brl_price }}
                   <a href="{% url 'usuarios:detalhe_pedido' pedido.numero %}" class="conta-link">Ver</a>
                 </div>
               </div>
@@ -110,6 +114,39 @@
             <a href="{% url 'usuarios:novo_endereco' %}" class="conta-link">Adicionar endereço</a>
           </p>
         {% endif %}
+      </div>
+
+
+      <div class="conta-card">
+        <div class="conta-card-header">
+          <h3 class="conta-card-titulo">Meios de pagamento</h3>
+          <a href="{% url 'usuarios:meios_pagamento' %}" class="conta-link">Gerenciar</a>
+        </div>
+        {% with cartoes=request.user.cartoes_salvos.all %}
+        {% if cartoes %}
+          {% for cartao in cartoes %}
+            {% if forloop.counter <= 3 %}
+            <div class="conta-endereco-card{% if cartao.esta_vencido %} conta-cartao--vencido{% endif %}" style="margin-bottom:0.5rem;">
+              <p class="conta-end-apelido">
+                <i class="far fa-credit-card"></i> {{ cartao.descricao }}
+                {% if cartao.esta_vencido %}
+                  <span style="background:#e74c3c;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px;margin-left:0.4rem;">Vencido</span>
+                {% endif %}
+              </p>
+              <p style="font-size:0.85rem;color:#666;">{{ cartao.nome_titular }} · Validade: {{ cartao.validade_display }}</p>
+            </div>
+            {% endif %}
+          {% endfor %}
+          {% if cartoes.count > 3 %}
+            <p style="font-size:0.85rem;color:#888;margin-top:0.25rem;">+ {{ cartoes.count|add:"-3" }} cartão(s) adicional(is)</p>
+          {% endif %}
+        {% else %}
+          <p class="conta-vazio">
+            Nenhum cartão salvo.
+            <a href="{% url 'usuarios:meios_pagamento' %}" class="conta-link">Saiba como adicionar</a>
+          </p>
+        {% endif %}
+        {% endwith %}
       </div>
 
     </section>

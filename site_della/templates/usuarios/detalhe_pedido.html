@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load della_filters %}
 {% block titulo %}Pedido {{ pedido.numero }} — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
@@ -23,6 +24,9 @@
         </a>
         <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
           <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'usuarios:meios_pagamento' %}" class="conta-nav-link">
+          <i class="far fa-credit-card"></i> Meios de pagamento
         </a>
         <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
           <i class="far fa-heart"></i> Lista de desejos
@@ -134,11 +138,34 @@
         </div>
       {% endif %}
 
+      {% if pedido.status == 'entregue' %}
+        <div class="conta-card" style="background:#fffdf7;border:1px solid #ead9b7;">
+          <h3 class="conta-card-titulo" style="margin-top:0;">
+            <i class="fas fa-star" style="color:#c9a96e;"></i> Avaliação da compra
+          </h3>
+          {% if pedido.avaliacao %}
+            <p style="font-size:.92rem;color:#555;margin-bottom:1rem;">
+              Sua avaliação já foi enviada. Obrigada por compartilhar sua experiência com a D'ELLA.
+            </p>
+            <a href="{% url 'produtos:avaliar_pedido' pedido.numero %}" class="btn-conta-secundario btn-conta-secundario--sm">
+              <i class="fas fa-eye"></i> Ver avaliação enviada
+            </a>
+          {% else %}
+            <p style="font-size:.92rem;color:#555;margin-bottom:1rem;">
+              Seu pedido foi entregue. Agora você já pode avaliar a experiência da compra e os produtos recebidos.
+            </p>
+            <a href="{% url 'produtos:avaliar_pedido' pedido.numero %}" class="btn-conta-primario btn-conta-primario--sm">
+              <i class="fas fa-star"></i> Avaliar minha compra
+            </a>
+          {% endif %}
+        </div>
+      {% endif %}
+
       {% if pedido.status == 'aguardando_pagamento' %}
       <div class="conta-card" style="border:2px solid #c9a96e;background:#fffbf0;">
         <h3 class="conta-card-titulo" style="color:#8a6200;">
           <i class="fas fa-clock" style="color:#c9a96e;margin-right:.4rem;"></i>
-          Pagamento pendente — R$ {{ pedido.total|floatformat:"2g" }}
+          Pagamento pendente — R$ {{ pedido.total|brl_price }}
         </h3>
 
         <div style="padding:1rem 0;color:#666;line-height:1.7;">
@@ -155,8 +182,8 @@
         <h3 class="conta-card-titulo">Itens do pedido</h3>
         {% for item in pedido.itens.all %}
           <div class="conta-item-row">
-            {% if item.produto and item.produto.imagem_principal %}
-              <img src="{{ item.produto.imagem_principal.imagem.url }}" alt="{{ item.nome_produto }}" class="conta-item-foto">
+            {% if item.produto and item.imagem_cor %}
+              <img src="{{ item.imagem_cor.imagem.url }}" alt="{{ item.nome_produto }}" class="conta-item-foto">
             {% else %}
               <div class="conta-item-foto conta-item-foto--placeholder"></div>
             {% endif %}
@@ -168,7 +195,7 @@
               <p class="conta-item-qty">Qtd: {{ item.quantidade }}</p>
             </div>
             <div class="conta-item-preco">
-              R$ {{ item.preco_unitario|floatformat:"2g" }}
+              R$ {{ item.preco_unitario|brl_price }}
             </div>
           </div>
         {% endfor %}
@@ -180,21 +207,21 @@
         <div class="conta-resumo-lista">
           <div class="conta-resumo-linha">
             <span>Subtotal</span>
-            <span>R$ {{ pedido.subtotal|floatformat:"2g" }}</span>
+            <span>R$ {{ pedido.subtotal|brl_price }}</span>
           </div>
           {% if pedido.desconto %}
             <div class="conta-resumo-linha">
               <span>Desconto</span>
-              <span class="cor-verde">− R$ {{ pedido.desconto|floatformat:"2g" }}</span>
+              <span class="cor-verde">− R$ {{ pedido.desconto|brl_price }}</span>
             </div>
           {% endif %}
           <div class="conta-resumo-linha">
             <span>Frete</span>
-            <span>{% if pedido.frete %}R$ {{ pedido.frete|floatformat:"2g" }}{% else %}Grátis{% endif %}</span>
+            <span>{% if pedido.frete %}R$ {{ pedido.frete|brl_price }}{% else %}Grátis{% endif %}</span>
           </div>
           <div class="conta-resumo-linha conta-resumo-linha--total">
             <span>Total</span>
-            <span>R$ {{ pedido.total|floatformat:"2g" }}</span>
+            <span>R$ {{ pedido.total|brl_price }}</span>
           </div>
           <div class="conta-resumo-linha">
             <span>Pagamento</span>
@@ -221,17 +248,4 @@
 </main>
 {% endblock %}
 
-{% block js_extra %}
-{% if pix_qrcode %}
-<script>
-function copiarPixDetalhe() {
-  const input = document.getElementById('pix-payload-detalhe');
-  navigator.clipboard?.writeText(input.value).then(() => {
-    const btn = document.getElementById('btn-copiar-pix-det');
-    btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
-    setTimeout(() => { btn.innerHTML = '<i class="far fa-copy"></i> Copiar'; }, 2500);
-  }).catch(() => { input.select(); document.execCommand('copy'); });
-}
-</script>
-{% endif %}
-{% endblock %}
+{% block js_extra %}{% endblock %}

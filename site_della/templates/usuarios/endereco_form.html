@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block titulo %}{{ titulo }} — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
@@ -23,6 +24,9 @@
         </a>
         <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link ativo">
           <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'usuarios:meios_pagamento' %}" class="conta-nav-link">
+          <i class="far fa-credit-card"></i> Meios de pagamento
         </a>
         <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
           <i class="far fa-heart"></i> Lista de desejos
@@ -129,61 +133,5 @@
 {% endblock %}
 
 {% block js_extra %}
-<script>
-const cepInput = document.getElementById('id_end_cep');
-const btnBuscar = document.getElementById('btn-buscar-cep');
-
-// Máscara CEP
-cepInput?.addEventListener('input', function(){
-  let v = this.value.replace(/\D/g,'').slice(0,8);
-  if(v.length > 5) v = v.replace(/(\d{5})(\d{1,3})/,'$1-$2');
-  this.value = v;
-});
-
-async function buscarCep() {
-  const cep = cepInput.value.replace(/\D/g,'');
-  if(cep.length !== 8) return;
-  if(btnBuscar) btnBuscar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
-  try {
-    const r = await fetch(`/carrinho/cep/${cep}/`);
-    const d = await r.json();
-    if(d.status === 'erro') return;
-    document.getElementById('id_end_logradouro').value = d.logradouro || '';
-    document.getElementById('id_end_bairro').value = d.bairro || '';
-    document.getElementById('id_end_cidade').value = d.cidade || '';
-    document.getElementById('id_end_estado').value = d.estado || '';
-    document.getElementById('campos-endereco').style.display = 'block';
-    document.querySelector('[name="numero"]')?.focus();
-  } catch(e) {
-    // falha silenciosa no blur; só alerta no clique manual
-  } finally {
-    if(btnBuscar) btnBuscar.innerHTML = '<i class="fas fa-magnifying-glass"></i> Buscar';
-  }
-}
-
-// Auto-busca ao sair do campo (tab / clique fora)
-cepInput?.addEventListener('blur', buscarCep);
-
-// Buscar ao clicar no botão (com feedback de erro)
-btnBuscar?.addEventListener('click', async function(){
-  const cep = cepInput.value.replace(/\D/g,'');
-  if(cep.length !== 8){ alert('CEP inválido.'); return; }
-  this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
-  try {
-    const r = await fetch(`/carrinho/cep/${cep}/`);
-    const d = await r.json();
-    if(d.status === 'erro'){ alert('CEP não encontrado.'); return; }
-    document.getElementById('id_end_logradouro').value = d.logradouro || '';
-    document.getElementById('id_end_bairro').value = d.bairro || '';
-    document.getElementById('id_end_cidade').value = d.cidade || '';
-    document.getElementById('id_end_estado').value = d.estado || '';
-    document.getElementById('campos-endereco').style.display = 'block';
-    document.querySelector('[name="numero"]')?.focus();
-  } catch(e) {
-    alert('Erro ao buscar CEP.');
-  } finally {
-    this.innerHTML = '<i class="fas fa-magnifying-glass"></i> Buscar';
-  }
-});
-</script>
+<script src="{% static 'js/usuarios-endereco-form.js' %}"></script>
 {% endblock %}

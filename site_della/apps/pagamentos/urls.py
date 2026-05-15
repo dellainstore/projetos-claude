@@ -17,4 +17,7 @@ urlpatterns = [
     # Pix (geração de QR Code e polling de status)
     path('pix/gerar/<str:pedido_numero>/', views.pix_gerar, name='pix_gerar'),
     path('pix/status/<str:pedido_numero>/', views.pix_status, name='pix_status'),
+
+    # Cartões salvos
+    path('cartao/<int:pk>/excluir/', views.excluir_cartao, name='excluir_cartao'),
 ]

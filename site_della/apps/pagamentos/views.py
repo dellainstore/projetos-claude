@@ -2,7 +2,10 @@ import json
 import logging
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +138,17 @@ def pagseguro_notificacao(request):
                 atualizar_situacao_bling(pedido, SITUACAO_CANCELADO)
         except Exception as exc:
             logger.warning('Bling: não foi possível atualizar situação do pedido %s: %s', reference_id, exc)
+
+        # E-mails transacionais por status
+        try:
+            from apps.pedidos.emails import enviar_confirmacao_pagamento, enviar_cancelamento
+            if novo_status == 'pagamento_confirmado':
+                enviar_confirmacao_pagamento(pedido)
+            elif novo_status == 'cancelado':
+                enviar_cancelamento(pedido, estornado=False)
+        except Exception as exc:
+            logger.warning('E-mail: falha ao enviar notificação do pedido %s (status %s): %s',
+                           reference_id, novo_status, exc)
 
     return HttpResponse('OK')
 
@@ -309,6 +323,18 @@ def pix_gerar(request, pedido_numero):
     except Exception as e:
         logger.error('Erro ao gerar Pix estático %s: %s', pedido_numero, e, exc_info=True)
         return JsonResponse({'status': 'erro', 'erro': 'Erro ao gerar QR Code.'}, status=500)
+
+
+@login_required
+@require_POST
+def excluir_cartao(request, pk):
+    """Remove um cartão salvo do perfil do cliente."""
+    from .models import CartaoSalvo
+    cartao = get_object_or_404(CartaoSalvo, pk=pk, cliente=request.user)
+    cartao.ativo = False
+    cartao.save(update_fields=['ativo'])
+    messages.success(request, f'Cartão {cartao.descricao} removido com sucesso.')
+    return redirect('usuarios:meios_pagamento')
 
 
 @require_GET

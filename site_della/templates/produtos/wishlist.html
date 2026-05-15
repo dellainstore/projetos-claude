@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load della_filters %}
 {% block titulo %}Lista de Desejos — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
@@ -23,6 +24,9 @@
         </a>
         <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
           <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'usuarios:meios_pagamento' %}" class="conta-nav-link">
+          <i class="far fa-credit-card"></i> Meios de pagamento
         </a>
         <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link ativo">
           <i class="far fa-heart"></i> Lista de desejos
@@ -58,10 +62,10 @@
                     <p class="produto-card-nome">{{ p.nome }}</p>
                     <div class="produto-card-preco">
                       {% if p.em_promocao %}
-                        <span class="preco-de">R$ {{ p.preco_base_exibicao|floatformat:"2g" }}</span>
-                        <span class="preco-por">R$ {{ p.preco_atual|floatformat:"2g" }}</span>
+                        <span class="preco-de">R$ {{ p.preco_base_exibicao|brl_price }}</span>
+                        <span class="preco-por">R$ {{ p.preco_atual|brl_price }}</span>
                       {% else %}
-                        <span class="preco-por">R$ {{ p.preco_atual|floatformat:"2g" }}</span>
+                        <span class="preco-por">R$ {{ p.preco_atual|brl_price }}</span>
                       {% endif %}
                     </div>
                   </div>

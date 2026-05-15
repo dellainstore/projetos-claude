@@ -91,45 +91,12 @@ def obter_chave_publica() -> str:
 
 # ─── Criação de ordem com cartão ──────────────────────────────────────────────
 
-def criar_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1) -> dict:
-    """
-    Cria uma ordem de pagamento com cartão de crédito via Checkout Transparente.
-
-    Args:
-        pedido:         instância de apps.pedidos.models.Pedido já salva no banco
-        encrypted_card: string gerada pelo PagSeguro JS SDK no frontend
-        parcelas:       número de parcelas (1–12)
-
-    Returns:
-        dict com a resposta completa da API (inclui charges[0].status).
-
-    Raises:
-        requests.HTTPError  se a API retornar 4xx/5xx
-        requests.Timeout    se a API não responder em 30 s
-    """
-    payload = montar_payload_ordem_cartao(pedido, encrypted_card, parcelas)
-
-    url = f'{_base_url()}/orders'
-    try:
-        r = requests.post(url, json=payload, headers=_headers(), timeout=30)
-        if not r.ok:
-            logger.error(
-                'PagSeguro: erro %s ao criar ordem %s: %s',
-                r.status_code, pedido.numero, r.text[:500],
-            )
-            r.raise_for_status()
-        return r.json()
-    except requests.HTTPError:
-        raise
-    except Exception as exc:
-        logger.error(
-            'PagSeguro: falha de comunicação ao criar ordem %s: %s',
-            pedido.numero, exc,
-        )
-        raise
-
-
-def montar_payload_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1) -> dict:
+def montar_payload_ordem_cartao(
+    pedido,
+    encrypted_card: str,
+    parcelas: int = 1,
+    store: bool = False,
+) -> dict:
     """Monta o payload de criação de ordem de cartão sem chamar a API."""
     valor_centavos = int(round(float(pedido.total) * 100))
     cpf_limpo      = ''.join(c for c in (pedido.cpf or '') if c.isdigit())
@@ -179,7 +146,7 @@ def montar_payload_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1) 
                     'soft_descriptor': 'DELLA INSTORE',
                     'card': {
                         'encrypted': encrypted_card,
-                        'store':     False,
+                        'store':     bool(store),
                     },
                 },
                 'notification_urls': [
@@ -195,6 +162,227 @@ def montar_payload_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1) 
         payload['customer']['phones'] = phones
 
     return payload
+
+
+def montar_payload_ordem_cartao_token(pedido, card_token: str, parcelas: int = 1) -> dict:
+    """
+    Monta payload de ordem usando cartão já tokenizado (CartaoSalvo.token_pagbank).
+    Não requer encrypted_card — o PAN nunca volta ao servidor.
+    """
+    valor_centavos = int(round(float(pedido.total) * 100))
+    cpf_limpo      = ''.join(c for c in (pedido.cpf or '') if c.isdigit())
+
+    items = [
+        {
+            'reference_id': str(item.pk),
+            'name':         item.nome_produto[:64],
+            'quantity':     item.quantidade,
+            'unit_amount':  int(round(float(item.preco_unitario) * 100)),
+        }
+        for item in pedido.itens.select_related('produto').all()
+    ]
+
+    payload: dict = {
+        'reference_id': pedido.numero,
+        'customer': {
+            'name':   pedido.nome_completo,
+            'email':  pedido.email,
+            'tax_id': cpf_limpo,
+        },
+        'items': items,
+        'shipping': {
+            'address': {
+                'street':      pedido.logradouro,
+                'number':      pedido.numero_entrega,
+                'complement':  pedido.complemento or '',
+                'locality':    pedido.bairro,
+                'city':        pedido.cidade,
+                'region_code': pedido.estado.upper(),
+                'country':     'BRA',
+                'postal_code': pedido.cep_entrega,
+            }
+        },
+        'charges': [
+            {
+                'reference_id': pedido.numero,
+                'description':  f'Pedido {pedido.numero}',
+                'amount': {
+                    'value':    valor_centavos,
+                    'currency': 'BRL',
+                },
+                'payment_method': {
+                    'type':            'CREDIT_CARD',
+                    'installments':    max(1, int(parcelas)),
+                    'capture':         True,
+                    'soft_descriptor': 'DELLA INSTORE',
+                    'card': {
+                        'id': card_token,
+                    },
+                },
+                'notification_urls': [
+                    f'{settings.SITE_URL.rstrip("/")}/pagamento/pagseguro/notificacao/',
+                ],
+            }
+        ],
+    }
+
+    phones = _telefone_payload(pedido.telefone)
+    if phones:
+        payload['customer']['phones'] = phones
+
+    return payload
+
+
+def criar_ordem_cartao(pedido, encrypted_card: str, parcelas: int = 1, store: bool = False) -> dict:
+    """
+    Cria uma ordem de pagamento com cartão de crédito via Checkout Transparente.
+
+    Args:
+        pedido:         instância de apps.pedidos.models.Pedido já salva no banco
+        encrypted_card: string gerada pelo PagSeguro JS SDK no frontend
+        parcelas:       número de parcelas (1–12)
+        store:          se True, solicita ao PagBank que tokenize o cartão
+
+    Returns:
+        dict com a resposta completa da API (inclui charges[0].status).
+
+    Raises:
+        requests.HTTPError  se a API retornar 4xx/5xx
+        requests.Timeout    se a API não responder em 30 s
+    """
+    payload = montar_payload_ordem_cartao(pedido, encrypted_card, parcelas, store=store)
+
+    url = f'{_base_url()}/orders'
+    try:
+        r = requests.post(url, json=payload, headers=_headers(), timeout=30)
+        if not r.ok:
+            logger.error(
+                'PagSeguro: erro %s ao criar ordem %s: %s',
+                r.status_code, pedido.numero, r.text[:500],
+            )
+            r.raise_for_status()
+        return r.json()
+    except requests.HTTPError:
+        raise
+    except Exception as exc:
+        logger.error(
+            'PagSeguro: falha de comunicação ao criar ordem %s: %s',
+            pedido.numero, exc,
+        )
+        raise
+
+
+def criar_ordem_cartao_token(pedido, card_token: str, parcelas: int = 1) -> dict:
+    """
+    Cria ordem usando cartão já salvo (token PagBank). Não requer encrypted_card.
+
+    Raises:
+        requests.HTTPError  se a API retornar 4xx/5xx
+        requests.Timeout    se a API não responder em 30 s
+    """
+    payload = montar_payload_ordem_cartao_token(pedido, card_token, parcelas)
+
+    url = f'{_base_url()}/orders'
+    try:
+        r = requests.post(url, json=payload, headers=_headers(), timeout=30)
+        if not r.ok:
+            logger.error(
+                'PagSeguro (token): erro %s ao criar ordem %s: %s',
+                r.status_code, pedido.numero, r.text[:500],
+            )
+            r.raise_for_status()
+        return r.json()
+    except requests.HTTPError:
+        raise
+    except Exception as exc:
+        logger.error(
+            'PagSeguro (token): falha de comunicação ao criar ordem %s: %s',
+            pedido.numero, exc,
+        )
+        raise
+
+
+def extrair_dados_cartao_da_resposta(charge: dict) -> dict | None:
+    """
+    Extrai token e metadados do cartão da resposta de uma charge PagBank.
+    Retorna None se o PagBank não tokenizou (store=False ou cartão rejeitado).
+
+    Campos retornados: token_pagbank, ultimos_4, nome_titular, bandeira,
+                       mes_expiracao, ano_expiracao.
+    Nunca retorna PAN, CVV ou data completa.
+    """
+    pm   = charge.get('payment_method') or {}
+    card = pm.get('card') or {}
+
+    token = card.get('id', '').strip()
+    if not token:
+        return None
+
+    last4 = card.get('last_digits', '') or card.get('last4', '')
+    last4 = str(last4).strip()[-4:]
+
+    holder = (card.get('holder') or {})
+    nome   = (holder.get('name') or '').strip()[:120]
+
+    brand_raw = (card.get('brand') or '').lower().strip()
+    bandeiras = {b[0] for b in [
+        ('visa', ''), ('mastercard', ''), ('elo', ''),
+        ('amex', ''), ('hipercard', ''),
+    ]}
+    bandeira = brand_raw if brand_raw in {b[0] for b in [
+        ('visa',), ('mastercard',), ('elo',), ('amex',), ('hipercard',),
+    ]} else 'outro'
+
+    try:
+        mes = int(card.get('exp_month', 0))
+        ano = int(card.get('exp_year', 0))
+    except (TypeError, ValueError):
+        mes, ano = 0, 0
+
+    if not token or not last4 or not mes or not ano:
+        return None
+
+    return {
+        'token_pagbank':  token,
+        'ultimos_4':      last4,
+        'nome_titular':   nome,
+        'bandeira':       bandeira,
+        'mes_expiracao':  mes,
+        'ano_expiracao':  ano,
+    }
+
+
+def salvar_cartao_do_charge(cliente, charge: dict) -> 'CartaoSalvo | None':
+    """
+    Persiste o cartão tokenizado retornado pelo PagBank em CartaoSalvo.
+    Evita duplicata: se token já existe para o cliente, retorna o existente sem criar novo.
+    Retorna a instância salva ou None se o PagBank não retornou token.
+    """
+    from apps.pagamentos.models import CartaoSalvo
+
+    dados = extrair_dados_cartao_da_resposta(charge)
+    if not dados:
+        logger.info('PagSeguro: charge sem token de cartão — nenhum cartão salvo.')
+        return None
+
+    # Idempotência: mesmo token → não duplicar
+    existente = CartaoSalvo.objects.filter(
+        cliente=cliente,
+        token_pagbank=dados['token_pagbank'],
+    ).first()
+    if existente:
+        return existente
+
+    try:
+        cartao = CartaoSalvo.objects.create(cliente=cliente, **dados)
+        logger.info(
+            'PagSeguro: cartão **** %s (%s) salvo para %s',
+            dados['ultimos_4'], dados['bandeira'], cliente.email,
+        )
+        return cartao
+    except Exception as exc:
+        logger.error('PagSeguro: falha ao salvar cartão para %s: %s', cliente.email, exc)
+        return None
 
 
 # ─── Criação de ordem PIX ────────────────────────────────────────────────────

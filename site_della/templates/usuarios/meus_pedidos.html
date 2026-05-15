@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load della_filters %}
 {% block titulo %}Meus Pedidos — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
@@ -23,6 +24,9 @@
         </a>
         <a href="{% url 'usuarios:enderecos' %}" class="conta-nav-link">
           <i class="fas fa-location-dot"></i> Endereços
+        </a>
+        <a href="{% url 'usuarios:meios_pagamento' %}" class="conta-nav-link">
+          <i class="far fa-credit-card"></i> Meios de pagamento
         </a>
         <a href="{% url 'produtos:wishlist' %}" class="conta-nav-link">
           <i class="far fa-heart"></i> Lista de desejos
@@ -53,7 +57,7 @@
               </div>
               <div class="conta-pedido-col">
                 <span class="conta-pedido-label">Total</span>
-                <span>R$ {{ pedido.total|floatformat:"2g" }}</span>
+                <span>R$ {{ pedido.total|brl_price }}</span>
               </div>
               <div class="conta-pedido-col">
                 <span class="conta-pedido-label">Status</span>

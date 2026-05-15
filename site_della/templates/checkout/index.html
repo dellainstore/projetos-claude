@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static della_filters %}
 
 {% block titulo %}Checkout — Della Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
@@ -77,6 +77,38 @@
 
           <h3 class="checkout-sub-titulo">Endereço de entrega</h3>
 
+          {% if enderecos %}
+          <div class="checkout-enderecos-salvos">
+            <p class="checkout-enderecos-label">Selecione um endereço cadastrado:</p>
+            <div class="checkout-enderecos-lista" role="radiogroup" aria-label="Endereços salvos">
+              {% for end in enderecos %}
+              <label class="checkout-endereco-card" for="end_{{ end.pk }}">
+                <input type="radio" class="sr-only" name="_endereco_salvo" id="end_{{ end.pk }}"
+                       value="{{ end.pk }}" {% if end.principal %}checked{% endif %}
+                       data-cep="{{ end.cep }}"
+                       data-logradouro="{{ end.logradouro }}"
+                       data-numero="{{ end.numero }}"
+                       data-complemento="{{ end.complemento }}"
+                       data-bairro="{{ end.bairro }}"
+                       data-cidade="{{ end.cidade }}"
+                       data-estado="{{ end.estado }}">
+                <span class="checkout-endereco-apelido">
+                  {{ end.apelido }}
+                  {% if end.principal %}<span class="badge-principal">Principal</span>{% endif %}
+                </span>
+                <span class="checkout-endereco-detalhe">{{ end.logradouro }}, {{ end.numero }}{% if end.complemento %}, {{ end.complemento }}{% endif %}</span>
+                <span class="checkout-endereco-cidade">{{ end.bairro }} — {{ end.cidade }}/{{ end.estado }} · {{ end.get_cep_formatado }}</span>
+              </label>
+              {% endfor %}
+              <label class="checkout-endereco-card checkout-endereco-novo" for="end_novo">
+                <input type="radio" class="sr-only" name="_endereco_salvo" id="end_novo" value="novo">
+                <span class="checkout-endereco-apelido"><i class="fas fa-plus"></i> Novo endereço</span>
+                <span class="checkout-endereco-detalhe">Preencher um endereço diferente</span>
+              </label>
+            </div>
+          </div>
+          {% endif %}
+
           <div class="checkout-grid-cep">
             <div class="checkout-campo {% if form.cep.errors %}erro{% endif %}">
               <label for="{{ form.cep.id_for_label }}">CEP *</label>
@@ -100,7 +132,12 @@
             </div>
             <div class="checkout-campo {% if form.numero_entrega.errors %}erro{% endif %}">
               <label for="{{ form.numero_entrega.id_for_label }}">Número *</label>
-              {{ form.numero_entrega }}
+              <div class="num-wrapper">
+                {{ form.numero_entrega }}
+                <label class="sem-numero-toggle" for="id_sem_numero">
+                  <input type="checkbox" id="id_sem_numero"> Sem número (S/N)
+                </label>
+              </div>
               {% for e in form.numero_entrega.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
             </div>
             <div class="checkout-campo">
@@ -201,30 +238,82 @@
           <div id="tab-cartao" role="tabpanel" class="pagamento-tabpanel">
             <input type="radio" name="forma_pagamento" value="cartao_credito" id="radio_cartao"
                    class="sr-only">
+            <input type="hidden" name="cartao_salvo_id" id="cartao-salvo-id" value="">
 
             {% if cartao_habilitado %}
-            <div class="checkout-grid-2">
-              <div class="checkout-campo" style="grid-column:1 / -1;">
-                <label for="card-holder">Nome impresso no cartão *</label>
-                <input type="text" id="card-holder" class="checkout-input" placeholder="NOME COMO ESTÁ NO CARTÃO" autocomplete="cc-name">
-              </div>
-              <div class="checkout-campo" style="grid-column:1 / -1;">
-                <label for="card-number">Número do cartão *</label>
-                <input type="text" id="card-number" class="checkout-input" placeholder="0000 0000 0000 0000" inputmode="numeric" autocomplete="cc-number">
-              </div>
-              <div class="checkout-campo">
-                <label for="card-expiry">Validade *</label>
-                <input type="text" id="card-expiry" class="checkout-input" placeholder="MM/AA" inputmode="numeric" autocomplete="cc-exp">
-              </div>
-              <div class="checkout-campo">
-                <label for="card-cvv">CVV *</label>
-                <input type="text" id="card-cvv" class="checkout-input" placeholder="123" inputmode="numeric" autocomplete="cc-csc">
-              </div>
-              <div class="checkout-campo">
-                <label for="{{ form.parcelas.id_for_label }}">Parcelas</label>
-                {{ form.parcelas }}
+
+            {# ── Cartões salvos ───────────────────────────────────────────── #}
+            {% if cartoes_salvos %}
+            <div class="checkout-cartoes-salvos" id="bloco-cartoes-salvos">
+              <p class="checkout-enderecos-label">Selecione um cartão salvo:</p>
+              <div class="checkout-enderecos-lista" role="radiogroup" aria-label="Cartões salvos">
+                {% for cartao in cartoes_salvos %}
+                <label class="checkout-endereco-card checkout-cartao-card {% if cartao.esta_vencido %}cartao-vencido{% endif %}"
+                       for="cartao_{{ cartao.pk }}">
+                  <input type="radio" class="sr-only" name="_cartao_salvo_radio"
+                         id="cartao_{{ cartao.pk }}" value="{{ cartao.pk }}"
+                         {% if forloop.first and not cartao.esta_vencido %}checked{% endif %}
+                         {% if cartao.esta_vencido %}disabled{% endif %}>
+                  <span class="checkout-endereco-apelido">
+                    <i class="far fa-credit-card"></i> {{ cartao.descricao }}
+                    {% if cartao.esta_vencido %}
+                      <span class="badge-vencido">Vencido</span>
+                    {% endif %}
+                  </span>
+                  <span class="checkout-endereco-detalhe">{{ cartao.nome_titular }}</span>
+                  <span class="checkout-endereco-cidade">Validade: {{ cartao.validade_display }}</span>
+                </label>
+                {% endfor %}
+                <label class="checkout-endereco-card checkout-endereco-novo" for="cartao_novo">
+                  <input type="radio" class="sr-only" name="_cartao_salvo_radio" id="cartao_novo" value="novo">
+                  <span class="checkout-endereco-apelido"><i class="fas fa-plus"></i> Novo cartão</span>
+                  <span class="checkout-endereco-detalhe">Informar um cartão diferente</span>
+                </label>
               </div>
             </div>
+            {% endif %}
+
+            {# ── Formulário de cartão novo ─────────────────────────────────── #}
+            <div id="bloco-cartao-novo" {% if cartoes_salvos %}class="hidden"{% endif %}>
+              <div class="checkout-grid-2">
+                <div class="checkout-campo" style="grid-column:1 / -1;">
+                  <label for="card-holder">Nome impresso no cartão *</label>
+                  <input type="text" id="card-holder" class="checkout-input" placeholder="NOME COMO ESTÁ NO CARTÃO" autocomplete="cc-name">
+                </div>
+                <div class="checkout-campo" style="grid-column:1 / -1;">
+                  <label for="card-number">Número do cartão *</label>
+                  <input type="text" id="card-number" class="checkout-input" placeholder="0000 0000 0000 0000" inputmode="numeric" autocomplete="cc-number">
+                </div>
+                <div class="checkout-campo">
+                  <label for="card-expiry">Validade *</label>
+                  <input type="text" id="card-expiry" class="checkout-input" placeholder="MM/AA" inputmode="numeric" autocomplete="cc-exp">
+                </div>
+                <div class="checkout-campo">
+                  <label for="card-cvv">CVV *</label>
+                  <input type="text" id="card-cvv" class="checkout-input" placeholder="123" inputmode="numeric" autocomplete="cc-csc">
+                </div>
+              </div>
+
+              {# ── Checkbox salvar cartão ───────────────────────────────────── #}
+              {% if user.is_authenticated %}
+              <div class="checkout-salvar-cartao" style="margin-top:1.25rem;">
+                <label class="salvar-cartao-label" for="salvar-cartao-check">
+                  <input type="checkbox" name="salvar_cartao" id="salvar-cartao-check" value="on">
+                  <span class="salvar-cartao-texto">Salvar este cartão com segurança para compras futuras.</span>
+                </label>
+                <p class="salvar-cartao-info">
+                  (Seus dados serão armazenados de forma tokenizada pelo PagBank. Você poderá remover o cartão salvo a qualquer momento.)
+                </p>
+              </div>
+              {% endif %}
+            </div>
+
+            {# ── Parcelas (sempre visível quando cartão) ───────────────────── #}
+            <div class="checkout-campo" style="margin-top:1rem;" id="bloco-parcelas">
+              <label for="{{ form.parcelas.id_for_label }}">Parcelas</label>
+              {{ form.parcelas }}
+            </div>
+
             <input type="hidden" name="pagseguro_card_encrypted" id="pagseguro-card-encrypted">
             <p id="cartao-erro" class="campo-erro hidden" style="margin-top:1rem;"></p>
             <p style="color:#666;font-size:0.9rem;margin-top:1rem;">
@@ -322,14 +411,14 @@
                 <button type="button" class="resumo-qty-btn resumo-remover-btn" data-acao="remover" title="Remover item"><i class="fas fa-trash-alt"></i></button>
               </div>
             </div>
-            <p class="resumo-item-preco">R$ <span class="resumo-item-subtotal">{{ item.subtotal|floatformat:"2g" }}</span></p>
+            <p class="resumo-item-preco">R$ <span class="resumo-item-subtotal">{{ item.subtotal|brl_price }}</span></p>
           </div>
           {% endfor %}
         </div>
 
         <div class="checkout-resumo-linha">
           <span>Subtotal</span>
-          <span id="resumo-subtotal-valor">R$ {{ subtotal|floatformat:"2g" }}</span>
+          <span id="resumo-subtotal-valor">R$ {{ subtotal|brl_price }}</span>
         </div>
         <div class="checkout-resumo-linha hidden" id="resumo-desconto-linha" style="color:#27ae60;">
           <span>Desconto</span>
@@ -341,7 +430,7 @@
         </div>
         <div class="checkout-resumo-total">
           <span>Total</span>
-          <span id="resumo-total">R$ {{ subtotal|floatformat:"2g" }}</span>
+          <span id="resumo-total">R$ {{ subtotal|brl_price }}</span>
         </div>
 
         <div class="checkout-resumo-selos">
@@ -368,523 +457,18 @@
   "_event_id": "{{ meta_initiatecheckout_event_id|escapejs }}"
 }
 </script>
+<script type="application/json" id="checkout-config">
+{
+  "subtotal": {{ subtotal|unlocalize }},
+  "pagseguro_public_key": "{{ pagseguro_public_key|default:''|escapejs }}",
+  "form_errors": {% if form.errors %}true{% else %}false{% endif %},
+  "messages": {% if messages %}true{% else %}false{% endif %}
+}
+</script>
 {# SDK PagSeguro sempre carregado (independente da chave pública) — PagSeguro deve existir no submit #}
 <script src="https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js"></script>
-<script>
-(function() {
-  'use strict';
-
-  let SUBTOTAL = parseFloat('{{ subtotal|floatformat:2 }}'.replace(',', '.'));
-  window.SUBTOTAL = SUBTOTAL;  // exposto para parcelas.js
-  let descontoAtual = 0;
-  window._descontoAtualCheckout = 0;
-
-  // ── Elementos ────────────────────────────────────────────────────────────
-  const secoes  = document.querySelectorAll('.checkout-secao');
-  const steppers = document.querySelectorAll('.stepper-item');
-  let etapaAtual = 1;
-
-  // ── Stepper / navegação ──────────────────────────────────────────────────
-  function irParaEtapa(n) {
-    etapaAtual = n;
-    secoes.forEach((s, i) => {
-      s.classList.toggle('bloqueada', i + 1 !== n);
-      s.classList.toggle('ativa', i + 1 === n);
-    });
-    steppers.forEach((s, i) => {
-      s.classList.toggle('ativo', i + 1 === n);
-      s.classList.toggle('concluido', i + 1 < n);
-    });
-    // Rola até a seção ativa (não para o topo)
-    const secaoAtiva = document.getElementById('secao-' + n);
-    if (secaoAtiva) {
-      const offsetTopo = secaoAtiva.getBoundingClientRect().top + window.scrollY - 110;
-      window.scrollTo({ top: offsetTopo, behavior: 'smooth' });
-    }
-  }
-
-  document.getElementById('btn-ir-frete')?.addEventListener('click', () => {
-    if (!validarEtapa1()) return;
-    irParaEtapa(2);
-    carregarFrete();
-  });
-
-  document.getElementById('btn-voltar-dados')?.addEventListener('click', () => irParaEtapa(1));
-  document.getElementById('btn-ir-pagamento')?.addEventListener('click', () => {
-    if (!validarFrete()) return;
-    irParaEtapa(3);
-  });
-  document.getElementById('btn-voltar-frete')?.addEventListener('click', () => irParaEtapa(2));
-
-  // ── Validação etapa 1 ────────────────────────────────────────────────────
-  function validarEtapa1() {
-    const obrigatorios = [
-      'id_nome_completo', 'id_email', 'id_cpf',
-      'id_cep', 'id_logradouro', 'id_numero_entrega',
-      'id_bairro', 'id_cidade', 'id_estado',
-    ];
-    let ok = true;
-    obrigatorios.forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      const vazio = !el.value.trim();
-      el.closest('.checkout-campo')?.classList.toggle('erro', vazio);
-      if (vazio) ok = false;
-    });
-    if (!ok) {
-      document.getElementById('id_nome_completo')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-    return ok;
-  }
-
-  function validarFrete() {
-    const opcaoFrete = document.getElementById('id_opcao_frete')?.value;
-    if (!opcaoFrete) {
-      document.getElementById('frete-erro').classList.remove('hidden');
-      document.getElementById('frete-erro').textContent = 'Selecione uma opção de frete.';
-      return false;
-    }
-    return true;
-  }
-
-  // ── ViaCEP — autocompletar endereço ─────────────────────────────────────
-  const cepInput  = document.getElementById('id_cep');
-  const btnCep    = document.getElementById('btn-buscar-cep');
-  const camposEnd = document.getElementById('campos-endereco');
-
-  async function buscarCep(cep) {
-    const cepLimpo = cep.replace(/\D/g, '');
-    if (cepLimpo.length !== 8) return;
-
-    btnCep.disabled = true;
-    btnCep.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-    try {
-      const res  = await fetch(`/carrinho/cep/${cepLimpo}/`);
-      const dados = await res.json();
-
-      if (dados.status === 'ok') {
-        document.getElementById('id_logradouro').value = dados.logradouro;
-        document.getElementById('id_bairro').value     = dados.bairro;
-        document.getElementById('id_cidade').value     = dados.cidade;
-        document.getElementById('id_estado').value     = dados.estado;
-        camposEnd.classList.remove('hidden');
-        document.getElementById('id_numero_entrega')?.focus();
-      } else {
-        alert('CEP não encontrado. Verifique e tente novamente.');
-      }
-    } catch (e) {
-      alert('Não foi possível consultar o CEP. Preencha o endereço manualmente.');
-      camposEnd.classList.remove('hidden');
-    } finally {
-      btnCep.disabled = false;
-      btnCep.innerHTML = '<i class="fas fa-search"></i>';
-    }
-  }
-
-  btnCep?.addEventListener('click', () => buscarCep(cepInput.value));
-
-  cepInput?.addEventListener('blur', () => {
-    const v = cepInput.value.replace(/\D/g, '');
-    if (v.length === 8) buscarCep(v);
-  });
-
-  // Máscara CEP
-  cepInput?.addEventListener('input', () => {
-    let v = cepInput.value.replace(/\D/g, '').slice(0, 8);
-    if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5);
-    cepInput.value = v;
-  });
-
-  // Máscara CPF
-  const cpfInput = document.getElementById('id_cpf');
-  cpfInput?.addEventListener('input', () => {
-    let v = cpfInput.value.replace(/\D/g, '').slice(0, 11);
-    if (v.length > 9) v = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9);
-    else if (v.length > 6) v = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);
-    else if (v.length > 3) v = v.slice(0,3)+'.'+v.slice(3);
-    cpfInput.value = v;
-  });
-
-  // Máscara telefone
-  const telInput = document.querySelector('input[name="telefone"]');
-  telInput?.addEventListener('input', () => {
-    let v = telInput.value.replace(/\D/g, '').slice(0, 11);
-    if (v.length > 6) v = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7);
-    else if (v.length > 2) v = '(' + v.slice(0,2) + ') ' + v.slice(2);
-    telInput.value = v;
-  });
-
-  // ── Calcular frete ───────────────────────────────────────────────────────
-  async function carregarFrete() {
-    const cep = document.getElementById('id_cep').value.replace(/\D/g, '');
-    const loading = document.getElementById('frete-loading');
-    const opcoesEl = document.getElementById('frete-opcoes');
-    const erroEl = document.getElementById('frete-erro');
-
-    loading.classList.remove('hidden');
-    opcoesEl.innerHTML = '';
-    erroEl.classList.add('hidden');
-
-    try {
-      const res = await fetch(`/carrinho/frete/?cep=${cep}`);
-      const dados = await res.json();
-
-      loading.classList.add('hidden');
-
-      if (dados.status !== 'ok' || !dados.opcoes?.length) {
-        erroEl.classList.remove('hidden');
-        return;
-      }
-
-      opcoesEl.innerHTML = dados.opcoes.map((op, i) => `
-        <label class="frete-opcao" for="frete_${op.id}">
-          <input type="radio" name="_frete_visual" id="frete_${op.id}"
-                 value="${op.id}" ${i === 0 ? 'checked' : ''}
-                 data-preco="${op.preco}" data-nome="${op.nome} ${op.empresa}"
-                 data-prazo="${op.prazo}" onchange="selecionarFrete(this)">
-          <span class="frete-opcao-info">
-            <span class="frete-opcao-nome">${op.nome} <small>${op.empresa}</small></span>
-            <span class="frete-opcao-prazo">${op.descricao}</span>
-          </span>
-          <span class="frete-opcao-preco">R$ ${parseFloat(op.preco).toFixed(2).replace('.', ',')}</span>
-        </label>
-      `).join('');
-
-      // Seleciona automaticamente o primeiro
-      const primeiroRadio = opcoesEl.querySelector('input[type="radio"]');
-      if (primeiroRadio) selecionarFrete(primeiroRadio);
-
-    } catch (e) {
-      loading.classList.add('hidden');
-      erroEl.classList.remove('hidden');
-    }
-  }
-
-  function fmtBRL(v) {
-    return 'R$ ' + v.toFixed(2).replace('.', ',');
-  }
-
-  function atualizarResumoTotal() {
-    const freteVal = parseFloat(document.getElementById('id_valor_frete')?.value || '0') || 0;
-    const freteEl  = document.getElementById('resumo-frete-valor');
-    if (freteEl && freteVal > 0) freteEl.textContent = fmtBRL(freteVal);
-    const total = Math.max(0, SUBTOTAL - descontoAtual + freteVal);
-    document.getElementById('resumo-total').textContent = fmtBRL(total);
-  }
-
-  window.selecionarFrete = function(radio) {
-    document.getElementById('id_opcao_frete').value = radio.value;
-    document.getElementById('id_servico_frete_nome').value = radio.dataset.nome;
-    document.getElementById('id_valor_frete').value = radio.dataset.preco;
-    document.getElementById('id_prazo_frete').value = radio.dataset.prazo;
-
-    const frete = parseFloat(radio.dataset.preco);
-    document.getElementById('resumo-frete-valor').textContent = fmtBRL(frete);
-    atualizarResumoTotal();
-  };
-
-  // ── Cupom ────────────────────────────────────────────────────────────────
-  async function aplicarCupom() {
-    const input    = document.getElementById('id_cupom_codigo');
-    const feedback = document.getElementById('cupom-feedback');
-    const codigo   = (input?.value || '').trim().toUpperCase();
-    if (!codigo) return;
-    input.value = codigo;
-
-    try {
-      const res  = await fetch(`/carrinho/validar-cupom/?codigo=${encodeURIComponent(codigo)}&subtotal=${SUBTOTAL}`);
-      const data = await res.json();
-      feedback.classList.remove('hidden', 'cupom-ok', 'cupom-erro');
-
-      if (data.status === 'ok') {
-        descontoAtual = parseFloat(data.desconto);
-        window._descontoAtualCheckout = descontoAtual;
-        if (window._atualizarParcelasCheckout) window._atualizarParcelasCheckout();
-        feedback.textContent = '✓ ' + data.descricao + ' aplicado!';
-        feedback.classList.add('cupom-ok');
-        // Mostrar linha de desconto no resumo
-        const linhaDesc = document.getElementById('resumo-desconto-linha');
-        document.getElementById('resumo-desconto-valor').textContent = '−' + fmtBRL(descontoAtual);
-        linhaDesc?.classList.remove('hidden');
-        atualizarResumoTotal();
-      } else {
-        descontoAtual = 0;
-        feedback.textContent = '✗ ' + data.erro;
-        feedback.classList.add('cupom-erro');
-        document.getElementById('resumo-desconto-linha')?.classList.add('hidden');
-        atualizarResumoTotal();
-      }
-    } catch (e) {
-      feedback.classList.remove('hidden');
-      feedback.textContent = 'Erro ao validar cupom.';
-      feedback.classList.add('cupom-erro');
-    }
-  }
-
-  document.getElementById('btn-aplicar-cupom')?.addEventListener('click', aplicarCupom);
-  document.getElementById('id_cupom_codigo')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); aplicarCupom(); }
-  });
-
-  // ── Código do vendedor ───────────────────────────────────────────────────
-  async function aplicarVendedor() {
-    const input    = document.getElementById('id_codigo_vendedor_codigo');
-    const feedback = document.getElementById('vendedor-feedback');
-    const codigo   = (input?.value || '').trim().toUpperCase();
-    if (!codigo) return;
-    input.value = codigo;
-    feedback.classList.remove('hidden', 'cupom-ok', 'cupom-erro');
-
-    try {
-      const res  = await fetch(`/carrinho/validar-vendedor/?codigo=${encodeURIComponent(codigo)}`);
-      const data = await res.json();
-      if (data.status === 'ok') {
-        feedback.textContent = '✓ Vendedor ' + data.nome + ' vinculado ao pedido.';
-        feedback.classList.add('cupom-ok');
-      } else {
-        feedback.textContent = '✗ ' + data.erro;
-        feedback.classList.add('cupom-erro');
-      }
-    } catch (e) {
-      feedback.textContent = 'Erro ao validar código.';
-      feedback.classList.add('cupom-erro');
-    }
-  }
-
-  document.getElementById('btn-aplicar-vendedor')?.addEventListener('click', aplicarVendedor);
-  document.getElementById('id_codigo_vendedor_codigo')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); aplicarVendedor(); }
-  });
-
-  // ── Tabs pagamento ───────────────────────────────────────────────────────
-  document.querySelectorAll('.pagamento-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.pagamento-tab').forEach(t => {
-        t.classList.remove('ativa');
-        t.setAttribute('aria-selected', 'false');
-      });
-      document.querySelectorAll('.pagamento-tabpanel').forEach(p => p.classList.remove('ativo'));
-
-      tab.classList.add('ativa');
-      tab.setAttribute('aria-selected', 'true');
-
-      const tabId = tab.dataset.tab;
-      document.getElementById(`tab-${tabId}`)?.classList.add('ativo');
-
-      // Atualiza o radio oculto conforme a aba selecionada
-      if (tabId === 'pix') {
-        document.getElementById('radio_pix').checked = true;
-      } else if (tabId === 'cartao') {
-        const radioCartao = document.getElementById('radio_cartao');
-        if (radioCartao) radioCartao.checked = true;
-      }
-    });
-  });
-
-  // ── Máscaras do cartão ───────────────────────────────────────────────────
-  const cardNumberInput = document.getElementById('card-number');
-  cardNumberInput?.addEventListener('input', () => {
-    let v = cardNumberInput.value.replace(/\D/g, '').slice(0, 16);
-    v = v.replace(/(.{4})/g, '$1 ').trim();
-    cardNumberInput.value = v;
-  });
-
-  const cardHolderInput = document.getElementById('card-holder');
-  cardHolderInput?.addEventListener('input', () => {
-    cardHolderInput.value = cardHolderInput.value.toUpperCase();
-  });
-
-  const cardExpiryInput = document.getElementById('card-expiry');
-  cardExpiryInput?.addEventListener('input', () => {
-    let v = cardExpiryInput.value.replace(/\D/g, '').slice(0, 4);
-    if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
-    cardExpiryInput.value = v;
-  });
-
-  // ── Confirmar pedido ─────────────────────────────────────────────────────
-  document.getElementById('form-checkout')?.addEventListener('submit', async function(e) {
-    const formaAtual = document.querySelector('[name="forma_pagamento"]:checked')?.value;
-
-    if (formaAtual !== 'cartao_credito') {
-      // Pix: submit normal
-      const btn = document.getElementById('btn-confirmar');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando…';
-      return;
-    }
-
-    // ── Cartão: encripta antes de submeter ───────────────────────────────
-    e.preventDefault();
-
-    const btn    = document.getElementById('btn-confirmar');
-    const erroEl = document.getElementById('cartao-erro');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando…';
-    if (erroEl) erroEl.classList.add('hidden');
-
-    function mostrarErroCartao(msg) {
-      if (erroEl) {
-        erroEl.textContent = msg;
-        erroEl.classList.remove('hidden');
-        erroEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-lock"></i> Confirmar pedido';
-    }
-
-    const holder = (document.getElementById('card-holder')?.value || '').trim().toUpperCase();
-    const number = (document.getElementById('card-number')?.value || '').replace(/\s/g, '');
-    const expiry = (document.getElementById('card-expiry')?.value || '');
-    const cvv    = (document.getElementById('card-cvv')?.value || '').trim();
-
-    if (!holder || !number || !expiry || !cvv) {
-      mostrarErroCartao('Preencha todos os dados do cartão.');
-      return;
-    }
-
-    const partes   = expiry.split('/');
-    const expMonth = (partes[0] || '').trim();
-    const expYear  = '20' + (partes[1] || '').trim();
-
-    if (typeof PagSeguro === 'undefined' || typeof PagSeguro.encryptCard !== 'function') {
-      mostrarErroCartao('SDK de pagamento não carregou. Recarregue a página e tente novamente.');
-      return;
-    }
-
-    try {
-      const { hasErrors, errors, encryptedCard } = PagSeguro.encryptCard({
-        publicKey:    '{{ pagseguro_public_key|escapejs }}',
-        holder,
-        number,
-        expMonth,
-        expYear,
-        securityCode: cvv,
-      });
-
-      if (hasErrors) {
-        const msgs = {
-          'INVALID_NUMBER':           'Número do cartão inválido.',
-          'INVALID_SECURITY_CODE':    'CVV inválido.',
-          'INVALID_EXPIRATION_MONTH': 'Mês de validade inválido.',
-          'INVALID_EXPIRATION_YEAR':  'Ano de validade inválido.',
-          'INVALID_PUBLIC_KEY':       'Erro de configuração do gateway. Tente mais tarde.',
-        };
-        const msg = (errors || []).map(c => msgs[c] || c).join(' ');
-        mostrarErroCartao(msg || 'Dados do cartão inválidos.');
-        return;
-      }
-
-      document.getElementById('pagseguro-card-encrypted').value = encryptedCard;
-      this.submit();  // submit real, não dispara este listener novamente
-
-    } catch (err) {
-      console.error('PagSeguro.encryptCard error:', err);
-      mostrarErroCartao('Erro ao encriptar cartão: ' + (err?.message || String(err)));
-    }
-  });
-
-  // ── Quantidade no resumo (AJAX) ────────────────────────────────────────
-  document.querySelectorAll('.resumo-item').forEach(itemEl => {
-    const chave = itemEl.dataset.chave;
-    const qtyEl = itemEl.querySelector('.resumo-qty-valor');
-    const subtotalEl = itemEl.querySelector('.resumo-item-subtotal');
-
-    itemEl.querySelectorAll('.resumo-qty-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const acao  = btn.dataset.acao;
-        const atual = parseInt(qtyEl.textContent) || 1;
-        const nova  = acao === 'mais' ? atual + 1 : acao === 'remover' ? 0 : atual - 1;
-
-        const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-        try {
-          const res  = await fetch('/carrinho/atualizar/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-            body: JSON.stringify({ chave, quantidade: nova }),
-          });
-          const dados = await res.json();
-          if (dados.status !== 'ok') return;
-
-          if (nova <= 0) {
-            itemEl.remove();
-          } else {
-            qtyEl.textContent = nova;
-          }
-
-          // Atualiza subtotal do item
-          const itemDados = (dados.itens || []).find(i => i.chave === chave);
-          if (itemDados && subtotalEl) {
-            subtotalEl.textContent = parseFloat(itemDados.subtotal).toFixed(2).replace('.', ',');
-          }
-
-          // Atualiza subtotal e total do resumo
-          const novoSubtotal = parseFloat(dados.total_valor) || 0;
-          SUBTOTAL = novoSubtotal;          // atualiza let local usada por atualizarResumoTotal()
-          window.SUBTOTAL = novoSubtotal;   // atualiza global usada por parcelas.js
-
-          const subtotalResumo = document.getElementById('resumo-subtotal-valor');
-          if (subtotalResumo) subtotalResumo.textContent = 'R$ ' + novoSubtotal.toFixed(2).replace('.', ',');
-
-          // Recalcula total via função central (lê id_valor_frete e descontoAtual)
-          atualizarResumoTotal();
-
-          // Atualiza badge do carrinho na navbar
-          const badge = document.querySelector('.badge-carrinho');
-          if (badge) badge.textContent = dados.total_itens;
-
-          // Re-calcula parcelas se cartão ativo
-          if (window._atualizarParcelasCheckout) window._atualizarParcelasCheckout();
-        } catch (e) {}
-      });
-    });
-  });
-
-  // Se houver erros do servidor, reabrir na etapa 1
-  {% if form.errors %}
-    irParaEtapa(1);
-  {% endif %}
-
-  // Mensagens de erro do servidor no topo visível
-  {% if messages %}
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  {% endif %}
-
-})();
-</script>
-
-{% load static %}
+<script src="{% static 'js/checkout-index.js' %}"></script>
 {% if pagseguro_public_key and not pagamentos_temporariamente_indisponiveis %}
 <script src="{% static 'js/parcelas.js' %}"></script>
-<script>
-// Popula o select de parcelas assim que o total (com frete) for conhecido
-(function() {
-  var selectParcelas = document.getElementById('id_parcelas');
-
-  function atualizarParcelas() {
-    var total = parseFloat(document.getElementById('id_valor_frete')?.value || '0') || 0;
-    total = Math.max(0, SUBTOTAL - (window._descontoAtualCheckout || 0) + total);
-    DellaParcelas.gerarParcelas(selectParcelas, total, selectParcelas?.value || '1');
-  }
-
-  // Quando o frete for selecionado, recalcula as parcelas
-  var freteInput = document.getElementById('id_valor_frete');
-  if (freteInput) {
-    var obs = new MutationObserver(atualizarParcelas);
-    obs.observe(freteInput, { attributes: true, attributeFilter: ['value'] });
-    freteInput.addEventListener('change', atualizarParcelas);
-  }
-
-  // Quando a aba cartão abrir, garante que as parcelas estão corretas
-  document.querySelectorAll('.pagamento-tab').forEach(function(tab) {
-    tab.addEventListener('click', function() {
-      if (tab.dataset.tab === 'cartao') setTimeout(atualizarParcelas, 50);
-    });
-  });
-
-  // Expõe para o código de cupom atualizar o total das parcelas
-  window._atualizarParcelasCheckout = atualizarParcelas;
-})();
-</script>
 {% endif %}
 {% endblock %}
