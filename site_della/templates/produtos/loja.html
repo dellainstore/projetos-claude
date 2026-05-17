@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static della_filters %}
 
 {% block titulo %}
-  {% if categoria_ativa %}{{ categoria_ativa.nome }} — Della Instore{% else %}Loja — Della Instore{% endif %}
+  {% if categoria_ativa %}{{ categoria_ativa.nome }} | D'ELLA Instore{% else %}Loja | D'ELLA Instore{% endif %}
 {% endblock %}
 
 {% block meta_descricao %}
@@ -125,7 +125,7 @@
 
           <label class="sr-only" for="select-ordem">Ordenar por</label>
           <select name="ordem" id="select-ordem" class="ordem-select"
-                  onchange="document.getElementById('form-ordem').submit()">
+                  data-auto-submit-form="form-ordem">
             <option value="relevancia" {% if ordem == 'relevancia' %}selected{% endif %}>Relevância</option>
             <option value="novidades"  {% if ordem == 'novidades'  %}selected{% endif %}>Novidades</option>
             <option value="menor_preco" {% if ordem == 'menor_preco' %}selected{% endif %}>Menor preço</option>
@@ -146,18 +146,18 @@
                 {% if img %}
                   <img src="{{ img.imagem.url }}"
                        alt="{{ img.alt|default:produto.nome }}"
-                       loading="lazy" class="foto-principal">
-                  
-                  {% with imgs=produto.imagens.all %}
-                    {% if imgs|length > 1 %}
-                      <img src="{{ imgs.1.imagem.url }}"
+                       width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
+
+                  {% with img_hover=produto.imagem_hover %}
+                    {% if img_hover %}
+                      <img src="{{ img_hover.imagem.url }}"
                            alt="{{ produto.nome }}"
-                           loading="lazy" class="foto-hover">
+                           width="600" height="800" loading="lazy" decoding="async" class="foto-hover">
                     {% endif %}
                   {% endwith %}
                 {% else %}
                   <img src="{% static 'images/brand/produto-placeholder.jpg' %}"
-                       alt="{{ produto.nome }}" class="foto-principal">
+                       alt="{{ produto.nome }}" width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
                 {% endif %}
               {% endwith %}
 
@@ -173,10 +173,10 @@
             <a href="{{ produto.get_absolute_url }}" class="produto-card-nome">{{ produto.nome }}</a>
             <div class="produto-card-preco">
               {% if produto.em_promocao %}
-                <span class="preco-de">R$ {{ produto.preco_base_exibicao|floatformat:"2g" }}</span>
-                <span class="preco-por">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
+                <span class="preco-de">R$ {{ produto.preco_base_exibicao|brl_price }}</span>
+                <span class="preco-por">R$ {{ produto.preco_atual|brl_price }}</span>
               {% else %}
-                <span class="preco-por">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
+                <span class="preco-por">R$ {{ produto.preco_atual|brl_price }}</span>
               {% endif %}
             </div>
             {% if produto.parcelamento_texto %}
@@ -244,14 +244,5 @@
 {% endblock %}
 
 {% block js_extra %}
-<script>
-  // Filtros mobile: toggle sidebar
-  const btnFiltrosMobile = document.getElementById('btn-filtros-mobile');
-  const sidebar = document.getElementById('loja-sidebar');
-
-  btnFiltrosMobile?.addEventListener('click', () => {
-    const aberto = sidebar.classList.toggle('aberta');
-    btnFiltrosMobile.setAttribute('aria-expanded', aberto);
-  });
-</script>
+<script src="{% static 'js/produtos-loja.js' %}"></script>
 {% endblock %}

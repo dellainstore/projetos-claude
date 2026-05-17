@@ -4,12 +4,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>D'ELLA Instore — Em breve</title>
+  <title>D'ELLA Instore | Em breve</title>
   <meta name="facebook-domain-verification" content="sh7orcu6j8difu9pudh8i15u064ijc" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400&display=swap" rel="stylesheet">
+  <link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/jost/jost-variable.woff2' %}" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/playfair-display/playfair-display-variable.woff2' %}" crossorigin>
   <style>
+    @font-face {
+      font-family: 'Jost';
+      font-style: normal;
+      font-weight: 300 600;
+      font-display: swap;
+      src: url('{% static "fonts/jost/jost-variable.woff2" %}') format('woff2-variations'),
+           url('{% static "fonts/jost/jost-variable.woff2" %}') format('woff2');
+    }
+    @font-face {
+      font-family: 'Playfair Display';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url('{% static "fonts/playfair-display/playfair-display-variable.woff2" %}') format('woff2-variations'),
+           url('{% static "fonts/playfair-display/playfair-display-variable.woff2" %}') format('woff2');
+    }
+    @font-face {
+      font-family: 'Playfair Display';
+      font-style: italic;
+      font-weight: 400 500;
+      font-display: swap;
+      src: url('{% static "fonts/playfair-display/playfair-display-italic-variable.woff2" %}') format('woff2-variations'),
+           url('{% static "fonts/playfair-display/playfair-display-italic-variable.woff2" %}') format('woff2');
+    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
@@ -76,6 +99,23 @@
       color: #c9a96e;
       text-decoration: none;
     }
+
+    .staff-access {
+      position: fixed;
+      bottom: 1rem;
+      right: 1.5rem;
+    }
+
+    .staff-access a {
+      font-size: 0.65rem;
+      color: #222;
+      text-decoration: none;
+      letter-spacing: 0.04em;
+    }
+
+    .staff-access a:hover {
+      color: #555;
+    }
   </style>
 </head>
 <body>
@@ -91,6 +131,10 @@
   <div class="contact">
     Dúvidas? Entre em contato pelo
     <a href="https://wa.me/5511988879928">WhatsApp</a>
+  </div>
+
+  <div class="staff-access">
+    <a href="/painel/">acesso restrito</a>
   </div>
 
 </body>

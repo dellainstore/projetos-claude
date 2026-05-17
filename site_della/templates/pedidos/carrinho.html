@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static della_filters %}
 
-{% block titulo %}Carrinho — Della Instore{% endblock %}
+{% block titulo %}Carrinho | D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
 {% block conteudo %}
@@ -22,7 +22,7 @@
 
         <div class="carrinho-item-foto">
           {% if item.imagem %}
-            <img src="{{ item.imagem }}" alt="{{ item.nome }}" loading="lazy">
+            <img src="{{ item.imagem }}" alt="{{ item.nome }}" width="80" height="80" loading="lazy" decoding="async">
           {% else %}
             <div class="carrinho-item-sem-foto"></div>
           {% endif %}
@@ -33,7 +33,7 @@
           {% if item.variacao_desc %}
             <p class="carrinho-item-variacao">{{ item.variacao_desc }}</p>
           {% endif %}
-          <p class="carrinho-item-preco-unit">R$ {{ item.preco_decimal|floatformat:"2g" }} cada</p>
+          <p class="carrinho-item-preco-unit">R$ {{ item.preco_decimal|brl_price }} cada</p>
         </div>
 
         <div class="carrinho-item-qty">
@@ -49,7 +49,7 @@
         </div>
 
         <p class="carrinho-item-subtotal" id="sub-{{ item.chave }}">
-          R$ {{ item.subtotal|floatformat:"2g" }}
+          R$ {{ item.subtotal|brl_price }}
         </p>
 
         <button class="carrinho-item-remover"
@@ -68,7 +68,7 @@
 
       <div class="carrinho-resumo-linha">
         <span>Subtotal (<span id="resumo-qtd">{{ carrinho|length }}</span> ite{{ carrinho|length|pluralize:"m,ns" }})</span>
-        <span id="resumo-subtotal">R$ {{ total|floatformat:"2g" }}</span>
+        <span id="resumo-subtotal">R$ {{ total|brl_price }}</span>
       </div>
 
       <div class="carrinho-resumo-linha">
@@ -78,7 +78,7 @@
 
       <div class="carrinho-resumo-total">
         <span>Total</span>
-        <span id="resumo-total">R$ {{ total|floatformat:"2g" }}</span>
+        <span id="resumo-total">R$ {{ total|brl_price }}</span>
       </div>
 
       <a href="{% url 'pedidos:checkout' %}" class="btn-primario btn-finalizar w-full justify-center">
@@ -93,6 +93,13 @@
         <span><i class="fas fa-lock"></i> Compra segura</span>
         <span><i class="fas fa-shield-alt"></i> Dados protegidos</span>
       </div>
+
+      {% if request.user.is_authenticated %}
+      <p style="font-size:0.72rem;color:#aaa;text-align:center;margin-top:0.75rem;line-height:1.4;">
+        Se você não finalizar a compra, poderemos enviar um lembrete por e-mail.
+        <a href="{% url 'produtos:politica_privacidade' %}" style="color:#aaa;text-decoration:underline;">Política de privacidade</a>.
+      </p>
+      {% endif %}
     </aside>
 
   </div>
@@ -113,102 +120,5 @@
 {% endblock %}
 
 {% block js_extra %}
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-
-  // ── Botões +/- de quantidade ───────────────────────────────────────────
-  document.querySelectorAll('.carrinho-qty-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const chave = btn.dataset.chave;
-      const acao  = btn.dataset.acao;
-      const qtyEl = document.getElementById(`qty-${chave}`);
-      let qty     = parseInt(qtyEl?.textContent || 1);
-
-      if (acao === 'diminuir') qty -= 1;
-      else qty += 1;
-
-      if (qty < 1) {
-        await removerItem(chave);
-        return;
-      }
-
-      try {
-        const res   = await fetch('/carrinho/atualizar/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify({ chave, quantidade: qty }),
-        });
-        const dados = await res.json();
-        if (dados.status === 'ok') atualizarPagina(dados, chave, qty);
-      } catch (e) {}
-    });
-  });
-
-  // ── Botões remover ─────────────────────────────────────────────────────
-  document.querySelectorAll('.carrinho-item-remover').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const chave = btn.dataset.chave;
-      await removerItem(chave);
-    });
-  });
-
-  async function removerItem(chave) {
-    try {
-      const res   = await fetch(`/carrinho/remover/${chave}/`, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrfToken },
-      });
-      const dados = await res.json();
-      if (dados.status === 'ok') {
-        // Remove visualmente
-        const itemEl = document.getElementById(`item-${chave}`);
-        itemEl?.remove();
-        atualizarResumo(dados);
-
-        // Se vazio, recarrega para mostrar estado vazio
-        if (dados.total_itens === 0) location.reload();
-      }
-    } catch (e) {}
-  }
-
-  function atualizarPagina(dados, chave, novaQty) {
-    // Atualiza qty exibida
-    const qtyEl = document.getElementById(`qty-${chave}`);
-    if (qtyEl) qtyEl.textContent = novaQty;
-
-    // Recalcula subtotal do item (busca o preço unitário)
-    const itemEl = document.getElementById(`item-${chave}`);
-    const precoUnitText = itemEl?.querySelector('.carrinho-item-preco-unit')?.textContent || '';
-    const precoUnit = parseFloat(precoUnitText.replace('R$', '').replace(',', '.').trim());
-    const subEl = document.getElementById(`sub-${chave}`);
-    if (subEl && !isNaN(precoUnit)) {
-      subEl.textContent = 'R$ ' + (precoUnit * novaQty).toFixed(2).replace('.', ',');
-    }
-
-    atualizarResumo(dados);
-  }
-
-  function atualizarResumo(dados) {
-    // Badge navbar
-    const badge = document.querySelector('.badge-carrinho');
-    if (badge) badge.textContent = dados.total_itens;
-
-    // Resumo lateral
-    const resumoQtd      = document.getElementById('resumo-qtd');
-    const resumoSubtotal = document.getElementById('resumo-subtotal');
-    const resumoTotal    = document.getElementById('resumo-total');
-    const total = parseFloat(dados.total_valor);
-    const totalFmt = 'R$ ' + total.toFixed(2).replace('.', ',');
-
-    if (resumoQtd) resumoQtd.textContent = dados.total_itens;
-    if (resumoSubtotal) resumoSubtotal.textContent = totalFmt;
-    if (resumoTotal) resumoTotal.textContent = totalFmt;
-
-    // Drawer
-    const drawerTotal = document.querySelector('.drawer-total-valor');
-    if (drawerTotal) drawerTotal.textContent = totalFmt;
-  }
-});
-</script>
+<script src="{% static 'js/pedidos-carrinho.js' %}"></script>
 {% endblock %}

@@ -1,7 +1,7 @@
 {% extends "admin/base.html" %}
 {% load i18n static %}
 
-{% block title %}{{ title }} | D'ELLA Instore — Painel{% endblock %}
+{% block title %}{{ title }} | D'ELLA Instore | Painel{% endblock %}
 
 {# Remove Django's dark_mode.css entirely — forçamos tema claro via della_admin.css #}
 {% block dark-mode-vars %}{% endblock %}
@@ -18,26 +18,39 @@
 
 {% block extrahead %}
 {{ block.super }}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="{% static 'images/brand/favicon.png' %}">
+<link rel="apple-touch-icon" href="{% static 'images/brand/favicon.png' %}">
+<style>
+@font-face {
+  font-family: 'Jost';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('{% static "fonts/jost/jost-variable.woff2" %}') format('woff2-variations'),
+       url('{% static "fonts/jost/jost-variable.woff2" %}') format('woff2');
+}
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('{% static "fonts/playfair-display/playfair-display-variable.woff2" %}') format('woff2-variations'),
+       url('{% static "fonts/playfair-display/playfair-display-variable.woff2" %}') format('woff2');
+}
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: italic;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('{% static "fonts/playfair-display/playfair-display-italic-variable.woff2" %}') format('woff2-variations'),
+       url('{% static "fonts/playfair-display/playfair-display-italic-variable.woff2" %}') format('woff2');
+}
+</style>
 <link rel="stylesheet" href="{% static 'admin/css/della_admin.css' %}">
-<script>
-// Persiste scroll do menu lateral em TODAS as páginas do admin
-(function(){
-  var KEY = 'admin_sidebar_scroll';
-  function restore(){
-    var nav = document.getElementById('nav-sidebar');
-    if (!nav) return;
-    var saved = sessionStorage.getItem(KEY);
-    if (saved) nav.scrollTop = parseInt(saved, 10);
-    nav.querySelectorAll('a').forEach(function(a){
-      a.addEventListener('click', function(){ sessionStorage.setItem(KEY, nav.scrollTop); });
-    });
-    window.addEventListener('beforeunload', function(){ sessionStorage.setItem(KEY, nav.scrollTop); });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restore);
-  else restore();
-})();
-</script>
+<script src="{% static 'admin/js/admin_inline_replacements.js' %}" defer></script>
+<style>
+/* Garante título sempre acima dos botões — override inline tem prioridade máxima */
+ul.object-tools { float: none !important; margin-top: 0.5rem !important; margin-bottom: 1.25rem !important; clear: both !important; }
+ul.object-tools li { float: none !important; height: auto !important; margin-left: 0 !important; }
+</style>
 {% endblock %}

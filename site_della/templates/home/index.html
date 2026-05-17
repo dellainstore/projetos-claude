@@ -1,11 +1,12 @@
 {% extends 'base.html' %}
-{% load static l10n %}
+{% load static l10n della_filters %}
 
-{% block titulo %}D'ELLA Instore — Moda Feminina Premium{% endblock %}
+{% block titulo %}D'ELLA Instore | Body Feminino, porque ser única nunca sai de moda{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
 {% block conteudo %}
 
+<h1 class="sr-only">D'ELLA Instore | Body Feminino, porque ser única nunca sai de moda</h1>
 
 <section class="hero" id="hero-slider" aria-label="Banner principal">
 
@@ -20,6 +21,7 @@
         <video class="hero-video" autoplay muted playsinline
                {% if banner.poster %}poster="{{ banner.poster.url }}"{% endif %}
                {% if banner.video_mobile %}data-src-mobile="{{ banner.video_mobile.url }}"{% endif %}
+               {% if forloop.first %}preload="auto"{% else %}preload="none"{% endif %}
                aria-hidden="true">
           <source src="{{ banner.video.url }}" type="video/mp4">
         </video>
@@ -29,7 +31,9 @@
             <source media="(max-width: 767px)" srcset="{{ banner.foto_mobile.url }}">
           {% endif %}
           <img src="{{ banner.foto.url }}" alt=""
-               class="hero-foto" loading="eager" aria-hidden="true">
+               class="hero-foto" width="1920" height="1080"
+               {% if forloop.first %}loading="eager" fetchpriority="high" decoding="async"{% else %}loading="lazy" decoding="async"{% endif %}
+               aria-hidden="true">
         </picture>
       {% endif %}
     </div>
@@ -82,7 +86,7 @@
   <div class="secao" style="padding-top: 2rem;">
     <header class="secao-header fade-in">
       <p class="subtitulo-secao">Seleção</p>
-      <h2 class="titulo-secao" id="titulo-destaque">Destaques da Semana</h2>
+      <h2 class="titulo-secao" id="titulo-destaque">Destaques</h2>
       <p>Peças exclusivas que unem conforto, estilo e sofisticação.</p>
     </header>
 
@@ -109,17 +113,17 @@
               {% with produto.imagem_principal as img %}
                 {% if img %}
                   <img src="{{ img.imagem.url }}" alt="{{ img.alt|default:produto.nome }}"
-                       class="foto-principal" loading="lazy">
+                       class="foto-principal" width="600" height="800" loading="lazy" decoding="async">
                 {% else %}
                   <img src="{% static 'images/brand/produto-placeholder.jpg' %}" alt="{{ produto.nome }}"
-                       class="foto-principal" loading="lazy">
+                       class="foto-principal" width="600" height="800" loading="lazy" decoding="async">
                 {% endif %}
               {% endwith %}
 
               {% with produto.imagem_hover as img_hover %}
                 {% if img_hover %}
                   <img src="{{ img_hover.imagem.url }}" alt="{{ produto.nome }} — foto alternativa"
-                       class="foto-hover" loading="lazy" aria-hidden="true">
+                       class="foto-hover" width="600" height="800" loading="lazy" decoding="async" aria-hidden="true">
                 {% endif %}
               {% endwith %}
 
@@ -145,9 +149,9 @@
               <a href="{{ produto.get_absolute_url }}">{{ produto.nome }}</a>
             </h3>
             <div class="produto-preco">
-              <span class="preco-atual">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
+              <span class="preco-atual">R$ {{ produto.preco_atual|brl_price }}</span>
               {% if produto.em_promocao %}
-                <span class="preco-original">R$ {{ produto.preco_base_exibicao|floatformat:"2g" }}</span>
+                <span class="preco-original">R$ {{ produto.preco_base_exibicao|brl_price }}</span>
               {% endif %}
             </div>
             {% if produto.parcelamento_texto %}
@@ -181,7 +185,7 @@
     {% for mb in mini_banners %}
     <a href="{{ mb.url }}" class="mini-banner fade-in {% if not forloop.first %}fade-in-delay-1{% endif %}"
        aria-label="Ver coleção">
-      <img src="{{ mb.foto.url }}" alt="" class="mini-banner-foto" loading="lazy">
+      <img src="{{ mb.foto.url }}" alt="" class="mini-banner-foto" width="600" height="800" loading="lazy" decoding="async">
     </a>
     {% endfor %}
   </div>
@@ -196,9 +200,9 @@
     <div class="look-foto-outer">
       <div class="look-foto fade-in">
         {% if look_obj and look_obj.foto %}
-          <img src="{{ look_obj.foto.url }}" alt="{{ look_obj.titulo }} — Della Instore" loading="lazy">
+          <img src="{{ look_obj.foto.url }}" alt="{{ look_obj.titulo }} | D'ELLA Instore" width="800" height="1000" loading="lazy" decoding="async">
         {% else %}
-          <img src="{% static 'images/brand/look-semana.jpg' %}" alt="Look da semana Della Instore" loading="lazy">
+          <img src="{% static 'images/brand/look-semana.jpg' %}" alt="Look da semana Della Instore" width="800" height="1000" loading="lazy" decoding="async">
         {% endif %}
       </div>
 
@@ -209,7 +213,7 @@
              aria-label="{{ look_obj.produto_ponto1.nome }}">
             <div class="look-ponto-tooltip">
               <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto1.nome }}</p>
-              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto1.preco_atual|floatformat:"2g" }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto1.preco_atual|brl_price }}</p>
             </div>
           </a>
         {% endif %}
@@ -219,7 +223,7 @@
              aria-label="{{ look_obj.produto_ponto2.nome }}">
             <div class="look-ponto-tooltip">
               <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto2.nome }}</p>
-              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto2.preco_atual|floatformat:"2g" }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto2.preco_atual|brl_price }}</p>
             </div>
           </a>
         {% endif %}
@@ -229,7 +233,7 @@
              aria-label="{{ look_obj.produto_ponto3.nome }}">
             <div class="look-ponto-tooltip">
               <p style="font-size:0.75rem;font-weight:500;">{{ look_obj.produto_ponto3.nome }}</p>
-              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto3.preco_atual|floatformat:"2g" }}</p>
+              <p style="font-size:0.8rem;color:var(--dourado);">R$ {{ look_obj.produto_ponto3.preco_atual|brl_price }}</p>
             </div>
           </a>
         {% endif %}
@@ -251,13 +255,13 @@
           {% for produto, foto in look_items %}
             <li class="look-produto-item">
               {% if foto %}
-                <img src="{{ foto.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb">
+                <img src="{{ foto.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb" width="80" height="80" loading="lazy" decoding="async">
               {% elif produto.imagem_principal %}
-                <img src="{{ produto.imagem_principal.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb">
+                <img src="{{ produto.imagem_principal.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb" width="80" height="80" loading="lazy" decoding="async">
               {% endif %}
               <div style="flex:1">
                 <p style="font-family:var(--fonte-titulo);font-size:0.95rem;margin-bottom:0.2rem;">{{ produto.nome }}</p>
-                <p style="font-size:0.85rem;font-weight:500;">R$ {{ produto.preco_atual|floatformat:"2g" }}</p>
+                <p style="font-size:0.85rem;font-weight:500;">R$ {{ produto.preco_atual|brl_price }}</p>
                 {% if produto.parcelamento_texto %}<p style="font-size:0.72rem;color:var(--cinza-texto);">{{ produto.parcelamento_texto }}</p>{% endif %}
               </div>
               <a href="{{ produto.get_absolute_url }}" class="btn-primario" style="padding:0.6rem 1.2rem;font-size:0.65rem;">
@@ -269,7 +273,7 @@
       {% else %}
         <ul class="look-produtos-lista">
           <li class="look-produto-item">
-            <img src="{% static 'images/brand/produto-placeholder.jpg' %}" alt="Produto" class="look-produto-thumb">
+            <img src="{% static 'images/brand/produto-placeholder.jpg' %}" alt="Produto" class="look-produto-thumb" width="80" height="80" loading="lazy" decoding="async">
             <div style="flex:1">
               <p style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--cinza-texto);margin-bottom:0.2rem;">Body</p>
               <p style="font-family:var(--fonte-titulo);font-size:1rem;margin-bottom:0.3rem;">Body Rendado Preto</p>
@@ -359,7 +363,7 @@
       {% for post in instagram_posts %}
         <a href="{{ post.permalink }}" target="_blank" rel="noopener noreferrer"
            class="instagram-item" aria-label="Ver post no Instagram">
-          <img src="{{ post.imagem_url }}" alt="Post Della Instore no Instagram" loading="lazy">
+          <img src="{{ post.imagem_url }}" alt="Post Della Instore no Instagram" width="600" height="600" loading="lazy" decoding="async">
           <div class="instagram-overlay" aria-hidden="true">
             <i class="fab fa-instagram"></i>
           </div>
@@ -401,7 +405,7 @@
     </header>
 
     <form id="form-newsletter" class="newsletter-form fade-in fade-in-delay-1"
-          novalidate aria-label="Inscrição na newsletter">
+          method="post" novalidate aria-label="Inscrição na newsletter">
       {% csrf_token %}
       <label for="newsletter-email" class="sr-only">Seu e-mail</label>
       <input type="email" id="newsletter-email" name="email"
@@ -414,9 +418,17 @@
       <button type="submit" class="newsletter-btn">Inscrever-se</button>
     </form>
 
-    <p id="newsletter-aviso" class="newsletter-aviso fade-in fade-in-delay-2">
-      Ao se inscrever você concorda com nossa
-      <a href="{% url 'produtos:politica_privacidade' %}" style="text-decoration:underline;">política de privacidade</a>.
+    <label class="newsletter-optin fade-in fade-in-delay-2">
+      <input type="checkbox" id="newsletter-optin" form="form-newsletter">
+      <span>Quero receber novidades e promoções da D'ELLA por e-mail. Consulte nossa
+        <a href="{% url 'produtos:politica_privacidade' %}" target="_blank">política de privacidade</a>.
+      </span>
+    </label>
+    <p id="newsletter-optin-erro" role="alert" aria-live="polite" style="display:none;color:#c0392b;font-size:0.82rem;margin:0.25rem 0 0;text-align:left;">
+      <i class="fas fa-exclamation-circle" aria-hidden="true"></i> Por favor, aceite os termos para continuar.
+    </p>
+
+    <p id="newsletter-aviso" class="newsletter-aviso fade-in fade-in-delay-2" style="margin-top:0.25rem;">
       Sem spam, apenas o melhor da moda.
     </p>
   </div>

@@ -1,14 +1,134 @@
 {% extends 'base.html' %}
-{% load static l10n %}
+{% load static l10n safe_html della_filters %}
 
-{% block titulo %}{{ produto.nome }} — Della Instore{% endblock %}
-{% block meta_descricao %}{{ produto.descricao|truncatewords:25 }}{% endblock %}
-{% block og_titulo %}{{ produto.nome }} — Della Instore{% endblock %}
-{% block og_descricao %}{{ produto.descricao|truncatewords:20 }}{% endblock %}
-{% block og_imagem %}
+{% block titulo %}{{ produto.nome }} | D'ELLA Instore{% endblock %}
+{% block meta_descricao %}{{ produto.descricao|striptags|truncatewords:25 }}{% endblock %}
+{% block og_titulo %}{{ produto.nome }} | D'ELLA Instore{% endblock %}
+{% block og_descricao %}{{ produto.descricao|striptags|truncatewords:20 }}{% endblock %}
+{% block og_imagem %}{% spaceless %}
   {% with img=produto.imagem_principal %}
-    {% if img %}{{ request.scheme }}://{{ request.get_host }}{{ img.imagem.url }}{% else %}{% static 'images/brand/og-default.jpg' %}{% endif %}
+    {% if img %}{{ request.scheme }}://{{ request.get_host }}{{ img.imagem.url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/brand/og-default.jpg' %}{% endif %}
   {% endwith %}
+{% endspaceless %}{% endblock %}
+{% block og_type %}product{% endblock %}
+{% block og_imagem_alt %}{{ produto.nome }} | D'ELLA Instore{% endblock %}
+{% block twitter_titulo %}{{ produto.nome }} | D'ELLA Instore{% endblock %}
+{% block twitter_descricao %}{{ produto.descricao|striptags|truncatewords:20 }}{% endblock %}
+{% block twitter_imagem %}{% spaceless %}
+  {% with img=produto.imagem_principal %}
+    {% if img %}{{ request.scheme }}://{{ request.get_host }}{{ img.imagem.url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/brand/og-default.jpg' %}{% endif %}
+  {% endwith %}
+{% endspaceless %}{% endblock %}
+
+{% block schema_extra %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "{{ produto.nome|escapejs }}",
+  "@id": "{{ request.scheme }}://{{ request.get_host }}{{ produto.get_absolute_url }}#product",
+  "url": "{{ request.scheme }}://{{ request.get_host }}{{ produto.get_absolute_url }}",
+  "description": "{{ produto.descricao|striptags|truncatewords:40|escapejs }}",
+  "image": [
+    {% for img in produto.imagens.all|slice:":4" %}
+      "{{ request.scheme }}://{{ request.get_host }}{{ img.imagem.url }}"{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ],
+  "sku": "{{ produto.sku|default:produto.pk|escapejs }}",
+  "brand": {
+    "@type": "Brand",
+    "name": "D'ELLA Instore"
+  },
+  "category": "{{ produto.categoria.nome|escapejs }}",
+  "offers": {
+    "@type": "Offer",
+    "url": "{{ request.scheme }}://{{ request.get_host }}{{ produto.get_absolute_url }}",
+    "priceCurrency": "BRL",
+    "price": "{{ produto.preco_atual|unlocalize }}",
+    "availability": "https://schema.org/InStock",
+    "itemCondition": "https://schema.org/NewCondition",
+    "seller": {
+      "@type": "Organization",
+      "name": "D'ELLA Instore"
+    }
+  }{% if total_aval > 0 %},
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "{{ media_notas|floatformat:1|unlocalize }}",
+    "reviewCount": "{{ total_aval }}",
+    "bestRating": "5",
+    "worstRating": "1"
+  },
+  "review": [
+    {% for av in avaliacoes|slice:":5" %}
+    {
+      "@type": "Review",
+      "author": {"@type": "Person", "name": "{{ av.nome_publico|escapejs }}"},
+      "datePublished": "{{ av.criada_em|date:'Y-m-d' }}",
+      "reviewRating": {
+        "@type": "Rating",
+        "ratingValue": "{{ av.nota }}",
+        "bestRating": "5",
+        "worstRating": "1"
+      }{% if av.comentario %},
+      "reviewBody": "{{ av.comentario|escapejs }}"{% endif %}{% if av.titulo %},
+      "name": "{{ av.titulo|escapejs }}"{% endif %}
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ]{% endif %}
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Início",
+      "item": "{{ request.scheme }}://{{ request.get_host }}/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Loja",
+      "item": "{{ request.scheme }}://{{ request.get_host }}{% url 'produtos:loja' %}"
+    }{% if produto.categoria.parent %},
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "{{ produto.categoria.parent.nome|escapejs }}",
+      "item": "{{ request.scheme }}://{{ request.get_host }}{{ produto.categoria.parent.get_absolute_url }}"
+    },
+    {
+      "@type": "ListItem",
+      "position": 4,
+      "name": "{{ produto.categoria.nome|escapejs }}",
+      "item": "{{ request.scheme }}://{{ request.get_host }}{{ produto.categoria.get_absolute_url }}"
+    },
+    {
+      "@type": "ListItem",
+      "position": 5,
+      "name": "{{ produto.nome|escapejs }}",
+      "item": "{{ request.scheme }}://{{ request.get_host }}{{ produto.get_absolute_url }}"
+    }{% else %},
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "{{ produto.categoria.nome|escapejs }}",
+      "item": "{{ request.scheme }}://{{ request.get_host }}{{ produto.categoria.get_absolute_url }}"
+    },
+    {
+      "@type": "ListItem",
+      "position": 4,
+      "name": "{{ produto.nome|escapejs }}",
+      "item": "{{ request.scheme }}://{{ request.get_host }}{{ produto.get_absolute_url }}"
+    }{% endif %}
+  ]
+}
+</script>
 {% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 
@@ -26,7 +146,9 @@
           <img id="foto-principal"
                src="{% if img %}{{ img.imagem.url }}{% else %}{% static 'images/brand/produto-placeholder.jpg' %}{% endif %}"
                alt="{{ img.alt|default:produto.nome }}"
-               class="galeria-foto-principal">
+               class="galeria-foto-principal"
+               width="1200" height="1500"
+               fetchpriority="high" decoding="async">
         {% endwith %}
 
         {% if produto.em_promocao %}
@@ -52,7 +174,7 @@
                 data-alt="{{ img.alt }}"
                 role="listitem"
                 aria-label="Foto {{ forloop.counter }}">
-          <img src="{{ img.src }}" alt="{{ img.alt }}" loading="lazy">
+          <img src="{{ img.src }}" alt="{{ img.alt }}" width="72" height="88" loading="lazy" decoding="async">
         </button>
         {% endfor %}
       </div>
@@ -80,10 +202,10 @@
       
       <div class="produto-info-preco">
         {% if produto.em_promocao %}
-          <span class="preco-de" id="produto-preco-de">R$ {{ produto.preco_base_exibicao|floatformat:"2g" }}</span>
-          <span class="preco-por destaque" id="produto-preco-por">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
+          <span class="preco-de" id="produto-preco-de">R$ {{ produto.preco_base_exibicao|brl_price }}</span>
+          <span class="preco-por destaque" id="produto-preco-por">R$ {{ produto.preco_atual|brl_price }}</span>
         {% else %}
-          <span class="preco-por destaque" id="produto-preco-por">R$ {{ produto.preco_atual|floatformat:"2g" }}</span>
+          <span class="preco-por destaque" id="produto-preco-por">R$ {{ produto.preco_atual|brl_price }}</span>
         {% endif %}
         <span class="preco-parcelamento" id="produto-parcelamento"{% if not produto.parcelamento_texto %} style="display:none;"{% endif %}>{{ produto.parcelamento_texto }}</span>
         {% if not produto.em_promocao %}
@@ -107,13 +229,12 @@
           <button class="variacao-cor {% if vcor.cor__codigo_hex_secundario %}bicolor{% endif %}{% if cor_inicial_id and cor_inicial_id == vcor.cor__id|stringformat:'s' %} selecionado{% endif %}"
                   data-cor="{{ vcor.cor__nome }}"
                   data-cor-id="{{ vcor.cor__id }}"
-                  {% if vcor.cor__codigo_hex_secundario %}
-                  style="background-color:{{ vcor.cor__codigo_hex|default:'#ccc' }};background-image:conic-gradient(from 135deg, {{ vcor.cor__codigo_hex|default:'#ccc' }} 0deg 180deg, {{ vcor.cor__codigo_hex_secundario }} 180deg 360deg);"
-                  {% else %}
-                  style="background-color:{% if vcor.cor__codigo_hex %}{{ vcor.cor__codigo_hex }}{% else %}#ccc{% endif %};"
-                  {% endif %}
+                  style="background-color:{{ vcor.cor__codigo_hex|default:'#ccc' }};"
                   title="{{ vcor.cor__nome }}"
                   aria-label="{{ vcor.cor__nome }}">
+            {% if vcor.cor__codigo_hex_secundario %}
+            <span aria-hidden="true" style="background-color:{{ vcor.cor__codigo_hex|default:'#ccc' }};background-image:conic-gradient(from 135deg,{{ vcor.cor__codigo_hex|default:'#ccc' }} 0deg 180deg,{{ vcor.cor__codigo_hex_secundario }} 180deg 360deg);"></span>
+            {% endif %}
           </button>
           {% endfor %}
         </div>
@@ -147,7 +268,7 @@
           <button class="qty-btn" id="qty-mais" aria-label="Aumentar quantidade">+</button>
         </div>
 
-        <p id="aviso-variacao" class="hidden" style="color:#c0392b;font-size:.85rem;margin:.25rem 0 .5rem;font-weight:500;"></p>
+        <p id="aviso-variacao" class="hidden" role="alert" aria-live="polite" style="color:#c0392b;font-size:.85rem;margin:.25rem 0 .5rem;font-weight:500;"></p>
         <p id="info-disponibilidade-variacao" style="display:none;margin:.1rem 0 .7rem;font-size:.84rem;color:#6b6b6b;line-height:1.5;"></p>
 
         <button class="btn-primario btn-comprar"
@@ -192,26 +313,6 @@
       </div>
 
       <div class="produto-info-desc">
-        <button class="acordeao-btn" aria-expanded="true" data-acordeao="desc">
-          Descrição <i class="fas fa-chevron-up"></i>
-        </button>
-        <div class="acordeao-conteudo aberto" id="acordeao-desc">
-          <p>{{ produto.descricao|linebreaksbr }}</p>
-        </div>
-      </div>
-
-      {% if produto.composicao %}
-      <div class="produto-info-desc">
-        <button class="acordeao-btn" aria-expanded="false" data-acordeao="comp">
-          Composição <i class="fas fa-chevron-down"></i>
-        </button>
-        <div class="acordeao-conteudo" id="acordeao-comp">
-          <p>{{ produto.composicao|linebreaksbr }}</p>
-        </div>
-      </div>
-      {% endif %}
-
-      <div class="produto-info-desc">
         <button class="acordeao-btn" aria-expanded="false" data-acordeao="entrega">
           Entrega e trocas <i class="fas fa-chevron-down"></i>
         </button>
@@ -219,12 +320,41 @@
           <ul class="info-lista">
             <li><i class="fas fa-undo-alt"></i> Trocas em até 7 dias após o recebimento</li>
             <li><i class="fas fa-lock"></i> Compra 100% segura e protegida</li>
+            <li>
+              <i class="fas fa-circle-question"></i>
+              Dúvidas? Consulte nossa
+              <a href="{% url 'produtos:trocas_devolucoes' %}" class="info-link-politicas">política de trocas</a>.
+            </li>
           </ul>
         </div>
       </div>
 
     </div>
   </div>
+
+  <section class="produto-detalhe-conteudo" aria-label="Descrição completa do produto">
+    <div class="produto-detalhe-conteudo-inner">
+      <div class="produto-info-desc produto-info-desc-amplo">
+        <button class="acordeao-btn" aria-expanded="false" data-acordeao="desc">
+          Descrição <i class="fas fa-chevron-down"></i>
+        </button>
+        <div class="acordeao-conteudo" id="acordeao-desc">
+          <div class="rich-texto rich-texto-produto">{{ produto.descricao|clean_html }}</div>
+        </div>
+      </div>
+
+      {% if produto.composicao %}
+      <div class="produto-info-desc produto-info-desc-amplo">
+        <button class="acordeao-btn" aria-expanded="false" data-acordeao="comp">
+          Composição <i class="fas fa-chevron-down"></i>
+        </button>
+        <div class="acordeao-conteudo" id="acordeao-comp">
+          <div class="rich-texto rich-texto-produto">{{ produto.composicao|clean_html }}</div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
 
   
   {% if avaliacoes %}
@@ -281,23 +411,23 @@
                 {% if img %}
                   <img src="{{ img.imagem.url }}"
                        alt="{{ img.alt|default:p.nome }}"
-                       loading="lazy" class="foto-principal">
+                       width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
                   {% if imgs|length > 1 %}
                     <img src="{{ imgs.1.imagem.url }}"
                          alt="{{ p.nome }}"
-                         loading="lazy" class="foto-hover" aria-hidden="true">
+                         width="600" height="800" loading="lazy" decoding="async" class="foto-hover" aria-hidden="true">
                   {% else %}
                     <img src="{{ img.imagem.url }}"
                          alt="{{ img.alt|default:p.nome }}"
-                         loading="lazy" class="foto-hover" aria-hidden="true">
+                         width="600" height="800" loading="lazy" decoding="async" class="foto-hover" aria-hidden="true">
                   {% endif %}
                 {% else %}
                   <img src="{% static 'images/brand/produto-placeholder.jpg' %}"
                        alt="{{ p.nome }}"
-                       loading="lazy" class="foto-principal">
+                       width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
                   <img src="{% static 'images/brand/produto-placeholder.jpg' %}"
                        alt="{{ p.nome }}"
-                       loading="lazy" class="foto-hover" aria-hidden="true">
+                       width="600" height="800" loading="lazy" decoding="async" class="foto-hover" aria-hidden="true">
                 {% endif %}
               {% endwith %}
             </div>
@@ -306,10 +436,10 @@
             <a href="{{ p.get_absolute_url }}" class="produto-card-nome">{{ p.nome }}</a>
             <div class="produto-card-preco">
               {% if p.em_promocao %}
-                <span class="preco-de">R$ {{ p.preco_base_exibicao|floatformat:"2g" }}</span>
-                <span class="preco-por">R$ {{ p.preco_atual|floatformat:"2g" }}</span>
+                <span class="preco-de">R$ {{ p.preco_base_exibicao|brl_price }}</span>
+                <span class="preco-por">R$ {{ p.preco_atual|brl_price }}</span>
               {% else %}
-                <span class="preco-por">R$ {{ p.preco_atual|floatformat:"2g" }}</span>
+                <span class="preco-por">R$ {{ p.preco_atual|brl_price }}</span>
               {% endif %}
             </div>
           </div>

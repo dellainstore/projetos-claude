@@ -1,0 +1,183 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verificar acesso | D'ELLA Instore</title>
+  <link rel="icon" href="{% static 'images/brand/favicon.png' %}">
+  <link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/jost/jost-variable.woff2' %}" crossorigin>
+  <style>
+    @font-face {
+      font-family: 'Jost';
+      font-style: normal;
+      font-weight: 300 700;
+      font-display: swap;
+      src: url('{% static "fonts/jost/jost-variable.woff2" %}') format('woff2-variations'),
+           url('{% static "fonts/jost/jost-variable.woff2" %}') format('woff2');
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; font-family: 'Jost', -apple-system, sans-serif; color: #1a1a1a; }
+
+    .lp { display: flex; min-height: 100vh; }
+
+    /* ── Lado esquerdo ───────────────────────────────── */
+    .lp-form {
+      width: 420px; flex-shrink: 0; background: #ffffff;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 64px 56px;
+    }
+
+    .lp-logo { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 36px; }
+    .lp-logo img { height: 30px; width: auto; display: block; }
+    .lp-logo-sub { font-size: 8px; letter-spacing: 5px; text-transform: uppercase; color: #bbb; margin-top: 5px; }
+
+    .lp-sep { height: 1px; background: #ede9e3; margin-bottom: 36px; }
+
+    .lp-label { font-size: 10px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: #c9a96e; margin-bottom: 8px; }
+    .lp-sublabel { font-size: 13px; color: #888; font-weight: 300; margin-bottom: 28px; line-height: 1.5; }
+
+    .lp-field { margin-bottom: 20px; }
+    .lp-field label { display: block; font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #999; margin-bottom: 8px; }
+
+    .lp-code-input {
+      width: 100%; padding: 16px 14px;
+      border: 1px solid #e8e2da; border-radius: 4px;
+      font-family: 'Jost', monospace; font-size: 26px; font-weight: 600;
+      letter-spacing: 14px; color: #1a1a1a; background: #fdfcfb;
+      text-align: center; outline: none;
+      transition: border-color .2s, background .2s;
+    }
+    .lp-code-input:focus { border-color: #c9a96e; background: #fff; }
+
+    .lp-btn {
+      width: 100%; padding: 13px; margin-top: 8px;
+      background: #0a0a0a; color: #fff; border: none; border-radius: 4px;
+      font-family: 'Jost', sans-serif; font-size: 12px; font-weight: 600;
+      letter-spacing: 2.5px; text-transform: uppercase;
+      cursor: pointer; transition: background .2s;
+    }
+    .lp-btn:hover { background: #2a2a2a; }
+
+    .lp-btn-secondary {
+      width: 100%; padding: 11px; margin-top: 10px;
+      background: transparent; color: #888;
+      border: 1px solid #e8e2da; border-radius: 4px;
+      font-family: 'Jost', sans-serif; font-size: 11px; font-weight: 500;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      cursor: pointer; transition: border-color .2s, color .2s;
+    }
+    .lp-btn-secondary:hover { border-color: #c9a96e; color: #c9a96e; }
+
+    .lp-error {
+      background: #fff5f5; border: 1px solid #f5c6c6;
+      border-radius: 4px; color: #c0392b;
+      font-size: 13px; padding: 10px 14px; margin-bottom: 20px;
+    }
+    .lp-success {
+      background: #f0faf4; border: 1px solid #b6e0c8;
+      border-radius: 4px; color: #2d8a5e;
+      font-size: 13px; padding: 10px 14px; margin-bottom: 20px;
+    }
+
+    .lp-back { display: block; margin-top: 24px; font-size: 12px; color: #bbb; text-align: center; text-decoration: none; }
+    .lp-back:hover { color: #888; }
+
+    /* ── Lado direito ─────────────────────────────────── */
+    .lp-visual {
+      flex: 1; background: #f7f5f2;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+    }
+    .lp-visual-inner { text-align: center; padding: 40px; }
+    .lp-visual-logo { height: 44px; width: auto; display: block; margin: 0 auto 8px; }
+    .lp-visual-sub { display: block; font-size: 9px; letter-spacing: 6px; text-transform: uppercase; color: #c0b8ae; margin-bottom: 36px; }
+    .lp-visual-line { height: 1px; width: 40px; background: #e0d8cf; margin: 0 auto 36px; }
+    .lp-visual-tagline { font-size: 12px; color: #c0b8ae; letter-spacing: .5px; font-weight: 300; }
+
+    @media (max-width: 860px) {
+      .lp-form { width: 100%; padding: 48px 32px; }
+      .lp-visual { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="lp">
+
+  <!-- Formulário -->
+  <div class="lp-form">
+
+    <div class="lp-logo">
+      <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA">
+      <span class="lp-logo-sub">I N S T O R E</span>
+    </div>
+
+    <div class="lp-sep"></div>
+
+    <div class="lp-label">Verificação de Acesso</div>
+    <p class="lp-sublabel">
+      Enviamos um código de 6 dígitos para<br>
+      <strong>{{ email_mascarado }}</strong>
+    </p>
+
+    {% if error %}
+      <p class="lp-error">{{ error }}</p>
+    {% endif %}
+
+    {% if reenviado %}
+      <p class="lp-success">Novo código enviado. Verifique seu e-mail.</p>
+    {% endif %}
+
+    <form method="post" action="?next={{ next }}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="verificar">
+      <div class="lp-field">
+        <label for="codigo">Código</label>
+        <input
+          type="text" id="codigo" name="codigo"
+          class="lp-code-input"
+          maxlength="6" inputmode="numeric" pattern="[0-9]{6}"
+          placeholder="000000" autocomplete="one-time-code"
+          autofocus>
+      </div>
+      <button type="submit" class="lp-btn">Confirmar</button>
+    </form>
+
+    <form method="post" action="?next={{ next }}" style="margin-top: 0;">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="reenviar">
+      <button type="submit" class="lp-btn-secondary">Reenviar código</button>
+    </form>
+
+    <a href="/painel/logout/" class="lp-back">← Voltar ao login</a>
+
+  </div>
+
+  <!-- Visual -->
+  <div class="lp-visual">
+    <div class="lp-visual-inner">
+      <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA" class="lp-visual-logo">
+      <span class="lp-visual-sub">I N S T O R E</span>
+      <div class="lp-visual-line"></div>
+      <p class="lp-visual-tagline">Painel interno exclusivo</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Auto-foca e submete quando 6 dígitos são digitados
+  const input = document.getElementById('codigo');
+  if (input) {
+    input.addEventListener('input', function () {
+      this.value = this.value.replace(/\D/g, '').slice(0, 6);
+      if (this.value.length === 6) {
+        this.closest('form').submit();
+      }
+    });
+  }
+</script>
+
+</body>
+</html>

@@ -1,7 +1,45 @@
 /* ─── Della Instore — Estilos Customizados ─────────────────────────────────── */
 
-/* ─── Fontes ─────────────────────────────────────────────────────────────────*/
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap');
+/* ─── Fontes auto-hospedadas (subset latin, variable WOFF2) ─────────────── */
+/* ascent-override / descent-override compensam as metricas que o Google Fonts CSS
+   injetava automaticamente. Sem isso, letras com ascender alto (B, D, P, T, etc)
+   ficam cortadas no topo quando o container tem line-height apertado. */
+@font-face {
+  font-family: 'Jost';
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  ascent-override: 99%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+  src: url('/static/fonts/jost/jost-variable.woff2') format('woff2-variations'),
+       url('/static/fonts/jost/jost-variable.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  ascent-override: 102%;
+  descent-override: 28%;
+  line-gap-override: 0%;
+  src: url('/static/fonts/playfair-display/playfair-display-variable.woff2') format('woff2-variations'),
+       url('/static/fonts/playfair-display/playfair-display-variable.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: italic;
+  font-weight: 400 500;
+  font-display: swap;
+  ascent-override: 102%;
+  descent-override: 28%;
+  line-gap-override: 0%;
+  src: url('/static/fonts/playfair-display/playfair-display-italic-variable.woff2') format('woff2-variations'),
+       url('/static/fonts/playfair-display/playfair-display-italic-variable.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* ─── Variáveis ──────────────────────────────────────────────────────────────*/
 :root {
@@ -36,7 +74,7 @@ a  { color: inherit; text-decoration: none; }
 button { cursor: pointer; border: none; background: none; font-family: inherit; }
 
 /* ─── Tipografia ─────────────────────────────────────────────────────────────*/
-h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height: 1.2; }
+h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height: 1.3; }
 
 .titulo-secao {
   font-family: var(--fonte-titulo);
@@ -58,7 +96,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 /* ─── Navbar ─────────────────────────────────────────────────────────────────*/
 .navbar {
   position: fixed;
-  top: 0; left: 0; right: 0;
+  top: var(--tarja-h); left: 0; right: 0;
   z-index: 1000;
   transition: background 0.4s ease, box-shadow 0.4s ease, color 0.4s ease;
   display: flex;
@@ -103,12 +141,12 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   color: inherit;
 }
 
-/* Logo absolutamente posicionada — centralizada na altura total da navbar (topo + categorias) */
+/* Logo absolutamente posicionada — centralizada na altura da barra branca (topo + categorias, sem a tarja) */
 .navbar-logo {
   position: absolute;
   left: 3.5rem;
   top: 0;
-  height: var(--navbar-total);
+  height: calc(var(--navbar-topo-h) + var(--navbar-cat-h));
   max-width: 19rem;
   display: flex;
   flex-direction: column;
@@ -211,6 +249,54 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   background: rgba(0,0,0,0.08);
 }
 
+/* Busca inline no navbar — campo desktop (expande à esquerda da lupa) */
+.navbar-busca-desktop {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.25s ease;
+  display: flex;
+  align-items: center;
+}
+.navbar-busca-desktop.ativo { width: 200px; }
+.navbar-busca-desktop input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid currentColor;
+  background: transparent;
+  font-family: var(--fonte-corpo);
+  font-size: 0.85rem;
+  padding: 0.2rem 0.4rem;
+  outline: none;
+  color: inherit;
+}
+.navbar-busca-desktop input::placeholder { opacity: 0.6; }
+
+/* Busca inline no navbar — barra mobile (aparece abaixo do topo) */
+.navbar-busca-mobile {
+  display: none;
+  padding: 0.5rem 1rem;
+  background: white;
+  border-top: 1px solid var(--cinza-claro);
+}
+.navbar-busca-mobile.ativo { display: flex; }
+.navbar-busca-mobile form { width: 100%; display: flex; }
+.navbar-busca-mobile input {
+  flex: 1;
+  border: none;
+  border-bottom: 1px solid var(--cinza-medio);
+  background: transparent;
+  font-family: var(--fonte-corpo);
+  font-size: 0.9rem;
+  padding: 0.3rem 0.4rem;
+  outline: none;
+  color: var(--preto);
+}
+.navbar-busca-mobile input::placeholder { opacity: 0.6; }
+
+/* Visibilidade por breakpoint */
+@media (min-width: 769px) { .navbar-busca-mobile { display: none !important; } }
+@media (max-width: 768px)  { .navbar-busca-desktop { display: none !important; } }
+
 .navbar-menu {
   display: flex;
   gap: 0;
@@ -306,10 +392,93 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   O hero começa ABAIXO do menu, não atrás dele.
 */
 :root {
+  --tarja-h: 0px;
   --navbar-topo-h: 60px;
   --navbar-cat-h: 36px;
-  --navbar-total: calc(var(--navbar-topo-h) + var(--navbar-cat-h));
+  --navbar-total: calc(var(--tarja-h) + var(--navbar-topo-h) + var(--navbar-cat-h));
 }
+html[data-tarja="1"] { --tarja-h: 32px; }
+
+/* ─── Tarja de Anúncios ────────────────────────────────────────────────────── */
+.tarja-anuncio {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--tarja-h);
+  z-index: 1001;
+  background: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  overflow: hidden;
+}
+
+.tarja-track {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tarja-item {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--fonte-corpo);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #d8cfc4;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  pointer-events: none;
+  padding: 0 0.5rem;
+}
+
+.tarja-item.tarja-ativa {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.tarja-item.tarja-saindo {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.tarja-btn-nav {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: rgba(216, 207, 196, 0.4);
+  font-size: 9px;
+  cursor: pointer;
+  transition: color 0.2s;
+  padding: 0;
+}
+
+.tarja-btn-nav:hover { color: #d8cfc4; }
+
+/* ocultar setas quando há só 1 frase */
+.tarja-anuncio[data-total="1"] .tarja-btn-nav { visibility: hidden; }
+
+@media (max-width: 480px) {
+  .tarja-item { font-size: 9px; letter-spacing: 0.12em; }
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 .hero {
   position: relative;
@@ -1306,6 +1475,30 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 
 .newsletter-btn:hover { background: var(--dourado); }
 
+.newsletter-optin {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  padding-left: calc(1.25rem + 1px);
+  font-size: 0.78rem;
+  color: #bbb;
+  text-align: left;
+}
+
+.newsletter-optin input[type="checkbox"] {
+  flex-shrink: 0;
+  accent-color: #fff;
+  width: 13px;
+  height: 13px;
+}
+
+.newsletter-optin a {
+  text-decoration: underline;
+  color: #bbb;
+}
+
 .newsletter-aviso {
   font-size: 0.75rem;
   color: var(--cinza-texto);
@@ -1915,7 +2108,11 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;
+  object-position: top center;
   transition: opacity 0.5s ease, transform 0.6s ease;
+  will-change: transform;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: smooth;
 }
 
 .produto-card-foto .foto-hover { opacity: 0; }
@@ -2044,9 +2241,13 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 .galeria-foto-principal {
   width: 100%; height: 100%;
   object-fit: cover;
+  object-position: top center;
   transition: opacity 0.3s ease;
   transform-origin: 50% 50%;
   display: block;
+  will-change: transform;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: smooth;
 }
 
 .galeria-badge {
@@ -2092,7 +2293,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   font-family: var(--fonte-titulo);
   font-size: clamp(1.6rem, 2.5vw, 2.2rem);
   font-weight: 400;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .produto-info-stars {
@@ -2135,7 +2336,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   width: 32px; height: 32px;
   border-radius: 50%;
   border: 2px solid transparent;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.28);
   position: relative;
   transition: border-color 0.2s;
   outline-offset: 3px;
@@ -2206,9 +2407,14 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   border-radius: 4px;
 }
 
-/* Bolinha bicolor: diagonal via conic-gradient — definida via style inline no template */
-.variacao-cor.bicolor {
-  /* o background-image diagonal é aplicado via JS/template com as duas cores */
+/* Bolinha bicolor: gradiente aplicado num span filho com overflow:hidden para garantir recorte circular */
+.variacao-cor.bicolor > span {
+  display: block;
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .variacao-cor.esgotado {
@@ -2995,13 +3201,14 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 }
 
 @media (max-width: 768px) {
-  :root { --navbar-total: var(--navbar-topo-h); }
+  :root { --navbar-total: calc(var(--tarja-h) + var(--navbar-topo-h)); }
   .navbar-categorias-bar { display: none; }
   .navbar-topo      { padding: 0 1rem; }
   .navbar-topo-esq button { display: flex; }
   .navbar-logo {
     left: 3rem;
     transform: none;
+    height: var(--navbar-topo-h);
   }
   .navbar-acoes     { gap: 0.65rem; }
   .navbar-acoes a, .navbar-acoes button { font-size: 1rem; }
@@ -3028,7 +3235,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 /* ─── Checkout ───────────────────────────────────────────────────────────────*/
 
 .checkout-wrapper {
-  padding-top: 72px;
+  padding-top: calc(var(--navbar-total) + 1rem);
   max-width: 1100px;
   margin: 0 auto;
   padding-left: 2rem;
@@ -3258,6 +3465,211 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   color: var(--cinza-texto);
   text-decoration: underline;
   margin-top: 0.2rem;
+}
+
+/* Endereços salvos no checkout */
+.checkout-enderecos-salvos { margin-bottom: 1.5rem; }
+
+.checkout-enderecos-label {
+  font-size: 0.82rem;
+  color: var(--cinza-texto);
+  margin-bottom: 0.6rem;
+}
+
+.checkout-enderecos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkout-endereco-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--cinza-medio);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.checkout-endereco-card:has(input:checked) { border-color: var(--dourado); background: #fffdf7; }
+.checkout-endereco-card:hover { border-color: var(--dourado); }
+
+.endereco-card-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.8rem 2.5rem 0.8rem 1rem;
+  cursor: pointer;
+}
+
+.checkout-endereco-card.checkout-endereco-novo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+}
+
+/* Chevron de edição inline */
+.endereco-card-toggle {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--cinza-texto);
+  transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.25s;
+  font-size: 0.85rem;
+  padding: 0;
+}
+
+.endereco-card-toggle:hover {
+  background: rgba(201, 169, 110, 0.12);
+  color: var(--dourado);
+  border-color: var(--dourado);
+}
+
+.endereco-card-toggle[aria-expanded="true"] {
+  color: var(--dourado);
+  transform: rotate(180deg);
+}
+
+.endereco-card-edit {
+  padding: 0.25rem 1rem 1rem;
+  border-top: 1px dashed var(--cinza-medio);
+  margin-top: 0.25rem;
+}
+
+.endereco-card-edit[hidden] { display: none; }
+
+.endereco-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.endereco-edit-campo {
+  grid-column: span 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.endereco-edit-campo.endereco-edit-col2 { grid-column: span 6; }
+.endereco-edit-campo.endereco-edit-uf   { grid-column: span 1; }
+
+.endereco-edit-campo label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cinza-texto);
+}
+
+.endereco-edit-campo input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--cinza-medio);
+  background: #fff;
+  font-size: 0.85rem;
+  color: var(--preto);
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.endereco-edit-campo input:focus {
+  outline: none;
+  border-color: var(--dourado);
+}
+
+.endereco-edit-erro {
+  margin: 0.6rem 0 0;
+  color: #c0392b;
+  font-size: 0.78rem;
+}
+
+.endereco-edit-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.endereco-edit-acoes .btn-primario,
+.endereco-edit-acoes .btn-secundario {
+  padding: 0.5rem 1.1rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 600px) {
+  .endereco-edit-campo { grid-column: span 6; }
+  .endereco-edit-campo.endereco-edit-uf { grid-column: span 2; }
+}
+
+.checkout-endereco-apelido {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--preto);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.checkout-endereco-detalhe {
+  font-size: 0.8rem;
+  color: var(--cinza-texto);
+}
+
+.checkout-endereco-cidade {
+  font-size: 0.75rem;
+  color: var(--cinza-texto);
+}
+
+.badge-principal {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--dourado);
+  color: #fff;
+  padding: 0.1rem 0.4rem;
+}
+
+.checkout-endereco-novo .checkout-endereco-apelido { color: var(--cinza-texto); }
+
+/* Campo número + toggle S/N */
+.num-wrapper { display: flex; flex-direction: column; gap: 0.35rem; }
+
+.sem-numero-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--cinza-texto);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sem-numero-toggle input[type="checkbox"] {
+  accent-color: var(--dourado);
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.checkout-input.campo-readonly {
+  background: #f5f5f5;
+  color: #999;
+  cursor: default;
 }
 
 .checkout-erros {
@@ -3880,7 +4292,7 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   .produto-detalhe-inner { grid-template-columns: 1fr; gap: 2rem; padding: 0 1.25rem; }
   .produto-detalhe-conteudo { padding: 0 1.25rem; }
   .galeria-principal { aspect-ratio: 3/4; }
-  .galeria-foto-principal { object-fit: contain; background: var(--cinza-claro); }
+  .galeria-foto-principal { object-fit: cover; object-position: top center; }
   .galeria-thumbs    { justify-content: flex-start; }
   .galeria-nav       { display: none; }
 
@@ -4831,13 +5243,11 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   user-select: none;
 }
 
-.tabela-medidas-logo-della {
-  font-family: 'Playfair Display', serif;
-  font-size: clamp(1.3rem, 2.5vw, 1.85rem);
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
+.tabela-medidas-logo-img {
+  display: block;
+  height: clamp(22px, 3vw, 32px);
+  width: auto;
+  object-fit: contain;
 }
 
 .tabela-medidas-logo-instore {
@@ -5317,6 +5727,30 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
 }
 
 .popup-btn:hover { background: var(--dourado); }
+
+.popup-optin {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  padding-left: calc(1.25rem + 1px);
+  font-size: 0.78rem;
+  color: #666;
+  text-align: left;
+}
+
+.popup-optin input[type="checkbox"] {
+  flex-shrink: 0;
+  accent-color: #333;
+  width: 13px;
+  height: 13px;
+}
+
+.popup-optin a {
+  text-decoration: underline;
+  color: #666;
+}
 
 .popup-aviso {
   font-size: 0.72rem;
@@ -5999,4 +6433,37 @@ h1, h2, h3, h4 { font-family: var(--fonte-titulo); font-weight: 400; line-height
   }
   .della-cookie-modal-footer { flex-direction: column-reverse; }
   .della-cookie-modal-footer button { width: 100%; }
+}
+
+/* Acessibilidade: skip-to-content (WCAG 2.4.1 Bypass Blocks) */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  z-index: 9999;
+  background: var(--preto);
+  color: white;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  transition: top 0.2s ease-out;
+}
+.skip-link:focus {
+  top: 0;
+  outline: 2px solid var(--dourado);
+  outline-offset: 2px;
+}
+
+/* Acessibilidade: respeita preferencia do usuario por menos movimento (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

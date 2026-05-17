@@ -1,13 +1,13 @@
 {% load static %}<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR"{% if tarja_frases %} data-tarja="1"{% endif %}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
 
   
-  <title>{% block titulo %}D'ELLA Instore — Moda Feminina Premium{% endblock %}</title>
-  <meta name="description" content="{% block meta_descricao %}D'ELLA Instore — Moda feminina premium. Body, Underwear, Beachwear, Casual, Couro, Fitness e Ballet. Elegância que veste a alma.{% endblock %}">
+  <title>{% block titulo %}D'ELLA Instore | Body Feminino, porque ser única nunca sai de moda{% endblock %}</title>
+  <meta name="description" content="{% block meta_descricao %}D'ELLA Instore | Body Feminino, porque ser única nunca sai de moda. Underwear, Beachwear, Casual, Couro, Fitness e Ballet.{% endblock %}">
   <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
   <meta name="csrf-token" content="{{ csrf_token }}">
 
@@ -15,10 +15,21 @@
   <meta name="facebook-domain-verification" content="sh7orcu6j8difu9pudh8i15u064ijc" />
 
   <meta property="og:site_name" content="D'ELLA Instore">
-  <meta property="og:title" content="{% block og_titulo %}D'ELLA Instore — Moda Feminina Premium{% endblock %}">
+  <meta property="og:title" content="{% block og_titulo %}D'ELLA Instore | Body Feminino, porque ser única nunca sai de moda{% endblock %}">
   <meta property="og:description" content="{% block og_descricao %}Moda feminina premium.{% endblock %}">
-  <meta property="og:image" content="{% block og_imagem %}{% static 'images/brand/og-default.jpg' %}{% endblock %}">
-  <meta property="og:type" content="website">
+  <meta property="og:image" content="{% block og_imagem %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/brand/og-default.jpg' %}{% endblock %}">
+  <meta property="og:image:width" content="{% block og_imagem_width %}1200{% endblock %}">
+  <meta property="og:image:height" content="{% block og_imagem_height %}630{% endblock %}">
+  <meta property="og:image:alt" content="{% block og_imagem_alt %}D'ELLA Instore | Moda feminina premium{% endblock %}">
+  <meta property="og:url" content="{{ request.build_absolute_uri }}">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{% block twitter_titulo %}D'ELLA Instore | Body Feminino, porque ser única nunca sai de moda{% endblock %}">
+  <meta name="twitter:description" content="{% block twitter_descricao %}Moda feminina premium.{% endblock %}">
+  <meta name="twitter:image" content="{% block twitter_imagem %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/brand/og-default.jpg' %}{% endblock %}">
 
   
   {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
@@ -29,9 +40,8 @@
   <link rel="shortcut icon" href="{% static 'images/brand/favicon.svg' %}">
 
   
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/jost/jost-variable.woff2' %}" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/playfair-display/playfair-display-variable.woff2' %}" crossorigin>
 
   
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -43,27 +53,116 @@
   <link rel="stylesheet" href="{% static 'css/della.css' %}">
 
   {% block css_extra %}{% endblock %}
+
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "D'ELLA Instore",
+    "alternateName": "Della Instore",
+    "url": "https://www.dellainstore.com",
+    "logo": "https://www.dellainstore.com{% static 'images/brand/logo-della.png' %}",
+    "description": "Moda feminina premium. Body, underwear, beachwear, casual, couro, fitness e ballet.",
+    "sameAs": [
+      "https://www.instagram.com/dellainstore",
+      "https://www.tiktok.com/@dellainstore_"
+    ],
+    "address": [
+      {
+        "@type": "PostalAddress",
+        "name": "Show Room",
+        "streetAddress": "Rua Visconde da Luz, 183",
+        "addressLocality": "São Paulo",
+        "addressRegion": "SP",
+        "postalCode": "04537-070",
+        "addressCountry": "BR"
+      },
+      {
+        "@type": "PostalAddress",
+        "name": "Loja Studio Anacã",
+        "streetAddress": "Av. Brasil, 649 - Jardim Paulista",
+        "addressLocality": "São Paulo",
+        "addressRegion": "SP",
+        "postalCode": "01431-000",
+        "addressCountry": "BR"
+      }
+    ],
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "email": "contato@dellainstore.com.br",
+      "contactType": "customer service",
+      "areaServed": "BR",
+      "availableLanguage": "Portuguese"
+    },
+    "taxID": "29.049.870/0001-37"
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "D'ELLA Instore",
+    "url": "https://www.dellainstore.com",
+    "inLanguage": "pt-BR",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://www.dellainstore.com/busca/?q={search_term_string}"
+      },
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>
+
+  {% block schema_extra %}{% endblock %}
 </head>
 <body{% if META_PIXEL_ID %} data-meta-pixel-id="{{ META_PIXEL_ID }}"{% endif %}{% if GA_MEASUREMENT_ID %} data-ga-measurement-id="{{ GA_MEASUREMENT_ID }}"{% endif %}>
 
+<a href="#conteudo-principal" class="skip-link">Pular para o conteúdo</a>
+
+{% if tarja_frases %}
+<div id="tarja-anuncio" class="tarja-anuncio" role="region" aria-label="Informações da loja">
+  <button class="tarja-btn-nav" id="tarja-prev" aria-label="Frase anterior">
+    <i class="fas fa-chevron-left"></i>
+  </button>
+  <div class="tarja-track" aria-live="polite" aria-atomic="true">
+    {% for frase in tarja_frases %}
+    <span class="tarja-item{% if forloop.first %} tarja-ativa{% endif %}">{{ frase.texto }}</span>
+    {% endfor %}
+  </div>
+  <button class="tarja-btn-nav" id="tarja-next" aria-label="Próxima frase">
+    <i class="fas fa-chevron-right"></i>
+  </button>
+</div>
+{% endif %}
 
 <nav id="navbar" class="navbar {% block navbar_class %}transparente{% endblock %}" role="navigation" aria-label="Menu principal">
 
-  <a href="{% url 'produtos:home' %}" class="navbar-logo" aria-label="D'ELLA Instore — Página inicial">
+  <a href="{% url 'produtos:home' %}" class="navbar-logo" aria-label="D'ELLA Instore | Página inicial">
     <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA" class="navbar-logo-della-img">
     <span class="navbar-logo-instore">Instore</span>
   </a>
 
   <div class="navbar-topo">
     <div class="navbar-topo-esq">
-      <button id="btn-menu-mobile" aria-label="Menu" aria-expanded="false">
-        <i class="fas fa-bars"></i>
+      <button id="btn-menu-mobile" aria-label="Abrir menu" aria-expanded="false" aria-controls="menu-mobile">
+        <i class="fas fa-bars" aria-hidden="true"></i>
       </button>
     </div>
     <div class="navbar-acoes">
-      <a href="{% url 'produtos:busca' %}" aria-label="Buscar">
-        <i class="fas fa-magnifying-glass"></i>
-      </a>
+      <div id="navbar-busca-desktop" class="navbar-busca-desktop" aria-hidden="true">
+        <form method="get" action="{% url 'produtos:busca' %}">
+          <input id="navbar-busca-input" type="search" name="q"
+                 placeholder="O que você procura?"
+                 autocomplete="off" aria-label="Pesquisar">
+        </form>
+      </div>
+      <button id="btn-busca" aria-label="Buscar" aria-expanded="false">
+        <i class="fas fa-magnifying-glass" id="btn-busca-icon"></i>
+      </button>
       {% if WHATSAPP_NUMBER_1 %}
       <a href="https://wa.me/{{ WHATSAPP_NUMBER_1 }}?text=Olá! Vim pelo site da Della Instore e gostaria de ajuda."
          target="_blank" rel="noopener noreferrer" aria-label="Suporte via WhatsApp">
@@ -90,6 +189,14 @@
     </div>
   </div>
 
+
+  <div id="navbar-busca-mobile" class="navbar-busca-mobile" aria-hidden="true">
+    <form method="get" action="{% url 'produtos:busca' %}">
+      <input id="navbar-busca-input-mobile" type="search" name="q"
+             placeholder="O que você procura?"
+             autocomplete="off" aria-label="Pesquisar">
+    </form>
+  </div>
 
   <div class="navbar-categorias-bar">
     <ul class="navbar-menu">
@@ -123,7 +230,7 @@
 
 <div id="menu-mobile" class="fixed inset-0 bg-white z-[1050] flex flex-col p-8 overflow-y-auto overscroll-contain transform -translate-x-full transition-transform duration-300 [&.aberto]:translate-x-0">
   <div class="flex justify-between items-center mb-10">
-    <a href="{% url 'produtos:home' %}" class="mobile-logo" aria-label="D'ELLA Instore — Página inicial">
+    <a href="{% url 'produtos:home' %}" class="mobile-logo" aria-label="D'ELLA Instore | Página inicial">
       <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA" class="mobile-logo-della-img">
       <span class="mobile-logo-instore">Instore</span>
     </a>
@@ -412,9 +519,10 @@
   </div>
 </div>
 
-<!-- Newsletter Popup -->
+<!-- Newsletter Popup — omitido para clientes logadas já inscritas na newsletter -->
+{% if not usuario_inscrito_newsletter %}
 <div id="popup-newsletter" class="popup-overlay" role="dialog" aria-modal="true"
-     aria-labelledby="popup-newsletter-titulo" style="display:none;">
+     aria-labelledby="popup-newsletter-titulo" style="display:none;"{% if user.is_authenticated %} data-force-show="1"{% endif %}>
   <div class="popup-box">
     <button class="popup-fechar" id="popup-newsletter-fechar" aria-label="Fechar">&times;</button>
     <div class="popup-icone"><i class="far fa-envelope"></i></div>
@@ -424,18 +532,24 @@
       {% csrf_token %}
       <input type="email" name="email" placeholder="Digite seu email"
              required maxlength="254" autocomplete="email" class="popup-input">
+      <label class="popup-optin">
+        <input type="checkbox" id="popup-newsletter-optin">
+        <span>Aceito receber e-mails com novidades e promoções da D'ELLA. Ver
+          <a href="{% url 'produtos:politica_privacidade' %}" target="_blank">política de privacidade</a>.
+        </span>
+      </label>
+      <p id="popup-optin-erro" role="alert" aria-live="polite" style="display:none;color:#c0392b;font-size:0.78rem;margin-bottom:0.4rem;">
+        <i class="fas fa-exclamation-circle" aria-hidden="true"></i> Marque a opção acima para continuar.
+      </p>
       <button type="submit" class="popup-btn">
         Assinar Newsletter <i class="fas fa-chevron-right"></i>
       </button>
     </form>
-    <p class="popup-aviso">
-      Ao se inscrever você concorda com nossa
-      <a href="{% url 'produtos:politica_privacidade' %}">política de privacidade</a>.
-    </p>
   </div>
 </div>
+{% endif %}
 
-<script src="{% static 'js/della.js' %}"></script>
+<script defer src="{% static 'js/della.js' %}"></script>
 
 {% block js_extra %}{% endblock %}
 

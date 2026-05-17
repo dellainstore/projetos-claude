@@ -1,7 +1,111 @@
 {% extends 'base.html' %}
+{% load static della_filters %}
 {% block navbar_class %}solida{% endblock %}
+
+{% block titulo %}
+  {% if q %}Busca: {{ q }} | D'ELLA Instore{% else %}Busca | D'ELLA Instore{% endif %}
+{% endblock %}
+
 {% block conteudo %}
-<div style="min-height:60vh;display:flex;align-items:center;justify-content:center;padding:6rem 2rem;">
-  <p style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#6b6b6b;">Em construção...</p>
+<div class="loja-wrapper" style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem 4rem;">
+
+  <header style="margin-bottom:2rem;">
+    {% if q %}
+      <h1 class="titulo-secao" style="font-size:1.6rem;">
+        Busca: <em style="font-style:normal;color:var(--dourado);">{{ q }}</em>
+      </h1>
+      <p style="color:var(--cinza-texto);margin-top:0.4rem;font-size:0.9rem;">
+        {{ resultados|length }} resultado{{ resultados|length|pluralize:",s" }} encontrado{{ resultados|length|pluralize:",s" }}
+      </p>
+    {% else %}
+      <h1 class="titulo-secao" style="font-size:1.6rem;">Buscar produtos</h1>
+    {% endif %}
+
+    <form method="get" action="{% url 'produtos:busca' %}"
+          style="display:flex;gap:0.5rem;margin-top:1.25rem;max-width:480px;">
+      <input type="search" name="q" value="{{ q }}"
+             placeholder="O que você procura?"
+             class="newsletter-input"
+             style="flex:1;"
+             autofocus>
+      <button type="submit" class="newsletter-btn" style="white-space:nowrap;">
+        <i class="fas fa-search"></i> Buscar
+      </button>
+    </form>
+  </header>
+
+  {% if q %}
+    {% if resultados %}
+    <div class="loja-grid">
+      {% for produto in resultados %}
+      <article class="produto-card fade-in" aria-label="{{ produto.nome }}">
+
+        <a href="{{ produto.get_absolute_url }}" class="produto-card-foto-link">
+          <div class="produto-card-foto">
+            {% with img=produto.imagem_principal %}
+              {% if img %}
+                <img src="{{ img.imagem.url }}"
+                     alt="{{ img.alt|default:produto.nome }}"
+                     width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
+                {% with img_hover=produto.imagem_hover %}
+                  {% if img_hover %}
+                    <img src="{{ img_hover.imagem.url }}"
+                         alt="{{ produto.nome }}"
+                         width="600" height="800" loading="lazy" decoding="async" class="foto-hover">
+                  {% endif %}
+                {% endwith %}
+              {% else %}
+                <img src="{% static 'images/brand/produto-placeholder.jpg' %}"
+                     alt="{{ produto.nome }}" width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
+              {% endif %}
+            {% endwith %}
+
+            {% if produto.novo %}
+              <span class="produto-badge novo">Novo</span>
+            {% elif produto.em_promocao %}
+              <span class="produto-badge promo">-{{ produto.percentual_desconto }}%</span>
+            {% endif %}
+          </div>
+        </a>
+
+        <div class="produto-card-info">
+          <a href="{{ produto.get_absolute_url }}" class="produto-card-nome">{{ produto.nome }}</a>
+          <div class="produto-card-preco">
+            {% if produto.em_promocao %}
+              <span class="preco-de">R$ {{ produto.preco_base_exibicao|brl_price }}</span>
+              <span class="preco-por">R$ {{ produto.preco_atual|brl_price }}</span>
+            {% else %}
+              <span class="preco-por">R$ {{ produto.preco_atual|brl_price }}</span>
+            {% endif %}
+          </div>
+          {% if produto.parcelamento_texto %}
+            <span class="produto-card-parcelamento">{{ produto.parcelamento_texto }}</span>
+          {% endif %}
+
+          <div class="produto-card-acoes">
+            <button class="btn-add-carrinho"
+                    data-produto-id="{{ produto.pk }}"
+                    data-produto-url="{{ produto.get_absolute_url }}"
+                    aria-label="Ver produto {{ produto.nome }}">
+              <i class="fas fa-bag-shopping"></i>
+            </button>
+          </div>
+        </div>
+
+      </article>
+      {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="loja-vazia">
+      <i class="far fa-search" style="font-size:3rem;color:var(--cinza-texto);margin-bottom:1.5rem;"></i>
+      <p class="titulo-secao" style="font-size:1.5rem;">Nenhum resultado para "{{ q }}"</p>
+      <p style="color:var(--cinza-texto);margin-top:0.75rem;">
+        Tente outras palavras ou <a href="{% url 'produtos:loja' %}" style="color:var(--dourado);">veja todos os produtos</a>.
+      </p>
+    </div>
+    {% endif %}
+  {% endif %}
+
 </div>
 {% endblock %}
