@@ -9,12 +9,13 @@ from django.core.cache import cache
 from django.db.models import Q, Avg, Count
 from django.db.models import Case, IntegerField, Value, When
 from django.conf import settings
+from django.contrib import messages
 from django.utils.html import strip_tags
 
 from apps.core_utils.meta import enviar_evento_meta, gerar_evento_id
 from apps.core_utils.cache_utils import (
     MENU_CATEGORIAS, HOME_BANNERS, HOME_MINI_BANNERS, HOME_LOOK,
-    HOME_DEPOIMENTOS, HOME_DESTAQUES, LOJA_CONFIG, GUIA_TABELAS,
+    HOME_DEPOIMENTOS, HOME_DESTAQUES, LOJA_CONFIG, GUIA_TABELAS, LINKS_BIO,
     _key_pagina, _key_relacionados, _key_tabela_medidas,
 )
 
@@ -48,7 +49,7 @@ def homepage(request):
     if depoimentos is None:
         try:
             depoimentos = list(
-                Avaliacao.objects.filter(aprovada=True)
+                Avaliacao.objects.filter(aprovada=True).exclude(comentario='')
                 .select_related('produto')
                 .order_by('-criada_em')[:3]
             )
@@ -116,6 +117,18 @@ def homepage(request):
         except Exception:
             pass
 
+    # Preload LCP: URL do primeiro banner para injecao no <head>
+    hero_preload_url = None
+    hero_preload_mobile_url = None
+    if banners:
+        primeiro = banners[0]
+        if primeiro.tipo == 'foto' and primeiro.foto:
+            hero_preload_url = primeiro.foto.url
+            if primeiro.foto_mobile:
+                hero_preload_mobile_url = primeiro.foto_mobile.url
+        elif primeiro.tipo == 'video' and primeiro.poster:
+            hero_preload_url = primeiro.poster.url
+
     context = {
         'produtos_destaque':      produtos_destaque,
         'depoimentos':            depoimentos,
@@ -128,6 +141,8 @@ def homepage(request):
         'instagram_posts':        _get_instagram_posts(),
         'WHATSAPP_NUMBER_1':      settings.WHATSAPP_NUMBER_1,
         'WHATSAPP_NUMBER_2':      settings.WHATSAPP_NUMBER_2,
+        'hero_preload_url':       hero_preload_url,
+        'hero_preload_mobile_url': hero_preload_mobile_url,
     }
     return render(request, 'home/index.html', context)
 
@@ -154,6 +169,7 @@ def feed_meta_xml(request):
         image_link = f'{site_url}{imagem.imagem.url}'
         description = ' '.join(strip_tags(produto.descricao or '').split())
         availability = 'in stock' if _produto_disponivel_meta(produto) else 'out of stock'
+        quantity = _quantidade_meta(produto)
         category_parts = []
         if produto.categoria.parent_id:
             category_parts.append(produto.categoria.parent.nome)
@@ -168,6 +184,7 @@ def feed_meta_xml(request):
             f'      <g:title>{escape(produto.nome)}</g:title>',
             f'      <g:description>{escape(description[:9999])}</g:description>',
             f'      <g:availability>{availability}</g:availability>',
+            f'      <g:quantity>{quantity}</g:quantity>',
             '      <g:condition>new</g:condition>',
             f'      <g:price>{_format_meta_price(produto.preco_base_exibicao)} BRL</g:price>',
             f'      <g:link>{escape(link)}</g:link>',
@@ -217,34 +234,68 @@ def loja(request, categoria_slug=None, parent_slug=None):
             .order_by('ordem', 'nome')
         )
         cache.set(MENU_CATEGORIAS, categorias, 60 * 60 * 4)
+    from django.db.models import Q as _Q
+
     categoria_ativa = None
 
     produtos_qs = Produto.objects.filter(ativo=True).prefetch_related('imagens', 'variacoes')
 
+    preco_min = request.GET.get('preco_min', '')
+    preco_max = request.GET.get('preco_max', '')
+    apenas_novos = request.GET.get('novo') == '1'
+    apenas_promo = request.GET.get('promo') == '1'
+    tamanhos_selecionados = request.GET.getlist('tamanho')
+    cat_get    = request.GET.get('categoria', '').strip()
+    subcat_get = request.GET.get('subcategoria', '').strip()
+
+    # URL kwargs têm prioridade; depois vêm os GET params do formulário
     if categoria_slug and parent_slug:
-        categoria_ativa = get_object_or_404(
-            Categoria,
-            slug=categoria_slug,
-            parent__slug=parent_slug,
-            ativa=True,
-        )
+        categoria_ativa = get_object_or_404(Categoria, slug=categoria_slug, parent__slug=parent_slug, ativa=True)
         produtos_qs = produtos_qs.filter(categoria=categoria_ativa)
     elif categoria_slug:
-        categoria_ativa = get_object_or_404(
-            Categoria,
-            slug=categoria_slug,
-            parent__isnull=True,
-            ativa=True,
-        )
-        # Se é uma categoria-mãe, inclui também os produtos das subcategorias
+        categoria_ativa = get_object_or_404(Categoria, slug=categoria_slug, parent__isnull=True, ativa=True)
         sub_ids = list(categoria_ativa.subcategorias.filter(ativa=True).values_list('id', flat=True))
         if sub_ids:
-            from django.db.models import Q as _Q
-            produtos_qs = produtos_qs.filter(
-                _Q(categoria=categoria_ativa) | _Q(categoria_id__in=sub_ids)
-            )
+            produtos_qs = produtos_qs.filter(_Q(categoria=categoria_ativa) | _Q(categoria_id__in=sub_ids))
         else:
             produtos_qs = produtos_qs.filter(categoria=categoria_ativa)
+    elif subcat_get:
+        try:
+            subcat_obj = Categoria.objects.get(slug=subcat_get, parent__isnull=False, ativa=True)
+            categoria_ativa = subcat_obj
+            produtos_qs = produtos_qs.filter(categoria=categoria_ativa)
+        except Categoria.DoesNotExist:
+            pass
+        except Categoria.MultipleObjectsReturned:
+            # slug ambiguo (mesmo slug em pais diferentes): mostra produtos de todas as ocorrencias
+            _ids = list(
+                Categoria.objects
+                .filter(slug=subcat_get, parent__isnull=False, ativa=True)
+                .values_list('id', flat=True)
+            )
+            if _ids:
+                produtos_qs = produtos_qs.filter(categoria_id__in=_ids)
+    elif cat_get:
+        try:
+            cat_obj = Categoria.objects.get(slug=cat_get, parent__isnull=True, ativa=True)
+            categoria_ativa = cat_obj
+            sub_ids = list(cat_obj.subcategorias.filter(ativa=True).values_list('id', flat=True))
+            if sub_ids:
+                produtos_qs = produtos_qs.filter(_Q(categoria=cat_obj) | _Q(categoria_id__in=sub_ids))
+            else:
+                produtos_qs = produtos_qs.filter(categoria=cat_obj)
+        except Categoria.DoesNotExist:
+            pass
+
+    # Valores para os selects do template e paginacao.
+    # Quando a categoria veio pela URL (kwargs), propaga o slug para que
+    # os links de paginacao preservem o filtro de categoria.
+    cat_select    = cat_get
+    subcat_select = subcat_get
+    if categoria_slug and parent_slug and not subcat_select:
+        subcat_select = categoria_slug
+    elif categoria_slug and not parent_slug and not cat_select:
+        cat_select = categoria_slug
 
     # Filtro de busca
     q = request.GET.get('q', '').strip()
@@ -254,8 +305,6 @@ def loja(request, categoria_slug=None, parent_slug=None):
         )
 
     # Filtro de preço
-    preco_min = request.GET.get('preco_min', '')
-    preco_max = request.GET.get('preco_max', '')
     if preco_min:
         try:
             produtos_qs = produtos_qs.filter(preco__gte=float(preco_min))
@@ -268,13 +317,49 @@ def loja(request, categoria_slug=None, parent_slug=None):
             pass
 
     # Filtro novidades / promoção
-    apenas_novos = request.GET.get('novo') == '1'
-    apenas_promo = request.GET.get('promo') == '1'
     if apenas_novos:
         produtos_qs = produtos_qs.filter(novo=True)
     if apenas_promo:
         produtos_qs = produtos_qs.filter(
             Q(preco_promocional__isnull=False) | Q(variacoes__preco_promocional__isnull=False)
+        ).distinct()
+
+    # Tamanhos do filtro: baseados na categoria DO FILTRO (cat_select/subcat_select).
+    # Quando "Todas as categorias" está selecionado, mostra todos os tamanhos do catálogo
+    # para que o estado dos dropdowns seja consistente com a lista de tamanhos.
+    from apps.produtos.models import TamanhoPadrao
+    _tam_base = Produto.objects.filter(ativo=True)
+    if subcat_select:
+        if categoria_ativa is not None and categoria_ativa.parent_id:
+            _tam_base = _tam_base.filter(categoria=categoria_ativa)
+        else:
+            # sem contexto de pai: filtra por todos os matches (nunca usa .get() com slug duplicado)
+            _subcat_ids = list(
+                Categoria.objects
+                .filter(slug=subcat_select, parent__isnull=False, ativa=True)
+                .values_list('id', flat=True)
+            )
+            if _subcat_ids:
+                _tam_base = _tam_base.filter(categoria_id__in=_subcat_ids)
+    elif cat_select:
+        try:
+            _c = Categoria.objects.get(slug=cat_select, parent__isnull=True, ativa=True)
+            _sids = list(_c.subcategorias.filter(ativa=True).values_list('id', flat=True))
+            _tam_base = _tam_base.filter(_Q(categoria=_c) | _Q(categoria_id__in=_sids)) if _sids else _tam_base.filter(categoria=_c)
+        except Categoria.DoesNotExist:
+            pass
+    tamanhos_disponiveis = list(
+        TamanhoPadrao.objects
+        .filter(variacao__produto__in=_tam_base, variacao__ativa=True)
+        .distinct()
+        .order_by('ordem', 'nome')
+    )
+
+    # Filtro por tamanho
+    if tamanhos_selecionados:
+        produtos_qs = produtos_qs.filter(
+            variacoes__tamanho__nome__in=tamanhos_selecionados,
+            variacoes__ativa=True,
         ).distinct()
 
     # Ordenação
@@ -300,19 +385,59 @@ def loja(request, categoria_slug=None, parent_slug=None):
             pass
 
     context = {
-        'categorias':      categorias,
-        'categoria_ativa': categoria_ativa,
-        'page_obj':        page_obj,
-        'total_produtos':  paginator.count,
-        'q':               q,
-        'preco_min':       preco_min,
-        'preco_max':       preco_max,
-        'apenas_novos':    apenas_novos,
-        'apenas_promo':    apenas_promo,
-        'ordem':           ordem,
-        'wishlist_ids':    wishlist_ids,
+        'categorias':            categorias,
+        'categoria_ativa':       categoria_ativa,
+        'page_obj':              page_obj,
+        'total_produtos':        paginator.count,
+        'q':                     q,
+        'preco_min':             preco_min,
+        'preco_max':             preco_max,
+        'apenas_novos':          apenas_novos,
+        'apenas_promo':          apenas_promo,
+        'ordem':                 ordem,
+        'wishlist_ids':          wishlist_ids,
+        'tamanhos_disponiveis':  tamanhos_disponiveis,
+        'tamanhos_selecionados': tamanhos_selecionados,
+        'cat_select':            cat_select,
+        'subcat_select':         subcat_select,
     }
+    # Modo parcial (AJAX): devolve só o grid e a paginação, sem o layout completo
+    if request.GET.get('_partial') == '1' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return render(request, 'produtos/_loja_grid.html', context)
     return render(request, 'produtos/loja.html', context)
+
+
+def loja_tamanhos(request):
+    """AJAX: tamanhos disponíveis para uma categoria/subcategoria."""
+    from apps.produtos.models import Categoria, Produto, TamanhoPadrao
+    from django.db.models import Q as _Q
+
+    cat_slug    = request.GET.get('categoria', '').strip()
+    subcat_slug = request.GET.get('subcategoria', '').strip()
+    qs = Produto.objects.filter(ativo=True)
+
+    if subcat_slug:
+        try:
+            s = Categoria.objects.get(slug=subcat_slug, parent__isnull=False, ativa=True)
+            qs = qs.filter(categoria=s)
+        except (Categoria.DoesNotExist, Categoria.MultipleObjectsReturned):
+            pass
+    elif cat_slug:
+        try:
+            c = Categoria.objects.get(slug=cat_slug, parent__isnull=True, ativa=True)
+            sids = list(c.subcategorias.filter(ativa=True).values_list('id', flat=True))
+            qs = qs.filter(_Q(categoria=c) | _Q(categoria_id__in=sids)) if sids else qs.filter(categoria=c)
+        except Categoria.DoesNotExist:
+            pass
+
+    tamanhos = list(
+        TamanhoPadrao.objects
+        .filter(variacao__produto__in=qs, variacao__ativa=True)
+        .distinct()
+        .order_by('ordem', 'nome')
+        .values_list('nome', flat=True)
+    )
+    return JsonResponse({'tamanhos': tamanhos})
 
 
 def _produto_disponivel_meta(produto) -> bool:
@@ -320,6 +445,18 @@ def _produto_disponivel_meta(produto) -> bool:
     if not variacoes:
         return True
     return any(v.disponivel for v in variacoes)
+
+
+def _quantidade_meta(produto) -> int:
+    variacoes = [v for v in produto.variacoes.all() if v.ativa and v.disponivel]
+    if not variacoes:
+        return 0
+    total = 0
+    for v in variacoes:
+        if v.modo_efetivo == 'sob_demanda':
+            return 999
+        total += v.estoque or 0
+    return max(total, 1)
 
 
 def _format_meta_price(valor) -> str:
@@ -336,7 +473,7 @@ def detalhe_produto(request, slug):
     )
 
     import json as _json
-    imagens = produto.imagens.order_by('-principal', 'ordem')
+    imagens = produto.imagens.select_related('cor').order_by('ordem', 'id')
 
     # Tamanhos únicos (sem repetir o mesmo tamanho para cada cor)
     variacoes_tamanho = list(
@@ -433,18 +570,37 @@ def detalhe_produto(request, slug):
             config_loja = None
         cache.set(LOJA_CONFIG, config_loja, 60 * 60 * 24)
 
-    # Mapa cor_id → índice da imagem na galeria (para troca de foto ao clicar na bolinha)
-    fotos_cor_map = {}
-    try:
-        from apps.produtos.models import ProdutoCorFoto
-        imagens_list = list(imagens)
-        imagem_id_para_idx = {img.pk: idx for idx, img in enumerate(imagens_list)}
-        for pcf in ProdutoCorFoto.objects.filter(produto=produto).select_related('imagem'):
-            if pcf.imagem_id and pcf.imagem_id in imagem_id_para_idx:
-                fotos_cor_map[str(pcf.cor_id)] = imagem_id_para_idx[pcf.imagem_id]
-    except Exception:
-        pass
-    fotos_cor_json = _json.dumps(fotos_cor_map)
+    galeria_padrao = [
+        {
+            'id': img.pk,
+            'src': img.imagem.url,
+            'alt': img.alt or produto.nome,
+        }
+        for img in imagens
+    ]
+
+    galerias_por_cor = {}
+    for cor in variacoes_cor:
+        cor_id = cor['cor__id']
+        imagens_cor = produto.imagens_da_cor(cor_id)
+        galerias_por_cor[str(cor_id)] = [
+            {
+                'id': img.pk,
+                'src': img.imagem.url,
+                'alt': img.alt or produto.nome,
+            }
+            for img in imagens_cor
+        ]
+
+    cor_inicial_id = str(produto.cor_capa_efetiva_id) if produto.cor_capa_efetiva_id else ''
+    imagens_iniciais = galerias_por_cor.get(cor_inicial_id) or galeria_padrao
+    cor_inicial_nome = ''
+    if cor_inicial_id:
+        for cor in variacoes_cor:
+            if str(cor['cor__id']) == cor_inicial_id:
+                cor_inicial_nome = cor['cor__nome']
+                break
+
     meta_viewcontent_event_id = gerar_evento_id('viewcontent')
 
     context = {
@@ -454,7 +610,11 @@ def detalhe_produto(request, slug):
         'variacoes_cor':      variacoes_cor,
         'variacoes_todas':    variacoes_todas,
         'variacoes_json':     variacoes_json,
-        'fotos_cor_json':     fotos_cor_json,
+        'galerias_por_cor_json': _json.dumps(galerias_por_cor),
+        'galeria_padrao_json': _json.dumps(galeria_padrao),
+        'cor_inicial_id':     cor_inicial_id,
+        'cor_inicial_nome':   cor_inicial_nome,
+        'imagens_iniciais':   imagens_iniciais,
         'avaliacoes':         avaliacoes,
         'media_notas':        round(media_notas, 1),
         'total_aval':         total_aval,
@@ -474,6 +634,7 @@ def detalhe_produto(request, slug):
                 'content_ids': [str(produto.id)],
                 'content_type': 'product',
                 'content_name': produto.nome,
+                'content_category': produto.categoria.nome if produto.categoria_id else '',
                 'value': float(produto.preco_atual),
                 'currency': 'BRL',
             },
@@ -481,6 +642,47 @@ def detalhe_produto(request, slug):
     except Exception:
         pass
     return render(request, 'produtos/detalhe.html', context)
+
+
+@login_required
+def avaliar_pedido(request, numero):
+    from .forms import AvaliacaoCompraForm
+
+    pedido = get_object_or_404(
+        request.user.pedidos.prefetch_related('itens__produto'),
+        numero=numero,
+    )
+
+    avaliacao_existente = pedido.avaliacao
+    if pedido.status != 'entregue' and avaliacao_existente is None:
+        messages.info(request, 'A avaliação é liberada assim que o pedido estiver entregue.')
+        return redirect('usuarios:detalhe_pedido', numero=pedido.numero)
+
+    if request.method == 'POST':
+        if avaliacao_existente is not None:
+            messages.info(request, 'Essa compra já foi avaliada.')
+            return redirect('produtos:avaliar_pedido', numero=pedido.numero)
+
+        form = AvaliacaoCompraForm(request.POST)
+        if form.is_valid():
+            avaliacao = form.save(commit=False)
+            avaliacao.pedido = pedido
+            avaliacao.cliente = request.user
+            avaliacao.produto = None
+            avaliacao.nome_publico = (request.user.nome or pedido.nome_completo or 'Cliente').split()[0]
+            avaliacao.aprovada = False
+            avaliacao.save()
+            messages.success(request, 'Avaliação enviada com sucesso! Obrigada por compartilhar sua experiência.')
+            return redirect('produtos:avaliar_pedido', numero=pedido.numero)
+    else:
+        form = AvaliacaoCompraForm()
+
+    return render(request, 'produtos/avaliar_pedido.html', {
+        'pedido': pedido,
+        'form': form,
+        'avaliacao_existente': avaliacao_existente,
+        'nome_publico': (request.user.nome or pedido.nome_completo or 'Cliente').split()[0],
+    })
 
 
 def busca(request):
@@ -498,8 +700,54 @@ def busca(request):
             .order_by('-destaque', '-criado_em')[:48]
         )
 
-    context = {'q': q, 'resultados': resultados}
+    meta_search_event_id = gerar_evento_id('search')
+    if q:
+        try:
+            enviar_evento_meta(
+                request,
+                event_name='Search',
+                event_id=meta_search_event_id,
+                event_source_url=request.build_absolute_uri(),
+                custom_data={
+                    'search_string': q,
+                    'content_ids': [str(p.id) for p in resultados],
+                    'content_type': 'product',
+                    'content_category': 'busca',
+                },
+            )
+        except Exception:
+            pass
+
+    context = {'q': q, 'resultados': resultados, 'meta_search_event_id': meta_search_event_id}
     return render(request, 'produtos/busca.html', context)
+
+
+def busca_autocomplete(request):
+    from apps.produtos.models import Produto, Categoria
+    q = request.GET.get('q', '').strip()[:60]
+    if len(q) < 2:
+        return JsonResponse({'sugestoes': []})
+
+    sugestoes = []
+
+    produtos = (
+        Produto.objects.filter(ativo=True, nome__icontains=q)
+        .values('nome', 'slug')
+        .order_by('-destaque', '-criado_em')[:6]
+    )
+    for p in produtos:
+        sugestoes.append({'tipo': 'produto', 'label': p['nome'], 'url': f'/produto/{p["slug"]}/'})
+
+    cats = (
+        Categoria.objects.filter(ativa=True, nome__icontains=q)
+        .select_related('parent')
+        .order_by('ordem', 'nome')[:3]
+    )
+    for c in cats:
+        url = f'/loja/{c.parent.slug}/{c.slug}/' if c.parent_id else f'/loja/{c.slug}/'
+        sugestoes.append({'tipo': 'categoria', 'label': c.nome, 'url': url})
+
+    return JsonResponse({'sugestoes': sugestoes[:8]})
 
 
 @login_required
@@ -514,7 +762,40 @@ def toggle_wishlist(request, produto_id):
         if not criado:
             obj.delete()
             return JsonResponse({'status': 'ok', 'na_wishlist': False})
-        return JsonResponse({'status': 'ok', 'na_wishlist': True})
+
+        # Adicionado à wishlist → evento AddToWishlist (Pixel + CAPI, dedup por event_id)
+        meta_event_id = gerar_evento_id('addtowishlist')
+        categoria_nome = produto.categoria.nome if produto.categoria_id else ''
+        valor = float(produto.preco_atual)
+        try:
+            enviar_evento_meta(
+                request,
+                event_name='AddToWishlist',
+                event_id=meta_event_id,
+                event_source_url=request.build_absolute_uri(produto.get_absolute_url()),
+                custom_data={
+                    'content_ids': [str(produto.id)],
+                    'content_type': 'product',
+                    'content_name': produto.nome,
+                    'content_category': categoria_nome,
+                    'value': valor,
+                    'currency': 'BRL',
+                },
+            )
+        except Exception:
+            pass
+
+        return JsonResponse({
+            'status': 'ok',
+            'na_wishlist': True,
+            'meta_event': {
+                'id': meta_event_id,
+                'content_id': str(produto.id),
+                'content_name': produto.nome,
+                'content_category': categoria_nome,
+                'value': valor,
+            },
+        })
     except Exception:
         return JsonResponse({'status': 'ok', 'na_wishlist': False})
 
@@ -547,15 +828,80 @@ def sobre(request):
     return _pagina_estatica(request, 'sobre', 'home/sobre.html')
 
 
+def links(request):
+    """Página /links (estilo Linktree) usada como link da bio do Instagram.
+
+    Standalone e leve: não carrega o navbar/footer/CSS/JS do site, apenas fontes
+    da marca e o consentimento de cookies + GA4/Meta Pixel (links-bio.js). Todos
+    os botões (loja, WhatsApp, endereços, destaques) vêm do model LinkBio,
+    gerenciáveis no admin.
+    """
+    botoes = cache.get(LINKS_BIO)
+    if botoes is None:
+        from apps.conteudo.models import LinkBio
+        botoes = list(LinkBio.objects.filter(ativo=True).order_by('ordem', 'id'))
+        cache.set(LINKS_BIO, botoes, 60 * 60 * 6)  # 6h
+
+    return render(request, 'home/links.html', {'botoes': botoes})
+
+
+def _formatar_telefone_contato(telefone):
+    import re as _re
+    digitos = _re.sub(r'\D', '', telefone or '')[:11]
+    if len(digitos) == 11:
+        return f'({digitos[:2]}) {digitos[2]} {digitos[3:7]}-{digitos[7:]}'
+    if len(digitos) == 10:
+        return f'({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}'
+    return telefone
+
+
 def contato(request):
     from apps.core_utils.sanitize import sanitize_text
-    import json as _json
 
     if request.method == 'POST':
-        nome      = sanitize_text(request.POST.get('nome', ''), max_length=100)
-        email     = sanitize_text(request.POST.get('email', ''), max_length=254).lower()
-        telefone  = sanitize_text(request.POST.get('telefone', ''), max_length=20)
-        mensagem  = sanitize_text(request.POST.get('mensagem', ''), max_length=1000)
+        import logging as _logging
+        import time as _time
+        _sec_log = _logging.getLogger('django.security')
+
+        # Honeypot 1: campo oculto que so bots preenchem
+        if request.POST.get('website'):
+            _sec_log.warning(
+                'HONEYPOT1 contato: nome=%s email=%s ua=%s',
+                request.POST.get('nome', '')[:60],
+                request.POST.get('email', '')[:60],
+                request.META.get('HTTP_USER_AGENT', '')[:120],
+            )
+            return render(request, 'home/contato.html', {'enviado': True})
+
+        # Honeypot 2: campo que o JS preenche apos 3s; bots sem JS ficam com valor errado
+        if request.POST.get('_tk') != 'ok':
+            _sec_log.warning(
+                'HONEYPOT2 (sem JS) contato: nome=%s email=%s ua=%s',
+                request.POST.get('nome', '')[:60],
+                request.POST.get('email', '')[:60],
+                request.META.get('HTTP_USER_AGENT', '')[:120],
+            )
+            return render(request, 'home/contato.html', {'enviado': True})
+
+        # Timing: rejeita submissoes em menos de 3 segundos (bots preenchem na hora)
+        try:
+            ts = int(request.POST.get('_ts', '0'))
+            elapsed_ms = int(_time.time() * 1000) - ts
+            if ts == 0 or elapsed_ms < 3000:
+                _sec_log.warning(
+                    'TIMING contato (muito rapido %dms): nome=%s email=%s',
+                    elapsed_ms,
+                    request.POST.get('nome', '')[:60],
+                    request.POST.get('email', '')[:60],
+                )
+                return render(request, 'home/contato.html', {'enviado': True})
+        except (ValueError, TypeError):
+            return render(request, 'home/contato.html', {'enviado': True})
+
+        nome     = sanitize_text(request.POST.get('nome', ''), max_length=100)
+        email    = sanitize_text(request.POST.get('email', ''), max_length=254).lower()
+        telefone = sanitize_text(request.POST.get('telefone', ''), max_length=20)
+        mensagem = sanitize_text(request.POST.get('mensagem', ''), max_length=1000)
 
         if not nome or not email or not mensagem:
             return render(request, 'home/contato.html', {
@@ -563,20 +909,45 @@ def contato(request):
                 'nome': nome, 'email': email, 'telefone': telefone, 'mensagem': mensagem,
             })
 
-        # Tenta enviar e-mail; se falhar, registra mas não expõe o erro ao usuário
+        tel_formatado = _formatar_telefone_contato(telefone) if telefone else 'Nao informado'
+
+        # Persiste no banco para acompanhamento no admin
+        from apps.conteudo.models import ContatoFormulario
+        ContatoFormulario.objects.create(
+            nome=nome, email=email, telefone=telefone, mensagem=mensagem
+        )
+
+        # Envia e-mail de notificacao para os destinatarios configurados em CONTATO_NOTIF_EMAILS
         try:
-            from django.core.mail import send_mail
+            from django.core.mail import EmailMultiAlternatives
             from django.conf import settings as _settings
-            corpo = f'Nome: {nome}\nE-mail: {email}\nTelefone: {telefone}\n\nMensagem:\n{mensagem}'
-            send_mail(
-                subject=f'Contato pelo site — {nome}',
-                message=corpo,
-                from_email=_settings.EMAIL_HOST_USER,
-                recipient_list=[_settings.EMAIL_HOST_USER],
-                fail_silently=True,
+
+            notif_raw = getattr(_settings, 'CONTATO_NOTIF_EMAILS', 'contato@dellainstore.com.br')
+            notif_list = [e.strip() for e in notif_raw.split(',') if e.strip()]
+            to_list  = [notif_list[0]] if notif_list else ['contato@dellainstore.com.br']
+            bcc_list = notif_list[1:] if len(notif_list) > 1 else []
+
+            corpo = (
+                f'Nova mensagem recebida pelo formulario do site.\n\n'
+                f'Nome: {nome}\n'
+                f'E-mail: {email}\n'
+                f'Telefone: {tel_formatado}\n\n'
+                f'Mensagem:\n{mensagem}'
             )
+            msg = EmailMultiAlternatives(
+                subject    = f'[Contato Site] {nome}',
+                body       = corpo,
+                from_email = _settings.DEFAULT_FROM_EMAIL,
+                to         = to_list,
+                bcc        = bcc_list,
+                reply_to   = [f'{nome} <{email}>'],
+            )
+            msg.send()
         except Exception:
-            pass
+            import logging as _log
+            _log.getLogger(__name__).error(
+                'Falha ao enviar e-mail de contato de %s', email, exc_info=True
+            )
 
         return render(request, 'home/contato.html', {'enviado': True})
 
@@ -621,6 +992,7 @@ def newsletter_signup(request):
     from django.db import IntegrityError
     from apps.core_utils.sanitize import sanitize_text
     from apps.produtos.models import NewsletterInscricao
+    from apps.pedidos.models import Cupom, CupomEmitido
 
     try:
         data  = json.loads(request.body)
@@ -634,15 +1006,88 @@ def newsletter_signup(request):
         except DjangoValidationError:
             return JsonResponse({'status': 'erro', 'erro': 'E-mail inválido.'})
 
+        novo = True
         try:
             NewsletterInscricao.objects.create(email=email)
         except IntegrityError:
-            # e-mail já inscrito — retorna ok silencioso (não revela existência)
-            return JsonResponse({'status': 'ok'})
+            novo = False
 
-        return JsonResponse({'status': 'ok'})
+        if request.user.is_authenticated and not request.user.recebe_newsletter:
+            request.user.__class__.objects.filter(pk=request.user.pk).update(recebe_newsletter=True)
+
+        # Emite (ou recupera) cupom de newsletter, se houver template ativo
+        cupom_data = _gerar_ou_recuperar_cupom_newsletter(email, request.user if request.user.is_authenticated else None)
+
+        # Evento Lead (Pixel + CAPI). E-mail enviado como dado de correspondência
+        # (hash SHA-256 no CAPI). Só dispara com consentimento de marketing.
+        meta_event_id = gerar_evento_id('lead')
+        try:
+            enviar_evento_meta(
+                request,
+                event_name='Lead',
+                event_id=meta_event_id,
+                event_source_url=request.build_absolute_uri('/'),
+                dados_cliente={'email': email},
+                custom_data={'content_name': 'Newsletter', 'content_category': 'newsletter'},
+            )
+        except Exception:
+            pass
+
+        resposta = {'status': 'ok', 'novo': novo, 'meta_event_id': meta_event_id}
+        if cupom_data:
+            resposta['cupom'] = cupom_data
+        return JsonResponse(resposta)
 
     except (json.JSONDecodeError, KeyError):
         return JsonResponse({'status': 'erro', 'erro': 'Requisição inválida.'}, status=400)
     except Exception:
         return JsonResponse({'status': 'erro', 'erro': 'Tente novamente.'}, status=500)
+
+
+def _gerar_ou_recuperar_cupom_newsletter(email, cliente=None):
+    """
+    Gera (ou recupera) o CupomEmitido de origem newsletter para o e-mail dado.
+
+    Retorna dict com {codigo, valor, tipo, dias_validade} ou None se não houver
+    template ativo / cliente já tem cupom usado. Idempotente: se já existir
+    cupom emitido válido (não usado, não expirado), reutiliza em vez de criar novo.
+    """
+    import logging
+    from apps.pedidos.models import Cupom, CupomEmitido
+    logger = logging.getLogger(__name__)
+
+    try:
+        template = (Cupom.objects
+                    .filter(origem='newsletter', ativo=True)
+                    .order_by('-id')
+                    .first())
+        if not template or not template.dias_validade_pos_emissao:
+            return None
+
+        emitido = (CupomEmitido.objects
+                   .filter(email__iexact=email, cupom_template=template, usado_em__isnull=True)
+                   .order_by('-emitido_em')
+                   .first())
+        if emitido and not emitido.esta_expirado:
+            cupom = emitido
+        else:
+            cupom = CupomEmitido.objects.create(
+                cupom_template=template,
+                email=email,
+                cliente=cliente,
+            )
+            try:
+                from apps.pedidos.emails import enviar_email_cupom_newsletter
+                enviar_email_cupom_newsletter(cupom)
+            except Exception as exc:
+                logger.warning('Falha ao enviar e-mail de cupom newsletter para %s: %s', email, exc)
+
+        return {
+            'codigo':         cupom.codigo,
+            'valor':          str(template.valor),
+            'tipo':           template.tipo,
+            'dias_validade':  int(template.dias_validade_pos_emissao),
+        }
+    except Exception as exc:
+        logger.warning('Falha ao gerar cupom newsletter para %s: %s', email, exc)
+        return None

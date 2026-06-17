@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seu cupom de {{ valor_fmt }} de desconto D'ELLA Instore</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f3f1;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f3f1;padding:40px 0 48px;">
+  <tr>
+    <td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+        <!-- HEADER -->
+        <tr>
+          <td style="background:#ffffff;padding:32px 40px 20px;text-align:center;
+                     border-radius:8px 8px 0 0;">
+            <img src="{{ logo_url }}" alt="D'ELLA" width="160"
+                 style="display:block;margin:0 auto 6px;border:0;outline:none;text-decoration:none;">
+            <div style="font-size:8px;font-weight:400;color:#b0a090;
+                        letter-spacing:5px;text-transform:uppercase;">I N S T O R E</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#ffffff;padding:0 40px;">
+            <div style="height:1px;background:#e0d0b8;"></div>
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td style="background:#ffffff;padding:32px 40px 16px;text-align:center;">
+            <div style="font-size:11px;font-weight:600;color:#c9a96e;letter-spacing:3px;
+                        text-transform:uppercase;margin-bottom:10px;">
+              Obrigada por se inscrever
+            </div>
+            <div style="font-size:24px;font-weight:300;color:#1a1a1a;letter-spacing:.5px;
+                        margin-bottom:10px;">
+              Seu cupom de <span style="font-weight:600;">{{ valor_fmt }}</span> chegou
+            </div>
+            <div style="font-size:14px;color:#888;line-height:1.6;">
+              Use no checkout da sua próxima compra na D'ELLA Instore.
+            </div>
+          </td>
+        </tr>
+
+        <!-- CUPOM -->
+        <tr>
+          <td style="background:#ffffff;padding:8px 40px 8px;text-align:center;">
+            <div style="display:inline-block;border:1px dashed #c9a96e;padding:18px 36px;border-radius:4px;">
+              <div style="font-size:10px;font-weight:600;color:#999;letter-spacing:2px;
+                          text-transform:uppercase;margin-bottom:8px;">
+                Código do cupom
+              </div>
+              <div style="font-size:22px;font-weight:600;color:#1a1a1a;letter-spacing:4px;">
+                {{ cupom.codigo }}
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <!-- VALIDADE -->
+        <tr>
+          <td style="background:#ffffff;padding:18px 40px 28px;text-align:center;">
+            <div style="font-size:13px;color:#666;line-height:1.6;">
+              Válido por <strong style="color:#1a1a1a;">{{ dias_validade }} dias</strong>{% if expira_em %}, até <strong style="color:#1a1a1a;">{{ expira_em|date:"d/m/Y" }}</strong>{% endif %}.<br>
+              Não cumulativo com outras promoções.
+            </div>
+          </td>
+        </tr>
+
+        <!-- CTA -->
+        <tr>
+          <td style="background:#ffffff;padding:0 40px 36px;text-align:center;">
+            <a href="{{ site_url }}/"
+               style="display:inline-block;background:#1a1a1a;color:#ffffff;
+                       padding:14px 48px;border-radius:4px;text-decoration:none;
+                       font-size:12px;font-weight:600;letter-spacing:2px;
+                       text-transform:uppercase;">
+              Conhecer a coleção
+            </a>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background:#eeecea;padding:24px 40px;text-align:center;
+                     border-radius:0 0 8px 8px;">
+            <div style="font-size:12px;color:#888;line-height:1.8;">
+              Dúvidas? Responda este e-mail ou fale pelo
+              <a href="https://wa.me/{{ whatsapp_number }}?text=Olá!%20Tenho%20uma%20dúvida%20sobre%20o%20meu%20cupom%20Della%20Instore"
+                 style="color:#1a1a1a;text-decoration:none;font-weight:600;">WhatsApp</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

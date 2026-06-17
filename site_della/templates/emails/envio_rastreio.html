@@ -3,128 +3,131 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Seu pedido foi enviado — Della Instore</title>
+<title>Pedido enviado — D'ELLA Instore</title>
 </head>
-<body style="margin:0;padding:0;background:#f5f5f3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#f4f3f1;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
 
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f3;padding:32px 0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f3f1;padding:40px 0 48px;">
   <tr>
     <td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
         <!-- HEADER -->
         <tr>
-          <td style="background:#0a0a0a;padding:32px 40px;text-align:center;">
-            <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;
-                        color:#c9a96e;letter-spacing:3px;">DELLA INSTORE</div>
-            <div style="font-size:11px;color:#888;letter-spacing:2px;margin-top:4px;text-transform:uppercase;">
-              Moda Feminina Premium
-            </div>
+          <td style="background:#ffffff;padding:32px 40px 20px;text-align:center;
+                     border-radius:8px 8px 0 0;">
+            <img src="{{ logo_url }}" alt="D'ELLA" width="160"
+                 style="display:block;margin:0 auto 6px;padding:6px 10px;background:#ffffff;border-radius:4px;">
+            <div style="font-size:8px;font-weight:400;color:#b0a090;
+                        letter-spacing:5px;text-transform:uppercase;">I N S T O R E</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#ffffff;padding:0 40px;">
+            <div style="height:1px;background:#e0d0b8;"></div>
           </td>
         </tr>
 
         <!-- HERO -->
         <tr>
-          <td style="background:#0a0a0a;padding:32px 40px;text-align:center;
-                      border-top:3px solid #c9a96e;">
-            <div style="font-size:40px;margin-bottom:12px;">📦</div>
-            <div style="font-size:22px;font-weight:700;color:#fafafa;letter-spacing:1px;">
-              Seu pedido está a caminho!
+          <td style="background:#ffffff;padding:32px 40px 28px;text-align:center;">
+            <div style="font-size:11px;font-weight:600;color:#c9a96e;letter-spacing:3px;
+                        text-transform:uppercase;margin-bottom:10px;">
+              Pedido Enviado
             </div>
-            <div style="font-size:14px;color:#888;margin-top:8px;">
-              Pedido {{ pedido.numero }}
+            <div style="font-size:24px;font-weight:300;color:#1a1a1a;letter-spacing:.5px;
+                        margin-bottom:10px;">
+              Seu pedido está<br>
+              <span style="font-weight:600;">a caminho</span>
+            </div>
+            <div style="font-size:14px;color:#888;line-height:1.6;">
+              Olá, <strong style="color:#555;">{{ pedido.nome_completo.split.0 }}</strong>!
+              Ótimas notícias — seu pedido foi enviado.
             </div>
           </td>
         </tr>
 
         <!-- BODY -->
         <tr>
-          <td style="background:#ffffff;padding:36px 40px;">
+          <td style="background:#ffffff;padding:0 40px 36px;">
 
-            <p style="margin:0 0 24px;font-size:15px;color:#333;line-height:1.6;">
-              Olá, <strong>{{ pedido.nome_completo.split.0 }}</strong>!<br>
-              Ótimas notícias — seu pedido foi enviado e já está a caminho.
-            </p>
-
-            <!-- Código de rastreio -->
+            <!-- Rastreio -->
             {% if pedido.codigo_rastreio %}
             <table width="100%" cellpadding="0" cellspacing="0"
-                   style="background:#f9f6f0;border:2px solid #c9a96e;border-radius:6px;
-                          margin-bottom:28px;">
+                   style="border:1px solid #ede9e1;border-radius:6px;margin-bottom:28px;">
               <tr>
                 <td style="padding:20px 24px;text-align:center;">
-                  <div style="font-size:12px;color:#888;text-transform:uppercase;
-                               letter-spacing:1px;margin-bottom:8px;">
+                  <div style="font-size:11px;color:#999;text-transform:uppercase;
+                               letter-spacing:1.5px;margin-bottom:8px;">
                     Código de Rastreio
                   </div>
-                  <div style="font-size:24px;font-weight:700;color:#0a0a0a;
-                               letter-spacing:3px;font-family:monospace;">
+                  <div style="font-size:18px;font-weight:600;color:#1a1a1a;
+                               letter-spacing:3px;font-family:monospace;margin-bottom:16px;">
                     {{ pedido.codigo_rastreio }}
                   </div>
-                  {% if pedido.transportadora %}
-                  <div style="font-size:13px;color:#888;margin-top:6px;">
-                    {{ pedido.transportadora }}
-                  </div>
-                  {% endif %}
+                  <a href="https://www.linkcorreios.com.br/?id={{ pedido.codigo_rastreio }}"
+                     target="_blank"
+                     style="display:inline-block;background:#1a1a1a;color:#ffffff;
+                             padding:12px 32px;border-radius:4px;text-decoration:none;
+                             font-size:12px;font-weight:600;letter-spacing:2px;
+                             text-transform:uppercase;">
+                    Rastrear Entrega
+                  </a>
                 </td>
               </tr>
             </table>
-
-            <div style="text-align:center;margin-bottom:32px;">
-              <a href="https://www.correios.com.br/rastreamento"
-                 style="display:inline-block;background:#c9a96e;color:#0a0a0a;
-                         padding:12px 32px;border-radius:3px;text-decoration:none;
-                         font-size:13px;font-weight:700;letter-spacing:1px;
-                         text-transform:uppercase;">
-                Rastrear Entrega
-              </a>
-            </div>
             {% endif %}
 
-            <!-- Resumo -->
+            <!-- Endereço -->
             <table width="100%" cellpadding="0" cellspacing="0"
-                   style="background:#f9f9f9;border-radius:6px;margin-bottom:28px;">
+                   style="border:1px solid #ede9e1;border-radius:6px;margin-bottom:28px;">
               <tr>
                 <td style="padding:16px 20px;">
-                  <div style="font-size:12px;font-weight:700;text-transform:uppercase;
-                               letter-spacing:1px;color:#666;margin-bottom:8px;">
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;
+                               letter-spacing:1.5px;color:#999;margin-bottom:8px;">
                     Endereço de Entrega
                   </div>
-                  <div style="font-size:14px;color:#333;line-height:1.7;">
+                  <div style="font-size:13px;color:#444;line-height:1.7;">
                     {{ pedido.logradouro }}, {{ pedido.numero_entrega }}
-                    {% if pedido.complemento %} — {{ pedido.complemento }}{% endif %}<br>
-                    {{ pedido.bairro }} — {{ pedido.cidade }}/{{ pedido.estado }}<br>
-                    CEP: {{ pedido.cep_entrega|slice:":5" }}-{{ pedido.cep_entrega|slice:"5:" }}
+                    {% if pedido.complemento %}<br>{{ pedido.complemento }}{% endif %}<br>
+                    {{ pedido.bairro }}<br>
+                    {{ pedido.cidade }}/{{ pedido.estado }}<br>
+                    CEP {{ pedido.cep_entrega|slice:":5" }}-{{ pedido.cep_entrega|slice:"5:" }}
                   </div>
                 </td>
               </tr>
             </table>
 
-            <!-- Itens resumo -->
-            <div style="font-size:13px;font-weight:700;text-transform:uppercase;
-                         letter-spacing:1px;color:#666;margin-bottom:12px;">
+            <!-- Itens -->
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;
+                         letter-spacing:1.5px;color:#999;margin-bottom:12px;">
               Itens Enviados
             </div>
+            <div style="height:1px;background:#ede9e1;margin-bottom:0;"></div>
             <table width="100%" cellpadding="0" cellspacing="0"
-                   style="margin-bottom:32px;">
+                   style="border-collapse:collapse;margin-bottom:0;">
               {% for item in pedido.itens.all %}
-              <tr style="border-bottom:1px solid #f0f0f0;">
-                <td style="padding:10px 0;font-size:14px;color:#333;">
-                  {{ item.quantidade }}x {{ item.nome_produto }}
+              <tr>
+                <td style="padding:11px 0;font-size:14px;color:#333;">
+                  <span style="font-weight:500;">{{ item.nome_produto }}</span>
                   {% if item.variacao_desc %}
-                    <span style="color:#888;font-size:12px;">— {{ item.variacao_desc }}</span>
+                  <span style="color:#b8b0a4;font-size:10px;line-height:1.45;"> &middot; {{ item.variacao_desc }}</span>
                   {% endif %}
+                </td>
+                <td style="padding:11px 0;text-align:right;font-size:13px;color:#888;white-space:nowrap;">
+                  {{ item.quantidade }}&times;
                 </td>
               </tr>
               {% endfor %}
             </table>
+            <div style="height:1px;background:#ede9e1;margin-bottom:32px;"></div>
 
             <!-- CTA -->
             <div style="text-align:center;">
               <a href="{{ site_url }}/conta/minha-conta/pedidos/{{ pedido.numero }}/"
-                 style="display:inline-block;background:#0a0a0a;color:#c9a96e;
-                         padding:14px 36px;border-radius:3px;text-decoration:none;
-                         font-size:13px;font-weight:700;letter-spacing:1.5px;
+                 style="display:inline-block;background:#1a1a1a;color:#ffffff;
+                         padding:14px 40px;border-radius:4px;text-decoration:none;
+                         font-size:12px;font-weight:600;letter-spacing:2px;
                          text-transform:uppercase;">
                 Ver Meu Pedido
               </a>
@@ -135,16 +138,16 @@
 
         <!-- FOOTER -->
         <tr>
-          <td style="background:#0a0a0a;padding:28px 40px;text-align:center;">
-            <div style="font-size:11px;color:#555;line-height:1.8;">
-              Dúvidas? Fale conosco pelo WhatsApp ou pelo e-mail<br>
-              <a href="mailto:contato@dellainstore.com.br"
-                 style="color:#c9a96e;text-decoration:none;">
-                contato@dellainstore.com.br
-              </a>
+          <td style="background:#eeecea;padding:24px 40px;text-align:center;
+                     border-radius:0 0 8px 8px;">
+            <div style="font-size:12px;color:#888;line-height:1.8;">
+              Dúvidas? Responda este e-mail ou fale pelo
+              <a href="https://wa.me/{{ whatsapp_number }}?text=Olá!%20Tenho%20uma%20dúvida%20sobre%20meu%20pedido"
+                 style="color:#1a1a1a;text-decoration:none;font-weight:600;">WhatsApp</a>
             </div>
-            <div style="margin-top:16px;font-size:10px;color:#444;letter-spacing:1px;">
-              DELLA INSTORE — MODA FEMININA PREMIUM
+            <div style="margin-top:10px;">
+              <a href="{{ site_url }}/conta/minha-conta/"
+                 style="font-size:12px;color:#888;text-decoration:none;">Acessar minha conta</a>
             </div>
           </td>
         </tr>

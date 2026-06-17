@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load della_filters %}
 {% block title %}{{ title }} — Painel D'ELLA{% endblock %}
 {% block content_title %}{% endblock %}
 
@@ -35,7 +36,7 @@
           <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;">{{ p.nome_completo }}</td>
           <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;">{{ p.get_forma_pagamento_display }}</td>
           <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;">{{ p.get_status_display }}</td>
-          <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;text-align:right;">R$ {{ p.total|floatformat:"2g" }}</td>
+          <td style="padding:.7rem 1rem;border-bottom:1px solid #f0f0f0;text-align:right;">R$ {{ p.total|brl_price }}</td>
         </tr>
         {% empty %}
         <tr><td colspan="5" style="padding:1rem;text-align:center;color:#777;">Nenhum pedido selecionado.</td></tr>

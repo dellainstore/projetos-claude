@@ -3,85 +3,94 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Redefinição de senha — Della Instore</title>
+<title>Redefinição de senha — D'ELLA Instore</title>
 </head>
-<body style="margin:0;padding:0;background:#f5f5f3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#f4f3f1;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
 
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f3;padding:32px 0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f3f1;padding:40px 0 48px;">
   <tr>
     <td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
         <!-- HEADER -->
         <tr>
-          <td style="background:#0a0a0a;padding:32px 40px;text-align:center;">
-            <div style="font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;
-                        color:#c9a96e;letter-spacing:3px;">DELLA INSTORE</div>
-            <div style="font-size:11px;color:#888;letter-spacing:2px;margin-top:4px;text-transform:uppercase;">
-              Moda Feminina Premium
-            </div>
+          <td style="background:#ffffff;padding:32px 40px 20px;text-align:center;
+                     border-radius:8px 8px 0 0;">
+            <img src="{{ logo_url }}" alt="D'ELLA" width="160"
+                 style="display:block;margin:0 auto 6px;padding:6px 10px;background:#ffffff;border-radius:4px;">
+            <div style="font-size:8px;font-weight:400;color:#b0a090;
+                        letter-spacing:5px;text-transform:uppercase;">I N S T O R E</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#ffffff;padding:0 40px;">
+            <div style="height:1px;background:#e0d0b8;"></div>
           </td>
         </tr>
 
         <!-- BODY -->
         <tr>
-          <td style="background:#ffffff;padding:48px 40px;">
+          <td style="background:#ffffff;padding:36px 40px 40px;">
 
-            <div style="font-size:32px;text-align:center;margin-bottom:24px;">🔐</div>
-
-            <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#0a0a0a;
-                        text-align:center;font-family:Georgia,serif;">
+            <div style="font-size:11px;font-weight:600;color:#c9a96e;letter-spacing:3px;
+                        text-transform:uppercase;text-align:center;margin-bottom:10px;">
               Redefinição de Senha
-            </h2>
-
-            <p style="margin:0 0 24px;font-size:15px;color:#555;line-height:1.7;text-align:center;">
-              Olá, <strong>{{ usuario.nome }}</strong>.<br>
-              Recebemos uma solicitação para redefinir a senha da sua conta.
-            </p>
+            </div>
+            <div style="font-size:24px;font-weight:300;color:#1a1a1a;letter-spacing:.5px;
+                        text-align:center;margin-bottom:20px;">
+              Olá, <span style="font-weight:600;">{{ usuario.nome }}</span>
+            </div>
+            <div style="font-size:14px;color:#888;line-height:1.7;text-align:center;
+                        margin-bottom:32px;">
+              Recebemos uma solicitação para redefinir a senha da sua conta.<br>
+              Clique no botão abaixo para criar uma nova senha.
+            </div>
 
             <!-- CTA -->
-            <div style="text-align:center;margin:32px 0;">
+            <div style="text-align:center;margin-bottom:32px;">
               <a href="{{ link }}"
-                 style="display:inline-block;background:#c9a96e;color:#0a0a0a;
-                         padding:16px 40px;border-radius:3px;text-decoration:none;
-                         font-size:14px;font-weight:700;letter-spacing:1.5px;
+                 style="display:inline-block;background:#1a1a1a;color:#ffffff;
+                         padding:14px 40px;border-radius:4px;text-decoration:none;
+                         font-size:12px;font-weight:600;letter-spacing:2px;
                          text-transform:uppercase;">
                 Criar Nova Senha
               </a>
             </div>
 
-            <p style="margin:0 0 16px;font-size:13px;color:#888;line-height:1.7;text-align:center;">
-              Este link é válido por <strong>24 horas</strong>.<br>
-              Se você não solicitou a redefinição, ignore este e-mail —
+            <div style="font-size:13px;color:#aaa;line-height:1.7;text-align:center;
+                        margin-bottom:24px;">
+              Este link é válido por <strong style="color:#888;">24 horas</strong>.<br>
+              Se você não solicitou a redefinição, ignore este e-mail —<br>
               sua senha permanece a mesma.
-            </p>
+            </div>
 
             <!-- Link alternativo -->
-            <div style="background:#f9f9f9;border-radius:4px;padding:14px 16px;margin-top:24px;">
-              <div style="font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;
-                           letter-spacing:.5px;">
-                Ou copie e cole este link no navegador:
-              </div>
-              <div style="font-size:12px;color:#555;word-break:break-all;">
-                {{ link }}
-              </div>
-            </div>
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="border:1px solid #ede9e1;border-radius:6px;">
+              <tr>
+                <td style="padding:14px 16px;">
+                  <div style="font-size:11px;color:#bbb;margin-bottom:6px;text-transform:uppercase;
+                               letter-spacing:.5px;">
+                    Ou copie e cole este link no navegador:
+                  </div>
+                  <div style="font-size:12px;color:#666;word-break:break-all;">
+                    {{ link }}
+                  </div>
+                </td>
+              </tr>
+            </table>
 
           </td>
         </tr>
 
         <!-- FOOTER -->
         <tr>
-          <td style="background:#0a0a0a;padding:28px 40px;text-align:center;">
-            <div style="font-size:11px;color:#555;line-height:1.8;">
-              Dúvidas? Fale conosco pelo e-mail<br>
+          <td style="background:#eeecea;padding:24px 40px;text-align:center;
+                     border-radius:0 0 8px 8px;">
+            <div style="font-size:12px;color:#888;line-height:1.8;">
+              Dúvidas? Fale conosco pelo e-mail
               <a href="mailto:contato@dellainstore.com.br"
-                 style="color:#c9a96e;text-decoration:none;">
-                contato@dellainstore.com.br
-              </a>
-            </div>
-            <div style="margin-top:16px;font-size:10px;color:#444;letter-spacing:1px;">
-              DELLA INSTORE — MODA FEMININA PREMIUM
+                 style="color:#1a1a1a;text-decoration:none;font-weight:600;">contato@dellainstore.com.br</a>
             </div>
           </td>
         </tr>

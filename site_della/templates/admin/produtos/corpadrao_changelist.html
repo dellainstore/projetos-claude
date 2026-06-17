@@ -1,4 +1,5 @@
 {% extends "admin/change_list.html" %}
+{% load static %}
 
 {% block object-tools-items %}
   <li>
@@ -20,27 +21,5 @@
 
 {% block extrahead %}
   {{ block.super }}
-  <script>
-    (function() {
-      var STORAGE_KEY = 'admin_corpadrao_changelist_scroll';
-
-      function salvarScroll() {
-        sessionStorage.setItem(STORAGE_KEY, String(window.scrollY || window.pageYOffset || 0));
-      }
-
-      document.addEventListener('DOMContentLoaded', function() {
-        var saved = sessionStorage.getItem(STORAGE_KEY);
-        if (saved !== null) {
-          window.scrollTo(0, parseInt(saved, 10) || 0);
-          sessionStorage.removeItem(STORAGE_KEY);
-        }
-
-        document.querySelectorAll('#result_list a, .field-acoes_linha a').forEach(function(link) {
-          link.addEventListener('click', salvarScroll);
-        });
-
-        window.addEventListener('beforeunload', salvarScroll);
-      });
-    })();
-  </script>
+  <script src="{% static 'admin/js/corpadrao_changelist.js' %}" defer></script>
 {% endblock %}

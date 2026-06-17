@@ -31,7 +31,7 @@
               <a href="{% url 'admin:produtos_categoria_change' item.parent.pk %}" class="della-btn-edit">Editar</a>
               <a href="{% url 'admin:produtos_categoria_delete' item.parent.pk %}"
                  class="della-btn-delete"
-                 onclick="return confirm('Excluir esta categoria?')">Excluir</a>
+                 data-confirm="Excluir esta categoria?">Excluir</a>
             </div>
           </div>
 
@@ -56,7 +56,7 @@
                   <a href="{% url 'admin:produtos_categoria_change' filha.pk %}" class="della-btn-edit">Editar</a>
                   <a href="{% url 'admin:produtos_categoria_delete' filha.pk %}"
                      class="della-btn-delete"
-                     onclick="return confirm('Excluir esta categoria?')">Excluir</a>
+                     data-confirm="Excluir esta categoria?">Excluir</a>
                 </div>
               </div>
             {% empty %}

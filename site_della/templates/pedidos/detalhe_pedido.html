@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
-{% load static %}
-{% block titulo %}Pedido {{ pedido.numero }} — D'ELLA Instore{% endblock %}
+{% load static della_filters %}
+{% block titulo %}Pedido {{ pedido.numero }} | D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
@@ -36,7 +36,7 @@
         <img src="data:image/png;base64,{{ pix_qrcode }}"
              alt="QR Code Pix — {{ pedido.numero }}"
              class="pix-qrcode-img">
-        <div class="pix-valor">R$ {{ pedido.total|floatformat:"2g" }}</div>
+        <div class="pix-valor">R$ {{ pedido.total|brl_price }}</div>
       </div>
 
       {% if pix_payload %}
@@ -45,7 +45,10 @@
         <div class="pix-copiar-input-wrapper">
           <input type="text" id="pix-payload-input" value="{{ pix_payload }}"
                  readonly class="pix-copiar-input">
-          <button type="button" id="btn-copiar-pix" class="btn-copiar-pix" onclick="copiarPix()">
+          <button type="button" id="btn-copiar-pix" class="btn-copiar-pix"
+                  data-copy-target="pix-payload-input"
+                  data-copy-default-html="<i class='far fa-copy'></i> Copiar"
+                  data-copy-success-html="<i class='fas fa-check'></i> Copiado!">
             <i class="far fa-copy"></i> Copiar
           </button>
         </div>
@@ -87,7 +90,7 @@
             {% endif %}
             <p class="detalhe-item-qty">Qtd: {{ item.quantidade }}</p>
           </div>
-          <p class="detalhe-item-preco">R$ {{ item.subtotal|floatformat:"2g" }}</p>
+          <p class="detalhe-item-preco">R$ {{ item.subtotal|brl_price }}</p>
         </div>
         {% endfor %}
       </div>
@@ -98,14 +101,19 @@
 
       <section class="detalhe-secao">
         <h2 class="detalhe-secao-titulo"><i class="fas fa-receipt"></i> Resumo</h2>
-        <div class="detalhe-linha"><span>Subtotal</span><span>R$ {{ pedido.subtotal|floatformat:"2g" }}</span></div>
-        <div class="detalhe-linha"><span>Frete</span><span>R$ {{ pedido.frete|floatformat:"2g" }}</span></div>
+        <div class="detalhe-linha"><span>Subtotal</span><span>R$ {{ pedido.subtotal|brl_price }}</span></div>
+        <div class="detalhe-linha"><span>Frete</span><span>R$ {{ pedido.frete|brl_price }}</span></div>
         {% if pedido.desconto %}
-        <div class="detalhe-linha" style="color:#27ae60;"><span>Desconto</span><span>− R$ {{ pedido.desconto|floatformat:"2g" }}</span></div>
+        <div class="detalhe-linha" style="color:#27ae60;"><span>Desconto</span><span>− R$ {{ pedido.desconto|brl_price }}</span></div>
         {% endif %}
-        <div class="detalhe-linha detalhe-total"><span>Total</span><span>R$ {{ pedido.total|floatformat:"2g" }}</span></div>
+        <div class="detalhe-linha detalhe-total"><span>Total</span><span>R$ {{ pedido.total|brl_price }}</span></div>
         <div class="detalhe-linha" style="margin-top:.75rem;"><span>Pagamento</span><span>{{ pedido.get_forma_pagamento_display }}</span></div>
-        {% if pedido.codigo_rastreio %}
+        {% if pedido.retirada_loja %}
+        <div class="detalhe-linha" style="margin-top:.75rem;">
+          <span>Entrega</span>
+          <span style="font-weight:600;color:var(--dourado, #c9a96e);">Retirada na Loja</span>
+        </div>
+        {% elif pedido.codigo_rastreio %}
         <div class="detalhe-linha" style="margin-top:.75rem;">
           <span>Rastreio</span>
           <span>
@@ -118,14 +126,26 @@
       </section>
 
       <section class="detalhe-secao">
+        {% if pedido.retirada_loja %}
+        <h2 class="detalhe-secao-titulo"><i class="fas fa-store"></i> Retirada na Loja</h2>
+        <p style="font-weight:500;">D'ELLA Instore - Show Room</p>
+        <p>Rua Visconde da Luz, 183</p>
+        <p>Vila Nova Conceição - São Paulo/SP</p>
+        <p>CEP 04537-070</p>
+        <p style="margin-top:.75rem;font-weight:500;">Horários de funcionamento:</p>
+        <p>Seg a Qui: 10h às 19h</p>
+        <p>Sex: 10h às 18h</p>
+        <p>Sáb: confirmar pelo WhatsApp</p>
+        {% else %}
         <h2 class="detalhe-secao-titulo"><i class="fas fa-map-marker-alt"></i> Endereço de Entrega</h2>
         <p>{{ pedido.nome_completo }}</p>
-        <p>{{ pedido.logradouro }}, {{ pedido.numero_entrega }}{% if pedido.complemento %} — {{ pedido.complemento }}{% endif %}</p>
+        <p>{{ pedido.logradouro }}, {{ pedido.numero_entrega }}{% if pedido.complemento %} - {{ pedido.complemento }}{% endif %}</p>
         <p>{{ pedido.bairro }}</p>
-        <p>{{ pedido.cidade }} — {{ pedido.estado }}</p>
+        <p>{{ pedido.cidade }} - {{ pedido.estado }}</p>
         <p>CEP: {{ pedido.cep_entrega|slice:":5" }}-{{ pedido.cep_entrega|slice:"5:" }}</p>
         {% if pedido.transportadora %}
         <p style="margin-top:.75rem;font-weight:500;">{{ pedido.transportadora }}</p>
+        {% endif %}
         {% endif %}
       </section>
 
@@ -144,17 +164,4 @@
 </div>
 {% endblock %}
 
-{% block js_extra %}
-{% if pix_qrcode %}
-<script>
-function copiarPix() {
-  const input = document.getElementById('pix-payload-input');
-  navigator.clipboard?.writeText(input.value).then(() => {
-    const btn = document.getElementById('btn-copiar-pix');
-    btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
-    setTimeout(() => { btn.innerHTML = '<i class="far fa-copy"></i> Copiar'; }, 2500);
-  }).catch(() => { input.select(); document.execCommand('copy'); });
-}
-</script>
-{% endif %}
-{% endblock %}
+{% block js_extra %}{% endblock %}

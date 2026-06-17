@@ -58,7 +58,7 @@ UNIDADE_NEGOCIO_ID = 1484433     # Matriz
 # ── Vendedores (nome em maiúsculas → bling_vendedor_id) ───────────────────────
 VENDEDOR_PADRAO_ID = 7616577942   # CRISLAINY SILVERIO GIACOMELLI
 VENDEDORES_BLING = {
-    'TINA DIAS':                     7613793453,
+    'TINA MARIA':                    7613793453,
     'CRISLAINY SILVERIO GIACOMELLI': 7616577942,
     'MICHELLE ALVES FERNANDES':      15205612892,
     'SARA OLIVEIRA':                 15596882226,
@@ -148,7 +148,26 @@ def enviar_pedido_bling(pedido) -> bool:
                 logger.warning('Bling: falha ao forçar situação inicial no pedido %s: %s',
                                pedido.numero, exc)
 
+        # Sync imediato para as variações do pedido que têm sync ativo.
+        # O pedido já foi enviado ao Bling e criou reserva — puxamos o saldo
+        # atualizado para refletir a reserva antes do próximo cron rodar.
+        _sincronizar_estoque_do_pedido(pedido)
+
     return True
+
+
+def _sincronizar_estoque_do_pedido(pedido) -> None:
+    """Dispara sync de estoque apenas para as variações do pedido com sync ativo."""
+    try:
+        from apps.produtos.models import Variacao
+        ids = [item.variacao_id for item in pedido.itens.all() if item.variacao_id]
+        if not ids:
+            return
+        variacoes = Variacao.objects.filter(pk__in=ids, usa_sync_bling=True, ativa=True)
+        if variacoes.exists():
+            sincronizar_estoque_bling(variacoes)
+    except Exception as exc:
+        logger.warning('Sync pós-pedido falhou (não crítico): %s', exc)
 
 
 # ── Atualização de situação ───────────────────────────────────────────────────
@@ -242,6 +261,107 @@ def restaurar_estoque_pedido(pedido) -> None:
             )
 
 
+# ── Sync de estoque Bling → Site ─────────────────────────────────────────────
+
+def sincronizar_estoque_bling(variacoes=None, *, usar_retry: bool = True) -> dict:
+    """
+    Puxa o saldo virtual disponível do Bling e atualiza Variacao.estoque.
+
+    Parâmetros:
+        variacoes: queryset ou lista de Variacao com usa_sync_bling=True.
+                   Se None, busca todas as variações ativas com sync habilitado.
+
+    Retorna dict com contadores: atualizadas, sem_id, erros.
+
+    Como funciona:
+        - Cada variação/produto no Bling é um produto separado (sem agrupamento
+          de variações), identificado por bling_variacao_id.
+        - GET /estoques/{bling_variacao_id} retorna saldos por depósito.
+        - Usamos saldoVirtualDisponivel (total − reservas de pedidos em andamento),
+          somando todos os depósitos ativos. Assim, pedidos em andamento (site e
+          loja física) já reduzem automaticamente o estoque exibido no site.
+    """
+    from apps.produtos.models import Variacao
+
+    if variacoes is None:
+        variacoes = Variacao.objects.filter(usa_sync_bling=True, ativa=True)
+
+    resultados = {'atualizadas': 0, 'sem_id': 0, 'erros': 0}
+
+    from django.conf import settings as django_settings
+    deposito_id = str(getattr(django_settings, 'BLING_DEPOSITO_ID', '') or '').strip()
+    if not deposito_id:
+        logger.warning(
+            'Sync estoque: BLING_DEPOSITO_ID não configurado — somando todos os depósitos. '
+            'Configure o ID do depósito "Show Room - D\'ella" para filtrar corretamente.'
+        )
+
+    try:
+        api = BlingAPI()
+    except Exception as exc:
+        logger.error('Sync estoque Bling: não foi possível inicializar API — %s', exc)
+        return resultados
+
+    for var in variacoes:
+        if not var.bling_variacao_id:
+            resultados['sem_id'] += 1
+            logger.debug('Sync estoque: variação %s sem bling_variacao_id', var.pk)
+            continue
+
+        try:
+            data = api.consultar_estoque_produto(var.bling_variacao_id, retry=usar_retry)
+            # Endpoint retorna data[0].depositos[] com saldos por depósito
+            items = data.get('data') or []
+            depositos_produto = (items[0].get('depositos') or []) if items else []
+
+            if deposito_id:
+                # Filtra apenas o Show Room - D'ella pelo ID configurado
+                depositos_filtrados = [
+                    d for d in depositos_produto
+                    if str(d.get('id', '')) == deposito_id
+                ]
+                if not depositos_filtrados:
+                    logger.warning(
+                        'Sync estoque: depósito %s não encontrado para variação %s (bling=%s). '
+                        'Depósitos disponíveis: %s',
+                        deposito_id, var.pk, var.bling_variacao_id,
+                        [d.get('id') for d in depositos_produto],
+                    )
+            else:
+                depositos_filtrados = depositos_produto
+
+            # saldoVirtual = físico − reservas de pedidos Em andamento
+            saldo = sum(
+                d.get('saldoVirtual', 0) or 0
+                for d in depositos_filtrados
+            )
+            saldo = max(0, int(saldo))
+
+            if var.estoque != saldo:
+                Variacao.objects.filter(pk=var.pk).update(estoque=saldo)
+                logger.info(
+                    'Sync estoque: variação %s (bling=%s) %s → %s',
+                    var.pk, var.bling_variacao_id, var.estoque, saldo,
+                )
+            resultados['atualizadas'] += 1
+
+        except BlingAPIError as exc:
+            resultados['erros'] += 1
+            logger.warning(
+                'Sync estoque: erro API para variação %s (bling=%s): %s',
+                var.pk, var.bling_variacao_id, exc,
+            )
+        except Exception as exc:
+            resultados['erros'] += 1
+            logger.error('Sync estoque: erro inesperado na variação %s: %s', var.pk, exc)
+
+    logger.info(
+        'Sync estoque Bling concluído — atualizadas=%s, sem_id=%s, erros=%s',
+        resultados['atualizadas'], resultados['sem_id'], resultados['erros'],
+    )
+    return resultados
+
+
 # ── NF-e ──────────────────────────────────────────────────────────────────────
 
 def emitir_nfe_bling(pedido) -> bool:
@@ -294,49 +414,168 @@ def emitir_nfe_bling(pedido) -> bool:
 
 # ── Resolução de contato (evita duplicatas no Bling) ─────────────────────────
 
-def _dados_contato_pedido(pedido) -> dict:
-    """Dados atuais do comprador formatados para o Bling (create/update)."""
+def _endereco_contato_pedido(pedido) -> dict:
+    """
+    Bloco 'endereco' do contato no Bling v3.
+    ATENCAO: a API v3 usa 'endereco' (objeto singular com geral/cobranca),
+    NAO 'enderecos' (array). Enviar o nome errado faz o Bling ignorar o campo
+    silenciosamente e o contato fica sem endereco (pendencia cadastral na NF-e).
+    """
     return {
-        'nome':       pedido.nome_completo,
-        'tipoPessoa': 'F',
-        'cpfCnpj':    pedido.cpf,
-        'email':      pedido.email,
-        'telefone':   pedido.telefone or '',
-        'enderecos': [{
-            'geral': {
-                'endereco':    pedido.logradouro,
-                'numero':      pedido.numero_entrega,
-                'complemento': pedido.complemento or '',
-                'bairro':      pedido.bairro,
-                'cep':         pedido.cep_entrega,
-                'municipio':   pedido.cidade,
-                'uf':          pedido.estado,
-            }
-        }],
+        'geral': {
+            'endereco':    pedido.logradouro,
+            'numero':      pedido.numero_entrega,
+            'complemento': pedido.complemento or '',
+            'bairro':      pedido.bairro,
+            'cep':         pedido.cep_entrega,
+            'municipio':   pedido.cidade,
+            'uf':          pedido.estado,
+        }
     }
+
+
+def _dados_contato_pedido(pedido) -> dict:
+    """
+    Dados do comprador para o contato inline no payload de pedido (fallback raro).
+    Bling v3 usa 'numeroDocumento' (NAO 'cpfCnpj') e 'endereco' singular.
+    """
+    return {
+        'nome':            pedido.nome_completo,
+        'tipoPessoa':      'F',
+        'numeroDocumento': pedido.cpf,
+        'email':           pedido.email,
+        'telefone':        pedido.telefone or '',
+        'endereco':        _endereco_contato_pedido(pedido),
+    }
+
+
+def _criar_contato_bling(pedido, api: BlingAPI) -> 'int | None':
+    """
+    Cria novo contato no Bling com os dados do pedido.
+    Retorna o ID do contato criado, ou None em caso de falha.
+    POST /contatos exige 'tipo' (nao 'tipoPessoa') e 'situacao'.
+    """
+    payload = {
+        'nome':            pedido.nome_completo,
+        'tipo':            'F',
+        'situacao':        'A',
+        'numeroDocumento': pedido.cpf,
+        'email':           pedido.email,
+        'telefone':        pedido.telefone or '',
+        'endereco':        _endereco_contato_pedido(pedido),
+    }
+    try:
+        resp = api.criar_contato(payload)
+        contato_id = (resp.get('data') or {}).get('id')
+        if contato_id:
+            logger.info('Bling: contato criado (id=%s) para pedido %s', contato_id, pedido.numero)
+            return int(contato_id)
+        logger.warning('Bling: criacao de contato para pedido %s nao retornou ID', pedido.numero)
+    except BlingAPIError as exc:
+        logger.warning('Bling: falha ao criar contato para pedido %s: %s', pedido.numero, exc)
+    return None
+
+
+def _atualizar_contato_com_dados_pedido(contato_id: int, pedido, api: BlingAPI) -> None:
+    """
+    Preenche campos vazios do contato Bling com dados do pedido.
+    Nunca sobrescreve campos ja preenchidos: apenas completa o que esta faltando.
+    """
+    try:
+        resp = api.consultar_contato(contato_id)
+        atual = resp.get('data', {}) or {}
+    except BlingAPIError as exc:
+        logger.warning('Bling: falha ao consultar contato %s para merge: %s', contato_id, exc)
+        return
+
+    def _vazio(val):
+        return not val or (isinstance(val, str) and not val.strip())
+
+    precisa_atualizar = False
+    payload = {
+        'nome':      atual.get('nome') or pedido.nome_completo,
+        'tipo':      atual.get('tipo') or atual.get('tipoPessoa') or 'F',
+        'situacao':  atual.get('situacao') or 'A',
+    }
+    if 'indicadorIe' in atual:
+        payload['indicadorIe'] = atual['indicadorIe']
+
+    cpf_bling = atual.get('numeroDocumento') or ''
+    if not _vazio(cpf_bling):
+        payload['numeroDocumento'] = cpf_bling
+    elif pedido.cpf:
+        payload['numeroDocumento'] = pedido.cpf
+        precisa_atualizar = True
+
+    email_bling = atual.get('email') or ''
+    if not _vazio(email_bling):
+        payload['email'] = email_bling
+    elif pedido.email:
+        payload['email'] = pedido.email
+        precisa_atualizar = True
+
+    tel_bling = atual.get('telefone') or atual.get('celular') or ''
+    if not _vazio(tel_bling):
+        payload['telefone'] = tel_bling
+    elif pedido.telefone:
+        payload['telefone'] = pedido.telefone
+        precisa_atualizar = True
+
+    # Bling v3 usa 'endereco' (objeto singular com geral/cobranca).
+    # So preenche se o endereco geral atual estiver vazio (nunca sobrescreve).
+    end_atual = atual.get('endereco') or {}
+    geral_atual = end_atual.get('geral') or {} if isinstance(end_atual, dict) else {}
+    if not _vazio(geral_atual.get('endereco')):
+        payload['endereco'] = end_atual
+    elif pedido.logradouro:
+        payload['endereco'] = _endereco_contato_pedido(pedido)
+        precisa_atualizar = True
+
+    if not precisa_atualizar:
+        logger.info('Bling: contato %s ja completo, sem atualizacoes necessarias', contato_id)
+        return
+
+    try:
+        api.atualizar_contato(contato_id, payload)
+        logger.info('Bling: contato %s atualizado com dados do pedido %s', contato_id, pedido.numero)
+    except BlingAPIError as exc:
+        logger.warning('Bling: falha ao atualizar contato %s: %s', contato_id, exc)
 
 
 def _resolver_contato_bling(pedido, api) -> dict:
     """
-    Busca contato existente no Bling pelo CPF do pedido (match exato).
-    - Se encontrar um contato com o mesmo CPF → retorna {'id': X} e o Bling
-      usa os dados cadastrais desse contato no pedido.
-    - Se NÃO encontrar → retorna os dados completos do pedido para o Bling
-      criar um contato novo.
-
-    Obs.: não fazemos busca por telefone/nome nem PUT no contato existente —
-    a busca por CPF é autoritativa e qualquer "atualização" poderia sobrescrever
-    dados corretos por informação digitada no checkout.
+    Resolve o contato Bling para o pedido, na ordem:
+    1. Busca por CPF  - se encontrar, completa campos faltantes e retorna {'id': X}
+    2. Busca por tel  - se encontrar, completa campos faltantes e retorna {'id': X}
+    3. Cria contato   - cria novo e retorna {'id': X}
+    4. Fallback inline - retorna dados brutos (Bling v3 pode rejeitar, mas tenta)
     """
+    # 1. CPF
     if pedido.cpf:
         contato_id = api.buscar_contato_por_cpf(pedido.cpf)
         if contato_id:
-            logger.info('Bling: contato encontrado por CPF (id=%s) — pedido %s',
+            logger.info('Bling: contato encontrado por CPF (id=%s) para pedido %s',
                         contato_id, pedido.numero)
+            _atualizar_contato_com_dados_pedido(contato_id, pedido, api)
             return {'id': contato_id}
 
-    logger.info('Bling: contato não encontrado por CPF — será criado no pedido %s',
-                pedido.numero)
+    # 2. Telefone
+    if pedido.telefone:
+        contato_id = api.buscar_contato_por_telefone(pedido.telefone)
+        if contato_id:
+            logger.info('Bling: contato encontrado por telefone (id=%s) para pedido %s',
+                        contato_id, pedido.numero)
+            _atualizar_contato_com_dados_pedido(contato_id, pedido, api)
+            return {'id': contato_id}
+
+    # 3. Criar novo contato
+    logger.info('Bling: nenhum contato encontrado, criando novo para pedido %s', pedido.numero)
+    novo_id = _criar_contato_bling(pedido, api)
+    if novo_id:
+        return {'id': novo_id}
+
+    # 4. Fallback inline (Bling v3 pode rejeitar sem id, mas tenta)
+    logger.warning('Bling: usando dados inline sem ID para pedido %s (criacao falhou)', pedido.numero)
     return _dados_contato_pedido(pedido)
 
 
@@ -353,14 +592,16 @@ def _redact_payload_pii(payload: dict) -> dict:
     return redacted
 
 
-def _montar_observacoes_internas(pedido) -> str:
-    """Garante a mensagem operacional/fiscal fixa em todos os pedidos do Bling."""
-    observacao_extra = (pedido.observacao_interna or '').strip()
-    if not observacao_extra:
-        return OBSERVACAO_INTERNA_PADRAO
-    if OBSERVACAO_INTERNA_PADRAO in observacao_extra:
-        return observacao_extra
-    return f"{OBSERVACAO_INTERNA_PADRAO}\n\n{observacao_extra}"
+def _montar_observacoes(pedido) -> str:
+    """
+    Campo 'observacoes' do pedido Bling (visivel no documento/NF-e).
+    Sempre inclui o texto fiscal/bancario padrao; appenda a obs do cliente se houver.
+    """
+    partes = [OBSERVACAO_INTERNA_PADRAO]
+    cliente = (pedido.observacao_cliente or '').strip()
+    if cliente:
+        partes.append(cliente)
+    return '\n\n'.join(partes)
 
 
 # ── Payload ───────────────────────────────────────────────────────────────────
@@ -405,7 +646,7 @@ def _montar_parcelas(pedido) -> list:
     label = 'À Vista' if n == 1 else f'{n}x'
     obs   = f'Cartão de Crédito {label}'
     if pedido.gateway_id:
-        obs += f' — Autorização: {pedido.gateway_id}'
+        obs += f' - Autorizacao: {pedido.gateway_id}'
 
     return [{
         'dataVencimento': hoje.isoformat(),
@@ -525,12 +766,17 @@ def _montar_transporte(pedido) -> dict:
     servico_logistico = _resolver_servico_logistico(pedido)
     nome_servico = servico_logistico['nome_servico']
     modalidade = servico_logistico['modalidade']
-    quantidade_itens = sum(int(item.quantidade) for item in pedido.itens.all()) or 1
+    # Peso real: soma (peso do produto em g × quantidade) para cada item, converte para kg.
+    # Fallback para DIMENSOES_PADRAO['weight'] quando o produto não tem peso cadastrado.
+    peso_total_g = sum(
+        (item.produto.peso or int(DIMENSOES_PADRAO['weight'] * 1000)) * item.quantidade
+        for item in pedido.itens.select_related('produto').all()
+    )
+    peso_bruto = round(max(peso_total_g, 1) / 1000, 3)
 
     # FOB quando cliente paga frete; CIF quando frete é gratuito (≥R$800 ou promoção)
-    frete_valor = float(pedido.frete)
+    frete_valor = round(float(pedido.frete), 2)
     frete_por_conta = 1 if frete_valor > 0 else 0
-    peso_bruto = round(DIMENSOES_PADRAO['weight'] * quantidade_itens, 3)
 
     volume = {
         'servico':     nome_servico,
@@ -647,11 +893,14 @@ def _montar_payload_pedido(pedido, contato: dict) -> dict:
         'numeroLoja':        pedido.numero,
         'data':              hoje,
         'dataSaida':         hoje,
-        'totalProdutos':     float(pedido.subtotal),
-        'total':             float(pedido.total),
-        'desconto':          float(pedido.desconto),
-        'observacoes':       pedido.observacao_cliente or '',
-        'observacoesInternas': _montar_observacoes_internas(pedido),
+        'totalProdutos':     round(float(pedido.subtotal), 2),
+        'total':             round(float(pedido.total), 2),
+        'desconto': {
+            'valor':  round(float(pedido.desconto), 2),
+            'unidade': 'VALOR',
+        },
+        'observacoes':         _montar_observacoes(pedido),
+        'observacoesInternas': (pedido.observacao_interna or '').strip(),
         'situacao':          {'id': SITUACAO_EM_ANDAMENTO_SITE},
         'loja': {
             'id': LOJA_ID,

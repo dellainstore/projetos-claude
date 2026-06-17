@@ -14,7 +14,7 @@ Environment="DJANGO_SETTINGS_MODULE=core.settings.production"
 
 # Socket Unix (mais seguro que porta TCP — só Nginx acessa)
 ExecStart=/var/www/della-sistemas/projetos-claude/site_della/venv/bin/gunicorn \
-    --workers 2 \
+    --workers 3 \
     --worker-class sync \
     --bind unix:/run/gunicorn_della_site/gunicorn.sock \
     --timeout 60 \

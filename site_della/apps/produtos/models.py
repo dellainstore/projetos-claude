@@ -1,10 +1,9 @@
 import os
-import uuid
 from django.db import models
 from django.utils.text import slugify
 from django.urls import reverse
 from django.core.exceptions import ValidationError
-from apps.core_utils.sanitize import sanitize_text, sanitize_multiline_text, validate_image_upload
+from apps.core_utils.sanitize import sanitize_text, sanitize_rich_html, validate_image_upload
 
 
 def produto_imagem_path(instance, filename):
@@ -110,8 +109,8 @@ class Produto(models.Model):
     )
     nome = models.CharField('Nome', max_length=200)
     slug = models.SlugField('Slug', max_length=220, unique=True, blank=True)
-    descricao = models.TextField('Descrição', max_length=2000)
-    composicao = models.CharField('Composição/Material', max_length=200, blank=True)
+    descricao = models.TextField('Descrição', max_length=5000)
+    composicao = models.TextField('Composição/Material', max_length=5000, blank=True)
 
     # Preços
     preco = models.DecimalField('Preço', max_digits=10, decimal_places=2)
@@ -237,13 +236,32 @@ class Produto(models.Model):
 
     @property
     def cor_capa_efetiva_id(self):
+        cores_disponiveis = {
+            v.cor_id for v in self._variacoes_cache()
+            if v.cor_id and v.disponivel
+        }
+
+        # 1. cor_principal com imagens e com variações disponíveis
+        if (self.cor_principal_id
+                and self.imagens_da_cor(self.cor_principal_id)
+                and (self.cor_principal_id in cores_disponiveis or not cores_disponiveis)):
+            return self.cor_principal_id
+
+        # 2. Primeira cor com imagens e variações disponíveis
+        for img in self._imagens_cache():
+            if img.cor_id and img.cor_id in cores_disponiveis:
+                return img.cor_id
+
+        # 3. Fallback: cor_principal com imagens (produto totalmente sem estoque)
         if self.cor_principal_id and self.imagens_da_cor(self.cor_principal_id):
             return self.cor_principal_id
 
+        # 4. Fallback: qualquer imagem com cor
         for img in self._imagens_cache():
             if img.cor_id:
                 return img.cor_id
 
+        # 5. Fallback: primeira variação ativa
         vistas = set()
         for variacao in self._variacoes_cache():
             if variacao.ativa and variacao.cor_id and variacao.cor_id not in vistas:
@@ -265,6 +283,8 @@ class Produto(models.Model):
         imagens_cor = self.imagens_da_cor(cor_id) if cor_id else []
         if len(imagens_cor) > 1:
             return imagens_cor[1]
+        if imagens_cor:
+            return imagens_cor[0]
         return None
 
     def get_absolute_url(self):
@@ -273,8 +293,17 @@ class Produto(models.Model):
 
     def clean(self):
         self.nome = sanitize_text(self.nome, max_length=200).upper()
-        self.descricao = sanitize_multiline_text(self.descricao, max_length=2000)
-        self.composicao = sanitize_multiline_text(self.composicao, max_length=200)
+        erros = {}
+        try:
+            self.descricao = sanitize_rich_html(self.descricao, max_length=5000)
+        except ValidationError as exc:
+            erros['descricao'] = exc.messages
+        try:
+            self.composicao = sanitize_rich_html(self.composicao, max_length=5000)
+        except ValidationError as exc:
+            erros['composicao'] = exc.messages
+        if erros:
+            raise ValidationError(erros)
         # Trata 0 ou valores negativos como "sem promoção" (converte para NULL)
         if self.preco_promocional is not None and self.preco_promocional <= 0:
             self.preco_promocional = None
@@ -330,12 +359,65 @@ class ProdutoImagem(models.Model):
         self.alt = sanitize_text(self.alt, max_length=200)
 
     def save(self, *args, **kwargs):
+        is_new_file = bool(self.imagem and hasattr(self.imagem, 'file'))
         # Garante só uma imagem principal por produto
         if self.principal:
             ProdutoImagem.objects.filter(
                 produto=self.produto, principal=True
             ).exclude(pk=self.pk).update(principal=False)
         super().save(*args, **kwargs)
+        if is_new_file:
+            self._normalizar_imagem()
+
+    def _normalizar_imagem(self, max_w=1200, max_h=1600):
+        """Redimensiona e converte para WebP (formato padrao do projeto)."""
+        try:
+            from PIL import Image as PilImage
+            path = self.imagem.path
+            already_webp = path.lower().endswith('.webp')
+            with PilImage.open(path) as img:
+                w, h = img.size
+                ratio = min(max_w / w, max_h / h)
+                needs_resize = ratio < 0.98
+
+                if not needs_resize and already_webp:
+                    return
+
+                if needs_resize:
+                    new_w, new_h = round(w * ratio), round(h * ratio)
+                    # Para imagens muito grandes (>3x o alvo), pre-reduz com BOX
+                    # antes do LANCZOS final -- muito mais rapido sem perda visual.
+                    if ratio < 0.35:
+                        interim = img.reduce(max(1, int(1 / ratio / 2)))
+                        out = interim.resize((new_w, new_h), PilImage.LANCZOS)
+                    else:
+                        out = img.resize((new_w, new_h), PilImage.LANCZOS)
+                else:
+                    out = img.copy()
+
+                if out.mode not in ('RGB', 'RGBA'):
+                    out = out.convert('RGB')
+
+                base = os.path.splitext(path)[0]
+                webp_path = base + '.webp'
+                # Salva em arquivo temporario primeiro: se o processo morrer
+                # durante o save, o arquivo original permanece intacto.
+                tmp_path = webp_path + '.tmp'
+                out.save(tmp_path, format='WEBP', quality=88, method=1)
+                os.replace(tmp_path, webp_path)
+
+            if not already_webp:
+                os.remove(path)
+                new_name = os.path.splitext(self.imagem.name)[0] + '.webp'
+                ProdutoImagem.objects.filter(pk=self.pk).update(imagem=new_name)
+        except Exception:
+            # Limpa arquivo temporario se ficou para tras
+            try:
+                tmp = os.path.splitext(self.imagem.path)[0] + '.webp.tmp'
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
 
 
 class CorPadrao(models.Model):
@@ -449,6 +531,13 @@ class Variacao(models.Model):
         (DISPONIBILIDADE_SOB_DEMANDA, 'Sob demanda'),
     ]
 
+    SEM_ESTOQUE_INDISPONIVEL = 'indisponivel'
+    SEM_ESTOQUE_SOB_DEMANDA  = 'sob_demanda'
+    SEM_ESTOQUE_CHOICES = [
+        (SEM_ESTOQUE_INDISPONIVEL, 'Tornar indisponível'),
+        (SEM_ESTOQUE_SOB_DEMANDA,  'Continuar vendendo sob demanda'),
+    ]
+
     produto   = models.ForeignKey(Produto, on_delete=models.CASCADE, related_name='variacoes')
 
     cor       = models.ForeignKey(
@@ -496,6 +585,21 @@ class Variacao(models.Model):
                         help_text='SKU individual desta variação no Bling. Ex: 100')
     bling_variacao_id = models.CharField('ID Bling', max_length=50, blank=True,
                         help_text='ID do produto filho desta variação no Bling.')
+    usa_sync_bling = models.BooleanField(
+        'Sync estoque Bling',
+        default=False,
+        help_text='Quando ativo, o estoque é atualizado automaticamente pelo Bling.',
+    )
+    comportamento_sem_estoque = models.CharField(
+        'Quando acabar o estoque',
+        max_length=20,
+        choices=SEM_ESTOQUE_CHOICES,
+        default=SEM_ESTOQUE_INDISPONIVEL,
+        help_text=(
+            'Define o comportamento ao zerar o estoque '
+            '(só se aplica a variações com disponibilidade imediata).'
+        ),
+    )
     ativa          = models.BooleanField('Ativa', default=True)
 
     class Meta:
@@ -532,6 +636,14 @@ class Variacao(models.Model):
                 raise ValidationError({
                     'prazo_confeccao_dias': 'Informe o prazo de confecção em dias úteis para variações sob demanda.'
                 })
+        elif self.comportamento_sem_estoque == self.SEM_ESTOQUE_SOB_DEMANDA:
+            if not self.prazo_confeccao_dias or self.prazo_confeccao_dias <= 0:
+                raise ValidationError({
+                    'prazo_confeccao_dias': (
+                        'Informe o prazo de confecção (dias úteis) — '
+                        'necessário para vender sob demanda quando o estoque acabar.'
+                    )
+                })
         else:
             self.prazo_confeccao_dias = None
         if self.preco_promocional is not None and self.preco_promocional <= 0:
@@ -555,10 +667,19 @@ class Variacao(models.Model):
         return ' / '.join(partes)
 
     @property
-    def disponivel(self):
+    def modo_efetivo(self):
+        """Retorna 'pronta_entrega', 'sob_demanda' ou 'indisponivel' conforme estado atual."""
         if self.disponibilidade == self.DISPONIBILIDADE_SOB_DEMANDA:
-            return self.ativa
-        return self.estoque > 0
+            return 'sob_demanda'
+        if self.estoque > 0:
+            return 'pronta_entrega'
+        if self.comportamento_sem_estoque == self.SEM_ESTOQUE_SOB_DEMANDA:
+            return 'sob_demanda'
+        return 'indisponivel'
+
+    @property
+    def disponivel(self):
+        return self.ativa and self.modo_efetivo != 'indisponivel'
 
     @property
     def usa_preco_proprio(self):
@@ -588,11 +709,11 @@ class Variacao(models.Model):
 
     @property
     def pronta_entrega(self):
-        return self.disponibilidade == self.DISPONIBILIDADE_IMEDIATA
+        return self.modo_efetivo == 'pronta_entrega'
 
     @property
     def sob_demanda(self):
-        return self.disponibilidade == self.DISPONIBILIDADE_SOB_DEMANDA
+        return self.modo_efetivo == 'sob_demanda'
 
     @property
     def prazo_total_adicional_dias(self):
@@ -602,7 +723,9 @@ class Variacao(models.Model):
     def disponibilidade_label(self):
         if self.sob_demanda:
             dias = self.prazo_total_adicional_dias
-            return f'Sob demanda: +{dias} dia{"s" if dias != 1 else ""} útil{"eis" if dias != 1 else ""} para confecção'
+            if dias:
+                return f'Sob demanda: +{dias} dia{"s" if dias != 1 else ""} útil{"eis" if dias != 1 else ""} para confecção'
+            return 'Sob demanda'
         return 'Disponibilidade imediata'
 
 
@@ -721,6 +844,12 @@ class TabelaMedidasLinha(models.Model):
 class Avaliacao(models.Model):
     """Avaliações da loja — moderadas antes de aparecer no site."""
 
+    pedido = models.OneToOneField(
+        'pedidos.Pedido',
+        on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='avaliacao_compra',
+        verbose_name='Pedido',
+    )
     produto = models.ForeignKey(
         Produto, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='avaliacoes',
@@ -730,6 +859,16 @@ class Avaliacao(models.Model):
                                  null=True, blank=True, related_name='avaliacoes')
     nome_publico = models.CharField('Nome', max_length=80)
     nota = models.PositiveSmallIntegerField('Nota', choices=[(i, i) for i in range(1, 6)])
+    nota_experiencia = models.PositiveSmallIntegerField(
+        'Experiência da compra',
+        choices=[(i, i) for i in range(1, 6)],
+        null=True, blank=True,
+    )
+    nota_produtos = models.PositiveSmallIntegerField(
+        'Produtos comprados',
+        choices=[(i, i) for i in range(1, 6)],
+        null=True, blank=True,
+    )
     comentario = models.TextField('Comentário', max_length=800, blank=True)
     aprovada = models.BooleanField('Aprovada', default=False)   # moderação manual
     criada_em = models.DateTimeField(auto_now_add=True)
@@ -740,13 +879,18 @@ class Avaliacao(models.Model):
         ordering = ['-criada_em']
 
     def __str__(self):
-        prod = self.produto.nome if self.produto_id else 'Loja'
+        if self.pedido_id:
+            prod = f'Pedido {self.pedido.numero}'
+        else:
+            prod = self.produto.nome if self.produto_id else 'Loja'
         return f'{prod} — {self.nota}★ por {self.nome_publico}'
 
     def clean(self):
         # Sanitiza campos de texto livre do cliente
         self.nome_publico = sanitize_text(self.nome_publico, max_length=80)
         self.comentario = sanitize_text(self.comentario, max_length=800)
+        if self.nota_experiencia and self.nota_produtos:
+            self.nota = round((self.nota_experiencia + self.nota_produtos) / 2)
 
     def save(self, *args, **kwargs):
         self.full_clean()

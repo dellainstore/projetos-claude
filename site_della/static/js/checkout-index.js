@@ -142,20 +142,42 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      const freteMeta = parseFloat(config.frete_meta || '0');
+      const freteGratis = freteMeta > 0 && subtotal >= freteMeta;
+
       if (opcoesEl) {
-        opcoesEl.innerHTML = dados.opcoes.map((op, i) => `
+        opcoesEl.innerHTML = dados.opcoes.map((op, i) => {
+          if (op.id === 'retirada_loja') {
+            return `
           <label class="frete-opcao" for="frete_${op.id}">
             <input type="radio" name="_frete_visual" id="frete_${op.id}"
                    value="${op.id}" ${i === 0 ? 'checked' : ''}
-                   data-preco="${op.preco}" data-nome="${op.nome} ${op.empresa}"
+                   data-preco="${op.preco}" data-nome="Retirada na Loja"
+                   data-prazo="0" data-frete-radio="1">
+            <span class="frete-opcao-info">
+              <span class="frete-opcao-nome">Retire na Loja - Rua Visconde da Luz, 183 - Vila Nova Conceição - São Paulo/SP</span>
+              <span class="frete-opcao-prazo">Disponível em até 2h após confirmação do pagamento</span>
+            </span>
+            <span class="frete-opcao-preco">Grátis</span>
+          </label>`;
+          }
+          const precoEfetivo = freteGratis ? '0' : op.preco;
+          const precoLabel = parseFloat(precoEfetivo) === 0
+            ? 'Grátis'
+            : `R$ ${parseFloat(precoEfetivo).toFixed(2).replace('.', ',')}`;
+          return `
+          <label class="frete-opcao" for="frete_${op.id}">
+            <input type="radio" name="_frete_visual" id="frete_${op.id}"
+                   value="${op.id}" ${i === 0 ? 'checked' : ''}
+                   data-preco="${precoEfetivo}" data-nome="${op.nome} ${op.empresa}"
                    data-prazo="${op.prazo}" data-frete-radio="1">
             <span class="frete-opcao-info">
               <span class="frete-opcao-nome">${op.nome} <small>${op.empresa}</small></span>
               <span class="frete-opcao-prazo">${op.descricao}</span>
             </span>
-            <span class="frete-opcao-preco">R$ ${parseFloat(op.preco).toFixed(2).replace('.', ',')}</span>
-          </label>
-        `).join('');
+            <span class="frete-opcao-preco">${precoLabel}</span>
+          </label>`;
+        }).join('');
       }
 
       const primeiroRadio = opcoesEl?.querySelector('input[type="radio"]');
@@ -173,7 +195,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function atualizarResumoTotal() {
     const freteVal = parseFloat(document.getElementById('id_valor_frete')?.value || '0') || 0;
     const freteEl = document.getElementById('resumo-frete-valor');
-    if (freteEl && freteVal > 0) freteEl.textContent = fmtBRL(freteVal);
+    const opcaoSelecionada = document.getElementById('id_opcao_frete')?.value;
+    if (freteEl && opcaoSelecionada) {
+      freteEl.textContent = freteVal === 0 ? 'Grátis' : fmtBRL(freteVal);
+    }
     const total = Math.max(0, subtotal - descontoAtual + freteVal);
     document.getElementById('resumo-total').textContent = fmtBRL(total);
   }
@@ -184,7 +209,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('id_valor_frete').value = radio.dataset.preco;
     document.getElementById('id_prazo_frete').value = radio.dataset.prazo;
     const frete = parseFloat(radio.dataset.preco);
-    document.getElementById('resumo-frete-valor').textContent = fmtBRL(frete);
+    const freteEl = document.getElementById('resumo-frete-valor');
+    if (freteEl) freteEl.textContent = frete === 0 ? 'Grátis' : fmtBRL(frete);
     atualizarResumoTotal();
   }
 
@@ -265,6 +291,15 @@ document.addEventListener('DOMContentLoaded', () => {
           document.getElementById('radio_pix').checked = true;
         } else if (tabId === 'cartao') {
           document.getElementById('radio_cartao')?.click();
+        }
+
+        const paymentType = tabId === 'pix' ? 'PIX' : 'Credit Card';
+        const valor = parseFloat(document.getElementById('id_valor_frete')?.value || '0') + subtotal - (window._descontoAtualCheckout || 0);
+        if (window.dellaTrackGA) {
+          window.dellaTrackGA('add_payment_info', { currency: 'BRL', value: valor, payment_type: paymentType });
+        }
+        if (window.dellaTrackMeta) {
+          window.dellaTrackMeta('AddPaymentInfo', { currency: 'BRL', value: valor, content_category: paymentType });
         }
       });
     });
@@ -463,6 +498,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-voltar-dados')?.addEventListener('click', () => irParaEtapa(1));
   document.getElementById('btn-ir-pagamento')?.addEventListener('click', () => {
     if (!validarFrete()) return;
+    const freteRadio = document.querySelector('input[name="_frete_visual"]:checked');
+    const tier = freteRadio?.dataset.nome || '';
+    const valor = parseFloat(freteRadio?.dataset.preco || '0') + subtotal - (window._descontoAtualCheckout || 0);
+    if (window.dellaTrackGA) {
+      window.dellaTrackGA('add_shipping_info', { currency: 'BRL', value: valor, shipping_tier: tier });
+    }
     irParaEtapa(3);
   });
   document.getElementById('btn-voltar-frete')?.addEventListener('click', () => irParaEtapa(2));
@@ -516,6 +557,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function initEnderecosSalvos() {
     const fmtCep = (cep) => cep.length === 8 ? cep.slice(0, 5) + '-' + cep.slice(5) : cep;
+    const blocoNovo = document.getElementById('bloco-endereco-novo');
+
+    function aplicarEnderecoSalvo(radio) {
+      const numInput = document.getElementById('id_numero_entrega');
+      const semNumCheck = document.getElementById('id_sem_numero');
+
+      document.getElementById('id_cep').value = fmtCep(radio.dataset.cep || '');
+      document.getElementById('id_logradouro').value = radio.dataset.logradouro || '';
+      document.getElementById('id_bairro').value = radio.dataset.bairro || '';
+      document.getElementById('id_cidade').value = radio.dataset.cidade || '';
+      document.getElementById('id_estado').value = radio.dataset.estado || '';
+      document.getElementById('id_complemento').value = radio.dataset.complemento || '';
+
+      const numero = radio.dataset.numero || '';
+      const isSN = numero.toUpperCase() === 'S/N';
+      if (semNumCheck) semNumCheck.checked = isSN;
+      if (numInput) {
+        numInput.value = numero;
+        numInput.readOnly = isSN;
+        numInput.classList.toggle('campo-readonly', isSN);
+      }
+    }
 
     document.querySelectorAll('input[name="_endereco_salvo"]').forEach((radio) => {
       radio.addEventListener('change', () => {
@@ -530,24 +593,147 @@ document.addEventListener('DOMContentLoaded', () => {
           });
           if (semNumCheck) semNumCheck.checked = false;
           camposEnd?.classList.add('hidden');
+          blocoNovo?.classList.remove('hidden');
           cepInput?.focus();
         } else {
-          document.getElementById('id_cep').value = fmtCep(radio.dataset.cep || '');
-          document.getElementById('id_logradouro').value = radio.dataset.logradouro || '';
-          document.getElementById('id_bairro').value = radio.dataset.bairro || '';
-          document.getElementById('id_cidade').value = radio.dataset.cidade || '';
-          document.getElementById('id_estado').value = radio.dataset.estado || '';
-          document.getElementById('id_complemento').value = radio.dataset.complemento || '';
-
-          const numero = radio.dataset.numero || '';
-          const isSN = numero.toUpperCase() === 'S/N';
-          if (semNumCheck) semNumCheck.checked = isSN;
-          if (numInput) {
-            numInput.value = numero;
-            numInput.readOnly = isSN;
-            numInput.classList.toggle('campo-readonly', isSN);
-          }
+          aplicarEnderecoSalvo(radio);
           camposEnd?.classList.remove('hidden');
+          blocoNovo?.classList.add('hidden');
+        }
+      });
+    });
+
+    // Aplica o endereço já selecionado no carregamento (radio com `checked`)
+    const selecionado = document.querySelector('input[name="_endereco_salvo"]:checked');
+    if (selecionado && selecionado.value !== 'novo') {
+      aplicarEnderecoSalvo(selecionado);
+    }
+
+    initEditInline();
+  }
+
+  function initEditInline() {
+    const csrf =
+      document.querySelector('meta[name="csrf-token"]')?.content ||
+      document.cookie.match(/csrftoken=([^;]+)/)?.[1] ||
+      '';
+    const onlyDigits = (s) => (s || '').replace(/\D/g, '');
+    const fmtCep = (cep) => cep.length === 8 ? cep.slice(0, 5) + '-' + cep.slice(5) : cep;
+
+    document.querySelectorAll('.checkout-endereco-card[data-endereco-pk]').forEach((card) => {
+      const toggle = card.querySelector('.endereco-card-toggle');
+      const editBox = card.querySelector('.endereco-card-edit');
+      const btnSalvar = card.querySelector('.endereco-edit-salvar');
+      const btnCancelar = card.querySelector('.endereco-edit-cancelar');
+      const erroEl = card.querySelector('.endereco-edit-erro');
+      const radio = card.querySelector('input[name="_endereco_salvo"]');
+      if (!toggle || !editBox || !radio) return;
+
+      function abrirEdit() {
+        editBox.hidden = false;
+        toggle.setAttribute('aria-expanded', 'true');
+      }
+      function fecharEdit() {
+        editBox.hidden = true;
+        toggle.setAttribute('aria-expanded', 'false');
+        if (erroEl) { erroEl.hidden = true; erroEl.textContent = ''; }
+      }
+
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (editBox.hidden) abrirEdit(); else fecharEdit();
+      });
+
+      // Enter dentro do form inline = Salvar (evita submeter o form-checkout)
+      editBox.querySelectorAll('input').forEach((inp) => {
+        inp.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            btnSalvar?.click();
+          }
+        });
+      });
+
+      btnCancelar?.addEventListener('click', (e) => {
+        e.preventDefault();
+        // Restaura valores originais a partir dos data-* do radio
+        card.querySelectorAll('[data-edit-field]').forEach((inp) => {
+          const campo = inp.dataset.editField;
+          if (campo === 'cep') {
+            inp.value = fmtCep(radio.dataset.cep || '');
+          } else {
+            inp.value = radio.dataset[campo] || '';
+          }
+        });
+        fecharEdit();
+      });
+
+      btnSalvar?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (erroEl) { erroEl.hidden = true; erroEl.textContent = ''; }
+        btnSalvar.disabled = true;
+        const labelOriginal = btnSalvar.textContent;
+        btnSalvar.textContent = 'Salvando...';
+
+        const dados = new FormData();
+        card.querySelectorAll('[data-edit-field]').forEach((inp) => {
+          let valor = inp.value.trim();
+          if (inp.dataset.editField === 'cep') valor = onlyDigits(valor);
+          if (inp.dataset.editField === 'estado') valor = valor.toUpperCase();
+          dados.append(inp.dataset.editField, valor);
+        });
+
+        try {
+          const res = await fetch(card.dataset.editUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+            body: dados,
+          });
+          const json = await res.json();
+
+          if (json.status !== 'ok') {
+            if (erroEl) {
+              const erros = json.erros || {};
+              const msgs = Object.values(erros).flat();
+              erroEl.textContent = msgs.length ? msgs.join(' ') : 'Não foi possível salvar.';
+              erroEl.hidden = false;
+            }
+            return;
+          }
+
+          const end = json.endereco || {};
+          radio.dataset.cep = end.cep || '';
+          radio.dataset.logradouro = end.logradouro || '';
+          radio.dataset.numero = end.numero || '';
+          radio.dataset.complemento = end.complemento || '';
+          radio.dataset.bairro = end.bairro || '';
+          radio.dataset.cidade = end.cidade || '';
+          radio.dataset.estado = end.estado || '';
+
+          const linha1 = card.querySelector('[data-campo="linha1"]');
+          const linha2 = card.querySelector('[data-campo="linha2"]');
+          if (linha1) {
+            linha1.textContent = `${end.logradouro}, ${end.numero}` +
+              (end.complemento ? `, ${end.complemento}` : '');
+          }
+          if (linha2) {
+            linha2.textContent = `${end.bairro} — ${end.cidade}/${end.estado} · ${end.cep_fmt}`;
+          }
+
+          if (radio.checked) {
+            radio.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
+          fecharEdit();
+        } catch (err) {
+          if (erroEl) {
+            erroEl.textContent = 'Erro de conexão. Tente novamente.';
+            erroEl.hidden = false;
+          }
+        } finally {
+          btnSalvar.disabled = false;
+          btnSalvar.textContent = labelOriginal;
         }
       });
     });
@@ -563,6 +749,30 @@ document.addEventListener('DOMContentLoaded', () => {
   initResumoItens();
   initParcelas();
   initEnderecosSalvos();
+
+  // Pré-preenche cupom/vendedor a partir do sessionStorage (set no PDP)
+  try {
+    const pdpCupom = sessionStorage.getItem('della_pdp_cupom');
+    const pdpVendedor = sessionStorage.getItem('della_pdp_vendedor');
+    const inputCupom = document.getElementById('id_cupom_codigo');
+    const inputVendedor = document.getElementById('id_codigo_vendedor_codigo');
+    if (pdpCupom && inputCupom && !inputCupom.value.trim()) {
+      inputCupom.value = pdpCupom;
+      setTimeout(aplicarCupom, 200);
+    }
+    if (pdpVendedor && inputVendedor && !inputVendedor.value.trim()) {
+      inputVendedor.value = pdpVendedor;
+      setTimeout(aplicarVendedor, 400);
+    }
+  } catch (_) {}
+
+  // Limpa sessionStorage ao confirmar pedido
+  document.getElementById('form-checkout')?.addEventListener('submit', () => {
+    try {
+      sessionStorage.removeItem('della_pdp_cupom');
+      sessionStorage.removeItem('della_pdp_vendedor');
+    } catch (_) {}
+  }, { once: true });
 
   if (config.form_errors) irParaEtapa(1);
   if (config.messages) window.scrollTo({ top: 0, behavior: 'smooth' });

@@ -13,17 +13,33 @@ from src import database as db
 from src import auth
 from src.utils import fmt_data
 
-_logado = bool(st.session_state.get("logged_in"))
+_logado_inicial = bool(st.session_state.get("logged_in"))
 
 st.set_page_config(
     page_title="Liga Quarta Scaff",
     page_icon="🎾",
     layout="wide",
-    initial_sidebar_state="expanded" if _logado else "collapsed",
+    initial_sidebar_state="expanded" if _logado_inicial else "collapsed",
 )
 
 # ── Inicializa banco na primeira execução ──────────────────────────────────────
 db.init_db()
+
+# ── Login persistente via cookie (12 h) ───────────────────────────────────────
+from streamlit_cookies_controller import CookieController as _CookieController
+_cc = _CookieController()
+
+if not st.session_state.get("logged_in"):
+    _token = _cc.get(auth._COOKIE_NAME)
+    if _token:
+        _dados = auth.validate_auth_token(_token)
+        if _dados:
+            st.session_state["logged_in"] = True
+            st.session_state["username"] = _dados["username"]
+            st.session_state["role"] = _dados["role"]
+            st.rerun()
+
+_logado = bool(st.session_state.get("logged_in"))
 
 # ── CSS customizado ────────────────────────────────────────────────────────────
 _css_base = """
@@ -78,6 +94,11 @@ def _pagina_login():
             elif st.button("Entrar", use_container_width=True, type="primary"):
                 if auth.fazer_login(username, senha):
                     st.session_state["login_tentativas"] = 0
+                    _token = auth.make_auth_token(
+                        st.session_state["username"],
+                        st.session_state["role"],
+                    )
+                    _cc.set(auth._COOKIE_NAME, _token, max_age=auth._TOKEN_TTL_HOURS * 3600)
                     st.success("Login realizado!")
                     st.rerun()
                 else:
@@ -100,13 +121,19 @@ def _dashboard():
 </div>
 """, unsafe_allow_html=True)
 
-    # Aviso de segurança: lembra o admin de trocar a senha padrão
+    # Aviso de segurança: só aparece se a conta admin ainda estiver com a senha padrão.
     if role == "admin" and st.session_state.get("username") == "admin":
-        st.warning(
-            "**Aviso de segurança:** Você está usando a conta `admin` padrão. "
-            "Altere a senha imediatamente em **Ranking → Gerenciar Usuários**.",
-            icon="⚠️",
+        user_admin = db.get_user("admin")
+        senha_padrao_ativa = bool(
+            user_admin
+            and auth.verificar_senha("admin123", user_admin["password_hash"])
         )
+        if senha_padrao_ativa:
+            st.warning(
+                "**Aviso de segurança:** Você está usando a conta `admin` padrão. "
+                "Altere a senha imediatamente em **Ranking → Gerenciar Usuários**.",
+                icon="⚠️",
+            )
 
     temporada = db.get_temporada_ativa()
 
@@ -231,7 +258,7 @@ def _fmt_sidebar_duracao(segundos: float) -> str:
 if not _logado:
     pg = st.navigation([st.Page(_pagina_login, title="Login", url_path="login")])
 else:
-    auth.render_sidebar_user()
+    auth.render_sidebar_user(cookie_controller=_cc)
     _render_sorteio_job_global()
     role = auth.get_role()
 

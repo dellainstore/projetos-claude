@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
-{% block titulo %}Criar Conta — Della Instore{% endblock %}
+{% load static %}
+{% block titulo %}Criar Conta | D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
 {% block conteudo %}
@@ -47,12 +48,12 @@
 
       <div class="conta-grid-2">
         <div class="conta-campo">
-          <label class="conta-label">Data de nascimento *</label>
+          <label class="conta-label">Data de nascimento</label>
           {{ form.data_nascimento }}
           {% if form.data_nascimento.errors %}<span class="conta-erro">{{ form.data_nascimento.errors.0 }}</span>{% endif %}
         </div>
         <div class="conta-campo">
-          <label class="conta-label">Gênero *</label>
+          <label class="conta-label">Gênero</label>
           {{ form.genero }}
           {% if form.genero.errors %}<span class="conta-erro">{{ form.genero.errors.0 }}</span>{% endif %}
         </div>
@@ -96,19 +97,5 @@
 {% endblock %}
 
 {% block js_extra %}
-<script>
-document.getElementById('id_cadastro_cpf')?.addEventListener('input', function(){
-  let v = this.value.replace(/\D/g,'').slice(0,11);
-  if(v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/,'$1.$2.$3-$4');
-  else if(v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/,'$1.$2.$3');
-  else if(v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/,'$1.$2');
-  this.value = v;
-});
-document.querySelector('[name="telefone"]')?.addEventListener('input', function(){
-  let v = this.value.replace(/\D/g,'').slice(0,11);
-  if(v.length > 6) v = v.replace(/(\d{2})(\d{4,5})(\d{4})/,'($1) $2-$3');
-  else if(v.length > 2) v = v.replace(/(\d{2})(\d+)/,'($1) $2');
-  this.value = v;
-});
-</script>
+<script src="{% static 'js/usuarios-cadastro.js' %}"></script>
 {% endblock %}

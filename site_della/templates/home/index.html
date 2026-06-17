@@ -4,6 +4,17 @@
 {% block titulo %}D'ELLA Instore | Body Feminino, porque ser única nunca sai de moda{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
+{% block head_extra %}
+{% if hero_preload_url %}
+{% if hero_preload_mobile_url %}
+<link rel="preload" as="image" href="{{ hero_preload_mobile_url }}" media="(max-width: 767px)">
+<link rel="preload" as="image" href="{{ hero_preload_url }}" media="(min-width: 768px)">
+{% else %}
+<link rel="preload" as="image" href="{{ hero_preload_url }}">
+{% endif %}
+{% endif %}
+{% endblock %}
+
 {% block conteudo %}
 
 <h1 class="sr-only">D'ELLA Instore | Body Feminino, porque ser única nunca sai de moda</h1>
@@ -19,6 +30,7 @@
 
       {% if banner.tipo == 'video' and banner.video %}
         <video class="hero-video" autoplay muted playsinline
+               style="object-position: {{ banner.posicao_imagem }};"
                {% if banner.poster %}poster="{{ banner.poster.url }}"{% endif %}
                {% if banner.video_mobile %}data-src-mobile="{{ banner.video_mobile.url }}"{% endif %}
                {% if forloop.first %}preload="auto"{% else %}preload="none"{% endif %}
@@ -32,6 +44,7 @@
           {% endif %}
           <img src="{{ banner.foto.url }}" alt=""
                class="hero-foto" width="1920" height="1080"
+               style="object-position: {{ banner.posicao_imagem }};"
                {% if forloop.first %}loading="eager" fetchpriority="high" decoding="async"{% else %}loading="lazy" decoding="async"{% endif %}
                aria-hidden="true">
         </picture>
@@ -194,6 +207,7 @@
 
 
 
+{% if look_obj and look_obj.foto %}
 <section class="shop-the-look" aria-labelledby="titulo-look">
   <div class="shop-the-look-inner">
 
@@ -243,17 +257,18 @@
     
     <div class="look-info fade-in fade-in-delay-2">
       <p class="subtitulo-secao">Inspiração</p>
-      <h2 class="titulo-secao" id="titulo-look" style="margin-top:0.75rem;margin-bottom:1.25rem;">
+      <h2 class="titulo-secao" id="titulo-look" style="margin-top:0.5rem;margin-bottom:1rem;">
         Look da Semana
       </h2>
-      <p style="color:var(--cinza-texto);font-size:0.95rem;font-weight:300;line-height:1.8;max-width:420px;">
-        {% if look_obj and look_obj.descricao %}{{ look_obj.descricao }}{% else %}Sofisticação no detalhe. Este look combina sensualidade e elegância para uma noite especial ou uma ocasião que pede presença marcante.{% endif %}
-      </p>
 
-      {% if look_items %}
-        <ul class="look-produtos-lista" role="list">
+      <div class="look-corpo">
+        <p style="color:var(--cinza-texto);font-size:0.95rem;font-weight:300;line-height:1.8;">
+          {% if look_obj and look_obj.descricao %}{{ look_obj.descricao }}{% else %}Sofisticação no detalhe. Este look combina sensualidade e elegância para uma noite especial ou uma ocasião que pede presença marcante.{% endif %}
+        </p>
+
+        {% if look_items %}
           {% for produto, foto in look_items %}
-            <li class="look-produto-item">
+            <div class="look-produto-item">
               {% if foto %}
                 <img src="{{ foto.imagem.url }}" alt="{{ produto.nome }}" class="look-produto-thumb" width="80" height="80" loading="lazy" decoding="async">
               {% elif produto.imagem_principal %}
@@ -264,15 +279,11 @@
                 <p style="font-size:0.85rem;font-weight:500;">R$ {{ produto.preco_atual|brl_price }}</p>
                 {% if produto.parcelamento_texto %}<p style="font-size:0.72rem;color:var(--cinza-texto);">{{ produto.parcelamento_texto }}</p>{% endif %}
               </div>
-              <a href="{{ produto.get_absolute_url }}" class="btn-primario" style="padding:0.6rem 1.2rem;font-size:0.65rem;">
-                Ver
-              </a>
-            </li>
+              <a href="{{ produto.get_absolute_url }}" class="btn-primario" style="padding:0.6rem 1.2rem;font-size:0.65rem;">Ver</a>
+            </div>
           {% endfor %}
-        </ul>
-      {% else %}
-        <ul class="look-produtos-lista">
-          <li class="look-produto-item">
+        {% else %}
+          <div class="look-produto-item">
             <img src="{% static 'images/brand/produto-placeholder.jpg' %}" alt="Produto" class="look-produto-thumb" width="80" height="80" loading="lazy" decoding="async">
             <div style="flex:1">
               <p style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--cinza-texto);margin-bottom:0.2rem;">Body</p>
@@ -280,12 +291,13 @@
               <p style="font-size:0.9rem;font-weight:500;">R$ 189,00</p>
             </div>
             <a href="{% url 'produtos:loja' %}" class="btn-primario" style="padding:0.6rem 1.2rem;font-size:0.65rem;">Ver</a>
-          </li>
-        </ul>
-      {% endif %}
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 </section>
+{% endif %}
 
 
 
@@ -402,6 +414,14 @@
         Receba em primeira mão lançamentos, promoções exclusivas<br>
         e inspirações de moda diretamente no seu e-mail.
       </p>
+      {% if cupom_newsletter_oferta %}
+      <p style="color:var(--dourado);font-size:0.95rem;font-weight:500;margin-top:1rem;letter-spacing:0.04em;">
+        Ao se inscrever, ganhe <strong>{{ cupom_newsletter_oferta.valor_label }}</strong> na sua próxima compra
+      </p>
+      <p style="color:var(--cinza-texto);font-size:0.78rem;font-weight:300;margin-top:0.25rem;">
+        Cupom válido por {{ cupom_newsletter_oferta.dias }} dias após o cadastro
+      </p>
+      {% endif %}
     </header>
 
     <form id="form-newsletter" class="newsletter-form fade-in fade-in-delay-1"

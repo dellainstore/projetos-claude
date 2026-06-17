@@ -1366,6 +1366,9 @@
       var paiId = String(paiSel.value || '');
       var valorAtual = String(subSel.value || '');
 
+      // Sem categoria pai selecionada, mantém todas as subcategorias visíveis
+      if (!paiId) return;
+
       // Limpa as opções antigas (mantém só o placeholder vazio se houver)
       Array.from(subSel.options).forEach(function (opt) {
         if (opt.value) opt.remove();

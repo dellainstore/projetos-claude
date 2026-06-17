@@ -1,9 +1,13 @@
+import base64
+import hashlib
+import hmac
 import json
 import logging
 from decimal import Decimal
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -28,12 +32,14 @@ def _salvar_carrinho_abandonado(request, cart):
         from .models import CarrinhoAbandonado
         itens = [
             {
-                'nome':         item['nome'],
+                'produto_id':    item.get('produto_id'),
+                'variacao_id':   item.get('variacao_id'),
+                'nome':          item['nome'],
                 'variacao_desc': item.get('variacao_desc', ''),
-                'preco':        str(item['preco_decimal']),
-                'quantidade':   item['quantidade'],
-                'subtotal':     str(item['subtotal']),
-                'imagem':       item.get('imagem', ''),
+                'preco':         str(item['preco_decimal']),
+                'quantidade':    item['quantidade'],
+                'subtotal':      str(item['subtotal']),
+                'imagem':        item.get('imagem', ''),
             }
             for item in cart
         ]
@@ -121,12 +127,98 @@ def _gerar_dados_pix(pedido):
 
 # ─── Carrinho ─────────────────────────────────────────────────────────────────
 
+def recuperar_carrinho_abandonado(request, token):
+    """Restaura na sessão os itens de um CarrinhoAbandonado a partir do token do e-mail."""
+    from .models import CarrinhoAbandonado
+    from apps.produtos.models import Produto, Variacao
+
+    try:
+        ca = CarrinhoAbandonado.objects.get(token=token, recuperado=False)
+    except (CarrinhoAbandonado.DoesNotExist, ValueError):
+        messages.info(request, 'Este link de carrinho não está mais disponível.')
+        return redirect('pedidos:carrinho')
+
+    cart = Carrinho(request)
+    restaurados = 0
+    for item in ca.itens:
+        produto_id  = item.get('produto_id')
+        variacao_id = item.get('variacao_id')
+        quantidade  = int(item.get('quantidade', 1) or 1)
+        if not produto_id or quantidade <= 0:
+            continue
+        try:
+            produto = Produto.objects.get(pk=produto_id, ativo=True)
+        except Produto.DoesNotExist:
+            continue
+        variacao = None
+        if variacao_id:
+            try:
+                variacao = Variacao.objects.get(pk=variacao_id, ativa=True, produto=produto)
+            except Variacao.DoesNotExist:
+                continue
+        cart.adicionar(produto, variacao=variacao, quantidade=quantidade)
+        restaurados += 1
+
+    if restaurados:
+        messages.success(request, 'Seu carrinho foi restaurado. Finalize sua compra para garantir suas peças.')
+    else:
+        messages.info(request, 'Os itens deste carrinho não estão mais disponíveis.')
+
+    return redirect('pedidos:carrinho')
+
+
 def carrinho(request):
     cart = Carrinho(request)
+    total = cart.get_total()
+
+    from django.core.cache import cache
+    from apps.core_utils.cache_utils import LOJA_CONFIG
+    config_loja = cache.get(LOJA_CONFIG)
+    if config_loja is None:
+        try:
+            from apps.conteudo.models import ConfiguracaoLoja
+            config_loja = ConfiguracaoLoja.get_config()
+        except Exception:
+            config_loja = None
+        cache.set(LOJA_CONFIG, config_loja, 60 * 60 * 24)
+
+    frete_meta = getattr(config_loja, 'frete_gratis_acima', None) if config_loja else None
+    frete_faltante = max(Decimal('0'), frete_meta - total) if frete_meta else None
+
+    itens_list = list(cart)
+
+    # Produtos relacionados: mesma categoria dos itens no carrinho, excluindo os já presentes
+    relacionados_carrinho = []
+    try:
+        from apps.produtos.models import Produto, Variacao as _Variacao
+        variacao_ids = [item.get('variacao_id') for item in itens_list if item.get('variacao_id')]
+        produto_ids_no_carrinho = [item.get('produto_id') for item in itens_list if item.get('produto_id')]
+        if variacao_ids:
+            cat_ids = list(
+                _Variacao.objects
+                .filter(pk__in=variacao_ids)
+                .values_list('produto__categoria_id', flat=True)
+                .distinct()
+            )
+            if cat_ids:
+                relacionados_carrinho = list(
+                    Produto.objects
+                    .filter(ativo=True, categoria_id__in=cat_ids)
+                    .exclude(pk__in=produto_ids_no_carrinho)
+                    .prefetch_related('imagens')
+                    .order_by('-destaque', '-criado_em')[:4]
+                )
+    except Exception:
+        relacionados_carrinho = []
+
     context = {
-        'carrinho': cart,
-        'itens':    list(cart),
-        'total':    cart.get_total(),
+        'carrinho':              cart,
+        'itens':                 itens_list,
+        'total':                 total,
+        'config_loja':           config_loja,
+        'frete_meta':            frete_meta,
+        'frete_faltante':        frete_faltante,
+        'relacionados_carrinho': relacionados_carrinho,
     }
     return render(request, 'pedidos/carrinho.html', context)
 
@@ -189,6 +281,7 @@ def adicionar_ao_carrinho(request, produto_id):
                     'content_ids': [str(produto.id)],
                     'content_type': 'product',
                     'content_name': produto.nome,
+                    'content_category': produto.categoria.nome if produto.categoria_id else '',
                     'currency': 'BRL',
                     'value': float(preco_item) * quantidade,
                     'contents': [
@@ -310,7 +403,7 @@ def checkout(request):
                     'estado':        end.estado,
                 })
         except Exception:
-            pass
+            logger.debug('Falha ao pre-preencher endereco no checkout', exc_info=True)
 
     if request.method == 'POST':
         form = CheckoutForm(request.POST, initial=initial)
@@ -368,8 +461,41 @@ def checkout(request):
             },
         )
     except Exception:
-        pass
+        logger.warning('Falha ao enviar evento Meta CAPI InitiateCheckout', exc_info=True)
     return render(request, 'checkout/index.html', context)
+
+
+def _ler_consentimento(request):
+    """Le o cookie della_consent e retorna (marketing, analytics) como booleans.
+
+    Persistido no pedido para permitir o disparo server-side do purchase (Meta
+    CAPI / GA4 MP) quando o pagamento confirma fora do browser (ex: PIX/webhook),
+    respeitando a escolha LGPD que a cliente fez no momento da compra.
+    """
+    raw = request.COOKIES.get('della_consent', '')
+    if not raw:
+        return False, False
+    try:
+        from urllib.parse import unquote
+        data = json.loads(unquote(raw))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False, False
+    return bool(data.get('marketing')), bool(data.get('analytics'))
+
+
+def _ler_ga_client_id(request):
+    """Extrai o client_id do GA4 do cookie _ga (formato GA1.1.<id>.<ts>).
+
+    Usado no disparo server-side (Measurement Protocol) para manter a mesma
+    identidade/atribuicao do evento client-side e a dedup por transaction_id.
+    """
+    raw = request.COOKIES.get('_ga', '').strip()
+    if not raw:
+        return ''
+    partes = raw.split('.')
+    if len(partes) >= 4:
+        return f'{partes[-2]}.{partes[-1]}'
+    return ''
 
 
 def _processar_checkout(request, form, cart):
@@ -388,6 +514,7 @@ def _processar_checkout(request, form, cart):
     frete           = Decimal(str(cd.get('valor_frete') or '0'))
     forma_pagamento = cd['forma_pagamento']
     parcelas        = int(cd.get('parcelas') or 1)
+    eh_retirada_loja = (cd.get('opcao_frete') or '').strip() == 'retirada_loja'
 
     calculo = CalculadorPedido().calcular(
         subtotal=subtotal,
@@ -395,11 +522,13 @@ def _processar_checkout(request, form, cart):
         cpf=cd.get('cpf', ''),
         valor_frete=frete,
         vendedor_codigo=cd.get('codigo_vendedor_codigo', ''),
+        cliente=request.user if request.user.is_authenticated else None,
     )
-    cupom_obj   = calculo.cupom_obj
-    vendedor_obj = calculo.vendedor_obj
-    desconto    = calculo.desconto
-    total       = calculo.total
+    cupom_obj         = calculo.cupom_obj
+    cupom_emitido_obj = calculo.cupom_emitido_obj
+    vendedor_obj      = calculo.vendedor_obj
+    desconto          = calculo.desconto
+    total             = calculo.total
 
     # Campo enviado pelo SDK PagSeguro JS (apenas para cartão novo)
     encrypted_card   = request.POST.get('pagseguro_card_encrypted', '').strip()
@@ -407,6 +536,11 @@ def _processar_checkout(request, form, cart):
     cartao_salvo_id  = request.POST.get('cartao_salvo_id', '').strip()
     # Checkbox "salvar cartão para compras futuras"
     salvar_cartao    = request.POST.get('salvar_cartao') == 'on'
+
+    # Snapshot de consentimento + client_id do GA4 para o disparo server-side do
+    # purchase (ex: PIX confirmado no webhook, sem browser). Ver _ler_consentimento.
+    consent_marketing, consent_analytics = _ler_consentimento(request)
+    ga_client_id = _ler_ga_client_id(request)
 
     if forma_pagamento == 'cartao_credito' and not encrypted_card and not cartao_salvo_id:
         messages.error(request, 'Dados do cartão não recebidos. Tente novamente.')
@@ -450,15 +584,19 @@ def _processar_checkout(request, form, cart):
                 total                 = total,
                 forma_pagamento       = forma_pagamento,
                 parcelas              = parcelas,
-                transportadora        = cd.get('servico_frete_nome', ''),
-                frete_servico_id      = (cd.get('opcao_frete') or '').strip(),
-                frete_prazo_dias      = cd.get('prazo_frete') or None,
+                retirada_loja         = eh_retirada_loja,
+                transportadora        = 'Retirada na Loja' if eh_retirada_loja else cd.get('servico_frete_nome', ''),
+                frete_servico_id      = '' if eh_retirada_loja else (cd.get('opcao_frete') or '').strip(),
+                frete_prazo_dias      = None if eh_retirada_loja else (cd.get('prazo_frete') or None),
                 observacao_cliente    = cd.get('observacao', ''),
                 gateway               = 'pagseguro' if forma_pagamento == 'cartao_credito' else '',
                 cupom                 = cupom_obj,
-                cupom_codigo          = cupom_obj.codigo if cupom_obj else '',
+                cupom_codigo          = cupom_emitido_obj.codigo if cupom_emitido_obj else (cupom_obj.codigo if cupom_obj else ''),
                 codigo_vendedor       = vendedor_obj,
                 codigo_vendedor_str   = vendedor_obj.codigo if vendedor_obj else '',
+                consentimento_marketing = consent_marketing,
+                consentimento_analytics = consent_analytics,
+                ga_client_id          = ga_client_id,
             )
             pedido.full_clean()
             pedido.save()
@@ -551,10 +689,22 @@ def _processar_checkout(request, form, cart):
         from .models import Cupom as _Cupom
         _Cupom.objects.filter(pk=cupom_obj.pk).update(vezes_usado=models.F('vezes_usado') + 1)
 
+    if cupom_emitido_obj:
+        from django.utils import timezone as _tz
+        cupom_emitido_obj.usado_em = _tz.now()
+        cupom_emitido_obj.pedido = pedido
+        cupom_emitido_obj.save(update_fields=['usado_em', 'pedido'])
+
     cart.limpar()
     _limpar_carrinho_abandonado(request)
 
     request.session['ultimo_pedido'] = pedido.numero
+    # Flag de rastreamento: garante que o evento purchase (GA4 + Meta) seja
+    # renderizado apenas na primeira exibicao da confirmacao pos-checkout.
+    # Consumida (removida) no primeiro render em confirmacao_pedido, evitando
+    # disparo duplicado se a cliente reabrir a pagina depois (mesmo em outro
+    # dispositivo, onde sessionStorage nao protege).
+    request.session['rastrear_purchase'] = pedido.numero
     pedidos_guest = request.session.get('pedidos_guest', [])
     if pedido.numero not in pedidos_guest:
         pedidos_guest.append(pedido.numero)
@@ -575,10 +725,15 @@ def _processar_checkout(request, form, cart):
     except Exception as exc:
         logger.warning('Bling: não foi possível enviar pedido %s: %s', pedido.numero, exc)
 
-    try:
-        enviar_evento_purchase(pedido, request)
-    except Exception as exc:
-        logger.warning('Meta CAPI: não foi possível enviar Purchase do pedido %s: %s', pedido.numero, exc)
+    # Purchase (Meta CAPI) so quando o pagamento ja esta confirmado no checkout
+    # (cartao PAID/AUTHORIZED). Para PIX e cartao em analise, o webhook do PagBank
+    # dispara ao confirmar — evita contabilizar venda nao paga. O request aqui
+    # enriquece a correspondencia (IP/UA/_fbp/_fbc).
+    if pedido.status == 'pagamento_confirmado':
+        try:
+            enviar_evento_purchase(pedido, request)
+        except Exception as exc:
+            logger.warning('Meta CAPI: não foi possível enviar Purchase do pedido %s: %s', pedido.numero, exc)
 
     return redirect('pedidos:confirmacao', numero=pedido.numero)
 
@@ -610,12 +765,27 @@ def confirmacao_pedido(request, numero):
     if pedido.forma_pagamento == 'pix' and pedido.status not in ('pagamento_confirmado', 'cancelado'):
         pix_qrcode, pix_payload, pix_via = _gerar_dados_pix(pedido)
 
+    # Dispara o purchase client-side (Pixel + GA4) apenas na primeira exibicao
+    # pos-checkout E somente com o pagamento ja confirmado:
+    #  - cartao aprovado: confirma no checkout, dispara neste primeiro render;
+    #  - PIX: 1o render fica aguardando_pagamento (nao dispara, flag preservada);
+    #    quando o polling detecta o pagamento a pagina recarrega ja paga e dispara.
+    # A flag so e consumida quando o evento realmente renderiza, evitando perder
+    # o PIX e impedindo re-disparo em revisitas (link, Meus Pedidos, outro device).
+    # Para PIX pago apos fechar a pagina, o webhook cobre via Meta CAPI + GA4 MP.
+    ja_pago = pedido.status == 'pagamento_confirmado'
+    disparar_tracking = ja_pago and request.session.get('rastrear_purchase') == numero
+    if disparar_tracking:
+        del request.session['rastrear_purchase']
+        request.session.modified = True
+
     context = {
-        'pedido':      pedido,
-        'itens':       pedido.itens.select_related('produto').all(),
-        'pix_qrcode':  pix_qrcode,
-        'pix_payload': pix_payload,
-        'pix_via':     pix_via,
+        'pedido':            pedido,
+        'itens':             pedido.itens.select_related('produto').all(),
+        'pix_qrcode':        pix_qrcode,
+        'pix_payload':       pix_payload,
+        'pix_via':           pix_via,
+        'disparar_tracking': disparar_tracking,
     }
     return render(request, 'checkout/confirmacao.html', context)
 
@@ -623,8 +793,12 @@ def confirmacao_pedido(request, numero):
 # ─── Frete ────────────────────────────────────────────────────────────────────
 
 def validar_cupom(request):
-    """AJAX: valida cupom e retorna desconto para o subtotal enviado."""
-    from .models import Cupom
+    """AJAX: valida cupom e retorna desconto para o subtotal enviado.
+
+    Aceita tanto cupons manuais (Cupom com origem=manual) quanto cupons emitidos
+    individualmente (CupomEmitido — newsletter, primeira_compra, etc.).
+    """
+    from .models import Cupom, CupomEmitido
     from decimal import Decimal
 
     codigo   = request.GET.get('codigo', '').strip().upper()
@@ -640,14 +814,26 @@ def validar_cupom(request):
     if not codigo:
         return JsonResponse({'status': 'erro', 'erro': 'Informe o código do cupom.'})
 
-    try:
-        cupom = Cupom.objects.get(codigo__iexact=codigo, ativo=True)
-    except Cupom.DoesNotExist:
-        return JsonResponse({'status': 'erro', 'erro': 'Cupom inválido.'})
+    cliente = request.user if request.user.is_authenticated else None
 
-    ok, motivo = cupom.esta_valido(cpf=cpf)
-    if not ok:
-        return JsonResponse({'status': 'erro', 'erro': motivo})
+    cupom = None
+    codigo_retorno = codigo
+    try:
+        emitido = CupomEmitido.objects.select_related('cupom_template').get(codigo__iexact=codigo)
+        ok, motivo = emitido.esta_valido(cpf=cpf, cliente=cliente)
+        if not ok:
+            return JsonResponse({'status': 'erro', 'erro': motivo})
+        cupom = emitido.cupom_template
+        codigo_retorno = emitido.codigo
+    except CupomEmitido.DoesNotExist:
+        try:
+            cupom = Cupom.objects.get(codigo__iexact=codigo, ativo=True, origem='manual')
+        except Cupom.DoesNotExist:
+            return JsonResponse({'status': 'erro', 'erro': 'Cupom inválido.'})
+        ok, motivo = cupom.esta_valido(cpf=cpf)
+        if not ok:
+            return JsonResponse({'status': 'erro', 'erro': motivo})
+        codigo_retorno = cupom.codigo
 
     desconto = cupom.calcular_desconto(subtotal)
     if cupom.tipo == 'percentual':
@@ -658,7 +844,7 @@ def validar_cupom(request):
 
     return JsonResponse({
         'status':    'ok',
-        'codigo':    cupom.codigo,
+        'codigo':    codigo_retorno,
         'descricao': descricao,
         'desconto':  str(desconto),
     })
@@ -721,23 +907,31 @@ def calcular_frete(request):
     from apps.pagamentos.services.melhorenvio import calcular
     opcoes = calcular(cep, itens)
 
-    return JsonResponse({
-        'status': 'ok',
-        'opcoes': [
-            {
-                'id':        o['id'],
-                'nome':      o['nome'],
-                'empresa':   o['empresa'],
-                'preco':     str(o['preco']),
-                'prazo':     (o['prazo'] or 0) + prazo_adicional,
-                'descricao': (
-                    f'Entrega em até {(o["prazo"] or 0) + prazo_adicional} dias úteis'
-                    + (f' ({prazo_adicional} de confecção + {(o["prazo"] or 0)} de frete)' if prazo_adicional else '')
-                ),
-            }
-            for o in opcoes
-        ],
+    lista = [
+        {
+            'id':        o['id'],
+            'nome':      o['nome'],
+            'empresa':   o['empresa'],
+            'preco':     str(o['preco']),
+            'prazo':     (o['prazo'] or 0) + prazo_adicional,
+            'descricao': (
+                f'Entrega em até {(o["prazo"] or 0) + prazo_adicional} dias úteis'
+                + (f' ({prazo_adicional} de confecção + {(o["prazo"] or 0)} de frete)' if prazo_adicional else '')
+            ),
+        }
+        for o in opcoes
+    ]
+
+    lista.append({
+        'id':        'retirada_loja',
+        'nome':      'Retirar na Loja',
+        'empresa':   "D'ELLA",
+        'preco':     '0',
+        'prazo':     0,
+        'descricao': 'Disponível a partir de 2h após confirmação do pagamento',
     })
+
+    return JsonResponse({'status': 'ok', 'opcoes': lista})
 
 
 def consultar_cep(request, cep):
@@ -814,12 +1008,6 @@ def checkout_pagamento(request):
 
 
 # ─── Webhook Melhor Envio ─────────────────────────────────────────────────────
-
-import hashlib
-import hmac
-import base64
-
-from django.views.decorators.csrf import csrf_exempt
 
 
 def _validar_assinatura_me(raw_body: bytes, assinatura: str) -> bool:

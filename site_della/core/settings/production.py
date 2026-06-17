@@ -20,15 +20,17 @@ SECURE_HSTS_PRELOAD = True
 # Cookie de sessão só trafega via HTTPS
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = 'Lax'   # proteção CSRF cross-site
+# Compartilha a sessão entre host canônico e variações com/sem www.
+SESSION_COOKIE_DOMAIN = '.dellainstore.com'
 
 # Cookie CSRF só via HTTPS
 CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = False  # False permite que JS leia o token para chamadas AJAX
 CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_DOMAIN = '.dellainstore.com'
 
 # Origens confiáveis para CSRF (M2 — obrigatório com HTTPS e proxy reverso)
 CSRF_TRUSTED_ORIGINS = [
-    'https://novo.dellainstore.com.br',
     'https://www.dellainstore.com.br',
     'https://dellainstore.com.br',
     'https://www.dellainstore.com',
@@ -89,6 +91,22 @@ LOGGING = {
             'backupCount': 3,
             'formatter': 'verbose',
         },
+        'file_bling': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'bling_webhook.log',
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 3,
+            'formatter': 'verbose',
+        },
+        'file_meta': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'meta_capi.log',
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 3,
+            'formatter': 'verbose',
+        },
     },
     'loggers': {
         'django': {
@@ -104,6 +122,16 @@ LOGGING = {
         'axes': {
             'handlers': ['file_security'],
             'level': 'WARNING',
+            'propagate': False,
+        },
+        'apps.bling': {
+            'handlers': ['file_bling'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'apps.core_utils.meta': {
+            'handlers': ['file_meta'],
+            'level': 'INFO',
             'propagate': False,
         },
     },

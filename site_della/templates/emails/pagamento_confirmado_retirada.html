@@ -1,0 +1,217 @@
+{% load della_filters %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pagamento confirmado - D'ELLA Instore</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f3f1;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f3f1;padding:40px 0 48px;">
+  <tr>
+    <td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+        <!-- HEADER -->
+        <tr>
+          <td style="background:#ffffff;padding:32px 40px 20px;text-align:center;
+                     border-radius:8px 8px 0 0;">
+            <img src="{{ logo_url }}" alt="D'ELLA" width="160"
+                 style="display:block;margin:0 auto 6px;padding:6px 10px;background:#ffffff;border-radius:4px;">
+            <div style="font-size:8px;font-weight:400;color:#b0a090;
+                        letter-spacing:5px;text-transform:uppercase;">I N S T O R E</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#ffffff;padding:0 40px;">
+            <div style="height:1px;background:#e0d0b8;"></div>
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td style="background:#ffffff;padding:32px 40px 28px;text-align:center;">
+            <div style="font-size:11px;font-weight:600;color:#5aab6f;letter-spacing:3px;
+                        text-transform:uppercase;margin-bottom:10px;">
+              Pagamento Confirmado
+            </div>
+            <div style="font-size:24px;font-weight:300;color:#1a1a1a;letter-spacing:.5px;
+                        margin-bottom:10px;">
+              Preparando seu pedido<br>
+              <span style="font-weight:600;">para retirada!</span>
+            </div>
+            <div style="font-size:14px;color:#888;line-height:1.6;">
+              Olá, <strong style="color:#555;">{{ pedido.nome_completo.split.0 }}</strong>!
+              Recebemos seu pagamento com sucesso.<br>
+              Avisaremos quando o pedido estiver pronto para você buscar na loja.
+            </div>
+          </td>
+        </tr>
+
+        <!-- BODY -->
+        <tr>
+          <td style="background:#ffffff;padding:0 40px 36px;">
+
+            <!-- Número do pedido -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="border:1px solid #ede9e1;border-radius:6px;margin-bottom:28px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <div style="font-size:11px;color:#999;text-transform:uppercase;
+                               letter-spacing:1.5px;margin-bottom:4px;">Número do Pedido</div>
+                  <div style="font-size:14px;font-weight:600;color:#c9a96e;letter-spacing:2px;">
+                    {{ pedido.numero }}
+                  </div>
+                </td>
+                <td style="padding:16px 20px;text-align:right;">
+                  <div style="font-size:11px;color:#999;text-transform:uppercase;
+                               letter-spacing:1.5px;margin-bottom:4px;">Data</div>
+                  <div style="font-size:14px;color:#444;font-weight:500;">
+                    {{ pedido.criado_em|date:"d/m/Y H\hi" }}
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Itens -->
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;
+                         letter-spacing:1.5px;color:#999;margin-bottom:12px;">
+              Itens do Pedido
+            </div>
+
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="border-collapse:collapse;margin-bottom:0;">
+              <tr>
+                <td style="padding:8px 0;font-size:11px;font-weight:600;
+                            text-transform:uppercase;letter-spacing:.5px;color:#bbb;">Produto</td>
+                <td style="padding:8px 0;font-size:11px;font-weight:600;
+                            text-transform:uppercase;letter-spacing:.5px;color:#bbb;
+                            text-align:center;width:40px;">Qtd</td>
+                <td style="padding:8px 0;font-size:11px;font-weight:600;
+                            text-transform:uppercase;letter-spacing:.5px;color:#bbb;
+                            text-align:right;">Total</td>
+              </tr>
+              <tr>
+                <td colspan="3" style="padding:0;">
+                  <div style="height:1px;background:#ede9e1;"></div>
+                </td>
+              </tr>
+              {% for item in pedido.itens.all %}
+              <tr>
+                <td style="padding:12px 0;">
+                  <div style="font-size:14px;color:#222;font-weight:500;">
+                    {{ item.nome_produto }}
+                  </div>
+                  {% if item.variacao_desc %}
+                  <div style="font-size:10px;color:#b8b0a4;margin-top:2px;line-height:1.45;">
+                    {{ item.variacao_desc }}
+                  </div>
+                  {% endif %}
+                </td>
+                <td style="padding:12px 0;text-align:center;font-size:14px;color:#777;">
+                  {{ item.quantidade }}
+                </td>
+                <td style="padding:12px 0;text-align:right;font-size:14px;color:#333;font-weight:500;">
+                  R$&nbsp;{{ item.subtotal|brl_price }}
+                </td>
+              </tr>
+              {% endfor %}
+              <tr>
+                <td colspan="3" style="padding:0;">
+                  <div style="height:1px;background:#ede9e1;"></div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Totais -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="margin-top:0;margin-bottom:28px;">
+              <tr>
+                <td style="padding:10px 0 5px;font-size:13px;color:#888;">Subtotal</td>
+                <td style="padding:10px 0 5px;font-size:13px;color:#555;text-align:right;">
+                  R$&nbsp;{{ pedido.subtotal|brl_price }}
+                </td>
+              </tr>
+              {% if pedido.desconto %}
+              <tr>
+                <td style="padding:5px 0;font-size:13px;color:#5aab6f;">Desconto</td>
+                <td style="padding:5px 0;font-size:13px;color:#5aab6f;text-align:right;">
+                  &minus;&nbsp;R$&nbsp;{{ pedido.desconto|brl_price }}
+                </td>
+              </tr>
+              {% endif %}
+              <tr>
+                <td style="padding:5px 0;font-size:13px;color:#888;">Frete</td>
+                <td style="padding:5px 0;font-size:13px;color:#5aab6f;text-align:right;font-weight:600;">
+                  Retirada na loja
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding:0;">
+                  <div style="height:1px;background:#ede9e1;margin:8px 0;"></div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:4px 0;font-size:15px;font-weight:600;color:#1a1a1a;">Total</td>
+                <td style="padding:4px 0;font-size:18px;font-weight:700;
+                            color:#c9a96e;text-align:right;">
+                  R$&nbsp;{{ pedido.total|brl_price }}
+                </td>
+              </tr>
+            </table>
+
+            <!-- Aviso de retirada -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="background:#fdf9f2;border:1px solid #ede9e1;border-radius:6px;margin-bottom:32px;">
+              <tr>
+                <td style="padding:20px 24px;">
+                  <div style="font-size:11px;font-weight:600;text-transform:uppercase;
+                               letter-spacing:1.5px;color:#c9a96e;margin-bottom:10px;">
+                    Proximos passos
+                  </div>
+                  <div style="font-size:13px;color:#555;line-height:1.8;">
+                    Assim que seu pedido estiver pronto, enviaremos um novo e-mail confirmando.
+                    <br>Fique de olho na caixa de entrada!
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- CTA -->
+            <div style="text-align:center;">
+              <a href="{{ site_url }}/conta/minha-conta/pedidos/{{ pedido.numero }}/"
+                 style="display:inline-block;background:#1a1a1a;color:#ffffff;
+                         padding:14px 40px;border-radius:4px;text-decoration:none;
+                         font-size:12px;font-weight:600;letter-spacing:2px;
+                         text-transform:uppercase;">
+                Acompanhar Pedido
+              </a>
+            </div>
+
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background:#eeecea;padding:24px 40px;text-align:center;
+                     border-radius:0 0 8px 8px;">
+            <div style="font-size:12px;color:#888;line-height:1.8;">
+              Dúvidas? Responda este e-mail ou fale pelo
+              <a href="https://wa.me/{{ whatsapp_number }}?text=Olá!%20Tenho%20uma%20dúvida%20sobre%20meu%20pedido"
+                 style="color:#1a1a1a;text-decoration:none;font-weight:600;">WhatsApp</a>
+            </div>
+            <div style="margin-top:10px;">
+              <a href="{{ site_url }}/conta/minha-conta/"
+                 style="font-size:12px;color:#888;text-decoration:none;">Acessar minha conta</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

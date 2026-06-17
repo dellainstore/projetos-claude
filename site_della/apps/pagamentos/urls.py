@@ -8,9 +8,6 @@ urlpatterns = [
     path('pagseguro/retorno/', views.pagseguro_retorno, name='pagseguro_retorno'),
     path('pagseguro/notificacao/', views.pagseguro_notificacao, name='pagseguro_notificacao'),
 
-    # Stone
-    path('stone/webhook/', views.stone_webhook, name='stone_webhook'),
-
     # Cartão — repagamento de pedido existente
     path('cartao/pagar/<str:pedido_numero>/', views.cartao_pagar_pedido, name='cartao_pagar_pedido'),
 

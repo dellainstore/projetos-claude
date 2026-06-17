@@ -156,6 +156,11 @@ def init_db() -> None:
                 jogador_id INTEGER REFERENCES jogadores(id),
                 PRIMARY KEY (temporada_id, jogador_id)
             );
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
         """)
         # Migração: adiciona colunas de nomes para visitantes se não existirem
         colunas = [r["name"] for r in conn.execute("PRAGMA table_info(jogos)").fetchall()]
@@ -211,7 +216,7 @@ def has_any_user() -> bool:
 
 def list_temporadas() -> list[dict]:
     with get_conn() as conn:
-        return conn.execute("SELECT * FROM temporadas ORDER BY ano DESC").fetchall()
+        return conn.execute("SELECT * FROM temporadas ORDER BY ano DESC, id DESC").fetchall()
 
 
 def get_temporada(temporada_id: int) -> dict | None:
@@ -227,7 +232,7 @@ def get_temporada_ativa() -> dict | None:
 def create_temporada(nome: str, ano: int, n_rodadas: int = 8, n_descartadas: int = 2) -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO temporadas (nome, ano, n_rodadas, n_descartadas) VALUES (?,?,?,?)",
+            "INSERT INTO temporadas (nome, ano, n_rodadas, n_descartadas, ativa) VALUES (?,?,?,?,0)",
             (nome, ano, n_rodadas, n_descartadas),
         )
         return cur.lastrowid
@@ -237,6 +242,14 @@ def set_temporada_ativa(temporada_id: int) -> None:
     with get_conn() as conn:
         conn.execute("UPDATE temporadas SET ativa = 0")
         conn.execute("UPDATE temporadas SET ativa = 1 WHERE id = ?", (temporada_id,))
+
+
+def update_temporada(temporada_id: int, nome: str, ano: int, n_rodadas: int, n_descartadas: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE temporadas SET nome=?, ano=?, n_rodadas=?, n_descartadas=? WHERE id=?",
+            (nome, ano, n_rodadas, n_descartadas, temporada_id),
+        )
 
 
 # ── JOGADORES ─────────────────────────────────────────────────────────────────
@@ -685,8 +698,8 @@ def create_final(temporada_id: int, ranking: list[dict]) -> int:
 
         def _pid(entry): return entry["jogador_id"]
 
-        ouro = [r for r in ranking if r["posicao"] <= 8]
-        prata = [r for r in ranking if 9 <= r["posicao"] <= 16]
+        ouro = ranking[:8]
+        prata = ranking[8:16]
 
         # Ouro: SF1 (1+2 vs 7+8), SF2 (3+4 vs 5+6)
         if len(ouro) >= 8:
@@ -791,6 +804,21 @@ def list_final_indisponiveis(temporada_id: int) -> list[dict]:
             """,
             (temporada_id,),
         ).fetchall()
+
+
+def get_setting(key: str) -> str | None:
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+
+def set_setting(key: str, value: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES (?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
 
 
 def set_final_indisponiveis(temporada_id: int, jogador_ids: list[int]) -> None:

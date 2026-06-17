@@ -5,3 +5,6 @@ class BlingConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.bling'
     verbose_name = 'Bling ERP'
+
+    def ready(self):
+        from . import signals  # noqa: F401

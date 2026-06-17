@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block titulo %}Pagina nao encontrada | D'ELLA Instore{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block conteudo %}
+<div class="pagina-estatica-wrapper" style="min-height: 60vh; display:flex; align-items:center; justify-content:center; text-align:center;">
+  <div style="max-width: 480px; padding: 2rem;">
+    <p style="font-size: 5rem; font-weight: 700; color: var(--cor-principal); margin: 0; line-height: 1;">404</p>
+    <h1 style="font-family: var(--fonte-titulo); font-size: clamp(1.4rem, 3vw, 2rem); margin: 1rem 0 0.5rem;">Pagina nao encontrada</h1>
+    <p style="color: #666; margin-bottom: 2rem;">O endereco que voce digitou nao existe ou foi movido.</p>
+    <div style="display:flex; gap: 1rem; justify-content:center; flex-wrap:wrap;">
+      <a href="/" class="btn-primario" style="padding: 0.75rem 1.5rem; text-decoration:none;">Voltar para o inicio</a>
+      <a href="/loja/" style="padding: 0.75rem 1.5rem; border: 1px solid var(--cor-principal); text-decoration:none; color: var(--cor-principal);">Ver produtos</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

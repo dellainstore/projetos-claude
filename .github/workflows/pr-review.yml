@@ -1,0 +1,134 @@
+name: PR — Segurança e Qualidade
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "site_della/**"
+
+jobs:
+  security-quality:
+    name: Análise de Segurança e Qualidade
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar ferramentas de análise
+        run: pip install ruff pip-audit
+
+      - name: Instalar dependências Python (sem extras de produção)
+        run: |
+          pip install -r site_della/requirements.txt 2>&1 | tail -5 || true
+
+      # ── Ruff: linting e regras de segurança ──────────────────────────────
+      - name: Ruff — Linting (erros e imports)
+        id: ruff_lint
+        continue-on-error: true
+        run: |
+          ruff check site_della/apps/ site_della/core/ \
+            --select=E,F,W \
+            --output-format=github \
+            2>&1 | tee /tmp/ruff_lint.txt
+
+      - name: Ruff — Regras de Segurança (bandit-style)
+        id: ruff_security
+        continue-on-error: true
+        run: |
+          ruff check site_della/apps/ site_della/core/ \
+            --select=S \
+            --output-format=github \
+            2>&1 | tee /tmp/ruff_security.txt
+
+      # ── pip-audit: CVEs em dependências Python ───────────────────────────
+      - name: pip-audit — Vulnerabilidades em dependências Python
+        id: pip_audit
+        continue-on-error: true
+        run: |
+          pip-audit -r site_della/requirements.txt \
+            --format=columns \
+            2>&1 | tee /tmp/pip_audit.txt
+
+      # ── npm audit: vulnerabilidades em deps JS ───────────────────────────
+      - name: npm audit — Vulnerabilidades em dependências JS
+        id: npm_audit
+        continue-on-error: true
+        working-directory: site_della
+        run: |
+          npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts 2>/dev/null || true
+          npm audit --audit-level=moderate 2>&1 | tee /tmp/npm_audit.txt
+
+      # ── Resumo: posta comentário no PR ───────────────────────────────────
+      - name: Postar resumo no PR
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+
+            function readFile(path) {
+              try { return fs.readFileSync(path, 'utf8').trim(); } catch { return ''; }
+            }
+
+            const ruffLint     = readFile('/tmp/ruff_lint.txt');
+            const ruffSecurity = readFile('/tmp/ruff_security.txt');
+            const pipAudit     = readFile('/tmp/pip_audit.txt');
+            const npmAudit     = readFile('/tmp/npm_audit.txt');
+
+            function status(outcome) {
+              return outcome === 'success' ? '✅' : '❌';
+            }
+
+            const s = {
+              lint:     '${{ steps.ruff_lint.outcome }}',
+              security: '${{ steps.ruff_security.outcome }}',
+              pip:      '${{ steps.pip_audit.outcome }}',
+              npm:      '${{ steps.npm_audit.outcome }}',
+            };
+
+            let body = `## 🔍 Análise Automática de Segurança e Qualidade\n\n`;
+            body += `| Check | Status |\n|---|---|\n`;
+            body += `| ${status(s.lint)} Ruff — Linting (erros/imports) | ${s.lint} |\n`;
+            body += `| ${status(s.security)} Ruff — Segurança (bandit) | ${s.security} |\n`;
+            body += `| ${status(s.pip)} pip-audit — CVEs Python | ${s.pip} |\n`;
+            body += `| ${status(s.npm)} npm audit — CVEs JavaScript | ${s.npm} |\n\n`;
+
+            if (ruffLint && s.lint !== 'success') {
+              body += `<details>\n<summary>🟠 Ruff Linting — detalhes</summary>\n\n\`\`\`\n${ruffLint.slice(0, 3000)}\n\`\`\`\n</details>\n\n`;
+            }
+            if (ruffSecurity && s.security !== 'success') {
+              body += `<details>\n<summary>🔴 Segurança (Bandit/Ruff) — detalhes</summary>\n\n\`\`\`\n${ruffSecurity.slice(0, 3000)}\n\`\`\`\n</details>\n\n`;
+            }
+            if (pipAudit && !pipAudit.includes('No known vulnerabilities found') && s.pip !== 'success') {
+              body += `<details>\n<summary>🔴 pip-audit — CVEs encontrados</summary>\n\n\`\`\`\n${pipAudit.slice(0, 3000)}\n\`\`\`\n</details>\n\n`;
+            }
+            if (npmAudit && !npmAudit.includes('found 0 vulnerabilities') && s.npm !== 'success') {
+              body += `<details>\n<summary>🟡 npm audit — detalhes</summary>\n\n\`\`\`\n${npmAudit.slice(0, 2000)}\n\`\`\`\n</details>\n\n`;
+            }
+
+            const allOk = Object.values(s).every(v => v === 'success');
+            if (allOk) {
+              body += `✅ **Todos os checks passaram.** Nenhum problema de segurança ou qualidade encontrado automaticamente.\n`;
+            } else {
+              body += `> ℹ️ Checks com ❌ indicam pontos que merecem revisão. Avalie o impacto antes de fazer merge.\n`;
+            }
+
+            body += `\n---\n*Gerado automaticamente por \`.github/workflows/pr-review.yml\`*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });

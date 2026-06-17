@@ -103,8 +103,8 @@ class CadastroForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['telefone'].required = True
-        self.fields['data_nascimento'].required = True
-        self.fields['genero'].required = True
+        self.fields['data_nascimento'].required = False
+        self.fields['genero'].required = False
 
     def clean_cpf(self):
         cpf = self.cleaned_data.get('cpf', '')
@@ -156,25 +156,42 @@ class EditarPerfilForm(forms.ModelForm):
         widget=forms.TextInput(attrs={'class': 'conta-input', 'autocomplete': 'name'}),
         error_messages={'required': 'Informe seu nome completo.'},
     )
+    data_nascimento = forms.DateField(
+        label='Data de nascimento',
+        required=True,
+        input_formats=['%d/%m/%Y'],
+        widget=forms.DateInput(
+            attrs={
+                'class': 'conta-input',
+                'placeholder': 'DD/MM/AAAA',
+                'inputmode': 'numeric',
+                'maxlength': '10',
+                'autocomplete': 'bday',
+            },
+            format='%d/%m/%Y',
+        ),
+        error_messages={
+            'required': 'Informe sua data de nascimento.',
+            'invalid': 'Data invalida. Use o formato DD/MM/AAAA.',
+        },
+    )
 
     class Meta:
         model = Cliente
-        fields = ['nome_completo', 'telefone', 'data_nascimento', 'genero']
+        fields = ['telefone', 'data_nascimento', 'genero']
         widgets = {
-            'telefone':        forms.TextInput(attrs={'class': 'conta-input', 'inputmode': 'tel', 'placeholder': '(11) 9 9999-9999'}),
-            'data_nascimento': forms.DateInput(attrs={'class': 'conta-input', 'type': 'date'}, format='%Y-%m-%d'),
-            'genero':          forms.Select(attrs={'class': 'conta-input conta-select'}),
+            'telefone': forms.TextInput(attrs={'class': 'conta-input', 'inputmode': 'tel', 'placeholder': '(11) 9 9999-9999'}),
+            'genero':   forms.Select(attrs={'class': 'conta-input conta-select'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['nome_completo'].initial = self.instance.get_full_name()
+        self.initial['telefone'] = self.instance.get_telefone_formatado()
         self.fields['telefone'].required = True
-        self.fields['data_nascimento'].required = True
         self.fields['genero'].required = True
         self.fields['telefone'].error_messages['required'] = 'Informe seu telefone.'
-        self.fields['data_nascimento'].error_messages['required'] = 'Informe sua data de nascimento.'
-        self.fields['genero'].error_messages['required'] = 'Selecione seu gênero.'
+        self.fields['genero'].error_messages['required'] = 'Selecione seu genero.'
 
     def clean_nome_completo(self):
         nome_completo = sanitize_name(self.cleaned_data.get('nome_completo', ''))

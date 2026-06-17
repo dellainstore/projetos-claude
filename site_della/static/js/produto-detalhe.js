@@ -24,7 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const parcelamentoEl = document.getElementById('produto-parcelamento');
   const qtyInput = document.getElementById('qty-input');
   const btnComprar = document.getElementById('btn-adicionar-carrinho');
-  const btnComprarAgora = document.getElementById('btn-comprar-agora');
   const btnPrev = document.querySelector('.galeria-nav-prev');
   const btnNext = document.querySelector('.galeria-nav-next');
 
@@ -78,6 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
         thumb.classList.toggle('ativa', thumbIdx === indexAtual);
       });
     }
+    document.querySelectorAll('#galeria-dots .galeria-dot').forEach((d, i) => {
+      d.classList.toggle('ativo', i === indexAtual);
+    });
   }
 
   function renderGaleria(corId) {
@@ -107,6 +109,21 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    const dotsEl = document.getElementById('galeria-dots');
+    if (dotsEl) {
+      dotsEl.innerHTML = '';
+      if (galeriaAtual.length > 1) {
+        galeriaAtual.forEach((_, dotIdx) => {
+          const dot = document.createElement('button');
+          dot.type = 'button';
+          dot.className = `galeria-dot${dotIdx === 0 ? ' ativo' : ''}`;
+          dot.setAttribute('aria-label', `Foto ${dotIdx + 1}`);
+          dot.addEventListener('click', () => ativarThumb(dotIdx));
+          dotsEl.appendChild(dot);
+        });
+      }
+    }
+
     indexAtual = 0;
     ativarThumb(0);
     atualizarVisibilidadeNavegacao();
@@ -121,6 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const precoUsado = emPromocao ? precoAtual : precoBase;
     btnComprar.dataset.preco = precoUsado;
     precoPorEl.textContent = `R$ ${fmtBRL(precoUsado)}`;
+    const stickyPrecoEl = document.getElementById('pdp-sticky-preco');
+    if (stickyPrecoEl) stickyPrecoEl.textContent = `R$ ${fmtBRL(precoUsado)}`;
     if (precoDeEl) {
       if (emPromocao) {
         precoDeEl.style.display = '';
@@ -168,7 +187,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (infoDisponibilidade) {
       if (entry) {
         infoDisponibilidade.style.display = '';
-        infoDisponibilidade.textContent = entry.disponibilidade_label + '.';
+        let textoDisp = entry.disponibilidade_label + '.';
+        if (entry.disponibilidade === 'imediata' && entry.estoque > 0 && entry.estoque <= 2) {
+          textoDisp = `Restam apenas ${entry.estoque} no estoque!`;
+          infoDisponibilidade.style.color = '#c0392b';
+          infoDisponibilidade.style.fontWeight = '500';
+        } else {
+          infoDisponibilidade.style.color = '';
+          infoDisponibilidade.style.fontWeight = '';
+        }
+        infoDisponibilidade.textContent = textoDisp;
       } else {
         infoDisponibilidade.style.display = 'none';
         infoDisponibilidade.textContent = '';
@@ -181,10 +209,22 @@ document.addEventListener('DOMContentLoaded', () => {
     tamanhoButtons.forEach((btn) => {
       const tamId = btn.dataset.tamanhoId;
       if (!corSelecionadaId) {
-        btn.classList.remove('esgotado');
-        btn.disabled = false;
-        btn.removeAttribute('aria-disabled');
-        btn.title = '';
+        // Sem cor: verifica se este tamanho tem alguma variacao disponivel em qualquer cor
+        const existeNaMap = Object.keys(variacoesMap).some((k) => k.split('_')[1] === tamId);
+        const temDisponivel = existeNaMap && Object.entries(variacoesMap).some(
+          ([k, e]) => k.split('_')[1] === tamId && e?.disponivel
+        );
+        if (existeNaMap && !temDisponivel) {
+          btn.classList.add('esgotado');
+          btn.disabled = true;
+          btn.setAttribute('aria-disabled', 'true');
+          btn.title = 'Esgotado';
+        } else {
+          btn.classList.remove('esgotado');
+          btn.disabled = false;
+          btn.removeAttribute('aria-disabled');
+          btn.title = '';
+        }
         return;
       }
       const entry = variacoesMap[`${corSelecionadaId}_${tamId}`];
@@ -286,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  async function adicionarAoCarrinho({ redirecionarCheckout = false }) {
+  async function adicionarAoCarrinho() {
     if (temCores && !corSelecionadaId) {
       mostrarAviso('Selecione uma cor antes de continuar.', '.variacao-cor');
       return;
@@ -297,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     document.getElementById('aviso-variacao')?.classList.add('hidden');
 
-    const produtoId = (redirecionarCheckout ? btnComprarAgora : btnComprar)?.dataset.produtoId;
+    const produtoId = btnComprar?.dataset.produtoId;
     const quantidade = parseInt(qtyInput?.value || '1', 10);
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
     const precoEvento = variacaoSelecionada?.preco_atual
@@ -306,13 +346,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const metaEventId = (window.crypto && window.crypto.randomUUID)
       ? `addtocart_${window.crypto.randomUUID().replace(/-/g, '')}`
       : `addtocart_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    const btn = redirecionarCheckout ? btnComprarAgora : btnComprar;
+    const btn = btnComprar;
     const textoOriginal = btn.innerHTML;
 
     btn.disabled = true;
-    btn.innerHTML = redirecionarCheckout
-      ? '<i class="fas fa-spinner fa-spin"></i> Indo para o checkout...'
-      : '<i class="fas fa-spinner fa-spin"></i> Adicionando...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adicionando...';
 
     try {
       const res = await fetch(`/carrinho/adicionar/${produtoId}/`, {
@@ -334,13 +372,23 @@ document.addEventListener('DOMContentLoaded', () => {
           fbq('track', 'AddToCart', {
             content_ids: [produtoId],
             content_type: 'product',
+            contents: [{ id: produtoId, quantity: quantidade, item_price: precoEvento }],
             value: precoEvento * quantidade,
             currency: 'BRL',
           }, { eventID: metaEventId });
         }
-        if (redirecionarCheckout) {
-          window.location.href = '/carrinho/checkout/';
-          return;
+        if (window.dellaTrackGA) {
+          window.dellaTrackGA('add_to_cart', {
+            currency: 'BRL',
+            value: precoEvento * quantidade,
+            items: [{
+              item_id: produtoId,
+              item_name: btnComprar?.dataset.produtoNome || '',
+              item_category: btnComprar?.dataset.produtoCategoria || '',
+              price: precoEvento,
+              quantity: quantidade,
+            }],
+          });
         }
         if (typeof window.atualizarDrawerConteudo === 'function') {
           window.atualizarDrawerConteudo(dados);
@@ -408,15 +456,26 @@ document.addEventListener('DOMContentLoaded', () => {
         html += '<ul class="frete-opcoes">';
         dadosFrete.opcoes.forEach((op) => {
           const precoOp = parseFloat(op.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-          html += `
-            <li class="frete-opcao">
-              <div>
-                <span class="frete-opcao-nome">${op.empresa} ${op.nome}</span>
-                <span class="frete-opcao-data">${dataEntrega(op.prazo)}</span>
-                <span class="frete-opcao-data">${op.descricao}</span>
-              </div>
-              <span class="frete-opcao-preco">R$&nbsp;${precoOp}</span>
-            </li>`;
+          if (op.id === 'retirada_loja') {
+            html += `
+              <li class="frete-opcao">
+                <div>
+                  <span class="frete-opcao-nome">Retire na Loja - Rua Visconde da Luz, 183 - Vila Nova Conceição - São Paulo/SP</span>
+                  <span class="frete-opcao-data">Disponível em até 2h</span>
+                </div>
+                <span class="frete-opcao-preco">Grátis</span>
+              </li>`;
+          } else {
+            html += `
+              <li class="frete-opcao">
+                <div>
+                  <span class="frete-opcao-nome">${op.empresa} ${op.nome}</span>
+                  <span class="frete-opcao-data">${dataEntrega(op.prazo)}</span>
+                  <span class="frete-opcao-data">${op.descricao}</span>
+                </div>
+                <span class="frete-opcao-preco">R$&nbsp;${precoOp}</span>
+              </li>`;
+          }
         });
         html += '</ul>';
       } else if (dadosFrete.status !== 'ok') {
@@ -458,6 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('selecionado');
         tamSelecionadoId = btn.dataset.tamanhoId;
         if (labelTamSel) labelTamSel.textContent = btn.dataset.tamanho;
+        document.getElementById('aviso-variacao')?.classList.add('hidden');
       }
       atualizarDisponibilidadeCores();
       validarCorAposTamanhoMudar();
@@ -469,13 +529,19 @@ document.addEventListener('DOMContentLoaded', () => {
   btnNext?.addEventListener('click', () => ativarThumb(indexAtual + 1));
 
   galeriaPrincipal?.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 1) { gAtivo = false; return; }
     gStartX = e.touches[0].clientX;
     gStartY = e.touches[0].clientY;
     gAtivo = true;
   }, { passive: true });
 
+  galeriaPrincipal?.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) gAtivo = false;
+  }, { passive: true });
+
   galeriaPrincipal?.addEventListener('touchend', (e) => {
     if (!gAtivo || galeriaAtual.length <= 1) return;
+    if (window.visualViewport && window.visualViewport.scale > 1) { gAtivo = false; return; }
     gAtivo = false;
     const dx = e.changedTouches[0].clientX - gStartX;
     const dy = e.changedTouches[0].clientY - gStartY;
@@ -492,8 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const max = parseInt(qtyInput.max || '10', 10);
     if (v < max) qtyInput.value = v + 1;
   });
-  btnComprar?.addEventListener('click', () => adicionarAoCarrinho({ redirecionarCheckout: false }));
-  btnComprarAgora?.addEventListener('click', () => adicionarAoCarrinho({ redirecionarCheckout: true }));
+  btnComprar?.addEventListener('click', () => adicionarAoCarrinho());
   const atualizarAlturaAcordeao = (conteudo) => {
     if (!conteudo) return;
     conteudo.style.maxHeight = conteudo.classList.contains('aberto') ? `${conteudo.scrollHeight}px` : '0px';
@@ -553,7 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.target.closest('.galeria-nav')) return;
       galeriaPrincipalEl.classList.add('zoom-ativo');
       fotoPrincipalEl.style.transition = 'transform 0.18s ease';
-      fotoPrincipalEl.style.transform = 'scale(1.55)';
+      fotoPrincipalEl.style.transform = 'scale(1.35)';
     });
     galeriaPrincipalEl.addEventListener('mousemove', (e) => {
       if (e.target.closest('.galeria-nav')) {
@@ -563,15 +628,118 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!galeriaPrincipalEl.classList.contains('zoom-ativo')) {
         galeriaPrincipalEl.classList.add('zoom-ativo');
         fotoPrincipalEl.style.transition = 'transform 0.18s ease';
-        fotoPrincipalEl.style.transform = 'scale(1.55)';
+        fotoPrincipalEl.style.transform = 'scale(1.35)';
       }
       const rect = galeriaPrincipalEl.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
       fotoPrincipalEl.style.transition = 'none';
       fotoPrincipalEl.style.transformOrigin = `${x}% ${y}%`;
-      fotoPrincipalEl.style.transform = 'scale(1.55)';
+      fotoPrincipalEl.style.transform = 'scale(1.35)';
     });
     galeriaPrincipalEl.addEventListener('mouseleave', _desativarZoom);
+  }
+
+  // ─── Cupom e código de vendedor no PDP ───────────────────────────────────
+  (function initPdpCupom() {
+    const cupomInput = document.getElementById('pdp-cupom-input');
+    const cupomBtn = document.getElementById('pdp-cupom-btn');
+    const cupomRes = document.getElementById('pdp-cupom-resultado');
+    const vendedorInput = document.getElementById('pdp-vendedor-input');
+    const vendedorBtn = document.getElementById('pdp-vendedor-btn');
+    const vendedorRes = document.getElementById('pdp-vendedor-resultado');
+
+    function setRes(el, msg, tipo) {
+      if (!el) return;
+      el.textContent = msg;
+      el.className = 'pdp-cupom-resultado ' + (tipo || '');
+    }
+
+    async function validarCupom() {
+      const codigo = (cupomInput?.value || '').trim().toUpperCase();
+      if (!codigo) return;
+      cupomInput.value = codigo;
+      cupomBtn.disabled = true;
+      setRes(cupomRes, 'Verificando...', '');
+      try {
+        const res = await fetch('/carrinho/validar-cupom/?codigo=' + encodeURIComponent(codigo) + '&subtotal=0');
+        const data = await res.json();
+        if (data.status === 'ok') {
+          setRes(cupomRes, '✓ ' + data.descricao + ' — será aplicado no checkout', 'ok');
+          try { sessionStorage.setItem('della_pdp_cupom', data.codigo); } catch (_) {}
+        } else {
+          setRes(cupomRes, '✗ ' + data.erro, 'erro');
+          try { sessionStorage.removeItem('della_pdp_cupom'); } catch (_) {}
+        }
+      } catch (_) {
+        setRes(cupomRes, 'Erro ao verificar cupom.', 'erro');
+      } finally {
+        cupomBtn.disabled = false;
+      }
+    }
+
+    async function validarVendedor() {
+      const codigo = (vendedorInput?.value || '').trim().toUpperCase();
+      if (!codigo) return;
+      vendedorInput.value = codigo;
+      vendedorBtn.disabled = true;
+      setRes(vendedorRes, 'Verificando...', '');
+      try {
+        const res = await fetch('/carrinho/validar-vendedor/?codigo=' + encodeURIComponent(codigo));
+        const data = await res.json();
+        if (data.status === 'ok') {
+          setRes(vendedorRes, '✓ Vendedor ' + data.nome + ' vinculado', 'ok');
+          try { sessionStorage.setItem('della_pdp_vendedor', data.codigo); } catch (_) {}
+        } else {
+          setRes(vendedorRes, '✗ ' + data.erro, 'erro');
+          try { sessionStorage.removeItem('della_pdp_vendedor'); } catch (_) {}
+        }
+      } catch (_) {
+        setRes(vendedorRes, 'Erro ao verificar código.', 'erro');
+      } finally {
+        vendedorBtn.disabled = false;
+      }
+    }
+
+    cupomBtn?.addEventListener('click', validarCupom);
+    cupomInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); validarCupom(); } });
+    vendedorBtn?.addEventListener('click', validarVendedor);
+    vendedorInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); validarVendedor(); } });
+
+    // Pré-preenche com sessionStorage se já validou antes
+    try {
+      const c = sessionStorage.getItem('della_pdp_cupom');
+      const v = sessionStorage.getItem('della_pdp_vendedor');
+      if (c && cupomInput) { cupomInput.value = c; setRes(cupomRes, '✓ Cupom ' + c + ' salvo — será aplicado no checkout', 'ok'); }
+      if (v && vendedorInput) { vendedorInput.value = v; setRes(vendedorRes, '✓ Vendedor ' + v + ' salvo', 'ok'); }
+    } catch (_) {}
+  })();
+
+  // ─── CTA sticky mobile: aparece quando o botão original sai da viewport ───
+  const stickyBar = document.getElementById('pdp-sticky-mobile');
+  const stickyBtn = document.getElementById('pdp-sticky-btn');
+  if (stickyBar && stickyBtn && btnComprar && 'IntersectionObserver' in window) {
+    let mostrada = false;
+    const mostrar = () => {
+      if (mostrada) return;
+      stickyBar.hidden = false;
+      stickyBar.setAttribute('aria-hidden', 'false');
+      requestAnimationFrame(() => stickyBar.classList.add('visivel'));
+      mostrada = true;
+    };
+    const esconder = () => {
+      if (!mostrada) return;
+      stickyBar.classList.remove('visivel');
+      stickyBar.setAttribute('aria-hidden', 'true');
+      setTimeout(() => { if (!mostrada) stickyBar.hidden = true; }, 320);
+      mostrada = false;
+    };
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) esconder(); else mostrar();
+      });
+    }, { rootMargin: '0px 0px -40px 0px', threshold: 0 });
+    observer.observe(btnComprar);
+    stickyBtn.addEventListener('click', () => btnComprar.click());
   }
 });

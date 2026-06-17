@@ -8,8 +8,21 @@ _CACHE_TTL = 30  # segundos — tempo máximo para o toggle refletir no site
 
 def manutencao_middleware(get_response):
     def middleware(request):
-        # Admin sempre acessível
-        if request.path.startswith('/painel/'):
+        # Healthcheck para uptime monitors (UptimeRobot etc): sempre responder
+        if request.path == '/healthz':
+            return get_response(request)
+
+        # Feed de catalogo para rastreadores externos: sempre acessivel
+        if request.path == '/feed-meta.xml':
+            return get_response(request)
+
+        # Admin, webhooks e páginas de autenticação sempre acessíveis em manutenção
+        _bypass = (
+            '/painel/',
+            '/bling/', '/pagamento/', '/carrinho/webhook/',
+            '/conta/entrar/', '/conta/sair/',
+        )
+        if any(request.path.startswith(p) for p in _bypass):
             return get_response(request)
 
         # Staff autenticado vê o site normalmente (para testar antes de abrir)

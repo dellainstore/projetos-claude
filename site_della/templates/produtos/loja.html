@@ -23,7 +23,6 @@
           {% if categoria_ativa %}{{ categoria_ativa.nome }}{% else %}Todas as peças{% endif %}
         </h1>
       </div>
-      <p class="loja-contador">{{ total_produtos }} peça{{ total_produtos|pluralize:",s" }}</p>
     </div>
   </div>
 
@@ -73,9 +72,43 @@
 
       <div class="sidebar-section">
         <h2 class="sidebar-titulo">Filtros</h2>
-        <form method="get" id="form-filtros" class="sidebar-form">
-          {% if categoria_ativa %}
-            <input type="hidden" name="categoria" value="{{ categoria_ativa.slug }}">
+        <form method="get" action="{% url 'produtos:loja' %}" id="form-filtros" class="sidebar-form">
+
+          <label class="sidebar-label">Categoria</label>
+          <select name="categoria" class="sidebar-input" id="filtro-categoria">
+            <option value="">Todas as categorias</option>
+            {% for cat in categorias %}
+              <option value="{{ cat.slug }}" {% if cat_select == cat.slug %}selected{% endif %}>{{ cat.nome }}</option>
+            {% endfor %}
+          </select>
+
+          <label class="sidebar-label">Subcategoria</label>
+          <select name="subcategoria" class="sidebar-input" id="filtro-subcategoria">
+            <option value="">Todas</option>
+            {% for cat in categorias %}{% for sub in cat.subcategorias.all %}{% if sub.ativa %}
+              <option value="{{ sub.slug }}" data-parent="{{ cat.slug }}"
+                      {% if subcat_select == sub.slug %}selected{% endif %}>{{ sub.nome }}</option>
+            {% endif %}{% endfor %}{% endfor %}
+          </select>
+
+          {% if tamanhos_disponiveis %}
+          <details class="sidebar-tam-dropdown" {% if tamanhos_selecionados %}open{% endif %}>
+            <summary class="sidebar-tam-summary">
+              Tamanho{% if tamanhos_selecionados %} <span class="sidebar-tam-badge">{{ tamanhos_selecionados|length }}</span>{% endif %}
+              <i class="fas fa-chevron-down sidebar-cat-seta"></i>
+            </summary>
+            <div class="sidebar-tam-opcoes">
+              {% for tam in tamanhos_disponiveis %}
+              <label class="sidebar-tam-check-label">
+                <input type="checkbox" name="tamanho" value="{{ tam.nome }}"
+                       {% if tam.nome in tamanhos_selecionados %}checked{% endif %}
+                       class="sr-only sidebar-tam-check">
+                <span class="sidebar-tam-caixa {% if tam.nome in tamanhos_selecionados %}selecionado{% endif %}"></span>
+                {{ tam.nome }}
+              </label>
+              {% endfor %}
+            </div>
+          </details>
           {% endif %}
 
           <label class="sidebar-label">Preço mínimo (R$)</label>
@@ -97,8 +130,7 @@
           </label>
 
           <button type="submit" class="btn-filtrar">Filtrar</button>
-          <a href="{% if categoria_ativa %}{{ categoria_ativa.get_absolute_url }}{% else %}{% url 'produtos:loja' %}{% endif %}"
-             class="sidebar-limpar">Limpar filtros</a>
+          <a href="{% url 'produtos:loja' %}" class="sidebar-limpar">Limpar filtros</a>
         </form>
       </div>
     </aside>
@@ -113,15 +145,15 @@
           <i class="fas fa-sliders-h"></i> Filtros
         </button>
 
-        <form method="get" id="form-ordem" class="ordem-form">
-          {% if categoria_ativa %}
-            <input type="hidden" name="categoria_slug" value="{{ categoria_ativa.slug }}">
-          {% endif %}
+        <form method="get" action="{% url 'produtos:loja' %}" id="form-ordem" class="ordem-form">
+          {% if cat_select %}<input type="hidden" name="categoria" value="{{ cat_select }}">{% endif %}
+          {% if subcat_select %}<input type="hidden" name="subcategoria" value="{{ subcat_select }}">{% endif %}
           {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
           {% if preco_min %}<input type="hidden" name="preco_min" value="{{ preco_min }}">{% endif %}
           {% if preco_max %}<input type="hidden" name="preco_max" value="{{ preco_max }}">{% endif %}
           {% if apenas_novos %}<input type="hidden" name="novo" value="1">{% endif %}
           {% if apenas_promo %}<input type="hidden" name="promo" value="1">{% endif %}
+          {% for tam in tamanhos_selecionados %}<input type="hidden" name="tamanho" value="{{ tam }}">{% endfor %}
 
           <label class="sr-only" for="select-ordem">Ordenar por</label>
           <select name="ordem" id="select-ordem" class="ordem-select"
@@ -134,109 +166,9 @@
         </form>
       </div>
 
-      
-      {% if page_obj.object_list %}
-      <div class="loja-grid">
-        {% for produto in page_obj %}
-        <article class="produto-card fade-in" aria-label="{{ produto.nome }}">
-
-          <a href="{{ produto.get_absolute_url }}" class="produto-card-foto-link">
-            <div class="produto-card-foto">
-              {% with img=produto.imagem_principal %}
-                {% if img %}
-                  <img src="{{ img.imagem.url }}"
-                       alt="{{ img.alt|default:produto.nome }}"
-                       width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
-
-                  {% with img_hover=produto.imagem_hover %}
-                    {% if img_hover %}
-                      <img src="{{ img_hover.imagem.url }}"
-                           alt="{{ produto.nome }}"
-                           width="600" height="800" loading="lazy" decoding="async" class="foto-hover">
-                    {% endif %}
-                  {% endwith %}
-                {% else %}
-                  <img src="{% static 'images/brand/produto-placeholder.jpg' %}"
-                       alt="{{ produto.nome }}" width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
-                {% endif %}
-              {% endwith %}
-
-              {% if produto.novo %}
-                <span class="produto-badge novo">Novo</span>
-              {% elif produto.em_promocao %}
-                <span class="produto-badge promo">-{{ produto.percentual_desconto }}%</span>
-              {% endif %}
-            </div>
-          </a>
-
-          <div class="produto-card-info">
-            <a href="{{ produto.get_absolute_url }}" class="produto-card-nome">{{ produto.nome }}</a>
-            <div class="produto-card-preco">
-              {% if produto.em_promocao %}
-                <span class="preco-de">R$ {{ produto.preco_base_exibicao|brl_price }}</span>
-                <span class="preco-por">R$ {{ produto.preco_atual|brl_price }}</span>
-              {% else %}
-                <span class="preco-por">R$ {{ produto.preco_atual|brl_price }}</span>
-              {% endif %}
-            </div>
-            {% if produto.parcelamento_texto %}
-              <span class="produto-card-parcelamento">{{ produto.parcelamento_texto }}</span>
-            {% endif %}
-
-            <div class="produto-card-acoes">
-              <button class="btn-add-carrinho"
-                      data-produto-id="{{ produto.pk }}"
-                      data-produto-url="{{ produto.get_absolute_url }}"
-                      aria-label="Ver produto {{ produto.nome }}">
-                <i class="fas fa-bag-shopping"></i>
-              </button>
-              <button class="btn-wishlist {% if produto.pk in wishlist_ids %}ativo{% endif %}"
-                      data-wishlist-id="{{ produto.pk }}"
-                      aria-label="{% if produto.pk in wishlist_ids %}Remover da wishlist{% else %}Adicionar à wishlist{% endif %}">
-                <i class="{% if produto.pk in wishlist_ids %}fas{% else %}far{% endif %} fa-heart"></i>
-              </button>
-            </div>
-          </div>
-
-        </article>
-        {% endfor %}
+      <div id="loja-resultados">
+        {% include 'produtos/_loja_grid.html' %}
       </div>
-
-      
-      {% if page_obj.has_other_pages %}
-      <nav class="paginacao" aria-label="Páginas">
-        {% if page_obj.has_previous %}
-          <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if ordem %}&ordem={{ ordem }}{% endif %}{% if preco_min %}&preco_min={{ preco_min }}{% endif %}{% if preco_max %}&preco_max={{ preco_max }}{% endif %}{% if apenas_novos %}&novo=1{% endif %}{% if apenas_promo %}&promo=1{% endif %}"
-             class="paginacao-btn" aria-label="Página anterior">
-            <i class="fas fa-arrow-left"></i>
-          </a>
-        {% endif %}
-
-        {% for num in page_obj.paginator.page_range %}
-          {% if page_obj.number == num %}
-            <span class="paginacao-btn ativo">{{ num }}</span>
-          {% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
-            <a href="?page={{ num }}{% if q %}&q={{ q }}{% endif %}{% if ordem %}&ordem={{ ordem }}{% endif %}{% if preco_min %}&preco_min={{ preco_min }}{% endif %}{% if preco_max %}&preco_max={{ preco_max }}{% endif %}{% if apenas_novos %}&novo=1{% endif %}{% if apenas_promo %}&promo=1{% endif %}"
-               class="paginacao-btn">{{ num }}</a>
-          {% endif %}
-        {% endfor %}
-
-        {% if page_obj.has_next %}
-          <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if ordem %}&ordem={{ ordem }}{% endif %}{% if preco_min %}&preco_min={{ preco_min }}{% endif %}{% if preco_max %}&preco_max={{ preco_max }}{% endif %}{% if apenas_novos %}&novo=1{% endif %}{% if apenas_promo %}&promo=1{% endif %}"
-             class="paginacao-btn" aria-label="Próxima página">
-            <i class="fas fa-arrow-right"></i>
-          </a>
-        {% endif %}
-      </nav>
-      {% endif %}
-
-      {% else %}
-      <div class="loja-vazia">
-        <i class="far fa-search" style="font-size:3rem;color:var(--cinza-texto);margin-bottom:1.5rem;"></i>
-        <p class="titulo-secao" style="font-size:1.5rem;">Nenhum produto encontrado</p>
-        <p style="color:var(--cinza-texto);margin-top:0.75rem;">Tente ajustar os filtros ou <a href="{% url 'produtos:loja' %}" style="color:var(--dourado);">ver tudo</a>.</p>
-      </div>
-      {% endif %}
 
     </div>
   </div>
@@ -244,5 +176,17 @@
 {% endblock %}
 
 {% block js_extra %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (window.dellaTrackGA) {
+      window.dellaTrackGA('view_item_list', {
+        item_list_id: '{% if categoria_ativa %}{{ categoria_ativa.slug|escapejs }}{% else %}loja{% endif %}',
+        item_list_name: '{% if categoria_ativa %}{{ categoria_ativa.nome|escapejs }}{% else %}Todos os produtos{% endif %}'
+      });
+    }
+  });
+</script>
 <script src="{% static 'js/produtos-loja.js' %}"></script>
+<script src="{% static 'js/loja-filtros.js' %}"
+        data-url-tamanhos="{% url 'produtos:loja_tamanhos' %}"></script>
 {% endblock %}

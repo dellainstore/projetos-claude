@@ -4,6 +4,7 @@ from django.contrib.auth.admin import UserAdmin, GroupAdmin
 from django.contrib.auth.models import Group
 from django.utils.html import format_html
 from django.urls import reverse
+from apps.core_utils.admin_mixin import DellaAdminMixin
 from .models import Cliente, Endereco, Wishlist
 
 
@@ -25,6 +26,32 @@ class ClienteAdminForm(forms.ModelForm):
         self.instance.sobrenome = partes[1] if len(partes) > 1 else ''
         return super().save(commit)
 
+
+class ClienteAdminAddForm(forms.ModelForm):
+    nome_completo = forms.CharField(label='Nome completo', max_length=200, widget=forms.TextInput(attrs={'style': 'width: 100%'}))
+    password1 = forms.CharField(label='Senha', widget=forms.PasswordInput)
+    password2 = forms.CharField(label='Confirmar senha', widget=forms.PasswordInput)
+
+    class Meta:
+        model = Cliente
+        fields = ['email', 'nome_completo', 'password1', 'password2']
+
+    def clean(self):
+        cd = super().clean()
+        if cd.get('password1') and cd.get('password2') and cd['password1'] != cd['password2']:
+            self.add_error('password2', 'As senhas nao coincidem.')
+        return cd
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        partes = self.cleaned_data.get('nome_completo', '').strip().split(' ', 1)
+        user.nome = partes[0]
+        user.sobrenome = partes[1] if len(partes) > 1 else ''
+        user.set_password(self.cleaned_data['password1'])
+        if commit:
+            user.save()
+        return user
+
 # Remove "Grupos" da seção Autenticação e Autorização padrão do Django
 # e move para cá com nome em português
 admin.site.unregister(Group)
@@ -42,8 +69,9 @@ class EnderecoInline(admin.TabularInline):
 
 
 @admin.register(Cliente)
-class ClienteAdmin(UserAdmin):
+class ClienteAdmin(DellaAdminMixin, UserAdmin):
     form = ClienteAdminForm
+    add_form = ClienteAdminAddForm
     list_display = ('email', 'nome_completo_fmt', 'telefone', 'is_active', 'recebe_newsletter', 'criado_em', 'acoes_linha')
     list_display_links = ('email',)
     list_filter = ('is_active', 'is_staff', 'recebe_newsletter', 'genero')
@@ -59,14 +87,9 @@ class ClienteAdmin(UserAdmin):
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:usuarios_cliente_change', args=[obj.pk])
         delete_url = reverse('admin:usuarios_cliente_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este cliente?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este cliente?')
     acoes_linha.short_description = 'Ações'
 
     def nome_completo_fmt(self, obj):
@@ -83,7 +106,7 @@ class ClienteAdmin(UserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'nome', 'sobrenome', 'password1', 'password2'),
+            'fields': ('email', 'nome_completo', 'password1', 'password2'),
         }),
     )
     readonly_fields = ('criado_em', 'atualizado_em', 'senha_display')
@@ -107,7 +130,7 @@ class ClienteAdmin(UserAdmin):
 
 
 @admin.register(Endereco)
-class EnderecoAdmin(admin.ModelAdmin):
+class EnderecoAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('cliente', 'apelido', 'logradouro', 'numero', 'cidade', 'estado', 'principal', 'acoes_linha')
     list_display_links = ('cliente',)
     list_filter = ('estado', 'principal', 'tipo')
@@ -123,19 +146,14 @@ class EnderecoAdmin(admin.ModelAdmin):
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:usuarios_endereco_change', args=[obj.pk])
         delete_url = reverse('admin:usuarios_endereco_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este endereço?\')" >✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este endereço?')
     acoes_linha.short_description = 'Ações'
 
 
 @admin.register(Wishlist)
-class WishlistAdmin(admin.ModelAdmin):
+class WishlistAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('cliente', 'produto', 'adicionado_em', 'acoes_linha')
     list_display_links = ('cliente',)
     search_fields = ('cliente__email', 'produto__nome')
@@ -150,12 +168,7 @@ class WishlistAdmin(admin.ModelAdmin):
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:usuarios_wishlist_change', args=[obj.pk])
         delete_url = reverse('admin:usuarios_wishlist_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este item?\')" >✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este item?')
     acoes_linha.short_description = 'Ações'

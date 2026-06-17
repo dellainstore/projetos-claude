@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block conteudo %}
-<div class="loja-wrapper" style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem 4rem;">
+<div class="loja-wrapper busca-wrapper">
 
   <header style="margin-bottom:2rem;">
     {% if q %}
@@ -108,4 +108,19 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block js_extra %}
+{# Meta Pixel: Search — disparado pelo della.js apos carregar o pixel #}
+{% if q %}
+<script type="application/json" data-meta-event="Search">
+{
+  "search_string": "{{ q|escapejs }}",
+  "content_ids": [{% for p in resultados %}"{{ p.id }}"{% if not forloop.last %},{% endif %}{% endfor %}],
+  "content_type": "product",
+  "content_category": "busca",
+  "_event_id": "{{ meta_search_event_id|escapejs }}"
+}
+</script>
+{% endif %}
 {% endblock %}

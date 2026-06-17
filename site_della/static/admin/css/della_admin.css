@@ -69,11 +69,48 @@
   --da-shadow:     0 1px 3px rgba(0,0,0,0.07);
   --da-shadow-md:  0 4px 16px rgba(0,0,0,0.10);
   --da-font:       'Jost', -apple-system, sans-serif;
-  --da-header-h:   56px;
+  --da-header-h:   42px;
 }
 
 /* Forçar color-scheme claro (impede browser de aplicar dark em form controls) */
 html { color-scheme: light !important; forced-color-adjust: none !important; }
+
+.star-rating {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 0.25rem;
+}
+
+.star-rating__control {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.star-rating__stars {
+  display: inline-flex;
+  gap: 0.12rem;
+}
+
+.star-rating__star {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font-size: 2rem;
+  line-height: 1;
+  color: #d5cec3;
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.star-rating__star.is-active {
+  color: #ff8a00;
+}
+
+.star-rating__star:hover {
+  transform: scale(1.02);
+}
 
 /* ---------------------------------------------------------------------------
    2. BASE
@@ -83,6 +120,20 @@ body {
   background: var(--da-bg) !important;
   color: var(--da-text) !important;
   font-size: 14px !important;
+  overflow: hidden !important;
+}
+
+/* #container é flex-column: header fixo no topo, #main scrolla internamente */
+#container {
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+/* #main (sidebar + conteúdo) é quem scrolla — header fica parado acima dele */
+#container > .main {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
 }
 
 /* Todos os inputs/selects sempre claros */
@@ -101,13 +152,16 @@ input, select, textarea, button {
    --------------------------------------------------------------------------- */
 #header {
   background: var(--da-brand) !important;
-  padding: 0 1.75rem !important;
+  padding: 0 1.25rem !important;
   height: var(--da-header-h) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
   box-shadow: 0 2px 8px rgba(0,0,0,0.35) !important;
   border-bottom: 1px solid rgba(201,169,110,0.25) !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  z-index: 1000 !important;
 }
 
 #site-name a, #site-name a:visited {
@@ -156,6 +210,11 @@ input, select, textarea, button {
   border-right: 1px solid var(--da-border) !important;
   width: 260px !important;
   min-width: 260px !important;
+  position: sticky !important;
+  top: 0 !important;
+  align-self: flex-start !important;
+  height: calc(100vh - var(--da-header-h)) !important;
+  overflow-y: auto !important;
 }
 
 /* Todos os elementos internos: fundo branco explícito */
@@ -430,7 +489,22 @@ ul.messagelist li.warning::before { content: '!'; }
 /* ---------------------------------------------------------------------------
    9. OBJECT TOOLS
    --------------------------------------------------------------------------- */
-ul.object-tools { list-style: none !important; }
+/* Título acima dos botões em todos os changelists — desfaz float:right e margin-top:-48px do Django */
+ul.object-tools {
+  list-style: none !important;
+  float: none !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 1.25rem !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.5rem !important;
+  padding: 0 !important;
+}
+ul.object-tools li {
+  float: none !important;
+  height: auto !important;
+  margin-left: 0 !important;
+}
 
 ul.object-tools li a, ul.object-tools li a:visited {
   background-color: transparent !important;
@@ -686,6 +760,7 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
   padding-right: 0.5rem !important;
 }
 
+/* ── Variações inline — inputs e selects ocupam a célula toda ── */
 #variacoes-group .field-estoque input,
 #variacoes-group .field-preco input,
 #variacoes-group .field-preco_promocional input,
@@ -694,6 +769,7 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
 #variacoes-group .field-ordem input,
 #variacoes-group .field-tamanho select,
 #variacoes-group .field-disponibilidade select,
+#variacoes-group .field-comportamento_sem_estoque select,
 #variacoes-group .field-prazo_confeccao_dias input {
   width: 100% !important;
   min-width: 0 !important;
@@ -701,68 +777,108 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
 
 #variacoes-group .field-preco input,
 #variacoes-group .field-preco_promocional input { max-width: 110px !important; }
-#variacoes-group .field-estoque input { max-width: 90px !important; }
+#variacoes-group .field-estoque input          { max-width: 90px  !important; }
 #variacoes-group .field-prazo_confeccao_dias input { max-width: 110px !important; }
-#variacoes-group .field-sku_variacao input { max-width: 170px !important; }
+#variacoes-group .field-sku_variacao input     { max-width: 170px !important; }
 #variacoes-group .field-bling_variacao_id input { max-width: 210px !important; }
 
+/* ── Tabela larga o suficiente para todas as colunas rolarem sem corte ──
+   Soma exata das larguras nth-child: 0+250+60+110+130+170+220+250+150+150+200+230+130+90+110+110 = 2360px */
 #variacoes-group table {
-  min-width: 1800px !important;
-  width: max-content !important;
+  min-width: 2360px !important;
+  width: 2360px !important;
+  table-layout: fixed !important;
 }
 
 #fotos_por_cor-group table {
   min-width: 1040px !important;
 }
 
-#variacoes-group .field-cor,
-#variacoes-group .field-tamanho,
-#variacoes-group .field-preco,
-#variacoes-group .field-preco_promocional,
-#variacoes-group .field-disponibilidade,
-#variacoes-group .field-prazo_confeccao_dias,
-#variacoes-group .field-estoque,
-#variacoes-group .field-sku_variacao,
-#variacoes-group .field-bling_variacao_id,
-#fotos_por_cor-group .field-cor,
-#fotos_por_cor-group .field-imagem {
-  min-width: 150px !important;
+/* ── Cabeçalhos: permitir quebra de linha para textos longos
+   (ex: "PRAZO DE CONFECÇÃO (DIAS ÚTEIS)", "SYNC ESTOQUE BLING")
+   caberem dentro da largura da coluna sem invadir as vizinhas ── */
+#variacoes-group thead th {
+  white-space: normal !important;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  line-height: 1.2 !important;
+  vertical-align: middle !important;
 }
 
+/* ── Largura de cada coluna aplicada a CABEÇALHO (th.column-*) E CÉLULA (td.field-*) ──
+   Sem isso os th ficam mais estreitos que os td e o alinhamento quebra.            */
+
+/* cor */
+#variacoes-group th.column-cor,
+#variacoes-group td.field-cor           { min-width: 150px !important; }
+
+/* tamanho */
+#variacoes-group th.column-tamanho,
+#variacoes-group td.field-tamanho       { min-width: 130px !important; }
+
+/* preco / preco_promocional */
+#variacoes-group th.column-preco,
 #variacoes-group td.field-preco,
-#variacoes-group td.field-preco_promocional,
-#variacoes-group td.field-disponibilidade,
-#variacoes-group td.field-prazo_confeccao_dias,
-#variacoes-group td.field-estoque,
-#variacoes-group td.field-sku_variacao,
-#variacoes-group td.field-bling_variacao_id {
-  padding-left: 0.85rem !important;
-  padding-right: 0.85rem !important;
-}
+#variacoes-group th.column-preco_promocional,
+#variacoes-group td.field-preco_promocional { min-width: 120px !important; padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
 
-#variacoes-group .field-sku_variacao,
-#variacoes-group .field-bling_variacao_id {
-  min-width: 190px !important;
-}
+/* disponibilidade */
+#variacoes-group th.column-disponibilidade,
+#variacoes-group td.field-disponibilidade   { min-width: 175px !important; padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
 
-#variacoes-group .field-ativa,
-#variacoes-group td.field-ativa,
-#variacoes-group th.column-ativa {
+/* comportamento_sem_estoque — texto mais longo: "Continuar vendendo sob demanda" */
+#variacoes-group th.column-comportamento_sem_estoque,
+#variacoes-group td.field-comportamento_sem_estoque { min-width: 210px !important; padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
+
+/* prazo_confeccao_dias */
+#variacoes-group th.column-prazo_confeccao_dias,
+#variacoes-group td.field-prazo_confeccao_dias      { min-width: 120px !important; padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
+
+/* estoque */
+#variacoes-group th.column-estoque,
+#variacoes-group td.field-estoque   { min-width: 100px !important; padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
+
+/* sku_variacao */
+#variacoes-group th.column-sku_variacao,
+#variacoes-group td.field-sku_variacao  { min-width: 180px !important; padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
+
+/* bling_variacao_id */
+#variacoes-group th.column-bling_variacao_id,
+#variacoes-group td.field-bling_variacao_id { min-width: 190px !important; padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
+
+/* ativa — checkbox centralizado */
+#variacoes-group th.column-ativa,
+#variacoes-group td.field-ativa {
   min-width: 78px !important;
   width: 78px !important;
   text-align: center !important;
-}
-
-#variacoes-group td.field-ativa {
   padding-left: 0.75rem !important;
   padding-right: 0.75rem !important;
 }
-
 #variacoes-group .field-ativa input[type="checkbox"] {
   display: inline-block !important;
   margin: 0 auto !important;
   vertical-align: middle !important;
 }
+
+/* usa_sync_bling — checkbox centralizado */
+#variacoes-group th.column-usa_sync_bling,
+#variacoes-group td.field-usa_sync_bling {
+  min-width: 90px !important;
+  width: 90px !important;
+  text-align: center !important;
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+}
+#variacoes-group .field-usa_sync_bling input[type="checkbox"] {
+  display: inline-block !important;
+  margin: 0 auto !important;
+  vertical-align: middle !important;
+}
+
+/* fotos_por_cor */
+#fotos_por_cor-group .field-cor,
+#fotos_por_cor-group .field-imagem { min-width: 150px !important; }
 
 #imagens-group .tabular.inline-related td.file-upload {
   min-width: 280px !important;
@@ -996,6 +1112,16 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
 .della-btn-edit:hover  { opacity: 0.82 !important; color: var(--da-white) !important; }
 .della-btn-delete:hover { background-color: var(--da-danger) !important; color: var(--da-white) !important; }
 
+.della-btn-no-perm {
+  display: inline-flex !important; align-items: center !important; gap: 0.25rem !important;
+  padding: 0.28rem 0.65rem !important; border-radius: 5px !important;
+  background-color: transparent !important; color: var(--da-border) !important;
+  border: 1.5px solid var(--da-border) !important;
+  font-size: 0.75rem !important; font-weight: 600 !important;
+  font-family: var(--da-font) !important; white-space: nowrap !important;
+  cursor: not-allowed !important; opacity: 0.55 !important;
+}
+
 /* ---------------------------------------------------------------------------
    18. DASHBOARD
    --------------------------------------------------------------------------- */
@@ -1182,33 +1308,86 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
 }
 
 /* Larguras fixas das colunas — aplicam ao clone (filho de #variacoes-group)
-   e à fonte (dentro de .tabular.inline-related) ao mesmo tempo */
-#variacoes-group th:nth-child(1),
-#variacoes-group td:nth-child(1) { width: 36px !important; min-width: 36px !important; max-width: 36px !important; }
+   e à fonte (dentro de .tabular.inline-related) ao mesmo tempo.
+   Total: 16 colunas (1 original + 14 fields + 1 delete).
+   Col 1 (original) fica com width:0 do Django (label é position:absolute).
+   Ordem dos fields em VariacaoInline.fields:
+     2 cor / 3 cor_preview / 4 tamanho / 5 preco / 6 preco_promocional /
+     7 disponibilidade / 8 comportamento_sem_estoque / 9 prazo_confeccao_dias /
+     10 estoque / 11 sku_variacao / 12 bling_variacao_id / 13 usa_sync_bling /
+     14 ativa / 15 clonar_btn / 16 delete (Remover?) */
 #variacoes-group th:nth-child(2),
 #variacoes-group td:nth-child(2) { width: 250px !important; min-width: 250px !important; max-width: 250px !important; }
 #variacoes-group th:nth-child(3),
 #variacoes-group td:nth-child(3) { width: 60px !important; min-width: 60px !important; max-width: 60px !important; }
 #variacoes-group th:nth-child(4),
-#variacoes-group td:nth-child(4) { width: 130px !important; min-width: 130px !important; max-width: 130px !important; }
+#variacoes-group td:nth-child(4) { width: 110px !important; min-width: 110px !important; max-width: 110px !important; }
 #variacoes-group th:nth-child(5),
-#variacoes-group td:nth-child(5) { width: 140px !important; min-width: 140px !important; max-width: 140px !important; }
+#variacoes-group td:nth-child(5) { width: 130px !important; min-width: 130px !important; max-width: 130px !important; }
 #variacoes-group th:nth-child(6),
-#variacoes-group td:nth-child(6) { width: 150px !important; min-width: 150px !important; max-width: 150px !important; }
+#variacoes-group td:nth-child(6) { width: 170px !important; min-width: 170px !important; max-width: 170px !important; }
 #variacoes-group th:nth-child(7),
-#variacoes-group td:nth-child(7) { width: 200px !important; min-width: 200px !important; max-width: 200px !important; }
+#variacoes-group td:nth-child(7) { width: 220px !important; min-width: 220px !important; max-width: 220px !important; }
 #variacoes-group th:nth-child(8),
-#variacoes-group td:nth-child(8) { width: 140px !important; min-width: 140px !important; max-width: 140px !important; }
+#variacoes-group td:nth-child(8) { width: 250px !important; min-width: 250px !important; max-width: 250px !important; }
 #variacoes-group th:nth-child(9),
-#variacoes-group td:nth-child(9) { width: 110px !important; min-width: 110px !important; max-width: 110px !important; }
+#variacoes-group td:nth-child(9) { width: 150px !important; min-width: 150px !important; max-width: 150px !important; }
 #variacoes-group th:nth-child(10),
-#variacoes-group td:nth-child(10) { width: 190px !important; min-width: 190px !important; max-width: 190px !important; }
+#variacoes-group td:nth-child(10) { width: 150px !important; min-width: 150px !important; max-width: 150px !important; }
 #variacoes-group th:nth-child(11),
-#variacoes-group td:nth-child(11) { width: 230px !important; min-width: 230px !important; max-width: 230px !important; }
+#variacoes-group td:nth-child(11) { width: 200px !important; min-width: 200px !important; max-width: 200px !important; }
 #variacoes-group th:nth-child(12),
-#variacoes-group td:nth-child(12) { width: 78px !important; min-width: 78px !important; max-width: 78px !important; }
+#variacoes-group td:nth-child(12) { width: 230px !important; min-width: 230px !important; max-width: 230px !important; }
 #variacoes-group th:nth-child(13),
-#variacoes-group td:nth-child(13) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; }
+#variacoes-group td:nth-child(13) { width: 130px !important; min-width: 130px !important; max-width: 130px !important; }
+#variacoes-group th:nth-child(14),
+#variacoes-group td:nth-child(14) { width: 90px !important; min-width: 90px !important; max-width: 90px !important; }
+#variacoes-group th:nth-child(15),
+#variacoes-group td:nth-child(15) { width: 110px !important; min-width: 110px !important; max-width: 110px !important; }
+#variacoes-group th:nth-child(16),
+#variacoes-group td:nth-child(16) { width: 110px !important; min-width: 110px !important; max-width: 110px !important; }
+
+/* ── Alinhamento horizontal cabeçalho × corpo ──
+   Inputs/selects do body têm padding interno horizontal de 0.8rem (12.8px).
+   Para o texto do cabeçalho casar com o texto dentro dos inputs/selects do
+   corpo, aplicamos:
+   1) padding-left consistente em TODAS as células do corpo (0.85rem)
+   2) padding-left no clone do thead = body cell padding + input padding
+      = 0.85 + 0.8 = 1.65rem
+   Sem o passo (1) as colunas cor/tamanho ficavam sem padding-left explícito
+   e o cabeçalho não alinhava com elas. */
+#variacoes-group .tabular.inline-related tbody td {
+  padding-left: 0.85rem !important;
+}
+
+#variacoes-group .della-thead-clone-wrap thead th[class] {
+  padding-left: 1.65rem !important;
+  padding-right: 0.5rem !important;
+}
+
+/* Colunas centralizadas (cor_preview ●, SYNC, ATIVA, CLONAR, REMOVER?) —
+   th E td centralizados, padding reduzido (texto não precisa alinhar com input). */
+#variacoes-group .della-thead-clone-wrap thead th:nth-child(3),
+#variacoes-group .della-thead-clone-wrap thead th:nth-child(13),
+#variacoes-group .della-thead-clone-wrap thead th:nth-child(14),
+#variacoes-group .della-thead-clone-wrap thead th:nth-child(15),
+#variacoes-group .della-thead-clone-wrap thead th:nth-child(16) {
+  text-align: center !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+}
+#variacoes-group td:nth-child(15),
+#variacoes-group td:nth-child(16) {
+  text-align: center !important;
+}
+
+/* "REMOVER?" não cabe em 110px com letter-spacing e padding padrão do cabeçalho —
+   reduzir os dois aqui só para essa coluna. */
+#variacoes-group .della-thead-clone-wrap thead th:nth-child(16) {
+  padding-left: 0.25rem !important;
+  padding-right: 0.25rem !important;
+  letter-spacing: 0.04em !important;
+}
 
 .della-inline-clone {
   border: 0 !important;
@@ -1302,6 +1481,29 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
 #imagens-group .della-upload-dropzone,
 #imagens-group .add-row {
   display: none !important;
+}
+
+/* Banner de erro de upload (validação client-side e server-side) */
+.della-upload-error-banner {
+  margin: 0.5rem 1.25rem 0;
+  padding: 0.65rem 1rem;
+  background: #fff0f0;
+  border: 1px solid #e57373;
+  border-radius: 6px;
+  color: #b71c1c;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.della-upload-error-banner strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.della-upload-error-banner ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.della-upload-error-banner li {
+  margin: 0.1rem 0;
 }
 
 /* Painel visual */
@@ -1849,19 +2051,9 @@ fieldset.collapsed h2 { background-color: #2a2a2a !important; }
   opacity: 0.45;
 }
 
-/* Célula da cor: botão câmera + dropdown lado a lado, em uma única linha.
-   `flex-wrap:nowrap` impede que a foto vá pra baixo do select. */
-#variacoes-group td.field-cor {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  gap: 6px !important;
-}
-#variacoes-group td.field-cor .related-widget-wrapper {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
-}
+/* Célula da cor: célula normal de tabela. O botão da câmera (.della-var-foto-btn)
+   está display:none (legado), então não precisa de flex layout aqui — display:flex
+   na célula quebra o respeito à largura quando a tabela usa table-layout: fixed. */
 #variacoes-group td.field-cor .related-widget-wrapper select {
   min-width: 150px !important;
 }

@@ -114,7 +114,7 @@ def dashboard_pedidos(request):
 
     historico_enviados = (
         HistoricoPedido.objects
-        .filter(criado_em__gte=inicio_periodo, status_novo='enviado')
+        .filter(criado_em__gte=inicio_periodo, status_novo__in=('enviado', 'entregue'))
         .values('pedido_id')
         .distinct()
     )

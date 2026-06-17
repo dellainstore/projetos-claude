@@ -18,8 +18,9 @@ class ResultadoCalculo:
     desconto: Decimal
     frete: Decimal
     total: Decimal
-    cupom_obj: object  # instância de Cupom ou None
+    cupom_obj: object  # instância de Cupom (template, se cupom emitido) ou None
     vendedor_obj: object  # instância de CodigoVendedor ou None
+    cupom_emitido_obj: object = None  # instância de CupomEmitido ou None
 
 
 class CalculadorPedido:
@@ -32,21 +33,33 @@ class CalculadorPedido:
         cpf: str,
         valor_frete: Decimal,
         vendedor_codigo: str = '',
+        cliente=None,
     ) -> ResultadoCalculo:
-        from apps.pedidos.models import Cupom, CodigoVendedor  # import local evita ciclo
+        from apps.pedidos.models import Cupom, CupomEmitido, CodigoVendedor  # import local evita ciclo
 
         cupom_obj = None
+        cupom_emitido_obj = None
         desconto = Decimal('0')
         codigo = (cupom_codigo or '').strip().upper()
         if codigo:
+            # Primeiro tenta como cupom emitido (gerado para um cliente específico)
             try:
-                obj = Cupom.objects.get(codigo__iexact=codigo, ativo=True)
-                ok, _ = obj.esta_valido(cpf=cpf)
+                emitido = CupomEmitido.objects.select_related('cupom_template').get(codigo__iexact=codigo)
+                ok, _ = emitido.esta_valido(cpf=cpf, cliente=cliente)
                 if ok:
-                    cupom_obj = obj
-                    desconto = obj.calcular_desconto(subtotal)
-            except Cupom.DoesNotExist:
-                pass
+                    cupom_emitido_obj = emitido
+                    cupom_obj = emitido.cupom_template
+                    desconto = cupom_obj.calcular_desconto(subtotal)
+            except CupomEmitido.DoesNotExist:
+                # Fluxo padrão: cupom manual digitado pelo cliente
+                try:
+                    obj = Cupom.objects.get(codigo__iexact=codigo, ativo=True, origem='manual')
+                    ok, _ = obj.esta_valido(cpf=cpf)
+                    if ok:
+                        cupom_obj = obj
+                        desconto = obj.calcular_desconto(subtotal)
+                except Cupom.DoesNotExist:
+                    pass
 
         vendedor_obj = None
         codigo_vendedor = (vendedor_codigo or '').strip().upper()
@@ -64,6 +77,7 @@ class CalculadorPedido:
             total=total,
             cupom_obj=cupom_obj,
             vendedor_obj=vendedor_obj,
+            cupom_emitido_obj=cupom_emitido_obj,
         )
 
 

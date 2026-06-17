@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static della_filters %}
 
-{% block titulo %}Checkout — Della Instore{% endblock %}
+{% block titulo %}Checkout | D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
@@ -82,23 +82,69 @@
             <p class="checkout-enderecos-label">Selecione um endereço cadastrado:</p>
             <div class="checkout-enderecos-lista" role="radiogroup" aria-label="Endereços salvos">
               {% for end in enderecos %}
-              <label class="checkout-endereco-card" for="end_{{ end.pk }}">
-                <input type="radio" class="sr-only" name="_endereco_salvo" id="end_{{ end.pk }}"
-                       value="{{ end.pk }}" {% if end.principal %}checked{% endif %}
-                       data-cep="{{ end.cep }}"
-                       data-logradouro="{{ end.logradouro }}"
-                       data-numero="{{ end.numero }}"
-                       data-complemento="{{ end.complemento }}"
-                       data-bairro="{{ end.bairro }}"
-                       data-cidade="{{ end.cidade }}"
-                       data-estado="{{ end.estado }}">
-                <span class="checkout-endereco-apelido">
-                  {{ end.apelido }}
-                  {% if end.principal %}<span class="badge-principal">Principal</span>{% endif %}
-                </span>
-                <span class="checkout-endereco-detalhe">{{ end.logradouro }}, {{ end.numero }}{% if end.complemento %}, {{ end.complemento }}{% endif %}</span>
-                <span class="checkout-endereco-cidade">{{ end.bairro }} — {{ end.cidade }}/{{ end.estado }} · {{ end.get_cep_formatado }}</span>
-              </label>
+              <div class="checkout-endereco-card" data-endereco-pk="{{ end.pk }}"
+                   data-edit-url="{% url 'usuarios:editar_endereco_ajax' end.pk %}">
+                <label class="endereco-card-summary" for="end_{{ end.pk }}">
+                  <input type="radio" class="sr-only" name="_endereco_salvo" id="end_{{ end.pk }}"
+                         value="{{ end.pk }}" {% if end.principal %}checked{% endif %}
+                         data-cep="{{ end.cep }}"
+                         data-logradouro="{{ end.logradouro }}"
+                         data-numero="{{ end.numero }}"
+                         data-complemento="{{ end.complemento }}"
+                         data-bairro="{{ end.bairro }}"
+                         data-cidade="{{ end.cidade }}"
+                         data-estado="{{ end.estado }}">
+                  <span class="checkout-endereco-apelido">
+                    {{ end.apelido }}
+                    {% if end.principal %}<span class="badge-principal">Principal</span>{% endif %}
+                  </span>
+                  <span class="checkout-endereco-detalhe" data-campo="linha1">{{ end.logradouro }}, {{ end.numero }}{% if end.complemento %}, {{ end.complemento }}{% endif %}</span>
+                  <span class="checkout-endereco-cidade" data-campo="linha2">{{ end.bairro }} — {{ end.cidade }}/{{ end.estado }} · {{ end.get_cep_formatado }}</span>
+                </label>
+                <button type="button" class="endereco-card-toggle" aria-expanded="false"
+                        aria-controls="end-edit-{{ end.pk }}" aria-label="Editar este endereço">
+                  <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="endereco-card-edit" id="end-edit-{{ end.pk }}" hidden>
+                  <div class="endereco-edit-grid">
+                    <div class="endereco-edit-campo">
+                      <label>CEP</label>
+                      <input type="text" data-edit-field="cep" inputmode="numeric" maxlength="9"
+                             value="{{ end.get_cep_formatado }}">
+                    </div>
+                    <div class="endereco-edit-campo endereco-edit-col2">
+                      <label>Rua / Avenida</label>
+                      <input type="text" data-edit-field="logradouro" value="{{ end.logradouro }}">
+                    </div>
+                    <div class="endereco-edit-campo">
+                      <label>Número</label>
+                      <input type="text" data-edit-field="numero" value="{{ end.numero }}">
+                    </div>
+                    <div class="endereco-edit-campo">
+                      <label>Complemento</label>
+                      <input type="text" data-edit-field="complemento" value="{{ end.complemento }}">
+                    </div>
+                    <div class="endereco-edit-campo">
+                      <label>Bairro</label>
+                      <input type="text" data-edit-field="bairro" value="{{ end.bairro }}">
+                    </div>
+                    <div class="endereco-edit-campo">
+                      <label>Cidade</label>
+                      <input type="text" data-edit-field="cidade" value="{{ end.cidade }}">
+                    </div>
+                    <div class="endereco-edit-campo endereco-edit-uf">
+                      <label>UF</label>
+                      <input type="text" data-edit-field="estado" maxlength="2" value="{{ end.estado }}"
+                             style="text-transform:uppercase">
+                    </div>
+                  </div>
+                  <p class="endereco-edit-erro" hidden></p>
+                  <div class="endereco-edit-acoes">
+                    <button type="button" class="btn-secundario endereco-edit-cancelar">Cancelar</button>
+                    <button type="button" class="btn-primario endereco-edit-salvar">Salvar</button>
+                  </div>
+                </div>
+              </div>
               {% endfor %}
               <label class="checkout-endereco-card checkout-endereco-novo" for="end_novo">
                 <input type="radio" class="sr-only" name="_endereco_salvo" id="end_novo" value="novo">
@@ -109,6 +155,7 @@
           </div>
           {% endif %}
 
+          <div id="bloco-endereco-novo" class="{% if enderecos %}hidden{% endif %}">
           <div class="checkout-grid-cep">
             <div class="checkout-campo {% if form.cep.errors %}erro{% endif %}">
               <label for="{{ form.cep.id_for_label }}">CEP *</label>
@@ -160,6 +207,7 @@
               {% for e in form.estado.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
             </div>
           </div>
+          </div>
 
           <div class="checkout-secao-footer">
             <button type="button" class="btn-primario" id="btn-ir-frete">
@@ -175,7 +223,14 @@
           </h2>
 
           <div id="frete-loading" class="frete-loading hidden">
-            <i class="fas fa-spinner fa-spin"></i> Calculando frete…
+            <div class="skeleton-frete-opcao">
+              <div><div class="skeleton-linha" style="width:52%;height:13px;margin-bottom:6px;"></div><div class="skeleton-linha" style="width:35%;height:11px;"></div></div>
+              <div class="skeleton-linha" style="width:14%;height:13px;"></div>
+            </div>
+            <div class="skeleton-frete-opcao">
+              <div><div class="skeleton-linha" style="width:44%;height:13px;margin-bottom:6px;"></div><div class="skeleton-linha" style="width:28%;height:11px;"></div></div>
+              <div class="skeleton-linha" style="width:14%;height:13px;"></div>
+            </div>
           </div>
 
           <div id="frete-opcoes" class="frete-opcoes">
@@ -338,36 +393,6 @@
             {% endif %}
           </div>
 
-          <div class="checkout-cupom-bloco" style="margin-top:1.5rem;">
-            <details class="cupom-details">
-              <summary class="cupom-summary">
-                <i class="fas fa-tag"></i> Tem um cupom ou código de vendedor?
-              </summary>
-              <div class="cupom-campos">
-                <div class="checkout-campo cupom-linha">
-                  <label for="{{ form.cupom_codigo.id_for_label }}">Cupom de desconto</label>
-                  <div class="cupom-input-wrapper">
-                    {{ form.cupom_codigo }}
-                    <button type="button" id="btn-aplicar-cupom" class="btn-cupom">
-                      Aplicar
-                    </button>
-                  </div>
-                  <p id="cupom-feedback" class="cupom-feedback hidden"></p>
-                </div>
-                <div class="checkout-campo">
-                  <label for="{{ form.codigo_vendedor_codigo.id_for_label }}">Código do vendedor</label>
-                  <div class="cupom-input-wrapper">
-                    {{ form.codigo_vendedor_codigo }}
-                    <button type="button" id="btn-aplicar-vendedor" class="btn-cupom">
-                      Aplicar
-                    </button>
-                  </div>
-                  <p id="vendedor-feedback" class="cupom-feedback hidden"></p>
-                </div>
-              </div>
-            </details>
-          </div>
-
           <div class="checkout-campo" style="margin-top:1rem;">
             <label for="{{ form.observacao.id_for_label }}">Observações (opcional)</label>
             {{ form.observacao }}
@@ -433,10 +458,29 @@
           <span id="resumo-total">R$ {{ subtotal|brl_price }}</span>
         </div>
 
+        <div class="checkout-cupom-sidebar">
+          <div class="checkout-campo cupom-linha">
+            <label for="{{ form.cupom_codigo.id_for_label }}"><i class="fas fa-tag"></i> Cupom de desconto</label>
+            <div class="cupom-input-wrapper">
+              {{ form.cupom_codigo }}
+              <button type="button" id="btn-aplicar-cupom" class="btn-cupom">Aplicar</button>
+            </div>
+            <p id="cupom-feedback" class="cupom-feedback hidden"></p>
+          </div>
+          <div class="checkout-campo" style="margin-top:0.75rem;">
+            <label for="{{ form.codigo_vendedor_codigo.id_for_label }}">Código do vendedor</label>
+            <div class="cupom-input-wrapper">
+              {{ form.codigo_vendedor_codigo }}
+              <button type="button" id="btn-aplicar-vendedor" class="btn-cupom">Aplicar</button>
+            </div>
+            <p id="vendedor-feedback" class="cupom-feedback hidden"></p>
+          </div>
+        </div>
+
         <div class="checkout-resumo-selos">
           <span><i class="fas fa-lock"></i> Compra segura</span>
           <span><i class="fas fa-shield-alt"></i> Dados protegidos</span>
-          <span><i class="fas fa-undo-alt"></i> 7 dias p/ troca</span>
+          <span><i class="fas fa-undo-alt"></i> 30 dias p/ troca</span>
         </div>
       </aside>
 
@@ -457,9 +501,24 @@
   "_event_id": "{{ meta_initiatecheckout_event_id|escapejs }}"
 }
 </script>
+{# GA4: begin_checkout (Enhanced Ecommerce) - disparado pelo della.js apos carregar o gtag #}
+<script type="application/json" data-ga-event="begin_checkout">
+{
+  "currency": "BRL",
+  "value": {{ subtotal|unlocalize }},
+  "num_items": {{ total_itens|default:0 }},
+  "items": [{% for item in itens %}{
+    "item_id": "{{ item.produto_id }}",
+    "item_name": "{{ item.nome|escapejs }}",
+    "price": {{ item.preco_decimal|unlocalize }},
+    "quantity": {{ item.quantidade }}
+  }{% if not forloop.last %},{% endif %}{% endfor %}]
+}
+</script>
 <script type="application/json" id="checkout-config">
 {
   "subtotal": {{ subtotal|unlocalize }},
+  "frete_meta": {{ frete_meta|default:0|unlocalize }},
   "pagseguro_public_key": "{{ pagseguro_public_key|default:''|escapejs }}",
   "form_errors": {% if form.errors %}true{% else %}false{% endif %},
   "messages": {% if messages %}true{% else %}false{% endif %}

@@ -35,9 +35,11 @@ staticfiles/
 cache/*
 !cache/.gitkeep
 
-# IDE
+# IDE / Claude Code (settings locais desta máquina)
 .vscode/
 .idea/
+.claude/settings.json
+.claude/settings.local.json
 *.swp
 *.swo
 

@@ -6,6 +6,7 @@ app_name = 'pedidos'
 urlpatterns = [
     path('', views.carrinho, name='carrinho'),
     path('status/', views.carrinho_status, name='carrinho_status'),
+    path('recuperar/<uuid:token>/', views.recuperar_carrinho_abandonado, name='recuperar_carrinho'),
     path('adicionar/<int:produto_id>/', views.adicionar_ao_carrinho, name='adicionar'),
     path('remover/<str:item_id>/', views.remover_do_carrinho, name='remover'),
     path('atualizar/', views.atualizar_carrinho, name='atualizar'),
@@ -20,4 +21,5 @@ urlpatterns = [
     path('frete/', views.calcular_frete, name='calcular_frete'),
     path('validar-cupom/', views.validar_cupom, name='validar_cupom'),
     path('validar-vendedor/', views.validar_vendedor, name='validar_vendedor'),
+    path('webhook/melhorenvio/', views.webhook_melhorenvio, name='webhook_melhorenvio'),
 ]

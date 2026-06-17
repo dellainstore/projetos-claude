@@ -42,9 +42,11 @@
   
   <link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/jost/jost-variable.woff2' %}" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="{% static 'fonts/playfair-display/playfair-display-variable.woff2' %}" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="{% static 'fontawesome/webfonts/fa-solid-900.woff2' %}" crossorigin>
 
-  
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  {% block head_extra %}{% endblock %}
+
+  <link rel="stylesheet" href="{% static 'fontawesome/css/all.min.css' %}">
 
 
   <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
@@ -118,8 +120,21 @@
   </script>
 
   {% block schema_extra %}{% endblock %}
+
+  {% if META_PIXEL_ID %}{{ meta_am|json_script:"meta-am-data" }}{% endif %}
+
+  {% if META_PIXEL_ID %}<script>
+  (function(){
+    var p=new URLSearchParams(window.location.search),c=p.get('fbclid');
+    if(!c)return;
+    var v='fb.1.'+Date.now()+'.'+c;
+    var e=new Date(Date.now()+90*864e5).toUTCString();
+    var s=location.protocol==='https:'?';Secure':'';
+    document.cookie='_fbc='+encodeURIComponent(v)+';path=/;expires='+e+';SameSite=Lax'+s;
+  })();
+  </script>{% endif %}
 </head>
-<body{% if META_PIXEL_ID %} data-meta-pixel-id="{{ META_PIXEL_ID }}"{% endif %}{% if GA_MEASUREMENT_ID %} data-ga-measurement-id="{{ GA_MEASUREMENT_ID }}"{% endif %}>
+<body{% if META_PIXEL_ID %} data-meta-pixel-id="{{ META_PIXEL_ID }}"{% endif %}{% if GA_MEASUREMENT_ID %} data-ga-measurement-id="{{ GA_MEASUREMENT_ID }}"{% endif %}{% if CLARITY_PROJECT_ID %} data-clarity-project-id="{{ CLARITY_PROJECT_ID }}"{% endif %}>
 
 <a href="#conteudo-principal" class="skip-link">Pular para o conteúdo</a>
 
@@ -154,21 +169,18 @@
     </div>
     <div class="navbar-acoes">
       <div id="navbar-busca-desktop" class="navbar-busca-desktop" aria-hidden="true">
-        <form method="get" action="{% url 'produtos:busca' %}">
+        <form method="get" action="{% url 'produtos:busca' %}" class="busca-form-wrapper">
           <input id="navbar-busca-input" type="search" name="q"
                  placeholder="O que você procura?"
-                 autocomplete="off" aria-label="Pesquisar">
+                 autocomplete="search" aria-label="Pesquisar"
+                 role="combobox" aria-expanded="false" aria-autocomplete="list"
+                 aria-controls="busca-sugestoes-desktop">
+          <ul id="busca-sugestoes-desktop" class="busca-sugestoes" role="listbox" aria-label="Sugestões" hidden></ul>
         </form>
       </div>
       <button id="btn-busca" aria-label="Buscar" aria-expanded="false">
         <i class="fas fa-magnifying-glass" id="btn-busca-icon"></i>
       </button>
-      {% if WHATSAPP_NUMBER_1 %}
-      <a href="https://wa.me/{{ WHATSAPP_NUMBER_1 }}?text=Olá! Vim pelo site da Della Instore e gostaria de ajuda."
-         target="_blank" rel="noopener noreferrer" aria-label="Suporte via WhatsApp">
-        <i class="fab fa-whatsapp"></i>
-      </a>
-      {% endif %}
       <button data-abrir-carrinho aria-label="Carrinho ({{ carrinho_total_itens }} itens)">
         <i class="fas fa-bag-shopping"></i>
         {% if carrinho_total_itens > 0 %}
@@ -191,10 +203,13 @@
 
 
   <div id="navbar-busca-mobile" class="navbar-busca-mobile" aria-hidden="true">
-    <form method="get" action="{% url 'produtos:busca' %}">
+    <form method="get" action="{% url 'produtos:busca' %}" class="busca-form-wrapper">
       <input id="navbar-busca-input-mobile" type="search" name="q"
              placeholder="O que você procura?"
-             autocomplete="off" aria-label="Pesquisar">
+             autocomplete="search" aria-label="Pesquisar"
+             role="combobox" aria-expanded="false" aria-autocomplete="list"
+             aria-controls="busca-sugestoes-mobile">
+      <ul id="busca-sugestoes-mobile" class="busca-sugestoes" role="listbox" aria-label="Sugestões" hidden></ul>
     </form>
   </div>
 
@@ -297,6 +312,20 @@
       <span class="text-sm font-medium tracking-widest uppercase">Total</span>
       <span class="drawer-total-valor">R$ 0,00</span>
     </div>
+
+    {% if frete_meta %}
+    {% load l10n %}
+    <div class="frete-progresso"
+         id="drawer-frete-progresso"
+         data-meta="{{ frete_meta|unlocalize }}"
+         hidden>
+      <p class="frete-progresso-msg" id="drawer-frete-progresso-msg"></p>
+      <div class="frete-progresso-trilha" aria-hidden="true">
+        <span class="frete-progresso-fill" id="drawer-frete-progresso-fill"></span>
+      </div>
+    </div>
+    {% endif %}
+
     <a href="{% url 'pedidos:checkout' %}" class="btn-primario w-full justify-center">
       Finalizar compra
     </a>
@@ -527,7 +556,16 @@
     <button class="popup-fechar" id="popup-newsletter-fechar" aria-label="Fechar">&times;</button>
     <div class="popup-icone"><i class="far fa-envelope"></i></div>
     <h2 class="popup-titulo" id="popup-newsletter-titulo">Newsletter</h2>
-    <p class="popup-subtitulo">Receba nossas ofertas por e-mail</p>
+    {% if cupom_newsletter_oferta %}
+      <p class="popup-subtitulo" style="color:var(--dourado);">
+        Ganhe <strong>{{ cupom_newsletter_oferta.valor_label }}</strong> na sua próxima compra
+      </p>
+      <p class="popup-subtitulo" style="font-size:0.72rem;letter-spacing:0.05em;text-transform:none;color:var(--cinza-texto);margin-top:-0.25rem;">
+        Cupom válido por {{ cupom_newsletter_oferta.dias }} dias após o cadastro
+      </p>
+    {% else %}
+      <p class="popup-subtitulo">Receba nossas ofertas por e-mail</p>
+    {% endif %}
     <form id="form-popup-newsletter" class="popup-form" novalidate>
       {% csrf_token %}
       <input type="email" name="email" placeholder="Digite seu email"

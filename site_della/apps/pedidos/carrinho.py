@@ -93,6 +93,11 @@ class Carrinho:
                 'imagem': imagem,
             }
 
+        if variacao:
+            qtd_atual = self.carrinho[chave]['quantidade']
+            quantidade = calcular_qtd_disponivel(variacao, quantidade, qtd_atual)
+            if quantidade <= 0:
+                return
         self.carrinho[chave]['quantidade'] += quantidade
         self.salvar()
 

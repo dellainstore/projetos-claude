@@ -52,10 +52,12 @@ start.sh            — script para iniciar o app
 ## Motor de Sorteio (src/draw_engine.py)
 - **Regra obrigatória master:** no mesmo dia, nenhum jogador repete parceiro ou adversário e também não pode enfrentar alguém com quem já fez dupla naquela noite (backtracking com rejeição imediata).
 - **Regra obrigatória secundária:** ninguém pode repetir parceiro da rodada oficial imediatamente anterior.
-- **Regra soft (histórico):** aceita parâmetro `historico_jogos` com jogos dos últimos N sorteios concluídos. Avalia até 500 soluções válidas, pontua cada uma e retorna a de menor penalidade. Sai imediatamente se encontrar score 0.
-- **Peso por recência:** a rodada imediatamente anterior é usada principalmente para reduzir adversários repetidos (`40` pts por confronto repetido). A penúltima rodada mantém parceiro repetido = `60` pts e adversário repetido = `10` pts como desempate histórico.
+- **Exceção por ausência recente:** quando um jogador faltou na rodada imediatamente anterior, a referência de "última rodada" passa a ser a última rodada em que ele realmente jogou dentro da janela histórica usada pelo sorteio. Ex.: ao gerar a rodada 7 usando rodadas 6 e 5 como base, quem esteve na 5, faltou na 6 e voltou na 7 passa a usar a 5 como referência pessoal para parceiro proibido e adversários recentes.
+- **Regra soft (histórico):** aceita parâmetro `historico_jogos` com jogos dos últimos N sorteios concluídos. A busca agora prioriza combinações que mantêm cada jogador com no máximo `2` adversários repetidos da rodada imediatamente anterior antes de refinar o restante do histórico.
+- **Peso por recência:** a rodada imediatamente anterior continua sendo a principal referência para reduzir adversários repetidos (`40` pts por confronto repetido), enquanto a penúltima mantém parceiro repetido = `60` pts e adversário repetido = `10` pts como desempate histórico.
+- **Heurística de performance:** o backtracking fixa o primeiro jogador restante de cada quadra para cortar simetrias e encerra a busca mais cedo quando já encontrou soluções válidas suficientes com a meta de repetição recente atendida.
 - Função `db.get_historico_jogos_rodadas(rodada_id, n=2)` retorna jogos das últimas N rodadas concluídas da temporada para alimentar o histórico.
-- **Resultado observado nos testes recentes (rodadas 6 × 7):** parceiros repetidos entre rodadas consecutivas ficaram em `0`. Adversários repetidos ainda ficaram na faixa de `24-25`, então os próximos ajustes devem focar só em reduzir confrontos repetidos sem perder tempo de geração.
+- **Resultado observado nos testes da rodada 7 comparada com a 6:** parceiros repetidos entre rodadas consecutivas continuam em `0`; adversários repetidos caíram de `50` incidências totais no sorteio oficial observado para `10` em teste do motor ajustado, com máximo de `2` por jogador.
 
 ## Geração em Segundo Plano (pages/2_Sorteio.py + src/sorteio_job.py)
 - O sorteio oficial pode ser iniciado em segundo plano e continua rodando no servidor mesmo se o usuário trocar de página ou fechar a aba.

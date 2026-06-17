@@ -109,7 +109,10 @@
       var row = e.target.closest('tr');
       if (!row) return;
       var checkbox = cell.querySelector('input[type="checkbox"]');
-      if (checkbox) checkbox.checked = true;
+      if (checkbox) {
+        checkbox.checked = true;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       var deleteLink = cell.querySelector('.inline-deletelink');
       if (deleteLink) {
         row.classList.add('della-inline-marked-delete');

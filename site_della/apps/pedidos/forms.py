@@ -1,6 +1,6 @@
 import re
 from django import forms
-from apps.core_utils.sanitize import sanitize_text, sanitize_phone, validate_cpf
+from apps.core_utils.sanitize import sanitize_name, sanitize_text, sanitize_phone, validate_cpf
 
 
 class CheckoutForm(forms.Form):
@@ -202,7 +202,7 @@ class CheckoutForm(forms.Form):
         return cep
 
     def clean_nome_completo(self):
-        return sanitize_text(self.cleaned_data.get('nome_completo', ''), max_length=240)
+        return sanitize_name(self.cleaned_data.get('nome_completo', ''), max_length=240)
 
     def clean_complemento(self):
         return sanitize_text(self.cleaned_data.get('complemento', ''), max_length=100)

@@ -14,7 +14,11 @@
 |---|---|
 | Stack | Django 5.1 + PostgreSQL + Gunicorn + Nginx |
 | Frontend | HTML/CSS/JS + Tailwind local (`static/css/tailwind.css`) |
-| VPS | `159.203.101.232` — `www.dellainstore.com` (PRODUÇÃO) |
+| VPS | `159.203.101.232` (DO Regular **2 vCPU / 4 GB / 80 GB**) |
+| Domínio principal | `www.dellainstore.com` (PRODUÇÃO) |
+| CDN | **Cloudflare** Free (DNS + proxy + SSL Full strict + HTTP/2 + gzip/brotli) |
+| DNS split | `.com` no **Cloudflare** (NS `rose/sonny.ns.cloudflare.com`); `.com.br` na **UOL Host** (e-mail Brevo) |
+| Registrar | Tucows (via UOL Host); expira **2026-09-05** |
 | Redirecionamentos | `dellainstore.com`, `*.dellainstore.com.br` → `www.dellainstore.com` |
 | Repositório | `dellainstore/projetos-claude` |
 | Caminho | `/var/www/della-sistemas/projetos-claude/site_della/` |
@@ -30,6 +34,15 @@ source venv/bin/activate
 
 Banco: `della_site` / `della_user`
 
+**Use os scripts de deploy — não rode os passos soltos** (foi rodar `collectstatic` sem restart que zerou o evento `add_to_cart` no GA4, ver abaixo):
+
+```bash
+bash scripts/deploy_estaticos.sh   # frontend (CSS/JS/eventos client-side): build:css + collectstatic + restart
+bash scripts/atualizar_site.sh     # deploy completo: pip install + build:css + migrate + collectstatic + restart
+```
+
+Passos manuais (só se souber o que está fazendo — os 3 últimos NUNCA se separam):
+
 ```bash
 npm run build:css          # se mudou classes Tailwind (obrigatório antes do collectstatic)
 python manage.py collectstatic --noinput --settings=core.settings.production
@@ -42,6 +55,8 @@ sudo systemctl restart gunicorn_della_site && sudo nginx -t && sudo systemctl re
 # Validar:
 python manage.py check --settings=core.settings.production
 ```
+
+⚠️ **`collectstatic` e `restart` são inseparáveis.** O WhiteNoise (`ManifestStaticFilesStorage`) carrega o `staticfiles.json` na MEMÓRIA do worker no boot. Rodar `collectstatic` sem reiniciar = workers continuam servindo o hash ANTIGO do CSS/JS, e o navegador recebe arquivo desatualizado. **Diagnóstico real (2026-06-10):** o evento GA4 `add_to_cart` (que vive SÓ no JS) ficou zerado numa venda real mesmo estando no código — o `collectstatic` rodou às 18:05, o restart só às 02:21, e a venda das 20:45 pegou o `della.js` anterior, sem o handler. `view_item`/`purchase` (declarados nos templates via `data-ga-event`) não dependem do deploy do JS, por isso funcionaram no mesmo pedido. Ver subseção GA4.
 
 Logs: `sudo journalctl -u gunicorn_della_site -f`
 
@@ -160,6 +175,8 @@ Pastas em `apps/`:
 | `enviar_confirmacao_entrega` | Status → `entregue` |
 | `enviar_saiu_para_entrega` | Correios: saiu para entrega |
 | `enviar_email_carrinho_abandonado` | Admin action / cron |
+| `enviar_email_cupom_newsletter` | Inscrição na newsletter (após gerar `CupomEmitido`) |
+| `enviar_email_cupom_aniversario` | Cron `emitir_cupons_aniversario` (quando template ativo) |
 
 **Carrinho abandonado — quirks:**
 - `item.imagem` no carrinho é URL relativa (`/media/...`) — em `enviar_email_carrinho_abandonado` converter para absoluta com `SITE_URL + url` antes de passar ao template
@@ -181,6 +198,7 @@ python manage.py enviar_emails_teste --email SEU@EMAIL --tipo saiu_entrega --set
 - Itens: formato `NOME (COR) (TAMANHO)`. Código = `item.sku` (não `bling_variacao_id`)
 - Pagamento confirmado **NÃO** muda situação no Bling (avanço manual)
 - HMAC do webhook validado por `BLING_CLIENT_SECRET` (não existe `BLING_WEBHOOK_SECRET` separado)
+- **Contato (CPF/endereço) usa nomes de campo da API v3 — NÃO regredir (corrigido 2026-06-10):** o create/update de contato (`apps/bling/services.py`) DEVE enviar `numeroDocumento` (NÃO `cpfCnpj`) e `endereco` como **objeto singular** com `geral`/`cobranca` (NÃO `enderecos` em array). O Bling v3 **ignora silenciosamente** campos que não reconhece, então usar os nomes errados cria o contato só com nome/e-mail/telefone — CPF e endereço ficam vazios e a NF-e acusa "pendências cadastrais". Era o bug de "cliente novo não puxa os dados, tem que preencher na mão". Helpers: `_endereco_contato_pedido()` (monta o `endereco`), `_criar_contato_bling()`, `_atualizar_contato_com_dados_pedido()`, `_dados_contato_pedido()` (fallback inline). O merge nunca sobrescreve campo já preenchido: só completa o que está vazio (compara `numeroDocumento` e `endereco.geral.endereco` atuais). Validado contra a API real preenchendo o contato vazio do pedido 0001.
 
 #### Sync de estoque Bling → Site (migration `0020`)
 
@@ -276,10 +294,37 @@ BLING_DEPOSITO_ID=7521173180   # Show Room - Della (depósito padrão)
 ### Meta Pixel / CAPI
 - Snippet **NÃO** no HTML — injetado por JS só se `consent.marketing === true` (LGPD)
 - CAPI ativa: `apps/core_utils/meta.py`. Feed catálogo: `/feed-meta.xml`
+- Eventos cobertos: `PageView`, `ViewContent` (PDP), `AddToCart` (PDP + drawer), `InitiateCheckout` (checkout), `AddPaymentInfo` (escolha de tab pagamento), `Purchase` (ver subseção "Purchase" abaixo). Disparo via `<script type="application/json" data-meta-event>` (processado em `dispararMetaEventosCustom()`) ou helper `window.dellaTrackMeta(event, params)`
+- CAPI `enviar_evento_purchase(pedido, request=None)`: `request` é opcional. Sem request (disparo server-side no webhook), o consentimento vem do snapshot `pedido.consentimento_marketing` e a URL de `SITE_URL`; com request, lê o cookie e enriquece com IP/UA/`_fbp`/`_fbc`
 
 ### GA4
 - Carrega só quando `della_consent.analytics === true`
 - **Bug corrigido**: chave do cookie é `analytics` (não `analise`) — verificar em `della.js → salvarConsent()`
+- Eventos cobertos: `page_view` (gtag config), `view_item_list` (loja/categoria), `view_item` (PDP), `add_to_cart` (PDP/drawer), `view_cart` (carrinho), `begin_checkout` (checkout), `add_shipping_info` (clique "Continuar para pagamento"), `add_payment_info` (troca de tab), `purchase` (ver subseção "Purchase" abaixo). Helper: `window.dellaTrackGA(event, params)` (silencioso sem consent)
+- **Eventos de página GA4** (`view_item`, `begin_checkout`, `purchase`): declarados no template como `<script type="application/json" data-ga-event="...">` e disparados por `dispararGAEventosCustom()` (em `della.js`, dentro de `carregarGA()`). Espelha o padrão Meta. Suporta `_once_key` (dedup via `sessionStorage`). Não usar `DOMContentLoaded` inline para esses (corre o risco de rodar antes de `carregarGA()` e o evento ser engolido)
+- **Eventos de interação GA4** (`add_to_cart`, `add_shipping_info`, `add_payment_info`): vivem SÓ no JS (`della.js`, `produto-detalhe.js`, `checkout-index.js`), disparados via `window.dellaTrackGA()` no clique. **Por isso dependem do deploy do JS** — diferente dos eventos de página acima, que vêm do template (renderizado pelo servidor a cada request). Consequência crítica: **todo deploy de evento client-side exige `collectstatic` + restart do gunicorn juntos** (use `bash scripts/deploy_estaticos.sh`). Em 2026-06-10 o `add_to_cart` ficou zerado numa venda real porque o `collectstatic` rodou sem restart e o navegador recebeu o `della.js` antigo, sem o handler — enquanto `view_item`/`purchase` (template) funcionaram no mesmo pedido. O diagnóstico (navegação cancelando beacon? gate de consentimento?) NÃO era nenhum dos dois: `add_to_cart` usa `fetch` (AJAX, sem navegar) e o mesmo `gtag` dos demais. Era deploy defasado.
+- **GA4 Measurement Protocol** (server-side): `apps/core_utils/ga4.py:enviar_ga4_purchase()`. Requer `GA_API_SECRET` no `.env` (GA4 Admin: Fluxos de dados, Measurement Protocol API secrets). No-op silencioso sem o secret ou sem consent
+
+### Purchase: regra de disparo (pago + dedup + captura via webhook)
+
+**O `purchase` (GA4 + Meta Pixel + Meta CAPI) conta apenas VENDA PAGA, nunca pedido só criado.** Antes (até 2026-06-10) os três disparavam na criação do pedido, contabilizando PIX e cartão em análise como venda mesmo sem pagamento. NÃO regredir para "disparar na criação do pedido".
+
+| Cenário | Status na confirmação | Onde dispara |
+|---|---|---|
+| Cartão `PAID`/`AUTHORIZED` | `pagamento_confirmado` no checkout | Client-side (1º render) + CAPI no checkout (com IP/UA/`_fbp`/`_fbc`) |
+| PIX pago com a página aberta | polling recarrega → `pagamento_confirmado` | Client-side no reload + CAPI + GA4 MP pelo webhook |
+| PIX pago após fechar a página | confirma fora do browser | CAPI + GA4 MP pelo webhook (única captura) |
+| PIX / cartão `IN_ANALYSIS` não pago | `aguardando_pagamento` | Nada (não conta venda não paga) |
+
+**Deduplicação (das plataformas, permite disparo redundante client + server):**
+- Meta: Pixel e CAPI usam o mesmo `event_id = purchase_<numero>`
+- GA4: client (gtag) e Measurement Protocol usam o mesmo `transaction_id = <numero>`
+
+**Pontos da implementação (NÃO regredir):**
+- **Client-side gateado a pago + 1ª exibição**: `confirmacao_pedido` (`apps/pedidos/views.py`) calcula `disparar_tracking = (pedido.status == 'pagamento_confirmado') and session['rastrear_purchase'] == numero`. A flag de session `rastrear_purchase` é setada em `_processar_checkout` e **só é consumida quando o evento realmente renderiza** (por isso o PIX dispara no reload pós-pagamento, e revisitas/Meus Pedidos/outro dispositivo não re-disparam). Os blocos `data-meta-event="Purchase"` e `data-ga-event="purchase"` em `confirmacao.html` ficam dentro de `{% if disparar_tracking %}`
+- **Server-side no webhook**: `apps/pagamentos/views.py` dispara CAPI + GA4 MP na **transição** de status para `pagamento_confirmado` (idempotente: o bloco só roda quando o status muda)
+- **CAPI no checkout**: só quando `pedido.status == 'pagamento_confirmado'` (cartão aprovado). PIX/análise ficam por conta do webhook
+- **Snapshot de consentimento (LGPD)**: `Pedido.consentimento_marketing`, `Pedido.consentimento_analytics` e `Pedido.ga_client_id` (cookie `_ga`) são gravados no checkout (`_ler_consentimento` / `_ler_ga_client_id`). O webhook (sem browser) respeita essa escolha: CAPI só com marketing, GA4 MP só com analytics. Migration: `pedidos/0017`
 
 ---
 
@@ -320,6 +365,12 @@ BLING_DEPOSITO_ID=7521173180   # Show Room - Della (depósito padrão)
 - **`/sitemap.xml` e `/robots.txt` servidos pela aplicação**. View em `apps/produtos/views_sitemap.py`, registradas em `core/urls.py`. NÃO criar `sitemap.xml` ou `robots.txt` estático no Nginx. O sitemap é cacheado por 6h via `@cache_page`.
 - **Skip-link + h1 sr-only + `prefers-reduced-motion`** (WCAG 2.2 AA). NÃO remover o `<a class="skip-link">` no início do `<body>` do `base.html`, nem o `<h1 class="sr-only">` da home, nem o `@media (prefers-reduced-motion: reduce)` no final do `della.css`.
 - **`width`/`height`/`decoding="async"` em toda `<img>` do site**. Padrões: card produto (PLP/destaques) `600x800` (3:4); galeria PDP principal `1200x1500` (4:5); galeria thumb `72x88`; mini banner `600x800`; look semana grande `800x1000`; look thumb `80x80`; instagram grid `600x600`; carrinho item `80x80`. Os valores são hints de aspect-ratio (o CSS força a proporção final via `aspect-ratio`).
+- **PDP tem UM único CTA primário**: "Adicionar ao carrinho" (`.btn-comprar`, classe `.btn-primario`). O antigo "Comprar agora" (dourado) foi removido em 2026-05-18 para eliminar competição visual e paralisia de decisão. A wishlist (`.btn-wishlist-detalhe`) usa estilo outline, full-width e mesma altura (48px) do CTA primário, mas com borda fina e fundo transparente — visualmente secundária. NÃO restaurar dois CTAs primários.
+- **CTA sticky mobile no PDP**: `#pdp-sticky-mobile` em `base.html` template `produtos/detalhe.html`. Em telas ≤767px, quando o botão original sai da viewport (IntersectionObserver com `rootMargin: '0px 0px -40px 0px'`), a barra fixa no rodapé aparece (com nome do produto, preço e botão "Adicionar"). Clique no botão sticky delega para `btnComprar.click()`. Preço dinâmico sincroniza via `atualizarPrecoExibido()`.
+- **Troca por tamanho/cor/modelo = 30 dias** (PDP `detalhe.html:321` e checkout `index.html:487`). Distinto do **arrependimento Art. 49 CDC = 7 dias** (mantido na página `politica_privacidade` e `trocas_devolucoes`). NÃO confundir: o texto resumido do PDP/checkout fala de troca consensual (30d); a política completa explica a diferença.
+- **Barra de progresso de frete grátis (2026-05-18)**: existe em 2 locais — página `/carrinho/` (`pedidos/carrinho.html`) e drawer lateral (`base.html` `#drawer-frete-progresso`). Ambos reutilizam a mesma classe CSS `.frete-progresso` em `della.css` (estilo premium: trilha 3px, fill animado, dourado quando conquistado). O drawer fica `hidden` se carrinho vazio. JS atualiza em tempo real ao mudar qtd. NÃO duplicar CSS — só usar a classe.
+- **`frete_meta` está no context processor universal `categorias_menu`** (`apps/produtos/context_processors.py`). Disponível em qualquer template via `{{ frete_meta }}`. Reaproveita cache `LOJA_CONFIG` (TTL 24h). NÃO buscar `ConfiguracaoLoja` em cada view — usar a variável do template.
+- **Filtro `unlocalize` é obrigatório** ao injetar valores `Decimal` em `data-*` attributes de HTML (ex: `data-meta="{{ frete_meta|unlocalize }}"`) — sem ele o Django renderiza `1.234,56` (locale pt-BR) e JS quebra ao fazer `parseFloat`. Sempre `unlocalize` para JS.
 
 ---
 
@@ -433,6 +484,90 @@ Migration: `apps/pagamentos/migrations/0003_cartaosalvo.py`
 
 ---
 
+## Sistema de Cupons (2026-05-18)
+
+Dois modelos em `apps/pedidos/models.py`:
+
+### `Cupom` (template ou cupom manual)
+
+Campo `origem` define o tipo:
+
+| Origem | Como funciona |
+|---|---|
+| `manual` (padrão) | Cliente digita o código no checkout (ex: `WELCOME10`, `DELLA10`). Funciona como sempre funcionou. |
+| `newsletter` | **Template**: ao inscrever-se na newsletter, sistema cria um `CupomEmitido` único (`DELLA-XXXXXX`) usando este template como molde. Cliente digita o código emitido. |
+| `primeira_compra` | **Preparado para futuro** — sem disparador automático. Para 1ª compra, usar `Cupom` manual com `um_por_cliente=True` (ex: `WELCOME10`). |
+| `aniversario` | **Template** — usado pelo cron `emitir_cupons_aniversario` para gerar `CupomEmitido` por cliente quando faz aniversário. |
+
+Campo `dias_validade_pos_emissao` (PositiveSmallIntegerField, null): só relevante para templates de origem ≠ manual. Define quanto dias o `CupomEmitido` gerado dura (validade calculada por emissão, não por data fixa). Quando preenchido, **ignora** `valido_de`/`valido_ate`.
+
+### `CupomEmitido` (instância individual)
+
+Gerado automaticamente para cada cliente/inscrição. Campos:
+
+- `cupom_template` (FK Cupom) — referência ao molde
+- `codigo` — único, formato `DELLA-XXXXXX` (gerado por `gerar_codigo_cupom_emitido()`)
+- `email` (indexed) — destinatário
+- `cliente` (FK Usuario, null) — preenchido se cliente estava logado ao se inscrever. Vazio = inscrição anônima
+- `emitido_em` / `expira_em` — calculado em `save()` baseado em `template.dias_validade_pos_emissao`
+- `usado_em` / `pedido` — marcado em `_processar_checkout` após pedido confirmado
+
+### Fluxo de validação no checkout
+
+`apps/pedidos/services/checkout.py:CalculadorPedido.calcular(cliente=...)` e `apps/pedidos/views.py:validar_cupom` seguem mesma ordem:
+
+1. Tenta como `CupomEmitido` (busca por `codigo`)
+2. Se não achar, busca como `Cupom` direto (apenas `origem='manual'`)
+
+### `CupomEmitido.esta_valido(cpf, cliente)` — regras
+
+- **Vínculo por cliente**: se `self.cliente_id` preenchido, só essa conta usa. Deslogado → `"Este cupom está vinculado a uma conta. Faça login para utilizar."` Outra conta → `"Este cupom é exclusivo de outra conta."` Se `cliente_id` vazio (inscrição anônima), qualquer cliente logada pode usar.
+- **Não-cumulatividade por CPF**:
+  - `origem='aniversario'`: 1 por ano calendário (filtrado por `criado_em__year`)
+  - Demais origens: 1 uso em toda a vida (regra original)
+- **Branch hardcoded por origem** em `esta_valido` (decisão por simplicidade — não há campo configurável). Se precisar adicionar nova origem recorrente, ajustar a função.
+
+### Admin — separação visual
+
+- **Cupons** (manuais): `/painel/pedidos/cupom/` — tipos `manual`, `newsletter` (template), `aniversario` (template)
+- **Cupons emitidos (automáticos)**: `/painel/pedidos/cupomemitido/` — instâncias geradas. `has_add_permission=False` (não criar manualmente).
+
+`CupomAdmin.save_model/delete_model` invalida o cache `NEWSLETTER_OFERTA` automaticamente (para o popup atualizar o texto da oferta).
+
+### Newsletter — cupom de boas-vindas
+
+Fluxo em `apps/produtos/views.py:_gerar_ou_recuperar_cupom_newsletter`:
+
+- Idempotente por e-mail: se já existe `CupomEmitido` válido (não expirado, não usado) para o e-mail, reutiliza
+- E-mail enviado pelo `enviar_email_cupom_newsletter` (template `emails/cupom_newsletter.html`)
+- Popup exibe o código + validade após inscrição (`obterMensagemNewsletterHTML` em `della.js`)
+- Texto da oferta no popup é **dinâmico** via `cupom_newsletter_oferta` (context processor `newsletter_status` lê o template ativo e cacheia em `NEWSLETTER_OFERTA` 1h). Sem template = texto genérico.
+
+### Decisões — NÃO regredir
+
+- **`CupomEmitido` não usa `um_por_cliente` do template** — a regra é hardcoded em `esta_valido` por origem. Não confundir os dois mecanismos.
+- **`CupomEmitido.cliente` vs `email`**: o `email` é registro histórico do destinatário; o `cliente` é o que controla acesso. Se preenchido, vincula. Manter ambos preenchidos quando cliente logada se inscreve.
+- **Código gerado não conflita com `Cupom.codigo` manual** — `gerar_codigo_cupom_emitido()` valida ambos os modelos para garantir unicidade.
+- **Cupom de aniversário recorrente é 1 por ano calendário** (CPF), não por idade. NÃO mudar para "1 por aniversário" (complicaria edge cases de mudança de data de nascimento).
+- **Cron de aniversário só dispara se houver template ativo** (`origem=aniversario, ativo=True, dias_validade_pos_emissao__isnull=False`). Permite agendar o cron antes de criar o template — quando criar, começa a disparar.
+- **`enviar_email_cupom_newsletter` e `_aniversario`** ficam em `apps/pedidos/emails.py` (não em `produtos/emails.py` — cupom é domínio de pedidos).
+- **Não-cumulatividade vs `um_por_cliente`**: ambas regras coexistem. `Cupom.um_por_cliente` controla o Cupom manual; `esta_valido` do CupomEmitido controla por origem.
+
+### Comandos úteis
+
+```bash
+# Testar dry-run do cupom de aniversário
+python manage.py emitir_cupons_aniversario --dry-run --settings=core.settings.production
+
+# Forçar data de referência (testes)
+python manage.py emitir_cupons_aniversario --data-base 2026-12-25 --settings=core.settings.production
+
+# Cron sugerido em OPERACIONAL.md (adicionar quando criar o template no admin)
+0 8 * * * cd ... && ./venv/bin/python manage.py emitir_cupons_aniversario --settings=core.settings.production >> logs/cupons_aniversario.log 2>&1
+```
+
+---
+
 ## Conformidade LGPD (2026-05-17, Lei 13.709/2018)
 
 ### Itens implementados
@@ -441,7 +576,8 @@ Migration: `apps/pagamentos/migrations/0003_cartaosalvo.py`
 |---|---|---|
 | Encerramento de conta (Art. 18, VI) | `apps/usuarios/views.py` + `urls.py` + `templates/usuarios/minha_conta.html` | View `excluir_conta` (POST, `@require_POST`): confirma senha, anonimiza dados (`email → excluido_<uid>@conta.excluida`, CPF/tel/nome/data_nasc zerados, `is_active=False`, `set_unusable_password()`), apaga endereços/wishlist/carrinhos_abandonados, desativa cartões salvos, remove de `NewsletterInscricao`. Pedidos **não** são deletados (obrigação fiscal). Botão discreto em `<details>` no final da página minha conta. |
 | Cookie banner — dark pattern corrigido | `static/js/della.js` | Ao reabrir o modal, os toggles eram pré-marcados como `true` independente do consentimento salvo. Fix: `abrirModal(lerConsent() \|\| { analytics: false, marketing: false })` — carrega preferência existente ou padrão tudo negado. |
-| Newsletter opt-in explícito | `templates/home/index.html` + `templates/base.html` + `static/js/della.js` | Checkbox obrigatório antes de inscrever, com link para política de privacidade. Popup valida no JS (sem `required` nativo — usa validação manual com `#popup-optin-erro`). |
+| Newsletter opt-in explícito | `templates/home/index.html` + `templates/base.html` + `static/js/della.js` | Checkbox obrigatório antes de inscrever, com link para política de privacidade. Popup valida no JS (sem `required` nativo — usa validação manual com `#popup-optin-erro`). Listener `change` no checkbox esconde o erro ao marcar (mesmo padrão em ambos os formulários). |
+| Cupom newsletter de boas-vindas | `apps/produtos/views.py:_gerar_ou_recuperar_cupom_newsletter` + `apps/pedidos/models.py:CupomEmitido` | Inscrição na newsletter gera `CupomEmitido` (`DELLA-XXXXXX`) com validade configurável. E-mail usado somente para emitir cupom + envio promocional consentido. Vínculo por conta (`cliente_id`) se inscrita logada. Texto na política de privacidade explicitamente menciona o uso. Ver seção "Sistema de Cupons". |
 | Retenção de dados — comando de limpeza | `apps/core_utils/management/commands/limpar_dados_expirados.py` | Apaga: `AdminCodigo` OTPs expirados, `CarrinhoAbandonado` >90 dias não recuperados, sessões Django expiradas. Suporte `--dry-run`. |
 | Aviso carrinho abandonado | `templates/pedidos/carrinho.html` | Texto discreto abaixo dos selos (só para usuário logado): informa que pode receber lembrete por e-mail + link para política de privacidade. |
 
@@ -497,7 +633,7 @@ python manage.py shell --settings=core.settings.production < /tmp/minha_pagina.p
 
 ### Bug crítico corrigido — `safe_html.py` max_length
 
-`apps/core_utils/templatetags/safe_html.py` — templatetag `clean_html` chamava `sanitize_rich_html(value)` com `max_length=5000` (default).  
+`apps/core_utils/templatetags/safe_html.py` — templatetag `clean_html` chamava `sanitize_rich_html(value)` com `max_length=5000` (default).
 Qualquer página com conteúdo >5000 chars levantava `ValidationError` → bloco `except Exception` chamava `strip_tags()` → **todo o HTML era removido**, exibindo texto sem formatação.
 
 Fix: `sanitize_rich_html(value, max_length=100_000)` — limite generoso para páginas estáticas.
@@ -566,38 +702,170 @@ python manage.py converter_para_webp --quality 90 --settings=core.settings.produ
 
 ---
 
+## Infraestrutura de Producao (sessao 2026-05-18)
+
+Hardening operacional executado antes da abertura ao publico. Cada item documenta o que mudou, onde fica a config, e o que NAO regredir.
+
+### VPS: 2 vCPU / 4 GB
+
+Upgrade de Regular 1vCPU/2GB para 2vCPU/4GB no Digital Ocean. Snapshot pre-upgrade arquivado. Reverter so se houver economia critica de custo, mas com 5 gunicorn workers + Postgres + cron + Streamlit colocados juntos, 2vCPU/4GB e o piso. NAO voltar para 1 vCPU.
+
+### Gunicorn: 5 workers (era 3)
+
+`/etc/systemd/system/gunicorn_della_site.service` linha `--workers 5`. Formula `(2*CPU)+1 = 5`. Restart obrigatorio com `sudo systemctl restart gunicorn_della_site` apos qualquer mudanca de codigo Python. Se voltar para 1 vCPU, baixar para 3.
+
+### Webhook Bling estoque: SEM sync generico
+
+`apps/bling/views.py` (em `_processar_webhook_estoque_v1`): quando o webhook nao bate com nenhuma `Variacao` ativa com `usa_sync_bling=True`, **apenas loga e retorna 200**. Antes, caia em `sincronizar_estoque_bling()` sem args que iterava por TODAS as variacoes com sleep entre chamadas a API do Bling, ultrapassando os 60s de timeout do gunicorn e gerando 504 em massa.
+
+**NAO regredir**: o cron horario (`0 * * * *`) ja faz o sync completo. Webhook deve ser pontual, sem fallback generico.
+
+### Endpoint `/healthz` (uptime monitor)
+
+- View em `core/urls.py`: lambda que retorna `HttpResponse('ok')`, **NAO toca no banco**.
+- Bypass no `apps/core_utils/maintenance.py`: `/healthz` sempre responde 200, mesmo em modo manutencao. Necessario para o UptimeRobot nao acusar falso "down" quando o site esta em manutencao.
+- Nginx (`/etc/nginx/sites-available/della_site`): `location = /healthz` SEM `limit_req` (uptime monitor precisa bater de 5 em 5min sem ser bloqueado), com `access_log off` para nao poluir log.
+- **NAO** adicionar logica que toque no banco aqui: o objetivo e validar que gunicorn responde, nao o banco.
+
+### Rate limit no nginx (anti-abuso)
+
+Duas zonas em `/etc/nginx/nginx.conf`:
+
+| Zona | Taxa | Onde aplica |
+|---|---|---|
+| `della_limit` | 10 req/s, burst 30 | `location /` (geral) |
+| `della_login` | 5 req/min, burst 10 | login, cadastro, painel/login, painel/verificar (anti brute-force, soma com Axes) |
+
+Retorno: `429` (em vez do default 503), via `limit_req_status 429`. Validado em teste: 92/200 reqs paralelas barradas com sucesso.
+
+### Cloudflare na frente (DNS + proxy + SSL)
+
+- **Plano Free**. NS: `rose.ns.cloudflare.com` e `sonny.ns.cloudflare.com`. Trocados no painel UOL Host.
+- **Apenas o `.com`** esta no Cloudflare. O `.com.br` continua na UOL (onde fica o e-mail Brevo, MX/SPF/DKIM/DMARC intactos). NAO migrar o `.com.br` sem replicar todos os registros de e-mail primeiro, senao Brevo para de entregar.
+- **SSL/TLS: Full (strict)**. Cloudflare valida o cert Let's Encrypt da VPS. Combinado com HSTS no nginx (`max-age=31536000`). NAO mudar para Flexible (loop de redirect) nem para Full sem strict (vulneravel a MITM no leg CF->origin).
+- **Always Use HTTPS, Automatic HTTPS Rewrites, TLS 1.3, Opportunistic Encryption**: todos On.
+- **Minimum TLS Version**: 1.2 (nao subir para 1.3, bloqueia Android 7 e IE11).
+- **NAO ativar HSTS no Cloudflare**: o nginx ja envia o header. Configurar nos dois lugares conflita.
+- **Universal SSL** pode ficar em "Pending Validation (TXT)" por algumas horas apos mudanca. O cert temporario serve enquanto isso. Nao toca em "Disable Universal SSL" JAMAIS.
+
+### Cloudflare real IP no nginx (CRITICO)
+
+`/etc/nginx/conf.d/cloudflare-realip.conf`: `set_real_ip_from` para cada faixa IPv4/IPv6 publicada em `https://www.cloudflare.com/ips-v4` e `/ips-v6`, mais `real_ip_header CF-Connecting-IP; real_ip_recursive on;`.
+
+**Por que e critico**: sem isso, o `$remote_addr` do nginx aponta para o IP do edge Cloudflare (varias dezenas no pool), nao para o IP real do visitante. O rate limit `limit_req_zone $binary_remote_addr` ficaria inutil contra um atacante real, e logs (incluindo Axes) registrariam IPs do CF.
+
+**Quando o Cloudflare publicar novos ranges**: atualizar esse arquivo. Acontece raramente, mas sempre verificar apos relatos de bug de IP.
+
+### Django Axes com IP real
+
+`core/settings/base.py`:
+```python
+AXES_IPWARE_META_PRECEDENCE_ORDER = ['HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR']
+AXES_IPWARE_PROXY_COUNT = 1
+```
+
+`REMOTE_ADDR` em Django aponta para o socket unix do gunicorn (vazio para IP), entao Axes precisa olhar nos headers. nginx envia `X-Real-IP $remote_addr` (que, apos real_ip, e o IP do visitante real).
+
+### UptimeRobot (monitor de uptime, e-mail)
+
+- Plano Free. Conta no e-mail principal.
+- Monitor 1: `https://www.dellainstore.com/healthz`, check HEAD a cada 5min, considera Up se 2xx/3xx. Alerta por e-mail apos 2 falhas consecutivas.
+- Quando site sair do modo manutencao, **opcionalmente** criar um 2o monitor batendo em `/` com keyword check (mas Free nao tem keyword, entao so HTTP status).
+
+### Resultado do teste de carga (k6, 30 VUs por 3 min em /healthz via Cloudflare)
+
+- p95: **160 ms** (limite era 1500 ms)
+- Falhas: **0 em 1562 requests**
+- RAM no pico: 1.8/3.8 GB usado, 2 GB livre
+- CPU idle: 95%
+
+Infra atual tem grande folga para o trafego esperado. Limitacao do teste foi banda do cliente, nao servidor.
+
+### Comandos de operacao critica
+
+```bash
+# Reiniciar tudo depois de mudanca de codigo Python
+sudo systemctl restart gunicorn_della_site
+
+# Reload nginx apos mudanca de config (sem cortar conexoes ativas)
+sudo nginx -t && sudo systemctl reload nginx
+
+# Confirmar quantidade de workers
+ps aux | grep gunicorn_della_site | grep -v grep | wc -l   # esperado: 6 (1 master + 5 workers)
+
+# Verificar real IP funcionando (deve listar IP do cliente, nao do CF)
+sudo tail /var/log/nginx/della_site_access.log
+```
+
+---
+
 ## Pendências Ativas
 
-| Item | Observação |
+### Aguardando acao
+
+| Item | O que fazer |
 |---|---|
-| **Google Search Console** | Verificar propriedade `https://www.dellainstore.com` via GA4 + submeter `/sitemap.xml` após sair do modo manutenção |
-| **Meta Business** | Verificar domínio `dellainstore.com` — meta tag já está no `base.html` |
-| **Testar rastreio Correios** | Validar cron com pedido real. `--dry-run` disponível |
-| **[INFRA] Gunicorn + Nginx** | Rodar `sudo bash scripts/apply_bugfix_infra.sh` para aplicar: workers 2→3 e bloco PHP no Nginx |
-| **[DECIDIR] Revalidação de preço no checkout** | Preço é congelado no carrinho no momento do `adicionar()`. Se produto sair de promoção, pedido finaliza com preço antigo. Decidir se é comportamento intencional (protege cliente) ou se deve revalidar antes do checkout. |
-| **Rodar `/ux` (auditoria UX)** | Skill global em `~/.claude/commands/ux.md`. Roda no Claude Code quando os tokens resetarem. Audita jornada de compra, mobile, clareza, velocidade percebida, abandono. |
-| **Rodar `/cro` (auditoria CRO)** | Skill global em `~/.claude/commands/cro.md`. Auditoria de conversão, confiança, CTAs, ticket médio, retenção. |
-| **Aplicar recomendações da `/ui`** | Auditoria de UI já rodada (relatório completo entregue na sessão 2026-05-17). Não aplicado ainda. Foco: estética premium, minimalismo, alinhamento, padrão Vix/Paula Raia/Undertop. |
-| **Cloudflare CDN (Etapa 16 deferida)** | Adicionar Cloudflare em frente ao Nginx: HTTP/3, Brotli edge, cache global, DDoS protection, TLS 1.3 + 0-RTT. Plano free é suficiente. Trocar nameservers do domínio para os do Cloudflare. Configurar SSL como "Full (strict)". |
-| **Cleanup PNGs órfãos em `media/produtos/`** | 100 PNG + 3 JPEG ficaram no disco sem referência no banco (produtos antigos deletados). Auditoria separada quando houver tempo. |
-| **Sair do modo manutenção e medir Lighthouse real** | Após sair, rodar `pagespeed.web.dev/?url=https://www.dellainstore.com` e validar ganhos estimados (Performance: 40-55 → 75-90; LCP: 5s → ~1.8s; CLS: 0.20 → ~0.05). |
-| **Validar schemas no Rich Results Test** | `search.google.com/test/rich-results?url=https://www.dellainstore.com/produto/<SLUG>/` após sair de manutenção. |
+| **Cupom de aniversario** | Fluxo ja implementado. Para ativar: 1) Admin: Cupons + adicionar com `origem=aniversario`, `tipo=percentual`, `valor=15`, `dias_validade_pos_emissao=15`, `ativo=True`; 2) adicionar cron abaixo. Regra: 1 por cliente por ano calendario. |
+| **Correios: saiu para entrega / entregue** | O codigo de rastreio ja e capturado automaticamente pelo webhook Bling (Objeto de Postagem). Para automatizar "saiu para entrega" e "entregue", ainda e necessario contrato Correios CWS (Bronze). Sem o contrato, o cliente rastreia pelo link e a entrega e marcada automaticamente por `marcar_entrega_automatica`. |
+
+Cron do cupom de aniversario (adicionar via `crontab -e` apos criar o template no admin):
+
+```
+0 8 * * * cd /var/www/della-sistemas/projetos-claude/site_della && ./venv/bin/python manage.py emitir_cupons_aniversario --settings=core.settings.production >> logs/cupons_aniversario.log 2>&1
+```
+
+### Deferidas (nao fazer agora)
+
+| Item | Motivo |
+|---|---|
+| **CSP `style-src 'unsafe-inline'`** | Migrar 525+ `style="..."` inline para classes CSS. Risco de quebrar visual. Fazer com calma. Arquivo: `core/settings/base.py:207` |
+
+---
+
+## Concluido no dia de abertura (2026-05-20)
+
+### Performance
+- **Lighthouse Desktop 96 / Mobile 91** — meta era 75-90, superada
+- Font Awesome auto-hospedado (`static/fontawesome/`) — removida chamada CDN externa (era o principal render-blocking, -3s mobile)
+- Cache `/media/` nginx: 7d → 1y
+- Preload LCP hero: URL do 1° banner injetada no `<head>` via `{% block head_extra %}` em `index.html`
+- Preload `fa-solid-900.woff2` adicionado em `base.html`
+
+**Decisoes: NAO regredir**
+- Font Awesome deve ser sempre local (`{% static 'fontawesome/css/all.min.css' %}`). NAO voltar para CDN.
+- Para atualizar FA: `npm install @fortawesome/fontawesome-free@NOVA_VERSAO --save-dev` + copiar CSS e woff2 + `collectstatic`
+
+### SEO e rastreamento
+- Google Search Console: propriedade verificada + sitemap processado com 113 URLs
+- Rich Results: schema Product valido (avisos opcionais de review/aggregateRating somem quando houver avaliacoes)
+- GA4: funcionando, tempo real ativo
+- Meta Business: dominio `dellainstore.com` verificado
+- Auditoria UX: concluida
+- Microsoft Clarity: instalado (`CLARITY_PROJECT_ID=wu8z71lnuh`), condicional ao consent analytics, integrado com GA4
+
+### Redirecionamentos 301 (SEO — URLs do site antigo)
+Handler inteligente em `core/views.py` registrado como `handler404` em `core/urls.py`.
+
+Logica de redirecionamento:
+- Slug bate com produto ativo → 301 para `/produto/<slug>/`
+- Slug bate com categoria ativa → 301 para `/loja/<slug>/`
+- Padrao `/carrinho/produto/...` → 301 para `/carrinho/`
+- Padrao `/marca/...` → 301 para `/loja/`
+- Demais 404s → template `templates/404.html`
+
+Resultado esperado: numero de "4xx" no Search Console cai gradualmente nas proximas semanas conforme Google re-crawlea as URLs antigas.
 
 ---
 
 ## Pendências de Segurança
 
-Auditoria realizada em 2026-05-15. Itens já resolvidos: Stone removida, Bling HMAC v1 ativado.
+Auditoria realizada em 2026-05-15. Itens resolvidos: Stone removida, Bling HMAC v1 ativado, `AXES_ENABLED = True`, sandbox CSP removido, `BLING_REDIRECT_URI` atualizado.
 
-### 🟡 MÉDIO
+### Medio (deferido)
 
 | Item | Arquivo | O que fazer |
 |---|---|---|
-| **`style-src 'unsafe-inline'` no CSP** | `core/settings/base.py:207` | Migrar os 525+ `style="..."` inline para classes CSS e remover o `unsafe-inline`. Alternativa: implementar `nonce` no middleware CSP. Permite style injection e exfiltração via `background-image` |
-
-### 🔵 BAIXO
-
-Todos os itens resolvidos em 2026-05-15: `AXES_ENABLED = True` declarado explicitamente, `sandbox.api.pagseguro.com` removido do CSP de produção, `BLING_REDIRECT_URI` default atualizado para URL de produção.
+| **`style-src 'unsafe-inline'` no CSP** | `core/settings/base.py:207` | Migrar os 525+ `style="..."` inline para classes CSS. Alternativa: `nonce` no middleware CSP. Risco: style injection + exfiltracao via `background-image`. Nao fazer agora (risco de quebrar visual). |
 
 ---
 

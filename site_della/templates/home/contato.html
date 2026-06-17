@@ -1,31 +1,48 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block titulo %}Fale conosco — D'ELLA Instore{% endblock %}
+{% block titulo %}Fale conosco | D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
 
 {% block conteudo %}
 <div class="pagina-estatica-wrapper">
   <div class="pagina-estatica-inner pagina-estatica-estreita">
 
-    <h1 class="pagina-estatica-titulo">Fale Conosco</h1>
-    <p style="text-align:center;font-size:0.95rem;font-weight:300;color:#666;margin-bottom:2.5rem;line-height:1.7;">
-      Tem alguma dúvida, sugestão ou problema com seu pedido?<br>
-      Preencha o formulário abaixo e retornaremos em breve.
-    </p>
-
     {% if enviado %}
-      <div class="contato-sucesso">
-        <i class="fas fa-circle-check" style="font-size:2rem;color:#27ae60;margin-bottom:1rem;display:block;"></i>
-        <p><strong>Mensagem enviada com sucesso!</strong></p>
-        <p style="margin-top:0.5rem;font-weight:300;">Entraremos em contato pelo e-mail informado em breve.</p>
-        <a href="{% url 'produtos:home' %}" class="btn-primario" style="margin-top:1.5rem;display:inline-flex;">Voltar à loja</a>
+      <div class="contato-sucesso" style="margin-top:2rem;">
+        <i class="fas fa-circle-check" style="font-size:2.5rem;color:#27ae60;margin-bottom:1.25rem;display:block;"></i>
+        <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.75rem;">Mensagem enviada com sucesso!</p>
+        <p style="font-weight:300;color:#666;line-height:1.7;">Entraremos em contato pelo e-mail informado em breve.</p>
+        <a href="{% url 'produtos:home' %}" class="btn-primario" style="margin-top:2rem;display:inline-flex;">VOLTAR A LOJA</a>
       </div>
     {% else %}
 
+      <h1 class="pagina-estatica-titulo">Fale Conosco</h1>
+      <p style="text-align:center;font-size:0.95rem;font-weight:300;color:#666;margin-bottom:2.5rem;line-height:1.7;">
+        Tem alguma duvida, sugestao ou problema com seu pedido?<br>
+        Preencha o formulario abaixo e retornaremos em breve.
+      </p>
+
       {% if erro %}<div class="contato-erro">{{ erro }}</div>{% endif %}
 
-      <form method="post" action="{% url 'produtos:contato' %}" class="contato-form">
+      <form method="post" action="{% url 'produtos:contato' %}" class="contato-form" id="form-contato">
         {% csrf_token %}
+        {# Honeypot 1: campo oculto que so bots preenchem #}
+        <div style="position:absolute;left:-9999px;top:-9999px;" aria-hidden="true">
+          <input type="text" name="website" tabindex="-1" autocomplete="off" value="">
+        </div>
+        {# Honeypot 2: campo que o JS preenche apos 3s; bots sem JS ficam com valor errado #}
+        <input type="hidden" name="_tk" id="id_tk" value="">
+        {# Timing: JS registra o momento em que a pagina foi carregada #}
+        <input type="hidden" name="_ts" id="id_ts" value="">
+        <script>
+          (function() {
+            var t0 = Date.now();
+            document.getElementById('id_ts').value = t0;
+            setTimeout(function() {
+              document.getElementById('id_tk').value = 'ok';
+            }, 3000);
+          })();
+        </script>
         <div class="contato-campo">
           <label for="nome">Nome completo <span style="color:#c9a96e;">*</span></label>
           <input type="text" id="nome" name="nome" value="{{ nome|default:'' }}"
@@ -39,14 +56,14 @@
         <div class="contato-campo">
           <label for="telefone">Telefone / WhatsApp</label>
           <input type="tel" id="telefone" name="telefone" value="{{ telefone|default:'' }}"
-                 placeholder="(11) 99999-9999" maxlength="20">
+                 placeholder="(11) 9 9999-9999" maxlength="16" inputmode="tel" autocomplete="tel">
         </div>
         <div class="contato-campo">
           <label for="mensagem">Mensagem <span style="color:#c9a96e;">*</span></label>
           <textarea id="mensagem" name="mensagem" rows="5"
-                    placeholder="Descreva sua dúvida ou problema..."
+                    placeholder="Descreva sua duvida ou problema..."
                     required maxlength="1000">{{ mensagem|default:'' }}</textarea>
-          <span class="contato-hint">Máximo 1000 caracteres</span>
+          <span class="contato-hint">Maximo 1000 caracteres</span>
         </div>
         <button type="submit" class="btn-primario" style="width:100%;justify-content:center;">
           Enviar mensagem <i class="fas fa-arrow-right" style="font-size:0.8rem;"></i>
@@ -55,7 +72,7 @@
 
       <div style="margin-top:3rem;padding-top:2rem;border-top:1px solid #f0f0f0;text-align:center;">
         <p style="font-size:0.85rem;font-weight:300;color:#888;margin-bottom:1rem;">Ou fale diretamente pelo WhatsApp</p>
-        <a href="https://wa.me/{{ WHATSAPP_NUMBER_1 }}?text=Olá! Gostaria de ajuda."
+        <a href="https://wa.me/{{ WHATSAPP_NUMBER_1 }}?text=Ola! Gostaria de ajuda."
            target="_blank" rel="noopener noreferrer"
            class="btn-secundario" style="display:inline-flex;gap:0.5rem;align-items:center;">
           <i class="fab fa-whatsapp" style="font-size:1rem;color:#25d366;"></i> Atendimento via WhatsApp
@@ -66,3 +83,4 @@
   </div>
 </div>
 {% endblock %}
+

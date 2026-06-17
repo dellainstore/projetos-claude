@@ -28,6 +28,11 @@ def _tentar_rodada(
     adversarios_usados: dict[int, set[int]],
     parceiros_ultima_rodada: dict[int, set[int]] | None = None,
     adversarios_noite: dict[int, set[int]] | None = None,
+    adversarios_ultima_rodada: dict[int, set[int]] | None = None,
+    repetidos_ultima_contagem: dict[int, int] | None = None,
+    limite_repetidos_ultima: int | None = None,
+    hist_parceiros: dict[int, dict[int, int]] | None = None,
+    hist_adversarios: dict[int, dict[int, int]] | None = None,
 ) -> Optional[Rodada]:
     """
     Tenta montar uma rodada interna sem violar as restrições obrigatórias.
@@ -43,13 +48,46 @@ def _tentar_rodada(
     disponiveis = jogadores.copy()
     random.shuffle(disponiveis)
     matches: Rodada = []
+    repetidos_locais: dict[int, int] = {}
+
+    def _incremento_repetidos_ultima(j1: int, j2: int, j3: int, j4: int) -> dict[int, int]:
+        if adversarios_ultima_rodada is None:
+            return {}
+        inc = {
+            j1: int(j3 in adversarios_ultima_rodada.get(j1, set())) + int(j4 in adversarios_ultima_rodada.get(j1, set())),
+            j2: int(j3 in adversarios_ultima_rodada.get(j2, set())) + int(j4 in adversarios_ultima_rodada.get(j2, set())),
+            j3: int(j1 in adversarios_ultima_rodada.get(j3, set())) + int(j2 in adversarios_ultima_rodada.get(j3, set())),
+            j4: int(j1 in adversarios_ultima_rodada.get(j4, set())) + int(j2 in adversarios_ultima_rodada.get(j4, set())),
+        }
+        return {j: n for j, n in inc.items() if n}
+
+    def _custo_soft_match(j1: int, j2: int, j3: int, j4: int) -> tuple[int, int]:
+        """Ordena candidatos priorizando menos repetições recentes."""
+        inc_repetidos = _incremento_repetidos_ultima(j1, j2, j3, j4)
+        excesso = 0
+        if limite_repetidos_ultima is not None and repetidos_ultima_contagem is not None:
+            for jogador, add in inc_repetidos.items():
+                total = repetidos_ultima_contagem.get(jogador, 0) + repetidos_locais.get(jogador, 0) + add
+                excesso += max(total - limite_repetidos_ultima, 0)
+
+        hist = 0
+        if hist_parceiros is not None and hist_adversarios is not None:
+            hist += hist_parceiros.get(j1, {}).get(j2, 0)
+            hist += hist_parceiros.get(j3, {}).get(j4, 0)
+            for p in (j1, j2):
+                hist += hist_adversarios.get(p, {}).get(j3, 0)
+                hist += hist_adversarios.get(p, {}).get(j4, 0)
+
+        return excesso, hist
 
     def _viola_regras_hard(j1: int, j2: int, j3: int, j4: int) -> bool:
         """True se esta combinação violar alguma regra obrigatória."""
         if parceiros_ultima_rodada is not None:
-            if j2 in parceiros_ultima_rodada.get(j1, set()):
+            if (j2 in parceiros_ultima_rodada.get(j1, set())
+                    or j1 in parceiros_ultima_rodada.get(j2, set())):
                 return True
-            if j4 in parceiros_ultima_rodada.get(j3, set()):
+            if (j4 in parceiros_ultima_rodada.get(j3, set())
+                    or j3 in parceiros_ultima_rodada.get(j4, set())):
                 return True
         if adversarios_noite is None:
             return False
@@ -68,43 +106,72 @@ def _tentar_rodada(
         if idx == n_quadras:
             return True
 
-        for i in range(len(restantes)):
-            for j in range(i + 1, len(restantes)):
-                j1, j2 = restantes[i], restantes[j]
-                if j2 in parceiros_usados[j1]:
+        # Fixa o primeiro jogador restante para reduzir simetria e acelerar a busca.
+        j1 = restantes[0]
+        candidatos: list[tuple[tuple[int, int], tuple[int, int], tuple[int, int], list[int]]] = []
+
+        for j in range(1, len(restantes)):
+            j2 = restantes[j]
+            if j2 in parceiros_usados[j1]:
+                continue
+            if parceiros_ultima_rodada is not None and (
+                j2 in parceiros_ultima_rodada.get(j1, set())
+                or j1 in parceiros_ultima_rodada.get(j2, set())
+            ):
+                continue
+            for k in range(1, len(restantes)):
+                if k == j:
                     continue
-                if parceiros_ultima_rodada is not None and j2 in parceiros_ultima_rodada.get(j1, set()):
-                    continue
-                for k in range(len(restantes)):
-                    if k in (i, j):
+                for l in range(k + 1, len(restantes)):
+                    if l == j:
                         continue
-                    for l in range(k + 1, len(restantes)):
-                        if l in (i, j):
-                            continue
-                        j3, j4 = restantes[k], restantes[l]
+                    j3, j4 = restantes[k], restantes[l]
 
-                        if j4 in parceiros_usados[j3]:
-                            continue
-                        if j3 in adversarios_usados[j1] or j4 in adversarios_usados[j1]:
-                            continue
-                        if j3 in adversarios_usados[j2] or j4 in adversarios_usados[j2]:
-                            continue
-                        if j1 in adversarios_usados[j3] or j2 in adversarios_usados[j3]:
-                            continue
-                        if j1 in adversarios_usados[j4] or j2 in adversarios_usados[j4]:
-                            continue
+                    if j4 in parceiros_usados[j3]:
+                        continue
+                    if j3 in adversarios_usados[j1] or j4 in adversarios_usados[j1]:
+                        continue
+                    if j3 in adversarios_usados[j2] or j4 in adversarios_usados[j2]:
+                        continue
+                    if j1 in adversarios_usados[j3] or j2 in adversarios_usados[j3]:
+                        continue
+                    if j1 in adversarios_usados[j4] or j2 in adversarios_usados[j4]:
+                        continue
 
-                        if _viola_regras_hard(j1, j2, j3, j4):
-                            continue
+                    if _viola_regras_hard(j1, j2, j3, j4):
+                        continue
 
-                        novos_restantes = [
-                            p for idx2, p in enumerate(restantes)
-                            if idx2 not in (i, j, k, l)
-                        ]
-                        matches.append(((j1, j2), (j3, j4)))
-                        if backtrack(idx + 1, novos_restantes):
-                            return True
-                        matches.pop()
+                    novos_restantes = [
+                        p for idx2, p in enumerate(restantes)
+                        if idx2 not in (0, j, k, l)
+                    ]
+                    candidatos.append((
+                        _custo_soft_match(j1, j2, j3, j4),
+                        (j1, j2),
+                        (j3, j4),
+                        novos_restantes,
+                    ))
+
+        candidatos.sort(key=lambda item: item[0])
+
+        for _, dupla1, dupla2, novos_restantes in candidatos:
+            j1, j2 = dupla1
+            j3, j4 = dupla2
+            incremento = _incremento_repetidos_ultima(j1, j2, j3, j4)
+            for jogador, add in incremento.items():
+                repetidos_locais[jogador] = repetidos_locais.get(jogador, 0) + add
+
+            matches.append((dupla1, dupla2))
+            if backtrack(idx + 1, novos_restantes):
+                return True
+            matches.pop()
+
+            for jogador, add in incremento.items():
+                novo_total = repetidos_locais.get(jogador, 0) - add
+                if novo_total > 0:
+                    repetidos_locais[jogador] = novo_total
+                else:
+                    repetidos_locais.pop(jogador, None)
 
         return False
 
@@ -118,10 +185,12 @@ def _score_sorteio(
     sorteio: Sorteio,
     hist_parceiros: dict[int, dict[int, int]],
     hist_adversarios: dict[int, dict[int, int]],
-) -> tuple[int, int]:
+    adversarios_ultima_rodada: dict[int, set[int]] | None = None,
+    limite_repetidos_ultima: int = 2,
+) -> tuple[int, int, int]:
     """
     Pontua um sorteio gerado.
-    Retorna (score_r2, score_historico) onde menor = melhor.
+    Retorna (score_r2, score_excesso_ultima, score_historico) onde menor = melhor.
 
     score_r2:   legado de compatibilidade. Como as regras da mesma noite agora
                 são obrigatórias, este score tende a zero.
@@ -142,8 +211,10 @@ def _score_sorteio(
     adversarios_acum: dict[int, set[int]] = {j: set() for j in todos_jogadores}
     # Conta violações por pessoa (para minimizar quem acumula mais de 1)
     viols_por_pessoa: dict[int, int] = {j: 0 for j in todos_jogadores}
+    repetidos_ultima_por_pessoa: dict[int, int] = {j: 0 for j in todos_jogadores}
 
     score_r2 = 0
+    score_excesso_ultima = 0
     score_hist = 0
 
     for rodada in sorteio:
@@ -172,6 +243,12 @@ def _score_sorteio(
                 score_hist += hist_adversarios.get(p, {}).get(j3, 0)
                 score_hist += hist_adversarios.get(p, {}).get(j4, 0)
 
+            if adversarios_ultima_rodada is not None:
+                repetidos_ultima_por_pessoa[j1] += int(j3 in adversarios_ultima_rodada.get(j1, set())) + int(j4 in adversarios_ultima_rodada.get(j1, set()))
+                repetidos_ultima_por_pessoa[j2] += int(j3 in adversarios_ultima_rodada.get(j2, set())) + int(j4 in adversarios_ultima_rodada.get(j2, set()))
+                repetidos_ultima_por_pessoa[j3] += int(j1 in adversarios_ultima_rodada.get(j3, set())) + int(j2 in adversarios_ultima_rodada.get(j3, set()))
+                repetidos_ultima_por_pessoa[j4] += int(j1 in adversarios_ultima_rodada.get(j4, set())) + int(j2 in adversarios_ultima_rodada.get(j4, set()))
+
             # Atualiza acumulados da noite
             parceiros_acum[j1].add(j2);  parceiros_acum[j2].add(j1)
             parceiros_acum[j3].add(j4);  parceiros_acum[j4].add(j3)
@@ -185,7 +262,14 @@ def _score_sorteio(
     max_por_pessoa = max(viols_por_pessoa.values()) if viols_por_pessoa else 0
     score_r2_distrib = score_r2 * 100 + max_por_pessoa
 
-    return score_r2_distrib, score_hist
+    if repetidos_ultima_por_pessoa:
+        score_excesso_ultima = sum(
+            max(total - limite_repetidos_ultima, 0) * 1000
+            for total in repetidos_ultima_por_pessoa.values()
+        )
+        score_hist += sum(repetidos_ultima_por_pessoa.values())
+
+    return score_r2_distrib, score_excesso_ultima, score_hist
 
 
 def gerar_sorteio(
@@ -225,56 +309,88 @@ def gerar_sorteio(
     hist_p: dict[int, dict[int, int]] = {}
     hist_a: dict[int, dict[int, int]] = {}
     parceiros_ultima_rodada: dict[int, set[int]] = {}
-
-    def _peso_historico(jogo: dict) -> tuple[int, int]:
-        # A última rodada concluída pesa mais do que a penúltima.
-        rodada_num = jogo.get("rodada_numero")
-        if rodada_num is None:
-            return 0, 5
-        rodada_nums = [j.get("rodada_numero") for j in historico_jogos or [] if j.get("rodada_numero") is not None]
-        ordem = list(dict.fromkeys(rodada_nums))
-        idx = ordem.index(rodada_num) if rodada_num in ordem else None
-        if idx == 0:
-            return 0, 40
-        return 60, 10
+    adversarios_ultima_rodada: dict[int, set[int]] = {}
 
     rodada_nums_hist = [j.get("rodada_numero") for j in historico_jogos or [] if j.get("rodada_numero") is not None]
     ordem_rodadas_hist = list(dict.fromkeys(rodada_nums_hist))
+    ultima_rodada_por_jogador: dict[int, int] = {}
 
     if historico_jogos:
+        for jogo in historico_jogos:
+            rodada_num = jogo.get("rodada_numero")
+            if rodada_num is None:
+                continue
+            for jogador in (
+                jogo.get("dupla1_j1"),
+                jogo.get("dupla1_j2"),
+                jogo.get("dupla2_j1"),
+                jogo.get("dupla2_j2"),
+            ):
+                if jogador is not None and jogador not in ultima_rodada_por_jogador:
+                    ultima_rodada_por_jogador[jogador] = rodada_num
+
         for jogo in historico_jogos:
             j1 = jogo.get("dupla1_j1")
             j2 = jogo.get("dupla1_j2")
             j3 = jogo.get("dupla2_j1")
             j4 = jogo.get("dupla2_j2")
-            if not all(x is not None for x in (j1, j2, j3, j4)):
-                continue
             rodada_num = jogo.get("rodada_numero")
-            idx = ordem_rodadas_hist.index(rodada_num) if rodada_num in ordem_rodadas_hist else None
-            if idx == 0:
-                parceiros_ultima_rodada.setdefault(j1, set()).add(j2)
-                parceiros_ultima_rodada.setdefault(j2, set()).add(j1)
-                parceiros_ultima_rodada.setdefault(j3, set()).add(j4)
-                parceiros_ultima_rodada.setdefault(j4, set()).add(j3)
-            peso_parceiro, peso_adversario = _peso_historico(jogo)
-            hist_p.setdefault(j1, {})[j2] = max(hist_p.setdefault(j1, {}).get(j2, 0), peso_parceiro)
-            hist_p.setdefault(j2, {})[j1] = max(hist_p.setdefault(j2, {}).get(j1, 0), peso_parceiro)
-            hist_p.setdefault(j3, {})[j4] = max(hist_p.setdefault(j3, {}).get(j4, 0), peso_parceiro)
-            hist_p.setdefault(j4, {})[j3] = max(hist_p.setdefault(j4, {}).get(j3, 0), peso_parceiro)
-            for p in (j1, j2):
-                hist_a.setdefault(p, {})[j3] = max(hist_a.setdefault(p, {}).get(j3, 0), peso_adversario)
-                hist_a.setdefault(p, {})[j4] = max(hist_a.setdefault(p, {}).get(j4, 0), peso_adversario)
-            for p in (j3, j4):
-                hist_a.setdefault(p, {})[j1] = max(hist_a.setdefault(p, {}).get(j1, 0), peso_adversario)
-                hist_a.setdefault(p, {})[j2] = max(hist_a.setdefault(p, {}).get(j2, 0), peso_adversario)
+            if rodada_num is None:
+                continue
+
+            # Visitantes entram com id None. Ignoramos APENAS o visitante e
+            # preservamos as relações entre os jogadores reais da quadra — caso
+            # contrário a parceria/adversário humano daquele jogo ficaria invisível
+            # para as regras de não-repetição (era a causa de parceiros e
+            # adversários da rodada anterior voltarem a se repetir).
+            dupla1 = [p for p in (j1, j2) if p is not None]
+            dupla2 = [p for p in (j3, j4) if p is not None]
+
+            # Regra hard: parceiro da rodada imediatamente anterior.
+            for dupla in (dupla1, dupla2):
+                if len(dupla) == 2:
+                    a, b = dupla
+                    if ultima_rodada_por_jogador.get(a) == rodada_num:
+                        parceiros_ultima_rodada.setdefault(a, set()).add(b)
+                    if ultima_rodada_por_jogador.get(b) == rodada_num:
+                        parceiros_ultima_rodada.setdefault(b, set()).add(a)
+
+            # Adversários da rodada anterior (soft de alta prioridade).
+            for p in dupla1:
+                if ultima_rodada_por_jogador.get(p) == rodada_num:
+                    adversarios_ultima_rodada.setdefault(p, set()).update(dupla2)
+            for p in dupla2:
+                if ultima_rodada_por_jogador.get(p) == rodada_num:
+                    adversarios_ultima_rodada.setdefault(p, set()).update(dupla1)
+
+            # Pesos históricos de parceria (regra soft).
+            for dupla in (dupla1, dupla2):
+                if len(dupla) == 2:
+                    a, b = dupla
+                    peso_parceiro = 0 if ultima_rodada_por_jogador.get(a) == rodada_num else 60
+                    hist_p.setdefault(a, {})[b] = max(hist_p.setdefault(a, {}).get(b, 0), peso_parceiro)
+                    hist_p.setdefault(b, {})[a] = max(hist_p.setdefault(b, {}).get(a, 0), peso_parceiro)
+
+            # Pesos históricos de adversário (regra soft).
+            for p in dupla1:
+                peso_adversario = 40 if ultima_rodada_por_jogador.get(p) == rodada_num else 10
+                for q in dupla2:
+                    hist_a.setdefault(p, {})[q] = max(hist_a.setdefault(p, {}).get(q, 0), peso_adversario)
+            for p in dupla2:
+                peso_adversario = 40 if ultima_rodada_por_jogador.get(p) == rodada_num else 10
+                for q in dupla1:
+                    hist_a.setdefault(p, {})[q] = max(hist_a.setdefault(p, {}).get(q, 0), peso_adversario)
 
     # ── Loop de tentativas ────────────────────────────────────────────────────
     best_sorteio: Sorteio | None = None
     best_r2: int = 999_999
+    best_excesso_ultima: int = 999_999
     best_hist: int = 999_999
     validos_encontrados: int = 0
 
-    max_validos = 500
+    limite_repetidos_ultima = 2
+    max_validos = 100
+    min_validos_meta_atingida = 40
     started_at = time.perf_counter()
 
     def _report_progress(tentativa: int, *, done: bool = False, message: str | None = None) -> None:
@@ -318,6 +434,7 @@ def gerar_sorteio(
         adversarios: dict[int, set[int]] = {j: set() for j in jogadores}
         sorteio: Sorteio = []
         falhou = False
+        repetidos_ultima_contagem: dict[int, int] = {j: 0 for j in jogadores}
 
         # adversarios_noite: acumula quem já foi adversário na noite atual
         # (passado como dica para o backtracking evitar parcerias conflitantes)
@@ -330,6 +447,11 @@ def gerar_sorteio(
                 adversarios,
                 parceiros_ultima_rodada=parceiros_ultima_rodada,
                 adversarios_noite=adversarios_noite,
+                adversarios_ultima_rodada=adversarios_ultima_rodada,
+                repetidos_ultima_contagem=repetidos_ultima_contagem,
+                limite_repetidos_ultima=limite_repetidos_ultima,
+                hist_parceiros=hist_p,
+                hist_adversarios=hist_a,
             )
             if rodada is None:
                 falhou = True
@@ -341,9 +463,13 @@ def gerar_sorteio(
                 for p in (j1, j2):
                     adversarios[p].add(j3); adversarios[p].add(j4)
                     adversarios_noite[p].add(j3); adversarios_noite[p].add(j4)
+                    repetidos_ultima_contagem[p] += int(j3 in adversarios_ultima_rodada.get(p, set()))
+                    repetidos_ultima_contagem[p] += int(j4 in adversarios_ultima_rodada.get(p, set()))
                 for p in (j3, j4):
                     adversarios[p].add(j1); adversarios[p].add(j2)
                     adversarios_noite[p].add(j1); adversarios_noite[p].add(j2)
+                    repetidos_ultima_contagem[p] += int(j1 in adversarios_ultima_rodada.get(p, set()))
+                    repetidos_ultima_contagem[p] += int(j2 in adversarios_ultima_rodada.get(p, set()))
 
             sorteio.append(rodada)
 
@@ -351,11 +477,18 @@ def gerar_sorteio(
             continue
 
         # Pontua pelas regras 2 e 3 (menor = melhor)
-        sc_r2, sc_hist = _score_sorteio(sorteio, hist_p, hist_a)
+        sc_r2, sc_excesso_ultima, sc_hist = _score_sorteio(
+            sorteio,
+            hist_p,
+            hist_a,
+            adversarios_ultima_rodada=adversarios_ultima_rodada,
+            limite_repetidos_ultima=limite_repetidos_ultima,
+        )
 
         # Atualiza melhor sorteio (tupla garante prioridade da regra 2)
-        if (sc_r2, sc_hist) < (best_r2, best_hist):
+        if (sc_r2, sc_excesso_ultima, sc_hist) < (best_r2, best_excesso_ultima, best_hist):
             best_r2 = sc_r2
+            best_excesso_ultima = sc_excesso_ultima
             best_hist = sc_hist
             best_sorteio = sorteio
 
@@ -365,7 +498,10 @@ def gerar_sorteio(
             _report_progress(tentativa, message="Buscando a melhor combinacao...")
 
         # Sai cedo se encontrou solução perfeita ou após avaliar muitas soluções válidas.
-        if (best_r2 == 0 and best_hist == 0) or validos_encontrados >= max_validos:
+        if (
+            (best_r2 == 0 and best_excesso_ultima == 0 and validos_encontrados >= min_validos_meta_atingida)
+            or validos_encontrados >= max_validos
+        ):
             _report_progress(
                 tentativa,
                 done=True,

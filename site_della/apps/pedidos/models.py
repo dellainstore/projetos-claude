@@ -1,18 +1,17 @@
 import uuid
-import random
+import secrets
 import string
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from apps.core_utils.sanitize import sanitize_text, sanitize_address, sanitize_phone
-import json
+from apps.core_utils.sanitize import sanitize_name, sanitize_text, sanitize_address, sanitize_phone
 
 
 def gerar_codigo_vendedor():
     """Mantido para compatibilidade com migrations antigas."""
     chars = string.ascii_uppercase + string.digits
     while True:
-        codigo = ''.join(random.choices(chars, k=8))
+        codigo = ''.join(secrets.choice(chars) for _ in range(8))
         if not CodigoVendedor.objects.filter(codigo=codigo).exists():
             return codigo
 
@@ -54,6 +53,7 @@ class CarrinhoAbandonado(models.Model):
     email_enviado    = models.BooleanField('E-mail enviado', default=False)
     email_enviado_em = models.DateTimeField('E-mail enviado em', null=True, blank=True)
     recuperado       = models.BooleanField('Recuperado (compra feita)', default=False)
+    token            = models.UUIDField('Token de recuperação', default=uuid.uuid4, editable=False, unique=True)
 
     criado_em     = models.DateTimeField('Criado em', auto_now_add=True)
     atualizado_em = models.DateTimeField('Atualizado em', auto_now=True)
@@ -76,17 +76,40 @@ class CarrinhoAbandonado(models.Model):
         return sum(item.get('quantidade', 1) for item in self.itens)
 
 
+def gerar_codigo_cupom_emitido():
+    """Gera código único no formato DELLA-XXXXXX (6 caracteres alfanuméricos)."""
+    chars = string.ascii_uppercase + string.digits
+    while True:
+        sufixo = ''.join(secrets.choice(chars) for _ in range(6))
+        codigo = f'DELLA-{sufixo}'
+        if not CupomEmitido.objects.filter(codigo=codigo).exists() and \
+           not Cupom.objects.filter(codigo__iexact=codigo).exists():
+            return codigo
+
+
 class Cupom(models.Model):
     TIPO_CHOICES = [
         ('percentual', 'Percentual (%)'),
         ('fixo',       'Valor fixo (R$)'),
     ]
 
+    ORIGEM_CHOICES = [
+        ('manual',           'Manual (criado pelo admin)'),
+        ('newsletter',       'Newsletter (gerado ao se inscrever)'),
+        ('primeira_compra',  'Primeira compra'),
+        ('aniversario',      'Aniversário'),
+    ]
+
     codigo = models.CharField('Código', max_length=50, unique=True,
-                              help_text='Código que o cliente digita no checkout. Ex: DELLA10')
+                              help_text='Para cupons manuais: código que o cliente digita no checkout. Ex: DELLA10. Para cupons-template (origem ≠ manual), serve apenas de referência interna.')
     tipo   = models.CharField('Tipo de desconto', max_length=10, choices=TIPO_CHOICES, default='percentual')
     valor  = models.DecimalField('Valor do desconto', max_digits=10, decimal_places=2,
                                   help_text='Percentual (ex: 10 = 10%) ou valor fixo em reais (ex: 30.00)')
+
+    origem = models.CharField(
+        'Origem', max_length=20, choices=ORIGEM_CHOICES, default='manual',
+        help_text='Manual = cupons criados aqui no admin. Os demais são templates usados para gerar cupons únicos automaticamente para cada cliente (ex: newsletter).',
+    )
 
     quantidade_total = models.PositiveIntegerField(
         'Quantidade total disponível', null=True, blank=True,
@@ -101,6 +124,10 @@ class Cupom(models.Model):
 
     valido_de  = models.DateField('Válido a partir de', null=True, blank=True)
     valido_ate = models.DateField('Válido até', null=True, blank=True)
+    dias_validade_pos_emissao = models.PositiveSmallIntegerField(
+        'Dias de validade após emissão', null=True, blank=True,
+        help_text='Para templates de cupons emitidos individualmente (ex: newsletter): a validade é calculada por emissão. Quando preenchido, ignora "Válido a partir de" / "Válido até".',
+    )
 
     ativo = models.BooleanField('Ativo', default=True)
 
@@ -136,6 +163,101 @@ class Cupom(models.Model):
         return min(Decimal(str(self.valor)), subtotal)
 
 
+class CupomEmitido(models.Model):
+    """
+    Instância única de cupom emitido para um cliente específico (newsletter,
+    primeira compra, aniversário, etc.). O `cupom_template` aponta para o Cupom
+    que define tipo/valor/origem; cada CupomEmitido tem código único e expira
+    em `expira_em` (calculado a partir de `template.dias_validade_pos_emissao`).
+    """
+    cupom_template = models.ForeignKey(
+        'Cupom', on_delete=models.PROTECT, related_name='emitidos',
+        verbose_name='Cupom template',
+    )
+    codigo = models.CharField('Código', max_length=20, unique=True, default=gerar_codigo_cupom_emitido,
+                              help_text='Código único entregue à cliente. Formato DELLA-XXXXXX.')
+    email = models.EmailField('E-mail', max_length=254, db_index=True)
+    cliente = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cupons_emitidos', verbose_name='Cliente',
+    )
+
+    emitido_em = models.DateTimeField('Emitido em', auto_now_add=True)
+    expira_em  = models.DateTimeField('Expira em', null=True, blank=True)
+
+    usado_em = models.DateTimeField('Usado em', null=True, blank=True)
+    pedido = models.ForeignKey(
+        'Pedido', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cupons_emitidos_usados', verbose_name='Pedido',
+    )
+
+    class Meta:
+        verbose_name = 'Cupom emitido'
+        verbose_name_plural = 'Cupons emitidos (automáticos)'
+        ordering = ['-emitido_em']
+
+    def __str__(self):
+        return f'{self.codigo} ({self.email})'
+
+    def save(self, *args, **kwargs):
+        from datetime import timedelta
+        if not self.expira_em and self.cupom_template_id:
+            dias = self.cupom_template.dias_validade_pos_emissao
+            if dias:
+                base = self.emitido_em or timezone.now()
+                self.expira_em = base + timedelta(days=int(dias))
+        super().save(*args, **kwargs)
+
+    @property
+    def esta_expirado(self):
+        return bool(self.expira_em and timezone.now() > self.expira_em)
+
+    @property
+    def esta_usado(self):
+        return self.usado_em is not None
+
+    @property
+    def status(self):
+        if self.esta_usado:
+            return 'usado'
+        if self.esta_expirado:
+            return 'expirado'
+        return 'valido'
+
+    def esta_valido(self, cpf=None, cliente=None):
+        """Retorna (ok: bool, motivo: str). Valida regras específicas do cupom emitido."""
+        tpl = self.cupom_template
+        if not tpl.ativo:
+            return False, 'Cupom inativo.'
+        if self.esta_usado:
+            return False, 'Este cupom já foi utilizado.'
+        if self.esta_expirado:
+            return False, 'Cupom expirado.'
+
+        # Vínculo por cliente: se o cupom foi emitido para uma conta específica
+        # (cliente_id preenchido na emissão), apenas essa conta pode usar.
+        if self.cliente_id:
+            if cliente is None:
+                return False, 'Este cupom está vinculado a uma conta. Faça login para utilizar.'
+            if cliente.pk != self.cliente_id:
+                return False, 'Este cupom é exclusivo de outra conta.'
+
+        # Regra de não-cumulatividade por CPF.
+        # Aniversário é recorrente (1 por ano calendário); demais origens valem só 1 vez na vida.
+        if cpf:
+            qs = (Pedido.objects
+                  .filter(cpf=cpf, cupom__origem=tpl.origem)
+                  .exclude(status='cancelado'))
+            if tpl.origem == 'aniversario':
+                qs = qs.filter(criado_em__year=timezone.now().year)
+                if qs.exists():
+                    return False, 'Você já utilizou um cupom de aniversário neste ano.'
+            else:
+                if qs.exists():
+                    return False, f'Você já utilizou um cupom de {tpl.get_origem_display().lower()}.'
+        return True, ''
+
+
 class CodigoVendedor(models.Model):
     codigo = models.CharField('Código / Nome', max_length=50, unique=True,
                               help_text='Nome ou palavra-chave que identifica o vendedor. Ex: TINA')
@@ -157,6 +279,7 @@ class Pedido(models.Model):
         ('aguardando_pagamento', 'Aguardando Pagamento'),
         ('pagamento_confirmado', 'Pagamento Confirmado'),
         ('em_separacao',        'Em Separação'),
+        ('pronto_retirada',     'Pronto para Retirada'),
         ('enviado',             'Enviado'),
         ('entregue',            'Entregue'),
         ('cancelado',           'Cancelado'),
@@ -171,7 +294,6 @@ class Pedido(models.Model):
 
     GATEWAYS = [
         ('pagseguro', 'PagSeguro'),
-        ('stone',     'Stone'),
     ]
 
     numero = models.CharField('Número', max_length=20, unique=True, default=gerar_numero_pedido, db_index=True)
@@ -220,7 +342,14 @@ class Pedido(models.Model):
     gateway_id = models.CharField('ID no gateway', max_length=100, blank=True)
     parcelas = models.PositiveSmallIntegerField('Parcelas', default=1)
 
+    # Rastreamento (snapshot do consentimento no checkout, para disparo server-side
+    # do purchase quando o pagamento confirma fora do browser, ex: PIX via webhook)
+    consentimento_marketing = models.BooleanField('Consentiu marketing (Meta)', default=False)
+    consentimento_analytics = models.BooleanField('Consentiu analise (GA4)', default=False)
+    ga_client_id = models.CharField('GA4 client_id (_ga)', max_length=50, blank=True)
+
     # Entrega
+    retirada_loja = models.BooleanField('Retirar na loja', default=False)
     codigo_rastreio = models.CharField('Código de rastreio', max_length=50, blank=True)
     transportadora = models.CharField('Transportadora', max_length=80, blank=True)
     # Serviço Melhor Envio escolhido no checkout — usado para montar
@@ -232,6 +361,17 @@ class Pedido(models.Model):
     bling_pedido_id = models.CharField('ID pedido Bling', max_length=50, blank=True)
     bling_nfe_id = models.CharField('ID NF-e Bling', max_length=50, blank=True)
     nfe_chave = models.CharField('Chave NF-e', max_length=50, blank=True)
+
+    # Integração Melhor Envio (preenchido pelo webhook quando a etiqueta é postada)
+    me_order_id = models.CharField('ID pedido Melhor Envio', max_length=100, blank=True)
+
+    # Rastreio Correios — controle de e-mails já enviados
+    correios_email_saiu_entrega = models.BooleanField('E-mail "saiu p/ entrega" enviado', default=False)
+    correios_entregue_em = models.DateTimeField(
+        'Correios: entrega detectada em', null=True, blank=True,
+        help_text='Preenchido quando o rastreio confirma entrega. Status muda p/ entregue 7 dias depois.',
+    )
+    avaliacao_email_enviado_em = models.DateTimeField('E-mail de avaliação enviado em', null=True, blank=True)
 
     observacao_cliente = models.TextField('Observação do cliente', max_length=300, blank=True)
     observacao_interna = models.TextField('Observação interna', max_length=500, blank=True)
@@ -249,7 +389,7 @@ class Pedido(models.Model):
 
     def clean(self):
         # Sanitiza campos que o cliente pode ter preenchido
-        self.nome_completo = sanitize_text(self.nome_completo, max_length=240)
+        self.nome_completo = sanitize_name(self.nome_completo, max_length=240)
         self.logradouro = sanitize_address(self.logradouro)
         self.numero_entrega = sanitize_text(self.numero_entrega, max_length=20)
         self.complemento = sanitize_text(self.complemento, max_length=100)
@@ -267,6 +407,7 @@ class Pedido(models.Model):
         'aguardando_pagamento': 'Aguardando pagamento',
         'pagamento_confirmado': 'Em separação',
         'em_separacao':         'Em separação',
+        'pronto_retirada':      'Pronto para retirada',
         'enviado':              'Enviado',
         'entregue':             'Entregue',
         'cancelado':            'Cancelado',
@@ -300,8 +441,19 @@ class Pedido(models.Model):
 
     @property
     def pode_confirmar_entrega(self):
-        """Cliente pode marcar como entregue se já foi enviado."""
-        return self.status == 'enviado'
+        """
+        Mostra secao de confirmacao de entrega no painel da cliente:
+        - Status enviado: cliente ainda nao recebeu (Correios nao confirmou) — pode confirmar.
+        - Status entregue + ate 7 dias: janela de confirmacao explicita (desaparece por si so).
+        """
+        if self.status == 'enviado':
+            return True
+        if self.status == 'entregue':
+            data = self.data_entregue
+            if data:
+                from django.utils import timezone
+                return (timezone.now() - data).days <= 7
+        return False
 
     @property
     def link_rastreio(self):
@@ -309,6 +461,17 @@ class Pedido(models.Model):
         if not self.codigo_rastreio:
             return ''
         return f'https://www.linkcorreios.com.br/?id={self.codigo_rastreio}'
+
+    @property
+    def avaliacao(self):
+        try:
+            return self.avaliacao_compra
+        except Exception:
+            return None
+
+    @property
+    def pode_avaliar(self):
+        return self.status == 'entregue' and self.avaliacao is None
 
     def calcular_total(self):
         self.total = self.subtotal - self.desconto + self.frete
@@ -335,6 +498,15 @@ class ItemPedido(models.Model):
     def __str__(self):
         return f'{self.quantidade}x {self.nome_produto}'
 
+    @property
+    def imagem_cor(self):
+        """Primeira imagem da cor da variação comprada; fallback para imagem principal do produto."""
+        if self.variacao_id and self.variacao.cor_id:
+            imagens = self.produto.imagens_da_cor(self.variacao.cor_id)
+            if imagens:
+                return imagens[0]
+        return self.produto.imagem_principal
+
     def save(self, *args, **kwargs):
         self.subtotal = self.preco_unitario * self.quantidade
         super().save(*args, **kwargs)
@@ -355,3 +527,26 @@ class HistoricoPedido(models.Model):
 
     def __str__(self):
         return f'{self.pedido.numero}: {self.status_anterior} → {self.status_novo}'
+
+
+class RastreioEvento(models.Model):
+    """
+    Eventos recebidos via webhook do Melhor Envio.
+    Usados para log e para rastrear eventos que chegaram sem match de pedido.
+    """
+    pedido     = models.ForeignKey(Pedido, on_delete=models.SET_NULL,
+                                   null=True, blank=True, related_name='rastreio_eventos')
+    me_order_id = models.CharField('ID ME', max_length=100, db_index=True)
+    evento      = models.CharField('Evento', max_length=50)
+    tracking    = models.CharField('Código rastreio', max_length=50, blank=True)
+    dados_raw   = models.JSONField('Payload raw')
+    criado_em   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'Evento de Rastreio (ME)'
+        verbose_name_plural = 'Eventos de Rastreio (ME)'
+        ordering            = ['-criado_em']
+
+    def __str__(self):
+        pedido_str = f' | pedido {self.pedido.numero}' if self.pedido_id else ''
+        return f'{self.evento} — {self.me_order_id}{pedido_str}'

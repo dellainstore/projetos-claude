@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from datetime import date
 import time
+from collections import defaultdict
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -55,12 +56,156 @@ def nome_jogo(jogo: dict, slot: str, nomes_map: dict) -> str:
     return v if v else "?"
 
 
+def _partners_and_opponents(jogos: list[dict]) -> tuple[dict[int, set[int]], dict[int, set[int]]]:
+    parceiros: dict[int, set[int]] = defaultdict(set)
+    adversarios: dict[int, set[int]] = defaultdict(set)
+    for jogo in jogos:
+        j1, j2 = jogo["dupla1_j1"], jogo["dupla1_j2"]
+        j3, j4 = jogo["dupla2_j1"], jogo["dupla2_j2"]
+        if j1 is not None and j2 is not None:
+            parceiros[j1].add(j2); parceiros[j2].add(j1)
+        if j3 is not None and j4 is not None:
+            parceiros[j3].add(j4); parceiros[j4].add(j3)
+        for p in (j1, j2):
+            if p is not None:
+                adversarios[p].update(x for x in (j3, j4) if x is not None)
+        for p in (j3, j4):
+            if p is not None:
+                adversarios[p].update(x for x in (j1, j2) if x is not None)
+    return parceiros, adversarios
+
+
+def _same_night_violations(jogos: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    parceiros: dict[int, set[int]] = defaultdict(set)
+    adversarios: dict[int, set[int]] = defaultdict(set)
+    repetiu_parceiro: list[dict] = []
+    repetiu_adversario: list[dict] = []
+    enfrentou_ex_parceiro: list[dict] = []
+
+    for jogo in jogos:
+        ri = jogo["rodada_interna"]
+        q = jogo["quadra"]
+        j1, j2 = jogo["dupla1_j1"], jogo["dupla1_j2"]
+        j3, j4 = jogo["dupla2_j1"], jogo["dupla2_j2"]
+
+        if j1 is not None and j2 is not None and j2 in parceiros[j1]:
+            repetiu_parceiro.append({"jogadores": (j1, j2), "rodada_interna": ri, "quadra": q})
+        if j3 is not None and j4 is not None and j4 in parceiros[j3]:
+            repetiu_parceiro.append({"jogadores": (j3, j4), "rodada_interna": ri, "quadra": q})
+
+        for p, adjs in ((j1, (j3, j4)), (j2, (j3, j4)), (j3, (j1, j2)), (j4, (j1, j2))):
+            if p is None:
+                continue
+            for adv in adjs:
+                if adv is None:
+                    continue
+                if adv in adversarios[p]:
+                    repetiu_adversario.append({"jogador": p, "adversario": adv, "rodada_interna": ri, "quadra": q})
+                if adv in parceiros[p]:
+                    enfrentou_ex_parceiro.append({"jogador": p, "outro": adv, "rodada_interna": ri, "quadra": q})
+
+        if j1 is not None and j2 is not None:
+            parceiros[j1].add(j2); parceiros[j2].add(j1)
+        if j3 is not None and j4 is not None:
+            parceiros[j3].add(j4); parceiros[j4].add(j3)
+        for p in (j1, j2):
+            if p is not None:
+                adversarios[p].update(x for x in (j3, j4) if x is not None)
+        for p in (j3, j4):
+            if p is not None:
+                adversarios[p].update(x for x in (j1, j2) if x is not None)
+
+    return repetiu_parceiro, repetiu_adversario, enfrentou_ex_parceiro
+
+
+def _analisar_comparacao_rodada(
+    rodada_atual: dict,
+    rodadas_anteriores: list[dict],
+    nomes_map: dict[int, str],
+) -> dict:
+    sorteio_ativo = db.get_sorteio_ativo(rodada_atual["id"])
+    if not sorteio_ativo:
+        return {"erro": "Nenhum sorteio oficial encontrado para a rodada selecionada."}
+
+    jogos_atual = db.list_jogos_sorteio(sorteio_ativo["id"])
+    if not jogos_atual:
+        return {"erro": "O sorteio oficial selecionado não possui jogos cadastrados."}
+
+    parceiros_atual, adversarios_atual = _partners_and_opponents(jogos_atual)
+    repetiu_parceiro_noite, repetiu_adversario_noite, enfrentou_ex_parceiro = _same_night_violations(jogos_atual)
+
+    base_por_numero: dict[int, tuple[dict[int, set[int]], dict[int, set[int]]]] = {}
+    jogadores_base_por_numero: dict[int, set[int]] = {}
+    for rodada in rodadas_anteriores:
+        sorteio_base = db.get_sorteio_ativo(rodada["id"])
+        if not sorteio_base:
+            continue
+        jogos_base = db.list_jogos_sorteio(sorteio_base["id"])
+        parceiros_base, adversarios_base = _partners_and_opponents(jogos_base)
+        base_por_numero[rodada["numero"]] = (parceiros_base, adversarios_base)
+        jogadores_base_por_numero[rodada["numero"]] = set(parceiros_base) | set(adversarios_base)
+
+    jogadores_atuais = sorted(set(parceiros_atual) | set(adversarios_atual))
+    ref_por_jogador: dict[int, int | None] = {}
+    parceiros_ref_por_jogador: dict[int, set[int]] = {}
+    adversarios_ref_por_jogador: dict[int, set[int]] = {}
+
+    for jogador in jogadores_atuais:
+        rodada_ref = None
+        for rodada in rodadas_anteriores:
+            numero = rodada["numero"]
+            if jogador in jogadores_base_por_numero.get(numero, set()):
+                rodada_ref = numero
+                break
+        ref_por_jogador[jogador] = rodada_ref
+        if rodada_ref is None:
+            parceiros_ref_por_jogador[jogador] = set()
+            adversarios_ref_por_jogador[jogador] = set()
+            continue
+        parceiros_base, adversarios_base = base_por_numero[rodada_ref]
+        parceiros_ref_por_jogador[jogador] = parceiros_base.get(jogador, set())
+        adversarios_ref_por_jogador[jogador] = adversarios_base.get(jogador, set())
+
+    violacoes_parceiro_ref: list[dict] = []
+    repeticoes_adversarios_ref: list[dict] = []
+
+    for jogador in jogadores_atuais:
+        parceiros_repetidos = sorted(parceiros_atual.get(jogador, set()) & parceiros_ref_por_jogador[jogador])
+        if parceiros_repetidos:
+            violacoes_parceiro_ref.append({
+                "jogador": jogador,
+                "rodada_ref": ref_por_jogador[jogador],
+                "parceiros": parceiros_repetidos,
+            })
+
+        adversarios_repetidos = sorted(adversarios_atual.get(jogador, set()) & adversarios_ref_por_jogador[jogador])
+        repeticoes_adversarios_ref.append({
+            "jogador": jogador,
+            "rodada_ref": ref_por_jogador[jogador],
+            "adversarios": adversarios_repetidos,
+            "quantidade": len(adversarios_repetidos),
+        })
+
+    repeticoes_adversarios_ref.sort(key=lambda item: (-item["quantidade"], nomes_map.get(item["jogador"], str(item["jogador"]))))
+
+    return {
+        "rodada_atual": rodada_atual,
+        "rodadas_anteriores": rodadas_anteriores,
+        "repetiu_parceiro_noite": repetiu_parceiro_noite,
+        "repetiu_adversario_noite": repetiu_adversario_noite,
+        "enfrentou_ex_parceiro": enfrentou_ex_parceiro,
+        "violacoes_parceiro_ref": violacoes_parceiro_ref,
+        "repeticoes_adversarios_ref": repeticoes_adversarios_ref,
+        "nomes_map": nomes_map,
+    }
+
+
 if auth.is_admin():
-    tab_criar, tab_sorteio, tab_manual, tab_auditoria = st.tabs(
-        ["Criar / Gerenciar Rodadas", "Gerar Sorteio", "Entrada Manual", "Auditoria"]
+    tab_criar, tab_sorteio, tab_manual, tab_auditoria, tab_comparacao = st.tabs(
+        ["Criar / Gerenciar Rodadas", "Gerar Sorteio", "Entrada Manual", "Auditoria", "Comparação"]
     )
 else:
-    tab_sorteio, tab_auditoria = st.tabs(["Gerar Sorteio", "Auditoria"])
+    tab_sorteio, tab_auditoria, tab_comparacao = st.tabs(["Gerar Sorteio", "Auditoria", "Comparação"])
     tab_criar = None
     tab_manual = None
 
@@ -181,6 +326,7 @@ with tab_sorteio:
             "Rodada para Sortear",
             options=rodadas_pendentes,
             format_func=lambda r: f"Rodada {r['numero']} — {fmt_data(r['data'])} ({r['n_jogadores']} jogadores)",
+            index=len(rodadas_pendentes) - 1,
             key="sorteio_rodada",
         )
 
@@ -389,10 +535,13 @@ if tab_manual is not None:
         st.info("Crie uma rodada na aba **Criar / Gerenciar Rodadas** primeiro.")
         st.stop()
 
+    _aberta_man = next((r for r in reversed(rodadas) if r["status"] != "concluida"), None)
+    _idx_man = rodadas.index(_aberta_man) if _aberta_man else len(rodadas) - 1
     rodada_man = st.selectbox(
         "Rodada",
         options=rodadas,
         format_func=lambda r: f"Rodada {r['numero']} — {fmt_data(r['data'])} ({r['status']})",
+        index=_idx_man,
         key="manual_rodada",
     )
 
@@ -666,3 +815,176 @@ with tab_auditoria:
                             if st.button(f"🗑️ Excluir #{s['numero']}", key=f"del_{s['id']}"):
                                 db.delete_sorteio(s["id"])
                                 st.rerun()
+
+
+# ── ABA 5: Comparação ────────────────────────────────────────────────────────
+with tab_comparacao:
+    rodadas = db.list_rodadas(tid)
+    rodadas_com_sorteio = [r for r in rodadas if db.get_sorteio_ativo(r["id"])]
+
+    if not rodadas_com_sorteio:
+        st.info("Nenhuma rodada com sorteio oficial para comparar.")
+        st.stop()
+
+    _aberta = next((r for r in reversed(rodadas_com_sorteio) if r["status"] != "concluida"), None)
+    _default_idx = rodadas_com_sorteio.index(_aberta) if _aberta else len(rodadas_com_sorteio) - 1
+    rodada_cmp = st.selectbox(
+        "Rodada para comparar",
+        options=rodadas_com_sorteio,
+        format_func=lambda r: f"Rodada {r['numero']} — {fmt_data(r['data'])}",
+        index=_default_idx,
+        key="comparacao_rodada",
+    )
+
+    rodadas_base = [
+        r for r in sorted(rodadas, key=lambda item: item["numero"], reverse=True)
+        if r["numero"] < rodada_cmp["numero"] and db.get_sorteio_ativo(r["id"])
+    ][:2]
+
+    st.subheader(f"Comparação do Sorteio — Rodada {rodada_cmp['numero']}")
+    if not rodadas_base:
+        st.warning("Não há rodadas anteriores com sorteio oficial suficiente para comparar.")
+        st.stop()
+
+    st.caption(
+        "Base usada na comparação: "
+        + " · ".join(f"Rodada {r['numero']} ({fmt_data(r['data'])})" for r in rodadas_base)
+    )
+    st.caption(
+        "A referência é individual por jogador: primeiro tenta a rodada imediatamente anterior; "
+        "se o jogador não participou dela, usa a rodada anterior seguinte dentro da base."
+    )
+
+    nomes_map = {j["id"]: j["nome"] for j in db.list_jogadores(False)}
+    analise = _analisar_comparacao_rodada(rodada_cmp, rodadas_base, nomes_map)
+
+    if analise.get("erro"):
+        st.error(analise["erro"])
+        st.stop()
+
+    repetiu_parceiro_noite = analise["repetiu_parceiro_noite"]
+    repetiu_adversario_noite = analise["repetiu_adversario_noite"]
+    enfrentou_ex_parceiro = analise["enfrentou_ex_parceiro"]
+    violacoes_parceiro_ref = analise["violacoes_parceiro_ref"]
+    repeticoes_adversarios_ref = analise["repeticoes_adversarios_ref"]
+    pares_adversarios_repetidos: list[tuple[str, str]] = []
+    pares_vistos: set[tuple[int, int]] = set()
+    for item in repeticoes_adversarios_ref:
+        jogador = item["jogador"]
+        for adversario in item["adversarios"]:
+            chave = tuple(sorted((jogador, adversario)))
+            if chave in pares_vistos:
+                continue
+            pares_vistos.add(chave)
+            pares_adversarios_repetidos.append((
+                nomes_map.get(chave[0], str(chave[0])),
+                nomes_map.get(chave[1], str(chave[1])),
+            ))
+
+    total_repeticoes_adversario = sum(item["quantidade"] for item in repeticoes_adversarios_ref)
+    max_repeticoes_adversario = max((item["quantidade"] for item in repeticoes_adversarios_ref), default=0)
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Repetiu parceiro na noite", len(repetiu_parceiro_noite))
+    with c2:
+        st.metric("Repetiu adversário na noite", len(repetiu_adversario_noite))
+    with c3:
+        st.metric("Enfrentou ex-parceiro na noite", len(enfrentou_ex_parceiro))
+
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        st.metric("Violação de parceiro da referência", len(violacoes_parceiro_ref))
+    with c5:
+        st.metric("Máx. adversários repetidos por jogador", max_repeticoes_adversario)
+    with c6:
+        st.metric("Total de repetições de adversários", total_repeticoes_adversario)
+
+    if (
+        not repetiu_parceiro_noite
+        and not repetiu_adversario_noite
+        and not enfrentou_ex_parceiro
+        and not violacoes_parceiro_ref
+    ):
+        st.success("As regras obrigatórias do sorteio foram atendidas nesta comparação.")
+    else:
+        st.warning("Foram encontradas ocorrências que merecem revisão no sorteio.")
+
+    st.divider()
+    st.write("**Resumo das regras obrigatórias**")
+    st.write(
+        f"- Repetição de parceiro na mesma noite: **{len(repetiu_parceiro_noite)}**"
+    )
+    st.write(
+        f"- Repetição de adversário na mesma noite: **{len(repetiu_adversario_noite)}**"
+    )
+    st.write(
+        f"- Jogou contra alguém que já foi parceiro na noite: **{len(enfrentou_ex_parceiro)}**"
+    )
+    st.write(
+        f"- Repetição de parceiro da rodada anterior: **{len(violacoes_parceiro_ref)}**"
+    )
+
+    st.divider()
+    st.write("**Adversários repetidos da rodada anterior**")
+    if not pares_adversarios_repetidos:
+        st.info("Nenhum adversário repetido em relação às rodadas anteriores.")
+    else:
+        for nome_1, nome_2 in sorted(pares_adversarios_repetidos):
+            st.write(f"- **{nome_1} × {nome_2}**")
+
+    with st.expander("Detalhes por jogador"):
+        for item in repeticoes_adversarios_ref:
+            parceiros_violados = next(
+                (entry["parceiros"] for entry in violacoes_parceiro_ref if entry["jogador"] == item["jogador"]),
+                [],
+            )
+            st.write(
+                f"- **{nomes_map.get(item['jogador'], str(item['jogador']))}** · "
+                f"rodada de referência: **{item['rodada_ref'] or 'nenhuma'}** · "
+                f"parceiros repetidos: "
+                f"{', '.join(nomes_map.get(p, str(p)) for p in parceiros_violados) if parceiros_violados else 'nenhum'}"
+                f" · adversários repetidos: "
+                f"{', '.join(nomes_map.get(a, str(a)) for a in item['adversarios']) if item['adversarios'] else 'nenhum'}"
+            )
+
+    with st.expander("Ocorrências detalhadas das regras obrigatórias"):
+        if repetiu_parceiro_noite:
+            st.write("**Parceiros repetidos na mesma noite**")
+            for item in repetiu_parceiro_noite:
+                j1, j2 = item["jogadores"]
+                st.write(
+                    f"- {nomes_map.get(j1, str(j1))} / {nomes_map.get(j2, str(j2))} "
+                    f"no jogo {item['rodada_interna']} · quadra {item['quadra']}"
+                )
+        if repetiu_adversario_noite:
+            st.write("**Adversários repetidos na mesma noite**")
+            for item in repetiu_adversario_noite:
+                st.write(
+                    f"- {nomes_map.get(item['jogador'], str(item['jogador']))} repetiu confronto com "
+                    f"{nomes_map.get(item['adversario'], str(item['adversario']))} "
+                    f"no jogo {item['rodada_interna']} · quadra {item['quadra']}"
+                )
+        if enfrentou_ex_parceiro:
+            st.write("**Enfrentou alguém que já foi parceiro na mesma noite**")
+            for item in enfrentou_ex_parceiro:
+                st.write(
+                    f"- {nomes_map.get(item['jogador'], str(item['jogador']))} enfrentou "
+                    f"{nomes_map.get(item['outro'], str(item['outro']))} "
+                    f"no jogo {item['rodada_interna']} · quadra {item['quadra']}"
+                )
+        if violacoes_parceiro_ref:
+            st.write("**Parceiros repetidos da rodada anterior**")
+            for item in violacoes_parceiro_ref:
+                st.write(
+                    f"- {nomes_map.get(item['jogador'], str(item['jogador']))} repetiu parceiro(s) da rodada anterior "
+                    f"{item['rodada_ref']}: "
+                    + ", ".join(nomes_map.get(p, str(p)) for p in item["parceiros"])
+                )
+        if (
+            not repetiu_parceiro_noite
+            and not repetiu_adversario_noite
+            and not enfrentou_ex_parceiro
+            and not violacoes_parceiro_ref
+        ):
+            st.info("Nenhuma ocorrência obrigatória encontrada.")

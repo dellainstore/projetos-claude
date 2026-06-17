@@ -26,6 +26,19 @@ TIPOS_BANNER = [
 ]
 
 
+POSICAO_IMAGEM_BANNER = [
+    ('center center', 'Centralizado (padrão)'),
+    ('left center',   'Esquerda (mostra início da foto)'),
+    ('right center',  'Direita (mostra fim da foto)'),
+    ('center top',    'Topo (mostra parte superior)'),
+    ('center bottom', 'Base (mostra parte inferior)'),
+    ('left top',      'Esquerda superior'),
+    ('right top',     'Direita superior'),
+    ('left bottom',   'Esquerda inferior'),
+    ('right bottom',  'Direita inferior'),
+]
+
+
 class BannerPrincipal(models.Model):
     """
     Slides do banner principal (hero) da homepage.
@@ -56,6 +69,11 @@ class BannerPrincipal(models.Model):
 
     url_botao   = models.CharField('Link do banner (ao clicar)', max_length=200, blank=True, default='/loja/',
                     help_text='Caminho relativo. Ao clicar em qualquer parte do banner, redireciona para este link. Ex: /loja/ ou /loja/bodies/')
+
+    posicao_imagem = models.CharField(
+        'Posição da imagem no banner', max_length=14, choices=POSICAO_IMAGEM_BANNER,
+        default='center center',
+        help_text='Define qual parte da foto fica visível quando o banner é cortado pelo navegador. Use "Esquerda" se o texto/elemento principal estiver no início da foto.')
 
     ativo = models.BooleanField('Ativo', default=True)
 
@@ -249,6 +267,90 @@ class ConfiguracaoLoja(models.Model):
     @classmethod
     def get_config(cls):
         return cls.objects.first()
+
+
+class TarjaFrase(models.Model):
+    """Frases exibidas na tarja animada no topo do site (máx. 6 ativas)."""
+
+    texto = models.CharField('Texto', max_length=100,
+        help_text='Ex: Frete grátis acima de R$ 500 · Parcelamento em até 10x')
+    ativa = models.BooleanField('Ativa', default=True)
+    ordem = models.PositiveSmallIntegerField('Ordem', default=0,
+        help_text='Menor número aparece primeiro.')
+
+    class Meta:
+        verbose_name        = 'Tarja (Frase)'
+        verbose_name_plural = 'Tarja (Frases)'
+        ordering            = ['ordem', 'id']
+
+    def __str__(self):
+        return self.texto
+
+
+class LinkBio(models.Model):
+    """
+    Botões da página /links (bio do Instagram). TODOS os botões da página vêm
+    daqui (loja, WhatsApp, endereços e links de destaque), gerenciáveis no admin:
+    texto, link, subtítulo, ícone/estilo, ordem e ativar/desativar.
+    """
+
+    ICONE_NENHUM   = 'nenhum'
+    ICONE_LOJA     = 'loja'
+    ICONE_WHATSAPP = 'whatsapp'
+    ICONE_LOCAL    = 'local'
+    ICONE_DESTAQUE = 'destaque'
+    ICONES = [
+        (ICONE_LOJA,     'Loja (botão principal preto)'),
+        (ICONE_DESTAQUE, 'Destaque (dourado)'),
+        (ICONE_WHATSAPP, 'WhatsApp (ícone verde)'),
+        (ICONE_LOCAL,    'Endereço / Mapa (pino)'),
+        (ICONE_NENHUM,   'Simples (sem ícone)'),
+    ]
+
+    titulo    = models.CharField('Título', max_length=60,
+        help_text='Texto do botão. Ex: Loja online, WhatsApp Vendas, Nova Coleção.')
+    subtitulo = models.CharField('Subtítulo', max_length=120, blank=True,
+        help_text='Linha menor abaixo do título. Ex: o endereço completo da loja. Deixe vazio se não quiser.')
+    url       = models.URLField('Link', max_length=500,
+        help_text='Para onde o botão leva. Ex: https://www.dellainstore.com/ ou link do Google Maps.')
+    icone     = models.CharField('Ícone / Estilo', max_length=10, choices=ICONES, default=ICONE_NENHUM,
+        help_text='Define o ícone e o visual do botão.')
+    nova_aba  = models.BooleanField('Abrir em nova aba', default=True,
+        help_text='Recomendado para WhatsApp e mapas. Desmarque para a loja/home.')
+    ordem     = models.PositiveSmallIntegerField('Ordem', default=0,
+        help_text='Menor número aparece primeiro.')
+    ativo     = models.BooleanField('Ativo', default=True,
+        help_text='Desmarque para esconder sem precisar excluir.')
+
+    class Meta:
+        verbose_name        = 'Link da Bio (Instagram)'
+        verbose_name_plural = 'Links da Bio (Instagram)'
+        ordering            = ['ordem', 'id']
+
+    def __str__(self):
+        return self.titulo
+
+
+class ContatoFormulario(models.Model):
+    nome        = models.CharField('Nome', max_length=100)
+    email       = models.EmailField('E-mail', max_length=254)
+    telefone    = models.CharField('Telefone', max_length=20, blank=True)
+    mensagem    = models.TextField('Mensagem', max_length=1000)
+    recebido_em = models.DateTimeField('Recebido em', auto_now_add=True)
+    respondido  = models.BooleanField('Respondido', default=False)
+    respondido_em = models.DateTimeField('Respondido em', null=True, blank=True)
+    observacao  = models.TextField('Observacao interna', blank=True,
+                    help_text='Anotacoes internas sobre este contato (nao visiveis ao cliente).')
+
+    class Meta:
+        verbose_name        = 'Formulario de contato'
+        verbose_name_plural = 'Formularios de contato'
+        ordering            = ['-recebido_em']
+
+    def __str__(self):
+        from django.utils.formats import date_format
+        data = date_format(self.recebido_em, 'd/m/Y H:i') if self.recebido_em else ''
+        return f'{self.nome} ({self.email}) - {data}'
 
 
 class InstagramPost(models.Model):

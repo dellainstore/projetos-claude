@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.conf import settings
 from django.core.exceptions import ValidationError
+import re
 from apps.core_utils.sanitize import sanitize_name, sanitize_phone, validate_cpf
 
 
@@ -62,6 +64,14 @@ class Cliente(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.nome
+
+    def get_telefone_formatado(self):
+        digitos = re.sub(r'\D', '', self.telefone or '')[:11]
+        if len(digitos) == 11:
+            return f'({digitos[:2]}) {digitos[2]} {digitos[3:7]}-{digitos[7:]}'
+        if len(digitos) == 10:
+            return f'({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}'
+        return self.telefone
 
     def campos_pendentes_cadastro(self):
         pendentes = []
@@ -143,3 +153,48 @@ class Wishlist(models.Model):
 
     def __str__(self):
         return f'{self.cliente.email} ♥ {self.produto.nome}'
+
+
+class AdminVerificacao(models.Model):
+    """Rastreia a última verificação de e-mail do usuário admin (válida por 30 dias)."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='admin_verificacao',
+    )
+    ultima_verificacao = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Verificação admin'
+        verbose_name_plural = 'Verificações admin'
+
+    def __str__(self):
+        return f'{self.user.email} — {self.ultima_verificacao}'
+
+    def verificado_recentemente(self):
+        from django.utils import timezone
+        from datetime import timedelta
+        if not self.ultima_verificacao:
+            return False
+        return (timezone.now() - self.ultima_verificacao) < timedelta(days=30)
+
+
+class AdminCodigo(models.Model):
+    """Código OTP de 6 dígitos enviado por e-mail para verificação admin."""
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='admin_codigos',
+    )
+    codigo = models.CharField(max_length=6)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    expira_em = models.DateTimeField()
+    usado = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Código de verificação admin'
+        verbose_name_plural = 'Códigos de verificação admin'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f'{self.user.email} — {self.codigo}'

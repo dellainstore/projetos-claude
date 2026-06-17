@@ -16,6 +16,42 @@
     var root = null;
     var draggingCard = null;
 
+    // ── Auto-scroll e scroll-da-roda durante drag ─────────────────────────
+    var autoScrollRAF = null;
+    var dragClientY = 0;
+    var SCROLL_ZONE = 220;  // px da borda que ativa o scroll
+    var SCROLL_SPEED = 18;  // px por frame
+
+    function onDragOver(e) { dragClientY = e.clientY; }
+
+    function autoScrollStep() {
+      if (!draggingCard) return;
+      var vh = window.innerHeight;
+      if (dragClientY < SCROLL_ZONE) {
+        window.scrollBy(0, -SCROLL_SPEED * (1 - dragClientY / SCROLL_ZONE));
+      } else if (dragClientY > vh - SCROLL_ZONE) {
+        window.scrollBy(0, SCROLL_SPEED * (1 - (vh - dragClientY) / SCROLL_ZONE));
+      }
+      autoScrollRAF = requestAnimationFrame(autoScrollStep);
+    }
+
+    function onWheelDuringDrag(e) {
+      if (!draggingCard) return;
+      window.scrollBy(0, e.deltaY);
+    }
+
+    function startAutoScroll() {
+      document.addEventListener('dragover', onDragOver);
+      document.addEventListener('wheel', onWheelDuringDrag, { passive: true });
+      autoScrollRAF = requestAnimationFrame(autoScrollStep);
+    }
+
+    function stopAutoScroll() {
+      document.removeEventListener('dragover', onDragOver);
+      document.removeEventListener('wheel', onWheelDuringDrag);
+      if (autoScrollRAF) { cancelAnimationFrame(autoScrollRAF); autoScrollRAF = null; }
+    }
+
     function getImageRows() {
       return Array.from(imageGroup.querySelectorAll('tr.form-row')).filter(function (row) {
         return !row.classList.contains('empty-form');
@@ -83,7 +119,7 @@
 
     function getOptionMap() {
       var map = {};
-      document.querySelectorAll('#variacoes-group select[name$="-cor"] option, #imagens-group select[name$="-cor"] option, #id_cor_principal option').forEach(function (option) {
+      document.querySelectorAll('#variacoes-group select[name$="-cor"] option, #imagens-group select[name$="-cor"] option').forEach(function (option) {
         if (!option.value) return;
         map[String(option.value)] = {
           id: String(option.value),
@@ -101,6 +137,7 @@
         variationGroup.querySelectorAll('tr.form-row:not(.empty-form)').forEach(function (row) {
           var deleteInput = row.querySelector('input[type="checkbox"][name$="-DELETE"]');
           if (deleteInput && deleteInput.checked) return;
+          if (row.classList.contains('della-inline-marked-delete')) return;
           var select = row.querySelector('select[name$="-cor"]');
           if (!select) return;
           var corId = String(select.value || '');
@@ -134,6 +171,53 @@
         imageGroup.appendChild(root);
       }
       return root;
+    }
+
+    var MAX_UPLOAD_MB = 15;
+    var ALLOWED_EXTS = ['jpg', 'jpeg', 'png', 'webp'];
+
+    function validateFiles(files) {
+      var erros = [];
+      Array.from(files).forEach(function (file) {
+        var ext = file.name.split('.').pop().toLowerCase();
+        if (ALLOWED_EXTS.indexOf(ext) === -1) {
+          erros.push('"' + file.name + '": formato não permitido. Use JPG, PNG ou WebP.');
+        } else if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+          erros.push('"' + file.name + '": arquivo muito grande (' + (file.size / 1024 / 1024).toFixed(1) + ' MB). Máximo: ' + MAX_UPLOAD_MB + ' MB.');
+        }
+      });
+      return erros;
+    }
+
+    function showUploadErrors(erros) {
+      var banner = imageGroup.querySelector('.della-upload-error-banner');
+      if (!erros.length) {
+        if (banner) banner.remove();
+        return;
+      }
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.className = 'della-upload-error-banner';
+        var heading = imageGroup.querySelector('h2.inline-heading');
+        if (heading && heading.parentNode) {
+          heading.parentNode.insertBefore(banner, heading.nextSibling);
+        } else {
+          imageGroup.insertBefore(banner, imageGroup.firstChild);
+        }
+      }
+      banner.innerHTML = '<strong>Erro no upload:</strong><ul>' +
+        erros.map(function (e) { return '<li>' + e + '</li>'; }).join('') + '</ul>';
+    }
+
+    function checkHiddenInlineErrors() {
+      var errorItems = Array.from(imageGroup.querySelectorAll('.tabular.inline-related .errorlist li'));
+      if (!errorItems.length) {
+        showUploadErrors([]);
+        return;
+      }
+      var messages = errorItems.map(function (li) { return li.textContent.trim(); });
+      var unique = messages.filter(function (m, i) { return messages.indexOf(m) === i; });
+      showUploadErrors(unique);
     }
 
     function hideLegacyUi() {
@@ -195,6 +279,12 @@
       var fileInput = getRowFileInput(row);
       if (fileInput) fileInput.value = '';
       row.dataset.previewUrl = '';
+      // Limpa cor e ordem para que Django trate a linha como vazia (empty_permitted)
+      // e não tente validar imagem obrigatória numa linha sem arquivo.
+      var colorSelect = getRowColorSelect(row);
+      if (colorSelect) colorSelect.value = '';
+      var orderInput = getRowOrderInput(row);
+      if (orderInput) orderInput.value = '0';
       markRowDeleted(row);
     }
 
@@ -249,10 +339,12 @@
       card.addEventListener('dragstart', function () {
         draggingCard = card;
         card.classList.add('is-dragging');
+        startAutoScroll();
       });
       card.addEventListener('dragend', function () {
         card.classList.remove('is-dragging');
         draggingCard = null;
+        stopAutoScroll();
         root.querySelectorAll('.della-fotos-track').forEach(function (track) {
           track.classList.remove('is-file-dragover');
         });
@@ -337,6 +429,12 @@
     }
 
     function addFilesToColor(corId, files) {
+      var erros = validateFiles(files);
+      if (erros.length) {
+        showUploadErrors(erros);
+        return;
+      }
+      showUploadErrors([]);
       var track = root.querySelector('.della-fotos-track[data-cor-id="' + corId + '"]');
       var ordemBase = track ? track.querySelectorAll('.della-foto-card').length : 0;
       Array.from(files).forEach(function (file, index) {
@@ -464,6 +562,10 @@
         if (isDeletedRow(row)) return false;
         var corId = getRowColor(row);
         return !corId || !validCorIds[corId];
+      }).sort(function (a, b) {
+        var ordemA = parseInt((getRowOrderInput(a) || {}).value || '0', 10);
+        var ordemB = parseInt((getRowOrderInput(b) || {}).value || '0', 10);
+        return ordemA - ordemB;
       });
 
       var arquivoSection = document.createElement('section');
@@ -533,6 +635,7 @@
       root.appendChild(arquivoSection);
 
       syncPrincipalCheckboxes();
+      checkHiddenInlineErrors();
     }
 
     if (variationGroup) {
@@ -540,6 +643,13 @@
         var name = event.target ? (event.target.name || '') : '';
         if (/-cor$/.test(name) || /-DELETE$/.test(name)) {
           buildGroupedPanels();
+        }
+      });
+      // Para linhas NOVAS (sem checkbox DELETE), o × as esconde sem disparar change.
+      // Usa setTimeout para rodar após admin_linhas.js marcar a linha como deletada.
+      variationGroup.addEventListener('click', function (event) {
+        if (event.target && event.target.matches('.della-inline-remove')) {
+          setTimeout(buildGroupedPanels, 0);
         }
       });
     }
@@ -552,10 +662,27 @@
       }
     });
 
+    // Quando o form falha e é re-renderizado, linhas extra ficam com `cor`
+    // preenchida mas sem imagem (browser apaga o file input por segurança).
+    // Isso faz has_changed()=True → Django exige imagem → erro permanente.
+    // Limpamos essas linhas "fantasmas" uma vez na inicialização.
+    function cleanOrphanedNewRows() {
+      getImageRows().forEach(function (row) {
+        if (isSavedRow(row) || isDeletedRow(row)) return;
+        var fileInput = getRowFileInput(row);
+        if (!fileInput || fileInput.value || row.dataset.previewUrl) return;
+        var colorSelect = getRowColorSelect(row);
+        if (colorSelect && colorSelect.value) colorSelect.value = '';
+        var orderInput = getRowOrderInput(row);
+        if (orderInput && orderInput.value && orderInput.value !== '0') orderInput.value = '0';
+      });
+    }
+
     new MutationObserver(function () {
       hideLegacyUi();
     }).observe(imageGroup, { childList: true, subtree: true });
 
+    cleanOrphanedNewRows();
     buildGroupedPanels();
   });
 }());

@@ -11,7 +11,8 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.db.models import Avg
 from django.db import transaction
-from django.urls import path
+from django.urls import path, reverse
+from apps.core_utils.admin_mixin import DellaAdminMixin
 from django.http import HttpResponseRedirect, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.contrib.admin.views.decorators import staff_member_required
@@ -21,7 +22,10 @@ from .models import (
     TamanhoPadrao, TabelaMedidas, TabelaMedidasLinha, ProdutoCorFoto,
     NewsletterInscricao,
 )
-from .forms import ProdutoCorFotoForm, ProdutoAdminForm, CategoriaSubSelect, PENDING_PREFIX
+from .forms import (
+    ProdutoCorFotoForm, ProdutoAdminForm, CategoriaSubSelect,
+    PENDING_PREFIX, StarRatingWidget, VariacaoInlineForm,
+)
 
 
 def _estilo_preview_cor(cor_primaria='', cor_secundaria=''):
@@ -43,6 +47,32 @@ class CorPreviewSelect(forms.Select):
             option['attrs']['data-cor-hex'] = instance.codigo_hex or ''
             option['attrs']['data-cor-hex-secundario'] = instance.codigo_hex_secundario or ''
         return option
+
+
+class AvaliacaoAdminForm(forms.ModelForm):
+    class Meta:
+        model = Avaliacao
+        fields = '__all__'
+        widgets = {
+            'nota_experiencia': StarRatingWidget(),
+            'nota_produtos': StarRatingWidget(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for nome_campo in ('nota_experiencia', 'nota_produtos'):
+            campo = self.fields.get(nome_campo)
+            if campo is not None:
+                campo.required = True
+                campo.help_text = ''
+                campo.widget.attrs['class'] = 'avaliacao-stars-admin'
+
+    def clean(self):
+        cleaned = super().clean()
+        pedido = cleaned.get('pedido')
+        if not pedido:
+            self.add_error('pedido', 'Selecione o pedido para vincular a avaliação.')
+        return cleaned
 
 
 def _texto_importacao_chave(valor):
@@ -67,11 +97,17 @@ def _limpar_celula_planilha(valor):
 class ProdutoImagemInline(admin.TabularInline):
     model = ProdutoImagem
     extra = 1
-    fields = ('thumb_preview', 'imagem', 'principal', 'ordem')
+    fields = ('thumb_preview', 'imagem', 'cor', 'principal', 'ordem')
     readonly_fields = ('thumb_preview',)
-    ordering = ('-principal', 'ordem')
-    verbose_name = 'Foto do produto'
-    verbose_name_plural = 'Fotos do produto'
+    ordering = ('cor__ordem', 'cor__nome', 'ordem', 'id')
+    verbose_name = 'Foto por cor do produto'
+    verbose_name_plural = 'Fotos por cor do produto'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == 'cor':
+            formfield.widget = CorPreviewSelect(attrs=formfield.widget.attrs)
+        return formfield
 
     def thumb_preview(self, obj):
         if obj.imagem:
@@ -86,11 +122,12 @@ class ProdutoImagemInline(admin.TabularInline):
 
 class VariacaoInline(admin.TabularInline):
     model = Variacao
+    form = VariacaoInlineForm
     extra = 1
     fields = (
         'cor', 'cor_preview', 'tamanho', 'preco', 'preco_promocional',
-        'disponibilidade', 'prazo_confeccao_dias',
-        'estoque', 'sku_variacao', 'bling_variacao_id', 'ativa', 'clonar_btn'
+        'disponibilidade', 'comportamento_sem_estoque', 'prazo_confeccao_dias',
+        'estoque', 'sku_variacao', 'bling_variacao_id', 'usa_sync_bling', 'ativa', 'clonar_btn'
     )
     readonly_fields = ('cor_preview', 'clonar_btn')
     ordering = ('cor__ordem', 'cor__nome', 'tamanho__ordem')
@@ -205,7 +242,7 @@ class AvaliacaoInline(admin.StackedInline):
 # ---------------------------------------------------------------------------
 
 @admin.register(Categoria)
-class CategoriaAdmin(admin.ModelAdmin):
+class CategoriaAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('nome_arvore', 'nivel_badge', 'slug', 'ativa', 'total_produtos', 'acoes_linha')
     change_list_template = 'admin/produtos/categoria_changelist.html'
     list_display_links = ('nome_arvore',)
@@ -244,14 +281,9 @@ class CategoriaAdmin(admin.ModelAdmin):
     nivel_badge.short_description = 'Nível'
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:produtos_categoria_change', args=[obj.pk])
         delete_url = reverse('admin:produtos_categoria_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta categoria?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir esta categoria?')
     acoes_linha.short_description = 'Ações'
 
     def total_produtos(self, obj):
@@ -374,7 +406,7 @@ class CategoriaAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 @admin.register(Produto)
-class ProdutoAdmin(admin.ModelAdmin):
+class ProdutoAdmin(DellaAdminMixin, admin.ModelAdmin):
     form = ProdutoAdminForm
     IMPORT_PREVIEW_SESSION_KEY = 'produtos_import_preview_v2'
     IMPORT_FOTOS_PREVIEW_SESSION_KEY = 'produtos_import_fotos_preview_v1'
@@ -393,11 +425,13 @@ class ProdutoAdmin(admin.ModelAdmin):
     change_list_template = 'admin/produtos/produto_changelist.html'
 
     class Media:
-        js = ('admin/js/admin_linhas.js', 'admin/js/produto_admin.js')
-
-    def get_actions(self, request):
-        actions = super().get_actions(request)
-        return {k: v for k, v in actions.items() if k == 'delete_selected'}
+        js = (
+            'admin/js/admin_linhas.js',
+            'admin/js/produto_admin.js',
+            'admin/js/produto_admin_por_cor.js',
+            'admin/js/produto_text_editor.js',
+            'admin/js/variacao_sync_lock.js',
+        )
 
     fieldsets = (
         ('Identificação', {
@@ -405,6 +439,10 @@ class ProdutoAdmin(admin.ModelAdmin):
         }),
         ('Textos', {
             'fields': ('descricao', 'composicao'),
+            'description': (
+                'Descrição e composição aceitam formatação rica. '
+                'Você pode ajustar negrito, alinhamento, tamanho de fonte, listas e recuos.'
+            ),
         }),
         ('Preços', {
             'fields': ('preco', 'preco_promocional'),
@@ -432,8 +470,11 @@ class ProdutoAdmin(admin.ModelAdmin):
         }),
     )
 
-    inlines = [ProdutoImagemInline, ProdutoCorFotoInline, VariacaoInline]
-    actions = ['marcar_ativo', 'marcar_inativo', 'marcar_destaque', 'remover_destaque']
+    inlines = [ProdutoImagemInline, VariacaoInline]
+    actions = [
+        'marcar_ativo', 'marcar_inativo', 'marcar_destaque', 'remover_destaque',
+        'ativar_sync_bling_variacoes', 'desativar_sync_bling_variacoes',
+    ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Aplica o widget custom CategoriaSubSelect (com data-parent em cada
@@ -447,7 +488,16 @@ class ProdutoAdmin(admin.ModelAdmin):
                 .order_by('parent__nome', 'ordem', 'nome')
             )
             kwargs['widget'] = CategoriaSubSelect()
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+        elif db_field.name == 'cor_principal':
+            # Renderizado como hidden input: o radio nos cards de cor e a unica
+            # interface de selecao. O JS sincroniza o radio com este campo.
+            kwargs['queryset'] = CorPadrao.objects.order_by('ordem', 'nome')
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == 'cor_principal':
+            from django.forms import HiddenInput
+            formfield.widget = HiddenInput()
+            formfield.required = False
+        return formfield
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -476,8 +526,12 @@ class ProdutoAdmin(admin.ModelAdmin):
 
         form.save_m2m()
 
+        # Envolve o save de imagens em transacao atomica: se qualquer imagem
+        # falhar (ex: timeout de processamento), nenhuma alteracao e persistida,
+        # evitando delecoes parciais que corrompem o conjunto de fotos.
         if imagens_fs is not None:
-            imagens_fs.save()
+            with transaction.atomic():
+                imagens_fs.save()
 
         if cor_fotos_fs is not None:
             prefix_to_imagem = {}
@@ -501,6 +555,48 @@ class ProdutoAdmin(admin.ModelAdmin):
 
         for fs in outros:
             fs.save()
+
+        self._sincronizar_foto_capa(form.instance)
+
+    def _sincronizar_foto_capa(self, produto):
+        imagens = list(produto.imagens.select_related('cor').order_by('ordem', 'id'))
+        if not imagens:
+            return
+
+        # Se a cor principal atual nao tem nenhuma variacao ativa, descarta e
+        # escolhe outra — cobre o caso de inativar ou deletar a variacao principal.
+        if produto.cor_principal_id:
+            tem_variacao_ativa = (
+                produto.variacoes
+                .filter(ativa=True, cor_id=produto.cor_principal_id)
+                .exists()
+            )
+            if not tem_variacao_ativa:
+                produto.cor_principal_id = None
+
+        if not produto.cor_principal_id:
+            cor_sugerida = (
+                produto.variacoes
+                .filter(ativa=True, cor__isnull=False)
+                .order_by('cor__ordem', 'cor__nome', 'pk')
+                .values_list('cor_id', flat=True)
+                .first()
+            )
+            if not cor_sugerida:
+                cor_sugerida = next((img.cor_id for img in imagens if img.cor_id), None)
+            if cor_sugerida:
+                Produto.objects.filter(pk=produto.pk).update(cor_principal_id=cor_sugerida)
+                produto.cor_principal_id = cor_sugerida
+
+        alvo = None
+        if produto.cor_principal_id:
+            alvo = next((img for img in imagens if img.cor_id == produto.cor_principal_id), None)
+        if alvo is None:
+            alvo = imagens[0]
+
+        ProdutoImagem.objects.filter(produto=produto, principal=True).exclude(pk=alvo.pk).update(principal=False)
+        if not alvo.principal:
+            ProdutoImagem.objects.filter(pk=alvo.pk).update(principal=True)
 
     def delete_model(self, request, obj):
         super().delete_model(request, obj)
@@ -968,7 +1064,8 @@ class ProdutoAdmin(admin.ModelAdmin):
                     )
                 if disponibilidade == Variacao.DISPONIBILIDADE_IMEDIATA and prazo_confeccao is not None:
                     avisos.append(
-                        f'Linha {linha["linha"]}: prazo_confeccao_dias será ignorado para disponibilidade imediata.'
+                        f'Linha {linha["linha"]}: prazo_confeccao_dias preenchido para disponibilidade imediata '
+                        f'— será usado apenas se "comportamento_sem_estoque" for "sob_demanda".'
                     )
 
                 estoque, erro_estoque = self._parse_int(
@@ -1574,6 +1671,17 @@ class ProdutoAdmin(admin.ModelAdmin):
                 if ProdutoImagem.objects.filter(produto_id=produto_id).exists():
                     continue
 
+                cor_padrao = produto.cor_principal
+                if cor_padrao is None:
+                    primeira_variacao = (
+                        produto.variacoes
+                        .filter(ativa=True, cor__isnull=False)
+                        .select_related('cor')
+                        .order_by('cor__ordem', 'cor__nome', 'pk')
+                        .first()
+                    )
+                    cor_padrao = primeira_variacao.cor if primeira_variacao else None
+
                 with transaction.atomic():
                     criou_alguma = False
                     for ordem, zn in enumerate(sorted(arquivos_zip)):
@@ -1584,6 +1692,7 @@ class ProdutoAdmin(admin.ModelAdmin):
                         base = os.path.basename(zn.replace('\\', '/'))
                         img = ProdutoImagem(
                             produto=produto,
+                            cor=cor_padrao,
                             principal=(not criou_alguma),
                             ordem=ordem,
                         )
@@ -1611,14 +1720,9 @@ class ProdutoAdmin(admin.ModelAdmin):
         )
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:produtos_produto_change', args=[obj.pk])
         delete_url = reverse('admin:produtos_produto_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este produto?\')" >✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este produto?')
     acoes_linha.short_description = 'Ações'
 
     def thumb_principal(self, obj):
@@ -1700,13 +1804,32 @@ class ProdutoAdmin(admin.ModelAdmin):
         n = queryset.update(destaque=False)
         self.message_user(request, f'{n} produto(s) removido(s) do destaque.')
 
+    @admin.action(description='Ativar sync estoque Bling em TODAS as variações dos produtos selecionados')
+    def ativar_sync_bling_variacoes(self, request, queryset):
+        n = Variacao.objects.filter(produto__in=queryset).update(usa_sync_bling=True)
+        self.message_user(
+            request,
+            f'{n} variação(ões) marcada(s) com sync Bling ativo em '
+            f'{queryset.count()} produto(s). '
+            'O cron a cada 15 min vai começar a sincronizar o estoque automaticamente.',
+        )
+
+    @admin.action(description='Desativar sync estoque Bling em TODAS as variações dos produtos selecionados')
+    def desativar_sync_bling_variacoes(self, request, queryset):
+        n = Variacao.objects.filter(produto__in=queryset).update(usa_sync_bling=False)
+        self.message_user(
+            request,
+            f'{n} variação(ões) com sync Bling desativado em '
+            f'{queryset.count()} produto(s).',
+        )
+
 
 # ---------------------------------------------------------------------------
 # Cor e Tamanho padrão
 # ---------------------------------------------------------------------------
 
 @admin.register(CorPadrao)
-class CorPadraoAdmin(admin.ModelAdmin):
+class CorPadraoAdmin(DellaAdminMixin, admin.ModelAdmin):
     IMPORT_PREVIEW_SESSION_KEY = 'corpadrao_import_preview_v1'
     change_list_template = 'admin/produtos/corpadrao_changelist.html'
     list_display = ('cor_bolinha', 'nome', 'codigo_hex', 'ordem', 'acoes_linha')
@@ -2003,19 +2126,14 @@ class CorPadraoAdmin(admin.ModelAdmin):
     cor_bolinha.short_description = '●'
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:produtos_corpadrao_change', args=[obj.pk])
         delete_url = reverse('admin:produtos_corpadrao_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta cor?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir esta cor?')
     acoes_linha.short_description = 'Ações'
 
 
 @admin.register(TamanhoPadrao)
-class TamanhoPadraoAdmin(admin.ModelAdmin):
+class TamanhoPadraoAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('nome', 'ordem', 'acoes_linha')
     list_editable = ('ordem',)
     list_display_links = ('nome',)
@@ -2030,14 +2148,9 @@ class TamanhoPadraoAdmin(admin.ModelAdmin):
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:produtos_tamanhopadrao_change', args=[obj.pk])
         delete_url = reverse('admin:produtos_tamanhopadrao_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este tamanho?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este tamanho?')
     acoes_linha.short_description = 'Ações'
 
 
@@ -2046,7 +2159,7 @@ class TamanhoPadraoAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 @admin.register(TabelaMedidas)
-class TabelaMedidasAdmin(admin.ModelAdmin):
+class TabelaMedidasAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('nome', 'ativo', 'acoes_linha')
     list_display_links = ('nome',)
     list_editable = ('ativo',)
@@ -2082,14 +2195,9 @@ class TabelaMedidasAdmin(admin.ModelAdmin):
     )
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:produtos_tabelamedidas_change', args=[obj.pk])
         delete_url = reverse('admin:produtos_tabelamedidas_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta tabela?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir esta tabela?')
     acoes_linha.short_description = 'Ações'
 
     def _invalidar_cache_tabelas(self):
@@ -2114,19 +2222,68 @@ class TabelaMedidasAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 @admin.register(Avaliacao)
-class AvaliacaoAdmin(admin.ModelAdmin):
-    list_display = ('nome_publico', 'nota_estrelas', 'comentario_resumo', 'aprovada', 'criada_em', 'acoes_linha')
+class AvaliacaoAdmin(DellaAdminMixin, admin.ModelAdmin):
+    form = AvaliacaoAdminForm
+    list_display = (
+        'nome_publico', 'pedido_ref', 'nota_experiencia_estrelas',
+        'nota_produtos_estrelas', 'nota_estrelas', 'comentario_resumo',
+        'aprovada', 'criada_em', 'acoes_linha',
+    )
     list_display_links = ('nome_publico',)
-    list_filter = ('aprovada', 'nota')
+    list_filter = ('aprovada', 'nota', 'nota_experiencia', 'nota_produtos')
     list_editable = ('aprovada',)
-    search_fields = ('nome_publico', 'comentario')
+    search_fields = ('nome_publico', 'comentario', 'pedido__numero', 'cliente__email')
 
     class Media:
-        js = ('admin/js/admin_linhas.js',)
+        js = ('admin/js/admin_linhas.js', 'js/star-rating.js')
+        css = {'all': ('admin/css/della_admin.css',)}
     date_hierarchy = 'criada_em'
-    readonly_fields = ('criada_em',)
+    readonly_fields = ('cliente_resumo', 'nome_publico_resumo', 'criada_em')
     ordering = ('-criada_em',)
     actions = ['aprovar', 'reprovar']
+    fields = (
+        'pedido',
+        'cliente_resumo',
+        'nome_publico_resumo',
+        'nota_experiencia',
+        'nota_produtos',
+        'comentario',
+        'aprovada',
+        'criada_em',
+    )
+
+    def cliente_resumo(self, obj):
+        if obj.cliente_id:
+            return obj.cliente.email
+        if obj.pedido_id and obj.pedido.cliente_id:
+            return obj.pedido.cliente.email
+        return 'Será puxado automaticamente pelo pedido'
+    cliente_resumo.short_description = 'Cliente'
+
+    def nome_publico_resumo(self, obj):
+        if obj.nome_publico:
+            return obj.nome_publico
+        if obj.pedido_id:
+            nome = (obj.pedido.cliente.nome if obj.pedido.cliente_id and obj.pedido.cliente.nome else obj.pedido.nome_completo).split()[0]
+            return nome
+        return 'Será puxado automaticamente pelo pedido'
+    nome_publico_resumo.short_description = 'Nome público'
+
+    def pedido_ref(self, obj):
+        return obj.pedido.numero if obj.pedido_id else '—'
+    pedido_ref.short_description = 'Pedido'
+
+    def save_model(self, request, obj, form, change):
+        if obj.pedido_id:
+            obj.cliente = obj.pedido.cliente
+            nome_base = ''
+            if obj.pedido.cliente_id and getattr(obj.pedido.cliente, 'nome', ''):
+                nome_base = obj.pedido.cliente.nome
+            else:
+                nome_base = obj.pedido.nome_completo or ''
+            obj.nome_publico = (nome_base.split()[0] if nome_base else 'Cliente')
+            obj.produto = None
+        super().save_model(request, obj, form, change)
 
     def nota_estrelas(self, obj):
         return format_html(
@@ -2136,6 +2293,26 @@ class AvaliacaoAdmin(admin.ModelAdmin):
         )
     nota_estrelas.short_description = 'Nota'
 
+    def nota_experiencia_estrelas(self, obj):
+        if not obj.nota_experiencia:
+            return '—'
+        return format_html(
+            '<span style="color:#c9a96e;">{}{}</span>',
+            '★' * obj.nota_experiencia,
+            '☆' * (5 - obj.nota_experiencia),
+        )
+    nota_experiencia_estrelas.short_description = 'Compra'
+
+    def nota_produtos_estrelas(self, obj):
+        if not obj.nota_produtos:
+            return '—'
+        return format_html(
+            '<span style="color:#c9a96e;">{}{}</span>',
+            '★' * obj.nota_produtos,
+            '☆' * (5 - obj.nota_produtos),
+        )
+    nota_produtos_estrelas.short_description = 'Produtos'
+
     def comentario_resumo(self, obj):
         if obj.comentario:
             return obj.comentario[:80] + ('…' if len(obj.comentario) > 80 else '')
@@ -2143,14 +2320,9 @@ class AvaliacaoAdmin(admin.ModelAdmin):
     comentario_resumo.short_description = 'Comentário'
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:produtos_avaliacao_change', args=[obj.pk])
         delete_url = reverse('admin:produtos_avaliacao_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta avaliação?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir esta avaliação?')
     acoes_linha.short_description = 'Ações'
 
     @admin.action(description='Aprovar avaliações selecionadas')
@@ -2165,7 +2337,7 @@ class AvaliacaoAdmin(admin.ModelAdmin):
 
 
 @admin.register(NewsletterInscricao)
-class NewsletterInscricaoAdmin(admin.ModelAdmin):
+class NewsletterInscricaoAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display  = ('email', 'inscrito_em', 'ativo', 'acoes_linha')
     list_display_links = ('email',)
     list_editable = ('ativo',)
@@ -2181,13 +2353,28 @@ class NewsletterInscricaoAdmin(admin.ModelAdmin):
         actions = super().get_actions(request)
         return {k: v for k, v in actions.items() if k == 'delete_selected'}
 
+    def _resetar_flag_usuario(self, emails):
+        """Zera recebe_newsletter dos Users com e-mail correspondente às inscrições removidas."""
+        if not emails:
+            return
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        User.objects.filter(email__in=emails, recebe_newsletter=True).update(
+            recebe_newsletter=False
+        )
+
+    def delete_model(self, request, obj):
+        email = obj.email
+        super().delete_model(request, obj)
+        self._resetar_flag_usuario([email])
+
+    def delete_queryset(self, request, queryset):
+        emails = list(queryset.values_list('email', flat=True))
+        super().delete_queryset(request, queryset)
+        self._resetar_flag_usuario(emails)
+
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:produtos_newsletterinscricao_change', args=[obj.pk])
         delete_url = reverse('admin:produtos_newsletterinscricao_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta inscrição?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir esta inscrição?')
     acoes_linha.short_description = 'Ações'

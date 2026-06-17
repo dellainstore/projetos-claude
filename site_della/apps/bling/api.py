@@ -48,15 +48,17 @@ class BlingAPI:
             'Accept':        'application/json',
         }
 
-    def _request(self, method: str, endpoint: str, **kwargs) -> dict:
+    def _request(self, method: str, endpoint: str, *, retry: bool = True, **kwargs) -> dict:
         url = f'{BASE_URL}{endpoint}'
         last_resp = None
+        # retry=False: executa apenas 1 tentativa (contexto webhook — worker tem timeout de 30s)
+        max_tentativas = len(RETRY_DELAYS_SECONDS) if retry else 0
 
-        for tentativa in range(len(RETRY_DELAYS_SECONDS) + 1):
+        for tentativa in range(max_tentativas + 1):
             resp = requests.request(method, url, headers=self._headers(), timeout=20, **kwargs)
             last_resp = resp
 
-            if resp.status_code not in RETRY_STATUS_CODES or tentativa == len(RETRY_DELAYS_SECONDS):
+            if resp.status_code not in RETRY_STATUS_CODES or tentativa == max_tentativas:
                 break
 
             atraso = RETRY_DELAYS_SECONDS[tentativa]
@@ -86,9 +88,9 @@ class BlingAPI:
         """POST /pedidos/vendas — cria o pedido no Bling."""
         return self._request('POST', '/pedidos/vendas', json=payload)
 
-    def consultar_pedido_venda(self, bling_id: str) -> dict:
+    def consultar_pedido_venda(self, bling_id: str, retry: bool = True) -> dict:
         """GET /pedidos/vendas/{id} — consulta status do pedido."""
-        return self._request('GET', f'/pedidos/vendas/{bling_id}')
+        return self._request('GET', f'/pedidos/vendas/{bling_id}', retry=retry)
 
     def atualizar_situacao_pedido(self, bling_id: str, situacao_id: int) -> dict:
         """PATCH /pedidos/vendas/{id}/situacoes/{idSituacao} — altera situação."""
@@ -125,6 +127,39 @@ class BlingAPI:
         """GET /produtos/{id} — consulta produto do Bling."""
         return self._request('GET', f'/produtos/{bling_produto_id}')
 
+    def consultar_estoque_produto(self, bling_produto_id: str, retry: bool = True) -> dict:
+        """
+        GET /estoques/saldos?idsProdutos[]={id} — retorna saldos de estoque por depósito.
+
+        Estrutura da resposta:
+            data[0].depositos[].id             → ID do depósito
+            data[0].depositos[].saldoFisico    → estoque físico no depósito
+            data[0].depositos[].saldoVirtual   → disponível para venda (físico − reservas Em andamento)
+
+        Filtramos pelo BLING_DEPOSITO_ID (Show Room - D'ella) em services.py.
+        """
+        return self._request('GET', '/estoques/saldos', params={'idsProdutos[]': bling_produto_id}, retry=retry)
+
+    def listar_depositos(self) -> list:
+        """GET /depositos — lista todos os depósitos ativos. Requer escopo 'depositos'."""
+        resp = self._request('GET', '/depositos', params={'situacao': 'A', 'limite': 100})
+        return resp.get('data') or []
+
+    def buscar_produto_por_sku(self, sku: str) -> 'dict | None':
+        """
+        GET /produtos?codigo={sku} — busca produto no Bling pelo código/SKU.
+        Retorna o primeiro item encontrado ou None.
+        """
+        try:
+            data = self._request('GET', '/produtos', params={'codigo': sku, 'limite': 5})
+            items = data.get('data') or []
+            for item in items:
+                if item.get('codigo', '').strip() == sku.strip():
+                    return item
+        except BlingAPIError:
+            pass
+        return None
+
     # ── Logísticas ───────────────────────────────────────────────────────────
 
     def listar_logisticas(self, pagina: int = 1, limite: int = 100) -> dict:
@@ -136,6 +171,14 @@ class BlingAPI:
         return self._request('GET', f'/logisticas/{logistica_id}')
 
     # ── Contatos ──────────────────────────────────────────────────────────────
+
+    def criar_contato(self, payload: dict) -> dict:
+        """POST /contatos — cria um novo contato no Bling."""
+        return self._request('POST', '/contatos', json=payload)
+
+    def consultar_contato(self, contato_id: int) -> dict:
+        """GET /contatos/{id} — consulta dados completos de um contato."""
+        return self._request('GET', f'/contatos/{contato_id}')
 
     def atualizar_contato(self, contato_id: int, payload: dict) -> dict:
         """PUT /contatos/{id} — atualiza dados de um contato existente."""
@@ -166,10 +209,9 @@ class BlingAPI:
 
     def buscar_contato_por_telefone(self, telefone: str) -> 'int | None':
         """
-        Busca contato por telefone. O Bling v3 não expõe filtro direto por
-        telefone, então usamos criterio=1 (nome) + pesquisa — inviável — ou
-        confiamos apenas no CPF. Como fallback, listamos pela pesquisa geral
-        e validamos telefone no retorno. Se não encontrar match exato → None.
+        Busca contato por telefone. O Bling v3 nao expoe filtro direto por
+        telefone; usa pesquisa geral e valida os campos telefone, celular e fax
+        no retorno. Se nao encontrar match exato retorna None.
         """
         tel_clean = ''.join(c for c in (telefone or '') if c.isdigit())
         if not tel_clean or len(tel_clean) < 8:
@@ -181,7 +223,8 @@ class BlingAPI:
             for item in data.get('data', []) or []:
                 tel = ''.join(c for c in (item.get('telefone') or '') if c.isdigit())
                 cel = ''.join(c for c in (item.get('celular') or '') if c.isdigit())
-                if tel_clean in (tel, cel):
+                fax = ''.join(c for c in (item.get('fax') or '') if c.isdigit())
+                if tel_clean in (tel, cel, fax):
                     return item.get('id')
         except BlingAPIError:
             pass

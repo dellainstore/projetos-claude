@@ -4,11 +4,12 @@ from django.urls import path, reverse
 from django.shortcuts import redirect
 from django.contrib import messages
 from django.db import transaction
-from .models import BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, ConfiguracaoLoja, InstagramPost
+from apps.core_utils.admin_mixin import DellaAdminMixin
+from .models import BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, ConfiguracaoLoja, InstagramPost, TarjaFrase, LinkBio, ContatoFormulario
 
 
 @admin.register(BannerPrincipal)
-class BannerPrincipalAdmin(admin.ModelAdmin):
+class BannerPrincipalAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('ordem', 'tipo_badge', 'preview_midia', 'url_botao', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('ordem',)
@@ -55,16 +56,19 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
             'fields': ('url_botao',),
             'description': 'Ao clicar em qualquer parte do banner, o cliente é redirecionado para este link.',
         }),
+        ('Enquadramento da imagem', {
+            'fields': ('posicao_imagem',),
+            'description': (
+                'Define qual parte da foto fica visível quando o navegador corta a imagem para preencher o banner. '
+                'Use "Esquerda" se o elemento principal (texto, rosto) estiver no início da foto e estiver sendo cortado.'
+            ),
+        }),
     )
 
     def acoes_linha(self, obj):
         edit_url   = reverse('admin:conteudo_bannerprincipal_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_bannerprincipal_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este banner?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este banner?')
     acoes_linha.short_description = 'Ações'
 
     def tipo_badge(self, obj):
@@ -98,7 +102,7 @@ class BannerPrincipalAdmin(admin.ModelAdmin):
 
 
 @admin.register(MiniBanner)
-class MiniBannerAdmin(admin.ModelAdmin):
+class MiniBannerAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('posicao_label', 'posicao', 'preview_foto', 'url', 'ativo', 'acoes_linha')
     list_editable = ('posicao', 'ativo')
     list_display_links = ('posicao_label',)
@@ -197,11 +201,7 @@ class MiniBannerAdmin(admin.ModelAdmin):
     def acoes_linha(self, obj):
         edit_url   = reverse('admin:conteudo_minibanner_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_minibanner_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este mini banner?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este mini banner?')
     acoes_linha.short_description = 'Ações'
 
     def posicao_label(self, obj):
@@ -225,7 +225,7 @@ class MiniBannerAdmin(admin.ModelAdmin):
 
 
 @admin.register(PaginaEstatica)
-class PaginaEstaticaAdmin(admin.ModelAdmin):
+class PaginaEstaticaAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('get_slug_display', 'titulo', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('get_slug_display',)
@@ -250,11 +250,7 @@ class PaginaEstaticaAdmin(admin.ModelAdmin):
     def acoes_linha(self, obj):
         edit_url   = reverse('admin:conteudo_paginaestatica_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_paginaestatica_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir esta página?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir esta página?')
     acoes_linha.short_description = 'Ações'
 
     fieldsets = (
@@ -327,7 +323,7 @@ class ConfiguracaoLojaAdmin(admin.ModelAdmin):
 
 
 @admin.register(LookDaSemana)
-class LookDaSemanaAdmin(admin.ModelAdmin):
+class LookDaSemanaAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = ('titulo', 'preview_foto', 'lista_produtos', 'ativo', 'criado_em', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('titulo',)
@@ -406,11 +402,7 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
     def acoes_linha(self, obj):
         edit_url   = reverse('admin:conteudo_lookdasemana_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_lookdasemana_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este look?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este look?')
     acoes_linha.short_description = 'Ações'
 
     def preview_foto(self, obj):
@@ -431,7 +423,7 @@ class LookDaSemanaAdmin(admin.ModelAdmin):
 
 
 @admin.register(InstagramPost)
-class InstagramPostAdmin(admin.ModelAdmin):
+class InstagramPostAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display  = ('preview', 'instagram_id', 'media_type', 'timestamp', 'ativo', 'ordem', 'acoes_linha')
     list_editable = ('ativo', 'ordem')
     list_display_links = ('instagram_id',)
@@ -570,9 +562,132 @@ class InstagramPostAdmin(admin.ModelAdmin):
     def acoes_linha(self, obj):
         edit_url   = reverse('admin:conteudo_instagrampost_change', args=[obj.pk])
         delete_url = reverse('admin:conteudo_instagrampost_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir?\')">✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir?')
     acoes_linha.short_description = 'Ações'
+
+
+@admin.register(TarjaFrase)
+class TarjaFraseAdmin(DellaAdminMixin, admin.ModelAdmin):
+    list_display  = ('ordem', 'texto', 'ativa', 'acoes_linha')
+    list_editable = ('ordem', 'ativa')
+    list_display_links = ('texto',)
+    ordering = ('ordem', 'id')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_tarja
+        invalidar_tarja()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import invalidar_tarja
+        invalidar_tarja()
+
+    def acoes_linha(self, obj):
+        edit_url   = reverse('admin:conteudo_tarjafrase_change', args=[obj.pk])
+        delete_url = reverse('admin:conteudo_tarjafrase_delete', args=[obj.pk])
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Remover frase da tarja?')
+    acoes_linha.short_description = 'Ações'
+
+
+@admin.register(LinkBio)
+class LinkBioAdmin(DellaAdminMixin, admin.ModelAdmin):
+    list_display  = ('ordem', 'titulo', 'icone', 'link_clicavel', 'ativo', 'acoes_linha')
+    list_editable = ('ordem', 'ativo')
+    list_display_links = ('titulo',)
+    ordering = ('ordem', 'id')
+    search_fields = ('titulo', 'subtitulo', 'url')
+    fields = ('titulo', 'subtitulo', 'url', 'icone', 'nova_aba', 'ordem', 'ativo')
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_links_bio
+        invalidar_links_bio()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import invalidar_links_bio
+        invalidar_links_bio()
+
+    def link_clicavel(self, obj):
+        return format_html('<a href="{}" target="_blank" rel="noopener">{}</a>', obj.url, obj.url)
+    link_clicavel.short_description = 'Link'
+
+    def acoes_linha(self, obj):
+        edit_url   = reverse('admin:conteudo_linkbio_change', args=[obj.pk])
+        delete_url = reverse('admin:conteudo_linkbio_delete', args=[obj.pk])
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Remover este link da bio?')
+    acoes_linha.short_description = 'Ações'
+
+
+@admin.register(ContatoFormulario)
+class ContatoFormularioAdmin(admin.ModelAdmin):
+    list_display  = ('nome', 'email', 'telefone_exibido', 'mensagem_preview', 'recebido_em', 'status_badge')
+    list_filter   = ('respondido', 'recebido_em')
+    search_fields = ('nome', 'email', 'mensagem')
+    readonly_fields = ('nome', 'email', 'telefone', 'mensagem', 'recebido_em', 'respondido_em')
+    list_per_page = 30
+    date_hierarchy = 'recebido_em'
+    ordering      = ('-recebido_em',)
+    actions       = ['action_marcar_respondido', 'action_marcar_pendente']
+
+    fieldsets = (
+        ('Dados do contato', {
+            'fields': ('nome', 'email', 'telefone', 'mensagem', 'recebido_em'),
+        }),
+        ('Atendimento', {
+            'fields': ('respondido', 'respondido_em', 'observacao'),
+            'description': (
+                'Marque "Respondido" apos entrar em contato com o cliente. '
+                'A data de resposta e preenchida automaticamente.'
+            ),
+        }),
+    )
+
+    def save_model(self, request, obj, form, change):
+        from django.utils import timezone as tz
+        if change and obj.respondido and not obj.respondido_em:
+            obj.respondido_em = tz.now()
+        elif not obj.respondido:
+            obj.respondido_em = None
+        super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description='Marcar selecionados como Respondido')
+    def action_marcar_respondido(self, request, queryset):
+        from django.utils import timezone as tz
+        agora = tz.now()
+        atualizados = queryset.filter(respondido=False).update(respondido=True, respondido_em=agora)
+        self.message_user(request, f'{atualizados} formulario(s) marcado(s) como respondido.')
+
+    @admin.action(description='Marcar selecionados como Pendente')
+    def action_marcar_pendente(self, request, queryset):
+        atualizados = queryset.filter(respondido=True).update(respondido=False, respondido_em=None)
+        self.message_user(request, f'{atualizados} formulario(s) marcado(s) como pendente.')
+
+    def status_badge(self, obj):
+        if obj.respondido:
+            return format_html(
+                '<span style="background:#27ae60;color:#fff;padding:2px 10px;'
+                'border-radius:3px;font-size:11px;font-weight:600;">Respondido</span>'
+            )
+        return format_html(
+            '<span style="background:#e74c3c;color:#fff;padding:2px 10px;'
+            'border-radius:3px;font-size:11px;font-weight:600;">Pendente</span>'
+        )
+    status_badge.short_description = 'Status'
+
+    def mensagem_preview(self, obj):
+        if len(obj.mensagem) > 80:
+            return obj.mensagem[:80] + '...'
+        return obj.mensagem
+    mensagem_preview.short_description = 'Mensagem'
+
+    def telefone_exibido(self, obj):
+        return obj.telefone or '—'
+    telefone_exibido.short_description = 'Telefone'

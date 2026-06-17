@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block titulo %}Avaliar Pedido {{ pedido.numero }} | D'ELLA Instore{% endblock %}
+{% block navbar_class %}solida{% endblock %}
+
+{% block conteudo %}
+<main class="conta-area">
+  <div class="avaliacao-form-wrap">
+    <section class="avaliacao-form-card">
+      <div class="avaliacao-intro">
+        <span class="avaliacao-badge"><i class="fas fa-star"></i> Avaliação da compra</span>
+        <div>
+          <h1 class="conta-secao-titulo" style="margin-bottom:.35rem;">Pedido {{ pedido.numero }}</h1>
+          <p style="font-size:.95rem;color:#666;line-height:1.7;">
+            Sua avaliação será vinculada a esta compra entregue. Se o comentário for divulgado no site,
+            aparecerá apenas como <strong>{{ nome_publico }}</strong>.
+          </p>
+        </div>
+        <div class="avaliacao-pedido-itens">
+          {% for item in pedido.itens.all %}
+            <span class="avaliacao-item-tag">{{ item.nome_produto }}{% if item.quantidade > 1 %} • {{ item.quantidade }}x{% endif %}</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if avaliacao_existente %}
+        <div class="conta-alerta conta-alerta--success">
+          Recebemos sua avaliação. Muito obrigada por compartilhar sua experiência com a D'ELLA.
+        </div>
+
+        <div class="avaliacao-resumo-notas">
+          <div class="avaliacao-resumo-nota">
+            <strong>Experiência da compra</strong>
+            <span class="avaliacao-resumo-estrelas" aria-label="{{ avaliacao_existente.nota_experiencia }} estrelas">
+              {% for i in "12345" %}
+                {% if forloop.counter <= avaliacao_existente.nota_experiencia %}★{% else %}☆{% endif %}
+              {% endfor %}
+            </span>
+          </div>
+          <div class="avaliacao-resumo-nota">
+            <strong>Produtos comprados</strong>
+            <span class="avaliacao-resumo-estrelas" aria-label="{{ avaliacao_existente.nota_produtos }} estrelas">
+              {% for i in "12345" %}
+                {% if forloop.counter <= avaliacao_existente.nota_produtos %}★{% else %}☆{% endif %}
+              {% endfor %}
+            </span>
+          </div>
+        </div>
+
+        {% if avaliacao_existente.comentario %}
+          <div class="conta-campo">
+            <label class="conta-label">Comentário enviado</label>
+            <div style="padding:1rem 1.05rem;border:1px solid #e8e1d5;border-radius:10px;background:#faf8f4;color:#555;line-height:1.75;">
+              {{ avaliacao_existente.comentario }}
+            </div>
+          </div>
+        {% endif %}
+      {% else %}
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="avaliacao-rating-bloco{% if form.nota_experiencia.errors %} conta-campo--erro{% endif %}">
+            <span class="avaliacao-rating-titulo">Experiência da compra</span>
+            {{ form.nota_experiencia }}
+            <span class="avaliacao-rating-ajuda">Avalie o processo da compra, entrega e atendimento.</span>
+            {% for error in form.nota_experiencia.errors %}<span class="conta-erro">{{ error }}</span>{% endfor %}
+          </div>
+
+          <div class="avaliacao-rating-bloco{% if form.nota_produtos.errors %} conta-campo--erro{% endif %}">
+            <span class="avaliacao-rating-titulo">Produtos comprados</span>
+            {{ form.nota_produtos }}
+            <span class="avaliacao-rating-ajuda">Avalie modelagem, qualidade e acabamento das peças.</span>
+            {% for error in form.nota_produtos.errors %}<span class="conta-erro">{{ error }}</span>{% endfor %}
+          </div>
+
+          <div class="conta-campo{% if form.comentario.errors %} conta-campo--erro{% endif %}">
+            <label class="conta-label" for="{{ form.comentario.id_for_label }}">Comentário opcional</label>
+            {{ form.comentario }}
+            <div class="avaliacao-charcount">
+              <span id="avaliacao-charcount-atual">0</span>/500 caracteres
+            </div>
+            {% for error in form.comentario.errors %}<span class="conta-erro">{{ error }}</span>{% endfor %}
+          </div>
+
+          <div class="avaliacao-form-footer">
+            <button type="submit" class="btn-conta-primario">
+              <i class="fas fa-paper-plane"></i> Enviar avaliação
+            </button>
+            <a href="{% url 'usuarios:detalhe_pedido' pedido.numero %}" class="btn-conta-secundario">
+              <i class="fas fa-arrow-left"></i> Voltar ao pedido
+            </a>
+          </div>
+        </form>
+      {% endif %}
+    </section>
+  </div>
+</main>
+{% endblock %}
+
+{% block js_extra %}
+<script src="{% static 'js/star-rating.js' %}"></script>
+<script>
+  (function () {
+    const textarea = document.getElementById('{{ form.comentario.id_for_label|default:"id_comentario" }}');
+    const counter = document.getElementById('avaliacao-charcount-atual');
+    if (!textarea || !counter) return;
+    const sync = () => { counter.textContent = textarea.value.length; };
+    textarea.addEventListener('input', sync);
+    sync();
+  })();
+</script>
+{% endblock %}

@@ -3,8 +3,10 @@ import logging
 from django.contrib import admin, messages
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
+from django.urls import reverse
+from apps.core_utils.admin_mixin import DellaAdminMixin
 
-from .models import Pedido, ItemPedido, HistoricoPedido, Cupom, CodigoVendedor, CarrinhoAbandonado
+from .models import Pedido, ItemPedido, HistoricoPedido, Cupom, CupomEmitido, CodigoVendedor, CarrinhoAbandonado
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ STATUS_CORES = {
     'aguardando_pagamento': '#f39c12',
     'pagamento_confirmado': '#27ae60',
     'em_separacao':         '#2980b9',
+    'pronto_retirada':      '#c9a96e',
     'enviado':              '#8e44ad',
     'entregue':             '#27ae60',
     'cancelado':            '#e74c3c',
@@ -56,14 +59,14 @@ STATUS_CORES = {
 
 
 @admin.register(Pedido)
-class PedidoAdmin(admin.ModelAdmin):
+class PedidoAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = (
-        'numero', 'nome_completo', 'email', 'badge_status', 'forma_pagamento',
-        'total_formatado', 'badge_bling', 'codigo_rastreio', 'criado_em',
-        'acoes_linha',
+        'numero', 'nome_completo', 'email', 'badge_status', 'badge_retirada',
+        'forma_pagamento', 'total_formatado', 'badge_bling', 'codigo_rastreio',
+        'criado_em', 'acoes_linha',
     )
     list_display_links = ('numero', 'nome_completo')
-    list_filter = ('status', 'forma_pagamento', 'gateway', 'estado')
+    list_filter = ('status', 'retirada_loja', 'forma_pagamento', 'gateway', 'estado')
     search_fields = ('numero', 'nome_completo', 'email', 'cpf', 'codigo_rastreio', 'bling_pedido_id')
     date_hierarchy = 'criado_em'
     ordering = ('-criado_em',)
@@ -133,7 +136,7 @@ class PedidoAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
         ('Entrega', {
-            'fields': ('codigo_rastreio', 'transportadora'),
+            'fields': ('retirada_loja', 'codigo_rastreio', 'transportadora'),
         }),
         ('Bling', {
             'fields': ('bling_pedido_id',),
@@ -148,6 +151,7 @@ class PedidoAdmin(admin.ModelAdmin):
     actions = [
         'marcar_pagamento_confirmado',
         'marcar_em_separacao',
+        'marcar_pronto_retirada',
         'marcar_enviado',
         'marcar_entregue',
         'marcar_cancelado',
@@ -157,14 +161,9 @@ class PedidoAdmin(admin.ModelAdmin):
     ]
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:pedidos_pedido_change', args=[obj.pk])
         delete_url = reverse('admin:pedidos_pedido_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este pedido?\')" >✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este pedido?')
     acoes_linha.short_description = 'Ações'
 
     def badge_status(self, obj):
@@ -181,6 +180,15 @@ class PedidoAdmin(admin.ModelAdmin):
         v = f'{obj.total:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
         return format_html('R$ {}', v)
     total_formatado.short_description = 'Total'
+
+    def badge_retirada(self, obj):
+        if obj.retirada_loja:
+            return format_html(
+                '<span style="background:#c9a96e;color:#fff;padding:2px 6px;'
+                'border-radius:3px;font-size:11px;" title="Retirada na loja">Loja</span>'
+            )
+        return format_html('<span style="color:#ddd;font-size:11px;">-</span>')
+    badge_retirada.short_description = 'Retirada'
 
     def badge_bling(self, obj):
         if obj.bling_nfe_id:
@@ -221,11 +229,22 @@ class PedidoAdmin(admin.ModelAdmin):
                 if novo_status == 'pagamento_confirmado':
                     self._tentar_enviar_email_pagamento_confirmado(request, pedido)
 
+                if novo_status == 'pronto_retirada':
+                    self._tentar_enviar_email_pronto_retirada(request, pedido)
+
                 if enviar_email_envio and novo_status == 'enviado':
                     self._tentar_enviar_email_envio(request, pedido)
 
+                if novo_status == 'entregue':
+                    self._tentar_enviar_email_entregue(request, pedido)
+
                 if novo_status == 'cancelado':
                     self._tentar_enviar_email_cancelamento(request, pedido, estornado=False)
+                    try:
+                        from apps.bling.services import restaurar_estoque_pedido
+                        restaurar_estoque_pedido(pedido)
+                    except Exception as exc_e:
+                        logger.error('Erro ao restaurar estoque do pedido %s: %s', pedido.numero, exc_e)
 
         self.message_user(request, f'{atualizados} pedido(s) marcado(s) como "{label}".')
 
@@ -242,6 +261,34 @@ class PedidoAdmin(admin.ModelAdmin):
                 )
         except Exception as exc:
             logger.error('Erro ao enviar e-mail de pagamento confirmado do pedido %s: %s', pedido.numero, exc)
+
+    def _tentar_enviar_email_pronto_retirada(self, request, pedido):
+        """Envia e-mail informando que o pedido esta pronto para retirada na loja."""
+        try:
+            from apps.pedidos.emails import enviar_pronto_retirada
+            ok = enviar_pronto_retirada(pedido)
+            if not ok:
+                self.message_user(
+                    request,
+                    f'Não foi possível enviar e-mail de pronto para retirada para {pedido.email}.',
+                    level='WARNING',
+                )
+        except Exception as exc:
+            logger.error('Erro ao enviar e-mail de pronto para retirada do pedido %s: %s', pedido.numero, exc)
+
+    def _tentar_enviar_email_entregue(self, request, pedido):
+        """Envia e-mail de entregue + avaliacao para qualquer pedido marcado como entregue pelo admin."""
+        try:
+            from apps.pedidos.emails import enviar_confirmacao_entrega
+            ok = enviar_confirmacao_entrega(pedido)
+            if not ok:
+                self.message_user(
+                    request,
+                    f'Não foi possível enviar e-mail de entregue para {pedido.email}.',
+                    level='WARNING',
+                )
+        except Exception as exc:
+            logger.error('Erro ao enviar e-mail de entregue do pedido %s: %s', pedido.numero, exc)
 
     def _tentar_enviar_email_cancelamento(self, request, pedido, estornado=False):
         """Envia e-mail informando o cancelamento do pedido."""
@@ -305,9 +352,13 @@ class PedidoAdmin(admin.ModelAdmin):
     def marcar_em_separacao(self, request, queryset):
         self._mudar_status(request, queryset, 'em_separacao', 'Em Separação')
 
+    @admin.action(description='→ Pronto para Retirada (+ e-mail ao cliente)')
+    def marcar_pronto_retirada(self, request, queryset):
+        self._mudar_status(request, queryset, 'pronto_retirada', 'Pronto para Retirada')
+
     @admin.action(description='→ Enviado (+ e-mail de rastreio)')
     def marcar_enviado(self, request, queryset):
-        self._mudar_status(request, queryset, 'enviado', 'Enviado', enviar_email_envio=True)
+        self._mudar_status(request, queryset, 'enviado', 'Enviado')
 
     @admin.action(description='→ Entregue')
     def marcar_entregue(self, request, queryset):
@@ -443,19 +494,26 @@ class PedidoAdmin(admin.ModelAdmin):
                 level='ERROR',
             )
 
+    def save_model(self, request, obj, form, change):
+        if change and 'status' in form.changed_data and obj.status == 'entregue':
+            super().save_model(request, obj, form, change)
+            self._tentar_enviar_email_entregue(request, obj)
+        else:
+            super().save_model(request, obj, form, change)
+
 
 # ---------------------------------------------------------------------------
 # Cupom
 # ---------------------------------------------------------------------------
 
 @admin.register(Cupom)
-class CupomAdmin(admin.ModelAdmin):
-    list_display  = ('codigo', 'tipo', 'valor_formatado', 'vezes_usado', 'quantidade_total',
+class CupomAdmin(DellaAdminMixin, admin.ModelAdmin):
+    list_display  = ('codigo', 'origem', 'tipo', 'valor_formatado', 'vezes_usado', 'quantidade_total',
                      'um_por_cliente', 'valido_ate', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('codigo',)
     search_fields = ('codigo',)
-    list_filter   = ('tipo', 'ativo', 'um_por_cliente')
+    list_filter   = ('origem', 'tipo', 'ativo', 'um_por_cliente')
     ordering      = ('-id',)
 
     class Media:
@@ -464,12 +522,24 @@ class CupomAdmin(admin.ModelAdmin):
     def get_actions(self, request):
         return {}
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from apps.core_utils.cache_utils import invalidar_newsletter_oferta
+        invalidar_newsletter_oferta()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        from apps.core_utils.cache_utils import invalidar_newsletter_oferta
+        invalidar_newsletter_oferta()
+
     fieldsets = (
         ('Código e desconto', {
-            'fields': ('codigo', 'tipo', 'valor', 'ativo'),
+            'fields': ('codigo', 'origem', 'tipo', 'valor', 'ativo'),
             'description': (
                 'Tipo <b>Percentual</b>: informe o % de desconto (ex: 10 = 10%). '
-                'Tipo <b>Valor fixo</b>: informe o valor em reais (ex: 30.00).'
+                'Tipo <b>Valor fixo</b>: informe o valor em reais (ex: 30.00). '
+                '<b>Origem</b>: Manual = código que a cliente digita direto. '
+                'Newsletter / Primeira compra / Aniversário = template usado pelo sistema para gerar cupons únicos por cliente.'
             ),
         }),
         ('Limites de uso', {
@@ -480,8 +550,12 @@ class CupomAdmin(admin.ModelAdmin):
             ),
         }),
         ('Validade', {
-            'fields': ('valido_de', 'valido_ate'),
-            'description': 'Deixe em branco para não limitar por data.',
+            'fields': ('valido_de', 'valido_ate', 'dias_validade_pos_emissao'),
+            'description': (
+                'Datas fixas: deixe em branco para não limitar. '
+                '<b>Dias de validade após emissão</b>: para templates de cupons individuais '
+                '(newsletter, etc.) — quando preenchido, ignora as datas fixas e expira N dias após emissão.'
+            ),
         }),
     )
 
@@ -493,14 +567,63 @@ class CupomAdmin(admin.ModelAdmin):
     valor_formatado.short_description = 'Desconto'
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:pedidos_cupom_change', args=[obj.pk])
         delete_url = reverse('admin:pedidos_cupom_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este cupom?\')" >✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este cupom?')
+    acoes_linha.short_description = 'Ações'
+
+
+# ---------------------------------------------------------------------------
+# CupomEmitido (instâncias geradas automaticamente — newsletter, etc.)
+# ---------------------------------------------------------------------------
+
+@admin.register(CupomEmitido)
+class CupomEmitidoAdmin(DellaAdminMixin, admin.ModelAdmin):
+    list_display  = ('codigo', 'email', 'origem_template', 'status_badge',
+                     'emitido_em', 'expira_em', 'usado_em', 'acoes_linha')
+    list_display_links = ('codigo',)
+    search_fields = ('codigo', 'email', 'cliente__email', 'cliente__nome')
+    list_filter   = ('cupom_template__origem', 'cupom_template')
+    ordering      = ('-emitido_em',)
+    autocomplete_fields = ('cupom_template', 'cliente', 'pedido')
+    readonly_fields = ('codigo', 'emitido_em', 'expira_em', 'usado_em', 'pedido')
+
+    class Media:
+        js = ('admin/js/admin_linhas.js',)
+
+    fieldsets = (
+        ('Identificação', {
+            'fields': ('codigo', 'cupom_template', 'email', 'cliente'),
+        }),
+        ('Datas', {
+            'fields': ('emitido_em', 'expira_em', 'usado_em', 'pedido'),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        # Não permite criar manualmente — só pelo fluxo automático (newsletter etc.)
+        return False
+
+    def origem_template(self, obj):
+        return obj.cupom_template.get_origem_display()
+    origem_template.short_description = 'Origem'
+    origem_template.admin_order_field = 'cupom_template__origem'
+
+    def status_badge(self, obj):
+        status = obj.status
+        cores = {
+            'valido':   ('#27ae60', 'Válido'),
+            'usado':    ('#2980b9', 'Usado'),
+            'expirado': ('#c0392b', 'Expirado'),
+        }
+        cor, label = cores.get(status, ('#888', status))
+        return format_html('<span style="color:{};font-weight:600;">{}</span>', cor, label)
+    status_badge.short_description = 'Status'
+
+    def acoes_linha(self, obj):
+        edit_url   = reverse('admin:pedidos_cupomemitido_change', args=[obj.pk])
+        delete_url = reverse('admin:pedidos_cupomemitido_delete', args=[obj.pk])
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este cupom emitido?')
     acoes_linha.short_description = 'Ações'
 
 
@@ -509,7 +632,7 @@ class CupomAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 @admin.register(CodigoVendedor)
-class CodigoVendedorAdmin(admin.ModelAdmin):
+class CodigoVendedorAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display  = ('codigo', 'nome', 'total_pedidos', 'ativo', 'acoes_linha')
     list_editable = ('ativo',)
     list_display_links = ('codigo',)
@@ -535,14 +658,9 @@ class CodigoVendedorAdmin(admin.ModelAdmin):
     total_pedidos.short_description = 'Pedidos vinculados'
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:pedidos_codigovendedor_change', args=[obj.pk])
         delete_url = reverse('admin:pedidos_codigovendedor_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Editar</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este código de vendedor?\')" >✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este código de vendedor?')
     acoes_linha.short_description = 'Ações'
 
 
@@ -551,7 +669,7 @@ class CodigoVendedorAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 @admin.register(CarrinhoAbandonado)
-class CarrinhoAbandonadoAdmin(admin.ModelAdmin):
+class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = (
         'email', 'nome', 'quantidade_itens_display', 'total_formatado',
         'badge_status', 'atualizado_em', 'acoes_linha',
@@ -574,7 +692,7 @@ class CarrinhoAbandonadoAdmin(admin.ModelAdmin):
         actions = super().get_actions(request)
         actions_filtradas = {k: v for k, v in actions.items() if k == 'delete_selected'}
         actions_filtradas['enviar_email_agora'] = (
-            self._action_enviar_email,
+            CarrinhoAbandonadoAdmin._action_enviar_email,
             'enviar_email_agora',
             'Enviar e-mail de lembrete agora',
         )
@@ -651,12 +769,7 @@ class CarrinhoAbandonadoAdmin(admin.ModelAdmin):
     itens_resumo.short_description = 'Itens do carrinho'
 
     def acoes_linha(self, obj):
-        from django.urls import reverse
         edit_url   = reverse('admin:pedidos_carrinhoabandonado_change', args=[obj.pk])
         delete_url = reverse('admin:pedidos_carrinhoabandonado_delete', args=[obj.pk])
-        return format_html(
-            '<a href="{}" class="della-btn-edit">✎ Ver</a>'
-            '<a href="{}" class="della-btn-delete" onclick="return confirm(\'Excluir este registro?\')" >✕ Excluir</a>',
-            edit_url, delete_url,
-        )
+        return self._render_acoes(obj, edit_url, delete_url, delete_confirm='Excluir este registro?', edit_label='✎ Ver')
     acoes_linha.short_description = 'Ações'

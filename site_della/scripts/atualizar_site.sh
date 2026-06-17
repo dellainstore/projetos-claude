@@ -23,19 +23,29 @@ echo "  Della Instore — Atualização do site     "
 echo "══════════════════════════════════════════"
 echo ""
 
-echo -e "${YELLOW}[1/4]${NC} Instalando dependências..."
+echo -e "${YELLOW}[1/5]${NC} Instalando dependências..."
 pip install -r requirements.txt --quiet
 echo -e "${GREEN}[OK]${NC}"
 
-echo -e "${YELLOW}[2/4]${NC} Aplicando migrations..."
+echo -e "${YELLOW}[2/5]${NC} Buildando CSS (Tailwind)..."
+# Obrigatorio antes do collectstatic: o CSS final (static/css/tailwind.css) e
+# gerado aqui. Sem este passo, mudancas de classe Tailwind nao chegam ao site.
+npm run build:css
+echo -e "${GREEN}[OK]${NC}"
+
+echo -e "${YELLOW}[3/5]${NC} Aplicando migrations..."
 python manage.py migrate --settings=$SETTINGS
 echo -e "${GREEN}[OK]${NC}"
 
-echo -e "${YELLOW}[3/4]${NC} Coletando arquivos estáticos..."
+echo -e "${YELLOW}[4/5]${NC} Coletando arquivos estáticos..."
 python manage.py collectstatic --noinput --settings=$SETTINGS
 echo -e "${GREEN}[OK]${NC}"
 
-echo -e "${YELLOW}[4/4]${NC} Reiniciando Gunicorn..."
+echo -e "${YELLOW}[5/5]${NC} Reiniciando Gunicorn..."
+# CRITICO: o WhiteNoise (ManifestStaticFilesStorage) carrega o staticfiles.json
+# na MEMORIA do worker no boot. Sem restart apos collectstatic, o site continua
+# servindo o hash antigo do CSS/JS (ex: evento add_to_cart que so existe no JS
+# nao chega ao navegador). collectstatic e restart andam SEMPRE juntos.
 sudo systemctl restart gunicorn_della_site
 sleep 2
 sudo systemctl is-active gunicorn_della_site && echo -e "${GREEN}[OK]${NC} Gunicorn ativo" || echo "ERRO no Gunicorn"

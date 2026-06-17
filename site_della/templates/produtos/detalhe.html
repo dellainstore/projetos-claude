@@ -165,6 +165,7 @@
           <i class="fas fa-chevron-right"></i>
         </button>
         {% endif %}
+        <div class="galeria-dots" id="galeria-dots" aria-hidden="true"></div>
       </div>
 
       <div class="galeria-thumbs" id="galeria-thumbs" role="list" aria-label="Galeria de fotos"{% if not imagens_iniciais %} style="display:none;"{% endif %}>
@@ -278,26 +279,20 @@
                 data-preco-base="{{ produto.preco_base_exibicao|unlocalize }}"
                 data-preco-promocional="{% if produto.preco_promocional_exibicao %}{{ produto.preco_promocional_exibicao|unlocalize }}{% endif %}"
                 data-peso="{{ produto.peso }}"
+                data-produto-nome="{{ produto.nome }}"
+                data-produto-categoria="{{ produto.categoria.nome }}"
                 aria-label="Adicionar {{ produto.nome }} ao carrinho">
           <i class="fas fa-bag-shopping"></i>
           Adicionar ao carrinho
         </button>
 
-        <button class="btn-primario btn-comprar-agora"
-                id="btn-comprar-agora"
-                data-produto-id="{{ produto.pk }}"
-                aria-label="Comprar {{ produto.nome }} agora">
-          <i class="fas fa-bolt"></i>
-          Comprar agora
+        <button class="btn-wishlist-detalhe {% if na_wishlist %}ativo{% endif %}"
+                data-wishlist-id="{{ produto.pk }}"
+                id="btn-wishlist-detalhe">
+          <i class="{% if na_wishlist %}fas{% else %}far{% endif %} fa-heart"></i>
+          {% if na_wishlist %}Salvo na Lista de Desejos{% else %}Adicionar à Lista de Desejos{% endif %}
         </button>
       </div>
-
-      <button class="btn-wishlist-detalhe {% if na_wishlist %}ativo{% endif %}"
-              data-wishlist-id="{{ produto.pk }}"
-              id="btn-wishlist-detalhe">
-        <i class="{% if na_wishlist %}fas{% else %}far{% endif %} fa-heart"></i>
-        {% if na_wishlist %}Salvo na Lista de Desejos{% else %}Adicionar à Lista de Desejos{% endif %}
-      </button>
 
       
       <!-- Calcule o frete -->
@@ -312,13 +307,31 @@
         <div id="frete-produto-resultado"></div>
       </div>
 
+      <div class="pdp-cupom" id="pdp-cupom-bloco">
+        <div class="pdp-cupom-linha">
+          <input type="text" id="pdp-cupom-input" placeholder="Cupom de desconto"
+                 class="frete-produto-cep-input pdp-cupom-input" maxlength="30"
+                 autocomplete="off" aria-label="Código do cupom">
+          <button id="pdp-cupom-btn" class="frete-produto-btn" type="button">Aplicar</button>
+        </div>
+        <div id="pdp-cupom-resultado" class="pdp-cupom-resultado" aria-live="polite"></div>
+
+        <div class="pdp-cupom-linha" style="margin-top:0.6rem;">
+          <input type="text" id="pdp-vendedor-input" placeholder="Código do vendedor"
+                 class="frete-produto-cep-input pdp-cupom-input" maxlength="30"
+                 autocomplete="off" aria-label="Código do vendedor">
+          <button id="pdp-vendedor-btn" class="frete-produto-btn" type="button">Aplicar</button>
+        </div>
+        <div id="pdp-vendedor-resultado" class="pdp-cupom-resultado" aria-live="polite"></div>
+      </div>
+
       <div class="produto-info-desc">
-        <button class="acordeao-btn" aria-expanded="false" data-acordeao="entrega">
-          Entrega e trocas <i class="fas fa-chevron-down"></i>
+        <button class="acordeao-btn" aria-expanded="true" data-acordeao="entrega">
+          Entrega e trocas <i class="fas fa-chevron-up"></i>
         </button>
-        <div class="acordeao-conteudo" id="acordeao-entrega">
+        <div class="acordeao-conteudo aberto" id="acordeao-entrega">
           <ul class="info-lista">
-            <li><i class="fas fa-undo-alt"></i> Trocas em até 7 dias após o recebimento</li>
+            <li><i class="fas fa-undo-alt"></i> Trocas em até 30 dias após o recebimento, nas mesmas condições em que foi recebido</li>
             <li><i class="fas fa-lock"></i> Compra 100% segura e protegida</li>
             <li>
               <i class="fas fa-circle-question"></i>
@@ -452,6 +465,18 @@
 
 </div>
 
+<div class="pdp-sticky-mobile" id="pdp-sticky-mobile" hidden aria-hidden="true">
+  <div class="pdp-sticky-info">
+    <span class="pdp-sticky-nome">{{ produto.nome }}</span>
+    <span class="pdp-sticky-preco" id="pdp-sticky-preco">R$ {{ produto.preco_atual|brl_price }}</span>
+  </div>
+  <button type="button" class="btn-primario pdp-sticky-btn" id="pdp-sticky-btn"
+          aria-label="Adicionar {{ produto.nome }} ao carrinho">
+    <i class="fas fa-bag-shopping"></i>
+    Adicionar
+  </button>
+</div>
+
 {% if tabela_medidas %}
 <div id="modal-guia-tamanhos" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Guia de tamanhos">
   <div class="modal-box">
@@ -494,9 +519,23 @@
   "content_ids": ["{{ produto.id }}"],
   "content_type": "product",
   "content_name": "{{ produto.nome|escapejs }}",
+  "content_category": "{{ produto.categoria.nome|escapejs }}",
   "value": {{ produto.preco_atual|unlocalize }},
   "currency": "BRL",
   "_event_id": "{{ meta_viewcontent_event_id|escapejs }}"
+}
+</script>
+{# GA4: view_item (Enhanced Ecommerce) - disparado pelo della.js apos carregar o gtag #}
+<script type="application/json" data-ga-event="view_item">
+{
+  "currency": "BRL",
+  "value": {{ produto.preco_atual|unlocalize }},
+  "items": [{
+    "item_id": "{{ produto.id }}",
+    "item_name": "{{ produto.nome|escapejs }}",
+    "item_category": "{{ produto.categoria.nome|escapejs }}",
+    "price": {{ produto.preco_atual|unlocalize }}
+  }]
 }
 </script>
 <script type="application/json" id="produto-detalhe-config">
@@ -507,5 +546,5 @@
   "cor_inicial_id": "{{ cor_inicial_id|escapejs }}"
 }
 </script>
-<script src="{% static 'js/produto-detalhe.js' %}"></script>
+<script defer src="{% static 'js/produto-detalhe.js' %}"></script>
 {% endblock %}

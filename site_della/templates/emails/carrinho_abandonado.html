@@ -5,138 +5,139 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sua seleção ainda está disponível — D'ELLA Instore</title>
 </head>
-<body style="margin:0;padding:0;background:#f5f5f3;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#f4f3f1;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
 
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f3;padding:32px 0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f3f1;padding:40px 0 48px;">
   <tr>
     <td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
         <!-- HEADER -->
         <tr>
-          <td style="background:#0a0a0a;padding:28px 40px;text-align:center;">
-            <img src="{{ logo_url }}" alt="D'ELLA" width="110"
-                 style="display:block;margin:0 auto 4px;">
-            <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
-                        font-size:9px;font-weight:300;color:#ffffff;
-                        letter-spacing:5px;text-transform:uppercase;margin-bottom:6px;">
-              Instore
-            </div>
-            <div style="font-size:10px;color:#888;letter-spacing:2px;text-transform:uppercase;">
-              Porque ser única nunca sai de moda
-            </div>
+          <td style="background:#ffffff;padding:32px 40px 20px;text-align:center;
+                     border-radius:8px 8px 0 0;">
+            <img src="{{ logo_url }}" alt="D'ELLA" width="160"
+                 style="display:block;margin:0 auto 6px;border:0;outline:none;text-decoration:none;">
+            <div style="font-size:8px;font-weight:400;color:#b0a090;
+                        letter-spacing:5px;text-transform:uppercase;">I N S T O R E</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#ffffff;padding:0 40px;">
+            <div style="height:1px;background:#e0d0b8;"></div>
           </td>
         </tr>
 
         <!-- HERO -->
         <tr>
-          <td style="background:#c9a96e;padding:20px 40px;text-align:center;">
-            <div style="font-size:22px;font-weight:700;color:#0a0a0a;letter-spacing:1px;line-height:1.3;text-align:center;">
-              {% if ca.nome %}Olá, {{ ca.nome|truncatewords:1 }}!{% else %}Olá!{% endif %} Sua seleção ainda está disponível
+          <td style="background:#ffffff;padding:32px 40px 28px;text-align:center;">
+            <div style="font-size:11px;font-weight:600;color:#c9a96e;letter-spacing:3px;
+                        text-transform:uppercase;margin-bottom:10px;">
+              Sua seleção te espera
+            </div>
+            <div style="font-size:24px;font-weight:300;color:#1a1a1a;letter-spacing:.5px;
+                        margin-bottom:10px;">
+              {% if ca.nome %}Olá, <span style="font-weight:600;">{{ ca.nome|truncatewords:1 }}</span>{% else %}<span style="font-weight:600;">Olá!</span>{% endif %}
+            </div>
+            <div style="font-size:14px;color:#888;line-height:1.6;">
+              Você selecionou peças exclusivas da D'ELLA.<br>
+              Finalize agora antes que esgotem!
             </div>
           </td>
         </tr>
 
         <!-- BODY -->
         <tr>
-          <td style="background:#ffffff;padding:36px 40px;">
-
-            <p style="margin:0 0 24px;font-size:15px;color:#444;line-height:1.7;">
-              Você selecionou peças exclusivas da D'ELLA que foram produzidas em quantidade limitada e elas ainda estão reservadas para você. Finalize agora e aproveite!
-            </p>
+          <td style="background:#ffffff;padding:0 40px 36px;">
 
             <!-- Itens do carrinho -->
-            <div style="font-size:12px;font-weight:700;text-transform:uppercase;
-                         letter-spacing:1px;color:#999;margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;
+                         letter-spacing:1.5px;color:#999;margin-bottom:12px;">
               Itens no seu carrinho
             </div>
 
+            <div style="height:1px;background:#ede9e1;margin-bottom:0;"></div>
             <table width="100%" cellpadding="0" cellspacing="0"
-                   style="border-collapse:collapse;margin-bottom:28px;">
+                   style="border-collapse:collapse;margin-bottom:0;">
               {% for item in itens %}
-              <tr style="border-bottom:1px solid #f0f0f0;">
-                <td style="padding:14px 12px;width:52px;vertical-align:middle;">
+              <tr>
+                <td style="padding:12px 0;vertical-align:middle;width:56px;">
                   {% if item.imagem %}
                   <img src="{{ item.imagem }}" alt="{{ item.nome }}"
                        width="48" height="64"
                        style="display:block;border-radius:3px;object-fit:cover;">
                   {% else %}
-                  <div style="width:48px;height:64px;background:#f5f5f3;border-radius:3px;">
-                  </div>
+                  <div style="width:48px;height:64px;background:#f5f3f0;border-radius:3px;"></div>
                   {% endif %}
                 </td>
-                <td style="padding:14px 12px;vertical-align:middle;">
-                  <div style="font-size:14px;color:#222;font-weight:600;line-height:1.4;">
+                <td style="padding:12px 8px;vertical-align:middle;">
+                  <div style="font-size:14px;color:#222;font-weight:500;line-height:1.4;">
                     {{ item.nome }}
                   </div>
                   {% if item.variacao_desc %}
-                  <div style="font-size:12px;color:#888;margin-top:3px;">
+                  <div style="font-size:10px;color:#b8b0a4;margin-top:3px;line-height:1.45;">
                     {{ item.variacao_desc }}
                   </div>
                   {% endif %}
-                  <div style="font-size:12px;color:#aaa;margin-top:3px;">
+                  <div style="font-size:12px;color:#bbb;margin-top:3px;">
                     Qtd: {{ item.quantidade }}
                   </div>
                 </td>
-                <td style="padding:14px 12px;text-align:right;vertical-align:middle;
-                            white-space:nowrap;">
-                  <div style="font-size:15px;color:#222;font-weight:700;">
-                    R$ {{ item.subtotal }}
+                <td style="padding:12px 0;text-align:right;vertical-align:middle;white-space:nowrap;">
+                  <div style="font-size:14px;color:#333;font-weight:600;">
+                    R$&nbsp;{{ item.subtotal }}
                   </div>
                 </td>
               </tr>
               {% endfor %}
+            </table>
+            <div style="height:1px;background:#ede9e1;margin-bottom:0;"></div>
 
-              <!-- Total -->
+            <!-- Total -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="margin-top:0;margin-bottom:28px;">
               <tr>
-                <td colspan="2" style="padding:16px 12px 0;font-size:14px;
-                                        font-weight:700;color:#0a0a0a;">
-                  Total do carrinho
-                </td>
-                <td style="padding:16px 12px 0;text-align:right;font-size:18px;
-                            font-weight:700;color:#c9a96e;white-space:nowrap;">
-                  R$ {{ total_fmt }}
+                <td style="padding:4px 0;font-size:15px;font-weight:600;color:#1a1a1a;">Total</td>
+                <td style="padding:4px 0;font-size:18px;font-weight:700;
+                            color:#c9a96e;text-align:right;">
+                  R$&nbsp;{{ total_fmt }}
                 </td>
               </tr>
             </table>
 
-            <!-- CTA principal -->
-            <div style="text-align:center;margin-bottom:32px;">
-              <a href="{{ site_url }}/carrinho/"
-                 style="display:inline-block;background:#0a0a0a;color:#c9a96e;
-                         padding:16px 48px;border-radius:3px;text-decoration:none;
-                         font-size:14px;font-weight:700;letter-spacing:2px;
+            <!-- CTA -->
+            <div style="text-align:center;margin-bottom:28px;">
+              <a href="{{ link_recuperar }}"
+                 style="display:inline-block;background:#1a1a1a;color:#ffffff;
+                         padding:14px 48px;border-radius:4px;text-decoration:none;
+                         font-size:12px;font-weight:600;letter-spacing:2px;
                          text-transform:uppercase;">
-                Garantir minhas peças
+                Garantir Minhas Peças
               </a>
             </div>
 
-            <!-- Rodapé informativo -->
-            <table width="100%" cellpadding="0" cellspacing="0"
-                   style="border-top:1px solid #f0f0f0;padding-top:24px;">
-              <tr>
-                <td style="padding:0 0 4px;font-size:12px;color:#aaa;text-align:center;
-                            line-height:1.9;">
-                  Sua seleção será liberada em breve e algumas peças não retornam ao estoque após esgotar.<br>
-                  Precisa de ajuda com tamanho ou modelo? Responda este e-mail ou nos chame no
-                  <a href="https://wa.me/{{ whatsapp_number }}?text=Olá!%20Preciso%20de%20ajuda%20com%20minha%20seleção%20D'ELLA"
-                     style="color:#25D366;text-decoration:none;font-weight:700;">WhatsApp</a>
-                </td>
-              </tr>
-            </table>
+            <div style="font-size:12px;color:#bbb;text-align:center;line-height:1.8;">
+              Algumas peças não retornam ao estoque após esgotar.<br>
+              Precisa de ajuda com tamanho ou modelo? Fale pelo
+              <a href="https://wa.me/{{ whatsapp_number }}?text=Olá!%20Preciso%20de%20ajuda%20com%20minha%20seleção%20D'ELLA"
+                 style="color:#888;text-decoration:none;font-weight:600;">WhatsApp</a>
+            </div>
 
           </td>
         </tr>
 
         <!-- FOOTER -->
         <tr>
-          <td style="background:#0a0a0a;padding:18px 40px;text-align:center;">
-            <div style="font-size:11px;color:#555;line-height:1.8;text-align:center;">
-              Você recebeu este e-mail porque tem uma conta na D'ELLA Instore.<br>
-              <a href="{{ site_url }}/conta/entrar/"
-                 style="color:#888;text-decoration:none;">
-                Acessar minha conta
-              </a>
+          <td style="background:#eeecea;padding:24px 40px;text-align:center;
+                     border-radius:0 0 8px 8px;">
+            <div style="font-size:12px;color:#888;line-height:1.8;">
+              Dúvidas? Responda este e-mail ou fale pelo
+              <a href="https://wa.me/{{ whatsapp_number }}?text=Olá!%20Tenho%20uma%20dúvida%20sobre%20meu%20pedido"
+                 style="color:#1a1a1a;text-decoration:none;font-weight:600;">WhatsApp</a>
+            </div>
+            <div style="margin-top:10px;">
+              <a href="{{ site_url }}/conta/minha-conta/"
+                 style="font-size:12px;color:#888;text-decoration:none;">Acessar minha conta</a>
             </div>
           </td>
         </tr>

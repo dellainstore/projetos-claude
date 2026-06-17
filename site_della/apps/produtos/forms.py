@@ -1,9 +1,73 @@
 from django import forms
+from django.utils.safestring import mark_safe
 
-from .models import Categoria, Produto, ProdutoCorFoto, ProdutoImagem
+from .models import Avaliacao, Categoria, Produto, ProdutoCorFoto, ProdutoImagem, Variacao
+
+
+class VariacaoInlineForm(forms.ModelForm):
+    """Bloqueia visualmente o campo `estoque` quando a variação tem
+    `usa_sync_bling=True` — o estoque passa a ser fonte do Bling. O JS
+    `variacao_sync_lock.js` libera o campo dinamicamente se o usuário
+    desmarcar o checkbox (sem precisar salvar antes)."""
+
+    class Meta:
+        model = Variacao
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        instance = getattr(self, 'instance', None)
+        if instance and instance.pk and instance.usa_sync_bling:
+            campo = self.fields.get('estoque')
+            if campo is not None:
+                campo.widget.attrs['readonly'] = 'readonly'
+                campo.widget.attrs['style'] = 'background:#f5f5f5;cursor:not-allowed;'
+                campo.widget.attrs['title'] = '🔒 Sincronizado pelo Bling'
+
+    def clean(self):
+        cleaned = super().clean()
+        instance = self.instance
+        sync_atual_no_post = cleaned.get('usa_sync_bling')
+        sync_no_banco = bool(instance and instance.pk and instance.usa_sync_bling)
+        if sync_no_banco and sync_atual_no_post:
+            # Field may be absent from POST (disabled JS widget doesn't submit).
+            # Clear any resulting validation error and restore the DB value.
+            self.errors.pop('estoque', None)
+            cleaned['estoque'] = instance.estoque
+        return cleaned
 
 
 PENDING_PREFIX = 'pending:'
+
+
+class StarRatingWidget(forms.Widget):
+    def __init__(self, attrs=None):
+        super().__init__(attrs)
+
+    def render(self, name, value, attrs=None, renderer=None):
+        attrs = attrs or {}
+        input_id = attrs.get('id', f'id_{name}')
+        current = ''
+        try:
+            current = int(value) if value not in (None, '') else ''
+        except (TypeError, ValueError):
+            current = ''
+
+        stars = []
+        for nota in range(1, 6):
+            active = ' is-active' if current and nota <= current else ''
+            stars.append(
+                f'<button type="button" class="star-rating__star{active}" '
+                f'data-value="{nota}" aria-label="{nota} estrela{"s" if nota > 1 else ""}">★</button>'
+            )
+
+        html = (
+            f'<div class="star-rating js-star-rating" data-current="{current or ""}">'
+            f'<input type="hidden" name="{name}" id="{input_id}" value="{current or ""}" class="star-rating__control">'
+            f'<div class="star-rating__stars">{"".join(stars)}</div>'
+            '</div>'
+        )
+        return mark_safe(html)
 
 
 class CategoriaSubSelect(forms.Select):
@@ -60,6 +124,22 @@ class ProdutoAdminForm(forms.ModelForm):
         cat_field = self.fields.get('categoria')
         if cat_field is not None:
             cat_field.label = 'Subcategoria'
+
+        descricao_field = self.fields.get('descricao')
+        if descricao_field is not None:
+            descricao_field.help_text = (
+                'Use a barra para formatar a descrição com negrito, alinhamento, '
+                'tamanho de fonte, listas e recuos.'
+            )
+            descricao_field.widget.attrs.update({'rows': 10})
+
+        composicao_field = self.fields.get('composicao')
+        if composicao_field is not None:
+            composicao_field.help_text = (
+                'Monte a composição do jeito que preferir: em linha, quebrada por tecido '
+                'ou com destaques de tamanho e alinhamento.'
+            )
+            composicao_field.widget.attrs.update({'rows': 8})
 
         # Pré-seleciona o pai a partir da subcategoria já vinculada (em edição)
         if self.instance and self.instance.pk and self.instance.categoria_id:
@@ -143,3 +223,37 @@ class ProdutoCorFotoForm(forms.ModelForm):
             cleaned['imagem'] = None
             self.instance.imagem = None
         return cleaned
+
+
+class AvaliacaoCompraForm(forms.ModelForm):
+    nota_experiencia = forms.IntegerField(
+        label='Experiência da compra',
+        min_value=1,
+        max_value=5,
+        widget=StarRatingWidget,
+        error_messages={'required': 'Escolha de 1 a 5 estrelas para a experiência da compra.'},
+    )
+    nota_produtos = forms.IntegerField(
+        label='Produtos comprados',
+        min_value=1,
+        max_value=5,
+        widget=StarRatingWidget,
+        error_messages={'required': 'Escolha de 1 a 5 estrelas para os produtos comprados.'},
+    )
+    comentario = forms.CharField(
+        label='Comentário (opcional)',
+        required=False,
+        max_length=500,
+        widget=forms.Textarea(attrs={
+            'rows': 5,
+            'maxlength': 500,
+            'placeholder': 'Se quiser, conte como foi sua experiência. Esse comentário pode aparecer no site após aprovação.',
+        }),
+    )
+
+    class Meta:
+        model = Avaliacao
+        fields = ('nota_experiencia', 'nota_produtos', 'comentario')
+
+    def clean_comentario(self):
+        return (self.cleaned_data.get('comentario') or '').strip()

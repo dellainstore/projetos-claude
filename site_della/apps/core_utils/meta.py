@@ -38,6 +38,7 @@ def enviar_evento_meta(
     event_source_url: str,
     dados_cliente: dict | None = None,
     event_time: int | None = None,
+    marketing_consent: bool | None = None,
 ) -> bool:
     pixel_id = getattr(settings, 'META_PIXEL_ID', '') or ''
     access_token = getattr(settings, 'META_CONVERSIONS_API_TOKEN', '') or ''
@@ -45,8 +46,16 @@ def enviar_evento_meta(
     if not pixel_id or not access_token:
         return False
 
-    if not marketing_consent_granted(request):
-        logger.info('Meta CAPI: envio ignorado no pedido %s por falta de consentimento.', pedido.numero)
+    # Consentimento: quando vem de um request (cliente no site), le o cookie.
+    # Quando disparado server-side (ex: webhook de pagamento, sem browser),
+    # usa o consentimento persistido no pedido, passado em marketing_consent.
+    consentido = (
+        marketing_consent
+        if marketing_consent is not None
+        else marketing_consent_granted(request)
+    )
+    if not consentido:
+        logger.info('Meta CAPI: envio ignorado (%s) por falta de consentimento.', event_id)
         return False
 
     endpoint = (
@@ -57,7 +66,7 @@ def enviar_evento_meta(
         'data': [
             {
                 'event_name': event_name,
-                'event_time': event_time or int(request.headers.get('X-Request-Start', '0') or 0) or None,
+                'event_time': event_time or (int(request.headers.get('X-Request-Start', '0') or 0) if request else 0) or None,
                 'event_id': event_id,
                 'action_source': 'website',
                 'event_source_url': event_source_url,
@@ -96,14 +105,24 @@ def enviar_evento_meta(
         return False
 
 
-def enviar_evento_purchase(pedido, request) -> bool:
+def enviar_evento_purchase(pedido, request=None) -> bool:
     items = list(pedido.itens.select_related('produto').all())
+    caminho = f'/carrinho/confirmacao/{pedido.numero}/'
+    if request is not None:
+        event_source_url = request.build_absolute_uri(caminho)
+        marketing_consent = None  # le do cookie do request
+    else:
+        # Disparo server-side (webhook de pagamento): sem browser, usa SITE_URL
+        # e o consentimento de marketing persistido no pedido no checkout.
+        event_source_url = f'{settings.SITE_URL.rstrip("/")}{caminho}'
+        marketing_consent = bool(getattr(pedido, 'consentimento_marketing', False))
     return enviar_evento_meta(
         request,
         event_name='Purchase',
         event_id=f'purchase_{pedido.numero}',
         event_time=int(pedido.criado_em.timestamp()),
-        event_source_url=request.build_absolute_uri(f'/carrinho/confirmacao/{pedido.numero}/'),
+        event_source_url=event_source_url,
+        marketing_consent=marketing_consent,
         dados_cliente={
             'nome_completo': pedido.nome_completo,
             'email': pedido.email,
@@ -138,10 +157,12 @@ def _build_user_data(request, dados_cliente: dict | None = None) -> dict:
     usuario = request.user if getattr(request, 'user', None) and request.user.is_authenticated else None
     nome = (dados_cliente.get('nome_completo') or (usuario.get_full_name() if usuario else '') or '').strip()
     first_name, last_name = _split_name(nome)
-    user_data = {
-        'client_ip_address': _client_ip(request),
-        'client_user_agent': request.META.get('HTTP_USER_AGENT', '')[:1000],
-    }
+    # Sem request (disparo server-side), nao ha IP/User-Agent/cookies do browser.
+    # A correspondencia segue forte pelos dados hasheados do pedido (em, ph, etc).
+    user_data = {}
+    if request is not None:
+        user_data['client_ip_address'] = _client_ip(request)
+        user_data['client_user_agent'] = request.META.get('HTTP_USER_AGENT', '')[:1000]
 
     email_raw = (
         dados_cliente.get('email')
@@ -161,6 +182,13 @@ def _build_user_data(request, dados_cliente: dict | None = None) -> dict:
     cidade_raw = dados_cliente.get('cidade') or ''
     estado_raw = dados_cliente.get('estado') or ''
     cep_raw = dados_cliente.get('cep') or ''
+    # Enriquece a correspondência: para usuário logado sem dados de endereço
+    # explícitos, usa o endereço principal cadastrado (cidade/estado/CEP).
+    if usuario and not (cidade_raw and estado_raw and cep_raw):
+        endereco = _endereco_principal_usuario(usuario)
+        cidade_raw = cidade_raw or endereco.get('cidade', '')
+        estado_raw = estado_raw or endereco.get('estado', '')
+        cep_raw = cep_raw or endereco.get('cep', '')
     external_id_raw = dados_cliente.get('external_id') or (str(usuario.pk) if usuario else '')
 
     email = _sha256(email_raw.strip().lower())
@@ -195,14 +223,37 @@ def _build_user_data(request, dados_cliente: dict | None = None) -> dict:
     if country:
         user_data['country'] = [country]
 
-    fbp = request.COOKIES.get('_fbp', '').strip()
-    fbc = request.COOKIES.get('_fbc', '').strip()
-    if fbp:
-        user_data['fbp'] = fbp
-    if fbc:
-        user_data['fbc'] = fbc
+    if request is not None:
+        fbp = request.COOKIES.get('_fbp', '').strip()
+        fbc = request.COOKIES.get('_fbc', '').strip()
+        if not fbc:
+            fbclid = request.GET.get('fbclid', '').strip()
+            if fbclid:
+                fbc = f'fb.1.{int(time.time() * 1000)}.{fbclid}'
+        if fbp:
+            user_data['fbp'] = fbp
+        if fbc:
+            user_data['fbc'] = fbc
 
     return user_data
+
+
+def _endereco_principal_usuario(usuario) -> dict:
+    """Cidade/estado/CEP do endereço principal do usuário logado (enriquece o CAPI).
+
+    Falha silenciosa: se não houver endereço ou a relação não existir, retorna {}.
+    """
+    try:
+        endereco = usuario.enderecos.order_by('-principal', '-criado_em').first()
+    except Exception:
+        return {}
+    if not endereco:
+        return {}
+    return {
+        'cidade': getattr(endereco, 'cidade', '') or '',
+        'estado': getattr(endereco, 'estado', '') or '',
+        'cep': getattr(endereco, 'cep', '') or '',
+    }
 
 
 def _client_ip(request) -> str:
@@ -239,3 +290,118 @@ def _sha256(value: str) -> str:
     if not normalized:
         return ''
     return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# CAPI PageView - sempre ativo (sem gate de consent)
+# ---------------------------------------------------------------------------
+
+def preparar_user_data_pageview(request) -> tuple[str, dict]:
+    """
+    Lê dados do request no thread principal e retorna (url, user_data).
+    Sem consent: apenas pais (nao e dado pessoal isolado).
+    Com consent: IP, UA, cookies Meta e dados hasheados do usuario logado.
+    Nao acessa banco de dados - seguro para chamar em toda requisicao.
+    """
+    url = request.build_absolute_uri()
+    tem_consent = marketing_consent_granted(request)
+
+    if not tem_consent:
+        return url, {'country': [_sha256('br')]}
+
+    user_data = {'country': [_sha256('br')]}
+
+    ip = _client_ip(request)
+    ua = request.META.get('HTTP_USER_AGENT', '')[:1000]
+    if ip:
+        user_data['client_ip_address'] = ip
+    if ua:
+        user_data['client_user_agent'] = ua
+
+    fbp = request.COOKIES.get('_fbp', '').strip()
+    fbc = request.COOKIES.get('_fbc', '').strip()
+    # Fallback: primeiro clique de anuncio - cookie ainda nao existe, mas fbclid esta na URL
+    if not fbc:
+        fbclid = request.GET.get('fbclid', '').strip()
+        if fbclid:
+            fbc = f'fb.1.{int(time.time() * 1000)}.{fbclid}'
+    if fbp:
+        user_data['fbp'] = fbp
+    if fbc:
+        user_data['fbc'] = fbc
+
+    # Dados do usuario autenticado ja estao em memoria (AuthMiddleware)
+    # Nao faz query no banco aqui.
+    usuario = (
+        request.user
+        if getattr(request, 'user', None) and request.user.is_authenticated
+        else None
+    )
+    if usuario:
+        email_raw = (getattr(usuario, 'email', '') or '').strip().lower()
+        phone_raw = getattr(usuario, 'telefone', '') or ''
+        cpf_raw   = getattr(usuario, 'cpf', '') or ''
+        nome_raw  = (usuario.get_full_name() or '').strip()
+        fn_raw, ln_raw = _split_name(nome_raw)
+
+        em  = _sha256(email_raw)
+        ph  = _sha256(_normalize_phone(phone_raw))
+        cpf = _sha256(_digits_only(cpf_raw))
+        ext = cpf or _sha256(str(usuario.pk))
+
+        if em:
+            user_data['em'] = [em]
+        if ph:
+            user_data['ph'] = [ph]
+        if ext:
+            user_data['external_id'] = ext
+        if fn_raw:
+            user_data['fn'] = [_sha256(fn_raw.lower())]
+        if ln_raw:
+            user_data['ln'] = [_sha256(ln_raw.lower())]
+
+    return url, user_data
+
+
+def enviar_capi_pageview(*, url: str, user_data: dict) -> bool:
+    """
+    Envia PageView para a CAPI Meta.
+    Nao acessa o objeto request - pode ser chamado em thread daemon.
+    """
+    pixel_id     = getattr(settings, 'META_PIXEL_ID', '') or ''
+    access_token = getattr(settings, 'META_CONVERSIONS_API_TOKEN', '') or ''
+    if not pixel_id or not access_token:
+        return False
+
+    endpoint = (
+        f'https://graph.facebook.com/'
+        f'{getattr(settings, "META_GRAPH_API_VERSION", "v19.0")}/{pixel_id}/events'
+    )
+    event_id = gerar_evento_id('pageview')
+    payload = {
+        'data': [{
+            'event_name':       'PageView',
+            'event_time':       int(time.time()),
+            'event_id':         event_id,
+            'action_source':    'website',
+            'event_source_url': url,
+            'user_data':        user_data,
+        }]
+    }
+    test_event_code = getattr(settings, 'META_CONVERSIONS_TEST_EVENT_CODE', '') or ''
+    if test_event_code:
+        payload['test_event_code'] = test_event_code
+
+    try:
+        resp = requests.post(
+            endpoint,
+            params={'access_token': access_token},
+            json=payload,
+            timeout=5,
+        )
+        resp.raise_for_status()
+        logger.debug('Meta CAPI PageView enviado (%s).', event_id)
+        return True
+    except requests.RequestException as exc:
+        logger.warning('Meta CAPI PageView: falha (%s): %s', event_id, exc)
+        return False

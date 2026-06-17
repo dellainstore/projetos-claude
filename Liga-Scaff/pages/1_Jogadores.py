@@ -175,7 +175,7 @@ with tab_temporadas:
         if temporadas:
             for t in temporadas:
                 with st.container(border=True):
-                    c1, c2, c3 = st.columns([3, 2, 1])
+                    c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 1, 1])
                     with c1:
                         badge = "🟢 Ativa" if t["ativa"] else "⚫ Inativa"
                         st.write(f"**{t['nome']}** {badge}")
@@ -185,13 +185,21 @@ with tab_temporadas:
                         concluidas = len([r for r in rodadas if r["status"] == "concluida"])
                         st.metric("Rodadas", f"{concluidas}/{len(rodadas)}")
                     with c3:
+                        if auth.is_admin() and not t["ativa"]:
+                            if st.button("Ativar", key=f"ativar_temp_{t['id']}"):
+                                db.set_temporada_ativa(t["id"])
+                                st.rerun()
+                    with c4:
                         if auth.is_admin():
-                            if not t["ativa"]:
-                                if st.button("Ativar", key=f"ativar_temp_{t['id']}"):
-                                    db.set_temporada_ativa(t["id"])
-                                    st.rerun()
+                            if st.button("✏️", key=f"edit_temp_{t['id']}", help="Editar temporada"):
+                                st.session_state["editando_temporada"] = t["id"]
+                                st.session_state.pop("confirmar_del_temp", None)
+                                st.rerun()
+                    with c5:
+                        if auth.is_admin():
                             if st.button("🗑️", key=f"del_temp_{t['id']}", help="Excluir temporada"):
                                 st.session_state["confirmar_del_temp"] = t["id"]
+                                st.session_state.pop("editando_temporada", None)
                                 st.rerun()
 
             conf_tid = st.session_state.get("confirmar_del_temp")
@@ -218,23 +226,50 @@ with tab_temporadas:
 
     with col_form:
         if auth.is_admin():
-            st.subheader("Nova Temporada")
-            with st.form("form_nova_temporada", clear_on_submit=True):
-                nome = st.text_input("Nome", placeholder="Liga Quarta Scaff 2025")
-                ano = st.number_input("Ano", min_value=2020, max_value=2035, value=2025)
-                n_rodadas = st.number_input("Nº de Rodadas", min_value=1, max_value=20, value=8)
-                n_descartadas = st.number_input(
-                    "Piores rodadas descartadas", min_value=0, max_value=5, value=2
-                )
-                if st.form_submit_button("Criar Temporada", use_container_width=True, type="primary"):
-                    if nome.strip():
-                        tid = db.create_temporada(nome.strip(), int(ano), int(n_rodadas), int(n_descartadas))
-                        if not db.get_temporada_ativa():
-                            db.set_temporada_ativa(tid)
-                        st.success(f"Temporada **{nome.strip()}** criada!")
+            editando_temp = st.session_state.get("editando_temporada")
+            if editando_temp:
+                t_edit = db.get_temporada(editando_temp)
+                if t_edit:
+                    st.subheader(f"Editar: {t_edit['nome']}")
+                    with st.form("form_editar_temporada"):
+                        nome = st.text_input("Nome", value=t_edit["nome"])
+                        ano = st.number_input("Ano", min_value=2020, max_value=2035, value=int(t_edit["ano"]))
+                        n_rodadas = st.number_input("Nº de Rodadas", min_value=1, max_value=20, value=int(t_edit["n_rodadas"]))
+                        n_descartadas = st.number_input(
+                            "Piores rodadas descartadas", min_value=0, max_value=5, value=int(t_edit["n_descartadas"])
+                        )
+                        fa, fb = st.columns(2)
+                        with fa:
+                            salvar_edit_t = st.form_submit_button("💾 Salvar", use_container_width=True, type="primary")
+                        with fb:
+                            cancelar_edit_t = st.form_submit_button("✕ Cancelar", use_container_width=True)
+
+                    if salvar_edit_t and nome.strip():
+                        db.update_temporada(editando_temp, nome.strip(), int(ano), int(n_rodadas), int(n_descartadas))
+                        st.session_state.pop("editando_temporada", None)
+                        st.success("Temporada atualizada!")
                         st.rerun()
-                    else:
-                        st.error("Nome é obrigatório.")
+                    if cancelar_edit_t:
+                        st.session_state.pop("editando_temporada", None)
+                        st.rerun()
+            else:
+                st.subheader("Nova Temporada")
+                with st.form("form_nova_temporada", clear_on_submit=True):
+                    nome = st.text_input("Nome", placeholder="Liga Quarta Scaff 2025")
+                    ano = st.number_input("Ano", min_value=2020, max_value=2035, value=2025)
+                    n_rodadas = st.number_input("Nº de Rodadas", min_value=1, max_value=20, value=8)
+                    n_descartadas = st.number_input(
+                        "Piores rodadas descartadas", min_value=0, max_value=5, value=2
+                    )
+                    if st.form_submit_button("Criar Temporada", use_container_width=True, type="primary"):
+                        if nome.strip():
+                            tid = db.create_temporada(nome.strip(), int(ano), int(n_rodadas), int(n_descartadas))
+                            if not db.get_temporada_ativa():
+                                db.set_temporada_ativa(tid)
+                            st.success(f"Temporada **{nome.strip()}** criada!")
+                            st.rerun()
+                        else:
+                            st.error("Nome é obrigatório.")
 
 
 # ── ABA 3: Participantes da Temporada ─────────────────────────────────────────
@@ -248,6 +283,7 @@ with tab_participantes:
         "Temporada",
         options=temporadas,
         format_func=lambda t: t["nome"],
+        index=next((i for i, t in enumerate(temporadas) if t["ativa"]), 0),
         key="temp_participantes",
     )
 

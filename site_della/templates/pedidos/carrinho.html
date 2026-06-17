@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static della_filters %}
+{% load static della_filters l10n %}
 
 {% block titulo %}Carrinho | D'ELLA Instore{% endblock %}
 {% block navbar_class %}solida{% endblock %}
@@ -81,6 +81,28 @@
         <span id="resumo-total">R$ {{ total|brl_price }}</span>
       </div>
 
+      {% if frete_meta %}
+      <div class="frete-progresso"
+           id="frete-progresso"
+           data-meta="{{ frete_meta|unlocalize }}"
+           data-total="{{ total|unlocalize }}">
+        {% if frete_faltante <= 0 %}
+          <p class="frete-progresso-msg conquistado" id="frete-progresso-msg">
+            <i class="fas fa-check" aria-hidden="true"></i>
+            Você ganhou frete grátis
+          </p>
+        {% else %}
+          <p class="frete-progresso-msg" id="frete-progresso-msg">
+            Faltam <strong>R$ {{ frete_faltante|brl_price }}</strong> para frete grátis
+          </p>
+        {% endif %}
+        <div class="frete-progresso-trilha" aria-hidden="true">
+          <span class="frete-progresso-fill" id="frete-progresso-fill"
+                style="width: {% widthratio total frete_meta 100 %}%;"></span>
+        </div>
+      </div>
+      {% endif %}
+
       <a href="{% url 'pedidos:checkout' %}" class="btn-primario btn-finalizar w-full justify-center">
         Finalizar compra
       </a>
@@ -117,8 +139,74 @@
   {% endif %}
 
 </div>
+{% if relacionados_carrinho %}
+<section class="carrinho-relacionados" aria-labelledby="titulo-rel-carrinho">
+  <div class="carrinho-relacionados-inner">
+    <p class="subtitulo-secao">Você pode gostar</p>
+    <h2 class="titulo-secao" id="titulo-rel-carrinho" style="font-size:1.25rem;">Complete o seu look</h2>
+    <div class="relacionados-grid">
+      {% for p in relacionados_carrinho %}
+      <article class="produto-card fade-in">
+        <a href="{{ p.get_absolute_url }}" class="produto-card-foto-link">
+          <div class="produto-card-foto">
+            {% with img=p.imagem_principal %}
+              {% if img %}
+                <img src="{{ img.imagem.url }}" alt="{{ img.alt|default:p.nome }}"
+                     width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
+              {% else %}
+                <img src="{% static 'images/brand/produto-placeholder.jpg' %}"
+                     alt="{{ p.nome }}" width="600" height="800" loading="lazy" decoding="async" class="foto-principal">
+              {% endif %}
+            {% endwith %}
+            {% if p.em_promocao %}
+              <span class="produto-badge promo">-{{ p.percentual_desconto }}%</span>
+            {% elif p.novo %}
+              <span class="produto-badge novo">Novo</span>
+            {% endif %}
+          </div>
+        </a>
+        <div class="produto-card-info">
+          <a href="{{ p.get_absolute_url }}" class="produto-card-nome">{{ p.nome }}</a>
+          <div class="produto-card-preco">
+            {% if p.em_promocao %}
+              <span class="preco-de">R$ {{ p.preco_base_exibicao|brl_price }}</span>
+              <span class="preco-por">R$ {{ p.preco_atual|brl_price }}</span>
+            {% else %}
+              <span class="preco-por">R$ {{ p.preco_atual|brl_price }}</span>
+            {% endif %}
+          </div>
+          {% if p.parcelamento_texto %}
+            <span class="produto-card-parcelamento">{{ p.parcelamento_texto }}</span>
+          {% endif %}
+          <div class="produto-card-acoes">
+            <button class="btn-add-carrinho"
+                    data-produto-id="{{ p.pk }}"
+                    data-produto-url="{{ p.get_absolute_url }}"
+                    aria-label="Ver produto {{ p.nome }}">
+              <i class="fas fa-bag-shopping"></i>
+            </button>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
 {% endblock %}
 
 {% block js_extra %}
+{% if itens %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (window.dellaTrackGA) {
+      window.dellaTrackGA('view_cart', {
+        currency: 'BRL',
+        value: {{ total|unlocalize }}
+      });
+    }
+  });
+</script>
+{% endif %}
 <script src="{% static 'js/pedidos-carrinho.js' %}"></script>
 {% endblock %}

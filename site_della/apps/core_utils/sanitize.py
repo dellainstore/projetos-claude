@@ -13,6 +13,7 @@ Aplique em:
 import re
 import unicodedata
 import bleach
+from bleach.css_sanitizer import CSSSanitizer
 from django.core.exceptions import ValidationError
 
 
@@ -26,6 +27,41 @@ ALLOWED_TAGS_BASIC = [           # apenas formatação básica (não usado em in
     'b', 'i', 'em', 'strong', 'br', 'p', 'ul', 'ol', 'li',
 ]
 ALLOWED_ATTRIBUTES = {}          # sem atributos — previne href=javascript:, onerror=, etc.
+
+RICH_TEXT_ALLOWED_CSS_PROPS = [
+    'color', 'background-color', 'background',
+    'font-size', 'font-weight', 'font-style', 'font-family',
+    'text-align', 'text-decoration', 'text-transform', 'text-indent',
+    'line-height', 'letter-spacing',
+    'margin', 'margin-top', 'margin-bottom', 'margin-left', 'margin-right',
+    'padding', 'padding-top', 'padding-bottom', 'padding-left', 'padding-right',
+    'width', 'height', 'max-width', 'max-height',
+    'border', 'border-radius', 'border-color', 'border-style', 'border-width',
+    'display', 'float', 'clear',
+]
+
+RICH_TEXT_ALLOWED_TAGS = [
+    'p', 'br', 'hr',
+    'strong', 'em', 'u', 'b', 'i', 's', 'small', 'sub', 'sup',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li', 'blockquote',
+    'a', 'img', 'figure', 'figcaption',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption',
+    'span', 'div', 'font',
+]
+
+RICH_TEXT_ALLOWED_ATTRS = {
+    '*': ['class', 'style', 'id'],
+    'a': ['href', 'title', 'target', 'rel'],
+    'img': ['src', 'alt', 'title', 'width', 'height', 'loading'],
+    'table': ['border', 'cellpadding', 'cellspacing'],
+    'td': ['colspan', 'rowspan', 'align'],
+    'th': ['colspan', 'rowspan', 'align', 'scope'],
+    'font': ['size', 'color', 'face'],
+}
+
+RICH_TEXT_ALLOWED_PROTOCOLS = ['http', 'https', 'mailto', 'tel']
+RICH_TEXT_CSS_SANITIZER = CSSSanitizer(allowed_css_properties=RICH_TEXT_ALLOWED_CSS_PROPS)
 
 
 # ─── Funções de sanitização ───────────────────────────────────────────────────
@@ -75,7 +111,49 @@ def sanitize_multiline_text(value: str, max_length: int = 2000) -> str:
     return cleaned[:max_length]
 
 
-def sanitize_name(value: str) -> str:
+def sanitize_rich_html(value: str, max_length: int = 5000) -> str:
+    """
+    Sanitiza HTML rico vindo do admin.
+    - Preserva tags e estilos permitidos
+    - Remove scripts, handlers inline e protocolos perigosos
+    - Normaliza unicode e limita tamanho
+    """
+    if not value:
+        return ''
+
+    cleaned = bleach.clean(
+        str(value),
+        tags=RICH_TEXT_ALLOWED_TAGS,
+        attributes=RICH_TEXT_ALLOWED_ATTRS,
+        protocols=RICH_TEXT_ALLOWED_PROTOCOLS,
+        css_sanitizer=RICH_TEXT_CSS_SANITIZER,
+        strip=True,
+        strip_comments=True,
+    )
+    cleaned = cleaned.replace('\r\n', '\n').replace('\r', '\n')
+    cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', cleaned)
+    cleaned = unicodedata.normalize('NFKC', cleaned).strip()
+    if len(cleaned) > max_length:
+        raise ValidationError(f'Conteúdo excede o limite de {max_length} caracteres.')
+    return cleaned
+
+
+NAME_LOWERCASE_PARTICLES = {'da', 'das', 'de', 'do', 'dos', 'e'}
+
+
+def _titlecase_name_token(token: str) -> str:
+    token = token.lower()
+    if token in NAME_LOWERCASE_PARTICLES:
+        return token
+
+    partes = re.split(r"([\-'])", token)
+    return ''.join(
+        parte.capitalize() if parte not in {"-", "'"} and parte else parte
+        for parte in partes
+    )
+
+
+def sanitize_name(value: str, max_length: int = 120) -> str:
     """
     Para campos de nome próprio (cliente, remetente).
     Permite apenas letras, espaços, hífens e apóstrofos.
@@ -83,11 +161,12 @@ def sanitize_name(value: str) -> str:
     if not value:
         return ''
 
-    cleaned = sanitize_text(value, max_length=120)
+    cleaned = sanitize_text(value, max_length=max_length)
 
     # Só permite caracteres válidos em nomes
     cleaned = re.sub(r"[^a-zA-ZÀ-ÿ\s'\-]", '', cleaned)
     cleaned = ' '.join(cleaned.split())
+    cleaned = ' '.join(_titlecase_name_token(token) for token in cleaned.split())
 
     return cleaned.strip()
 

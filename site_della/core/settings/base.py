@@ -58,10 +58,12 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',       # proteção CSRF ativa
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'apps.core_utils.maintenance.manutencao_middleware',
+    'apps.core_utils.admin_verificacao.AdminVerificacaoMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # anti-clickjacking
     'axes.middleware.AxesMiddleware',                  # brute force protection
     'csp.middleware.CSPMiddleware',                    # Content-Security-Policy
+    'apps.core_utils.middleware.MetaCAPIPageViewMiddleware',  # CAPI PageView sempre
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -80,6 +82,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'apps.produtos.context_processors.categorias_menu',
+                'apps.produtos.context_processors.newsletter_status',
                 'apps.pedidos.context_processors.carrinho_info',
             ],
             # auto-escape ativo por padrão — nunca usar |safe sem necessidade
@@ -158,7 +161,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Extensões permitidas para upload de imagens de produto
 ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp']
-MAX_UPLOAD_SIZE_MB = 5  # máximo 5MB por imagem
+MAX_UPLOAD_SIZE_MB = 15  # máximo 15MB por imagem (fotos de produto profissionais)
 
 # ─── E-mail (Brevo via API HTTP — porta 443, não bloqueada pela Digital Ocean) ──
 
@@ -168,15 +171,25 @@ ANYMAIL = {
 }
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default="D'ELLA Instore <contato@dellainstore.com.br>")
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+# E-mails que recebem notificacao de formulario de contato do site (separados por virgula)
+CONTATO_NOTIF_EMAILS  = config('CONTATO_NOTIF_EMAILS',  default='contato@dellainstore.com.br,financeiro@dellainstore.com.br')
+# E-mails que recebem o relatorio diario de seguranca
+SECURITY_NOTIF_EMAILS = config('SECURITY_NOTIF_EMAILS', default='financeiro@dellainstore.com.br')
 
-# ─── django-axes: bloqueio de brute force ─────────────────────────────────────
+# django-axes: bloqueio de brute force
 
-AXES_FAILURE_LIMIT = 5           # bloqueia após 5 tentativas falhas
+AXES_ENABLED = True              # explicito, sobrescrito para False em development.py
+AXES_FAILURE_LIMIT = 5           # bloqueia apos 5 tentativas falhas
 AXES_COOLOFF_TIME = 1            # bloqueia por 1 hora
 AXES_LOCKOUT_TEMPLATE = 'components/lockout.html'
-AXES_RESET_ON_SUCCESS = True     # reseta contador após login bem-sucedido
-# Bloqueia por IP + username (não só por usuário)
+AXES_RESET_ON_SUCCESS = True     # reseta contador apos login bem-sucedido
+# Bloqueia por IP + username
 AXES_LOCKOUT_PARAMETERS = ['ip_address', 'username']
+# Atras de Cloudflare + nginx (com real_ip do CF-Connecting-IP), o IP real
+# vem em X-Real-IP / X-Forwarded-For. REMOTE_ADDR aqui aponta para o socket
+# unix do gunicorn, entao precisamos instruir o ipware a olhar nos headers.
+AXES_IPWARE_META_PRECEDENCE_ORDER = ['HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR']
+AXES_IPWARE_PROXY_COUNT = 1
 
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',
@@ -193,25 +206,18 @@ CONTENT_SECURITY_POLICY = {
         'default-src': ("'self'",),
         'script-src': (
             "'self'",
-            "'unsafe-inline'",          # ainda necessário (snippets inline GA4/cleanup); remover quando migrar para nonce
-            "cdnjs.cloudflare.com",
-            "www.instagram.com",
-            "connect.facebook.net",
-            "assets.pagseguro.com.br",  # SDK de encriptação de cartão
-            "www.googletagmanager.com", # Google Analytics (GA4)
-            "www.google-analytics.com",
+            "'unsafe-inline'",          # script fbclid em base.html (cookie _fbc para Meta)
+            "connect.facebook.net",     # Meta Pixel
+            "assets.pagseguro.com.br",  # SDK de encriptacao de cartao
+            "www.googletagmanager.com", # GTM / GA4
+            "www.clarity.ms",           # Microsoft Clarity
         ),
         'style-src': (
             "'self'",
-            "'unsafe-inline'",          # estilos inline em alguns templates
-            "fonts.googleapis.com",
-            "cdnjs.cloudflare.com",
+            "'unsafe-inline'",          # estilos inline em templates e Django admin
         ),
         'font-src': (
-            "'self'",
-            "fonts.gstatic.com",
-            "fonts.googleapis.com",
-            "cdnjs.cloudflare.com",
+            "'self'",                   # fontes auto-hospedadas em static/fonts/
         ),
         'img-src': (
             "'self'",
@@ -220,7 +226,7 @@ CONTENT_SECURITY_POLICY = {
             "*.instagram.com",
             "cdninstagram.com",
             "*.cdninstagram.com",
-            "www.facebook.com",         # Meta Pixel <noscript> tracking pixel
+            "www.facebook.com",         # Meta Pixel tracking pixel
             "www.google-analytics.com", # GA4 beacons
             "www.googletagmanager.com",
         ),
@@ -231,13 +237,22 @@ CONTENT_SECURITY_POLICY = {
         ),
         'connect-src': (
             "'self'",
-            "api.pagseguro.com",        # chamadas do SDK de cartão
-            "sandbox.api.pagseguro.com",
-            "www.google-analytics.com", # GA4 hits
+            "assets.pagseguro.com.br",              # SDK PagBank
+            "api.pagseguro.com",                    # API PagBank
+            "buscacepinter.correios.com.br",        # busca de CEP no checkout
+            "www.google-analytics.com",             # GA4 hits
+            "region1.google-analytics.com",         # GA4 hits (datacenter alternativo)
             "analytics.google.com",
+            "stats.g.doubleclick.net",              # GA4 / Ads
             "www.googletagmanager.com",
+            "www.facebook.com",                     # Meta Pixel eventos
+            "*.clarity.ms",                         # Microsoft Clarity beacons
+            "c.bing.com",                           # Microsoft Clarity endpoint
         ),
-        'object-src': ("'none'",),      # bloqueia Flash e plugins antigos
+        'object-src': ("'none'",),      # bloqueia Flash e plugins obsoletos
+        'base-uri':   ("'self'",),      # impede injecao de <base href>
+        'form-action': ("'self'",),     # formularios so submetem para o proprio site
+        'report-uri': ('/csp-report/',),
     }
 }
 
@@ -246,35 +261,42 @@ CONTENT_SECURITY_POLICY = {
 PAGSEGURO_EMAIL = config('PAGSEGURO_EMAIL', default='')
 PAGSEGURO_TOKEN = config('PAGSEGURO_TOKEN', default='')
 PAGSEGURO_TOKEN_SANDBOX = config('PAGSEGURO_TOKEN_SANDBOX', default='')
-PAGSEGURO_SANDBOX = config('PAGSEGURO_SANDBOX', default=True, cast=bool)
+PAGSEGURO_SANDBOX = config('PAGSEGURO_SANDBOX', default=False, cast=bool)
 
-STONE_CLIENT_ID = config('STONE_CLIENT_ID', default='')
-STONE_CLIENT_SECRET = config('STONE_CLIENT_SECRET', default='')
-STONE_SANDBOX = config('STONE_SANDBOX', default=True, cast=bool)
-
-SITE_URL = config('SITE_URL', default='http://159.203.101.232:8000')
+SITE_URL = config('SITE_URL', default='https://www.dellainstore.com')
 
 BLING_CLIENT_ID      = config('BLING_CLIENT_ID', default='')
 BLING_CLIENT_SECRET  = config('BLING_CLIENT_SECRET', default='')
-BLING_REDIRECT_URI   = config('BLING_REDIRECT_URI', default='http://localhost:8000/bling/callback/')
+BLING_REDIRECT_URI   = config('BLING_REDIRECT_URI', default='https://www.dellainstore.com/bling/callback/')
+# ID do depósito "Show Room - D'ella" no Bling — filtra o saldo de estoque por depósito.
+# Descobrir em: Bling → Configurações → Depósitos, ou via GET /depositos na API.
+BLING_DEPOSITO_ID    = config('BLING_DEPOSITO_ID', default='', cast=str)
 
 WHATSAPP_NUMBER_1 = config('WHATSAPP_NUMBER_1', default='')
 WHATSAPP_NUMBER_2 = config('WHATSAPP_NUMBER_2', default='')
 
 META_PIXEL_ID = config('META_PIXEL_ID', default='')
 GA_MEASUREMENT_ID = config('GA_MEASUREMENT_ID', default='')
+# GA4 Measurement Protocol (disparo server-side do purchase no webhook de pagamento).
+# Criar em: GA4 Admin > Fluxos de dados > Measurement Protocol API secrets.
+GA_API_SECRET = config('GA_API_SECRET', default='')
+CLARITY_PROJECT_ID = config('CLARITY_PROJECT_ID', default='')
 META_CONVERSIONS_API_TOKEN = config('META_CONVERSIONS_API_TOKEN', default='')
 META_CONVERSIONS_TEST_EVENT_CODE = config('META_CONVERSIONS_TEST_EVENT_CODE', default='')
-META_GRAPH_API_VERSION = config('META_GRAPH_API_VERSION', default='v19.0')
+META_GRAPH_API_VERSION = config('META_GRAPH_API_VERSION', default='v22.0')
 
 INSTAGRAM_ACCESS_TOKEN = config('INSTAGRAM_ACCESS_TOKEN', default='')
 INSTAGRAM_ACCOUNT_ID   = config('INSTAGRAM_ACCOUNT_ID', default='')
 INSTAGRAM_APP_ID       = config('INSTAGRAM_APP_ID', default='')
 INSTAGRAM_APP_SECRET   = config('INSTAGRAM_APP_SECRET', default='')
 
-MELHOR_ENVIO_TOKEN       = config('MELHOR_ENVIO_TOKEN', default='')
-MELHOR_ENVIO_SANDBOX     = config('MELHOR_ENVIO_SANDBOX', default=True, cast=bool)
-MELHOR_ENVIO_CEP_ORIGEM  = config('MELHOR_ENVIO_CEP_ORIGEM', default='')
+MELHOR_ENVIO_TOKEN          = config('MELHOR_ENVIO_TOKEN', default='')
+MELHOR_ENVIO_SANDBOX        = config('MELHOR_ENVIO_SANDBOX', default=True, cast=bool)
+MELHOR_ENVIO_CEP_ORIGEM     = config('MELHOR_ENVIO_CEP_ORIGEM', default='')
+MELHOR_ENVIO_WEBHOOK_SECRET = config('MELHOR_ENVIO_WEBHOOK_SECRET', default='')
+
+CORREIOS_USUARIO       = config('CORREIOS_USUARIO', default='')
+CORREIOS_CODIGO_ACESSO = config('CORREIOS_CODIGO_ACESSO', default='')
 
 # Chave Pix (CPF, CNPJ, e-mail, telefone ou chave aleatória)
 PIX_CHAVE = config('PIX_CHAVE', default='')

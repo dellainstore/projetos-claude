@@ -16,15 +16,21 @@
     <a href="/painel/relatorio/" class="da-welcome-btn da-welcome-btn-primary">
       📊 Relatório Geral
     </a>
+    {% if perms.pedidos %}
     <a href="/painel/pedidos/dashboard/" class="da-welcome-btn da-welcome-btn-primary">
       🚚 Dashboard de Pedidos
     </a>
+    {% endif %}
+    {% if perms.conteudo.view_instagrampost %}
     <a href="/painel/conteudo/instagrampost/" class="da-welcome-btn da-welcome-btn-ghost">
       📷 Feed do Instagram
     </a>
+    {% endif %}
+    {% if perms.pedidos.view_pedido %}
     <a href="{% url 'admin:pedidos_pedido_changelist' %}" class="da-welcome-btn da-welcome-btn-ghost">
       🛍️ Ver Pedidos
     </a>
+    {% endif %}
     <a href="/" target="_blank" class="da-welcome-btn da-welcome-btn-ghost">
       🌐 Ver Site ↗
     </a>
@@ -32,9 +38,11 @@
 </div>
 
 {# ── 1° Conteúdo do Site ──────────────────────────────────────────────────── #}
+{% if perms.conteudo %}
 <div class="da-section-label">Conteúdo do Site</div>
 <div class="da-grid">
 
+  {% if perms.conteudo.view_bannerprincipal %}
   <a href="{% url 'admin:conteudo_bannerprincipal_changelist' %}" class="da-card">
     <div class="da-card-icon ic-dark">🎞️</div>
     <div class="da-card-body">
@@ -43,7 +51,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.conteudo.view_minibanner %}
   <a href="{% url 'admin:conteudo_minibanner_changelist' %}" class="da-card">
     <div class="da-card-icon ic-gold">🖼️</div>
     <div class="da-card-body">
@@ -52,7 +62,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.conteudo.view_lookdasemana %}
   <a href="{% url 'admin:conteudo_lookdasemana_changelist' %}" class="da-card">
     <div class="da-card-icon ic-purple">✨</div>
     <div class="da-card-body">
@@ -61,7 +73,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.conteudo.view_instagrampost %}
   <a href="{% url 'admin:conteudo_instagrampost_changelist' %}" class="da-card">
     <div class="da-card-icon ic-orange">📷</div>
     <div class="da-card-body">
@@ -70,7 +84,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.conteudo.view_paginaestatica %}
   <a href="{% url 'admin:conteudo_paginaestatica_changelist' %}" class="da-card">
     <div class="da-card-icon ic-blue">📄</div>
     <div class="da-card-body">
@@ -79,7 +95,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.conteudo.view_configuracaoloja %}
   <a href="{% url 'admin:conteudo_configuracaoloja_changelist' %}" class="da-card">
     <div class="da-card-icon ic-teal">🚚</div>
     <div class="da-card-body">
@@ -88,13 +106,54 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
+
+  {% if perms.conteudo.view_tarjafrase %}
+  <a href="{% url 'admin:conteudo_tarjafrase_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-dark">📣</div>
+    <div class="da-card-body">
+      <strong>Tarja de Anúncios</strong>
+      <small>Frases animadas na barra do topo do site</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+  {% endif %}
 
 </div>
+{% endif %}
+
+{# ── 1b° Atendimento ──────────────────────────────────────────────────────── #}
+{% if perms.conteudo.view_contatoformulario %}
+<div class="da-section-label">Atendimento</div>
+<div class="da-grid">
+
+  <a href="{% url 'admin:conteudo_contatoformulario_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-green">💬</div>
+    <div class="da-card-body">
+      <strong>Formulários de Contato</strong>
+      <small>Mensagens recebidas pelo formulário do site</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="{% url 'admin:conteudo_contatoformulario_changelist' %}?respondido__exact=0" class="da-card">
+    <div class="da-card-icon ic-orange">📬</div>
+    <div class="da-card-body">
+      <strong>Mensagens Pendentes</strong>
+      <small>Formulários ainda não respondidos</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+</div>
+{% endif %}
 
 {# ── 2° Produtos ──────────────────────────────────────────────────────────── #}
+{% if perms.produtos %}
 <div class="da-section-label">Produtos</div>
 <div class="da-grid">
 
+  {% if perms.produtos.view_produto %}
   <a href="{% url 'admin:produtos_produto_changelist' %}" class="da-card">
     <div class="da-card-icon ic-dark">👗</div>
     <div class="da-card-body">
@@ -103,7 +162,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.produtos.add_produto %}
   <a href="/painel/produtos/produto/importar/" class="da-card">
     <div class="da-card-icon ic-green">📥</div>
     <div class="da-card-body">
@@ -112,7 +173,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.produtos.view_categoria %}
   <a href="{% url 'admin:produtos_categoria_changelist' %}" class="da-card">
     <div class="da-card-icon ic-blue">📂</div>
     <div class="da-card-body">
@@ -121,7 +184,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.produtos.view_corpadrao %}
   <a href="{% url 'admin:produtos_corpadrao_changelist' %}" class="da-card">
     <div class="da-card-icon ic-gold">🎨</div>
     <div class="da-card-body">
@@ -130,7 +195,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.produtos.view_tamanhopadrao %}
   <a href="{% url 'admin:produtos_tamanhopadrao_changelist' %}" class="da-card">
     <div class="da-card-icon ic-gold">📏</div>
     <div class="da-card-body">
@@ -139,7 +206,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.produtos.view_avaliacao %}
   <a href="{% url 'admin:produtos_avaliacao_changelist' %}" class="da-card">
     <div class="da-card-icon ic-orange">⭐</div>
     <div class="da-card-body">
@@ -148,7 +217,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.produtos.view_tabelamedidas %}
   <a href="{% url 'admin:produtos_tabelamedidas_changelist' %}" class="da-card">
     <div class="da-card-icon ic-teal">📐</div>
     <div class="da-card-body">
@@ -157,7 +228,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.produtos.view_newsletterinscricao %}
   <a href="{% url 'admin:produtos_newsletterinscricao_changelist' %}" class="da-card">
     <div class="da-card-icon ic-purple">💌</div>
     <div class="da-card-body">
@@ -166,13 +239,17 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
 </div>
+{% endif %}
 
 {# ── 3° Pedidos (inclui Pagamentos) ───────────────────────────────────────── #}
+{% if perms.pedidos or perms.pagamentos %}
 <div class="da-section-label">Pedidos</div>
 <div class="da-grid">
 
+  {% if perms.pedidos.view_pedido %}
   <a href="{% url 'admin:pedidos_pedido_changelist' %}" class="da-card">
     <div class="da-card-icon ic-dark">🛍️</div>
     <div class="da-card-body">
@@ -181,7 +258,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.pagamentos.view_pagamento %}
   <a href="{% url 'admin:pagamentos_pagamento_changelist' %}" class="da-card">
     <div class="da-card-icon ic-blue">💳</div>
     <div class="da-card-body">
@@ -190,7 +269,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.pedidos.view_cupom %}
   <a href="{% url 'admin:pedidos_cupom_changelist' %}" class="da-card">
     <div class="da-card-icon ic-green">🏷️</div>
     <div class="da-card-body">
@@ -199,7 +280,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.pedidos.view_codigovendedor %}
   <a href="{% url 'admin:pedidos_codigovendedor_changelist' %}" class="da-card">
     <div class="da-card-icon ic-gold">👤</div>
     <div class="da-card-body">
@@ -208,13 +291,50 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
+
+  {% if perms.pedidos.view_cupomemitido %}
+  <a href="{% url 'admin:pedidos_cupomemitido_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-purple">🎫</div>
+    <div class="da-card-body">
+      <strong>Cupons Emitidos</strong>
+      <small>Cupons gerados por newsletter e aniversário</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+  {% endif %}
+
+  {% if perms.pedidos.view_carrinhoabandonado %}
+  <a href="{% url 'admin:pedidos_carrinhoabandonado_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-orange">🛒</div>
+    <div class="da-card-body">
+      <strong>Carrinhos Abandonados</strong>
+      <small>Clientes que não finalizaram a compra</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+  {% endif %}
+
+  {% if perms.pagamentos.view_cartaosalvo %}
+  <a href="{% url 'admin:pagamentos_cartaosalvo_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-blue">💳</div>
+    <div class="da-card-body">
+      <strong>Cartões Salvos</strong>
+      <small>Cartões tokenizados pelos clientes</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+  {% endif %}
 
 </div>
+{% endif %}
 
 {# ── 4° Usuários (inclui Grupos de acesso) ───────────────────────────────── #}
+{% if perms.usuarios or perms.auth.view_group %}
 <div class="da-section-label">Usuários</div>
 <div class="da-grid">
 
+  {% if perms.usuarios.view_cliente %}
   <a href="{% url 'admin:usuarios_cliente_changelist' %}" class="da-card">
     <div class="da-card-icon ic-dark">👥</div>
     <div class="da-card-body">
@@ -223,7 +343,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.usuarios.view_endereco %}
   <a href="{% url 'admin:usuarios_endereco_changelist' %}" class="da-card">
     <div class="da-card-icon ic-blue">📍</div>
     <div class="da-card-body">
@@ -232,7 +354,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.usuarios.view_wishlist %}
   <a href="{% url 'admin:usuarios_wishlist_changelist' %}" class="da-card">
     <div class="da-card-icon ic-red">❤️</div>
     <div class="da-card-body">
@@ -241,7 +365,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.usuarios.view_cliente %}
   <a href="/painel/usuarios/cliente/?is_staff__exact=1" class="da-card">
     <div class="da-card-icon ic-dark">🔐</div>
     <div class="da-card-body">
@@ -250,7 +376,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.auth.view_group %}
   <a href="{% url 'admin:auth_group_changelist' %}" class="da-card">
     <div class="da-card-icon ic-teal">🔑</div>
     <div class="da-card-body">
@@ -259,13 +387,17 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
 </div>
+{% endif %}
 
 {# ── 5° Bling ERP ──────────────────────────────────────────────────────────── #}
+{% if perms.bling %}
 <div class="da-section-label">Bling ERP</div>
 <div class="da-grid">
 
+  {% if perms.bling.view_blingtoken %}
   <a href="{% url 'admin:bling_blingtoken_changelist' %}" class="da-card">
     <div class="da-card-icon ic-orange">🔗</div>
     <div class="da-card-body">
@@ -274,7 +406,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.bling.view_blinglog %}
   <a href="{% url 'admin:bling_blinglog_changelist' %}" class="da-card">
     <div class="da-card-icon ic-teal">📋</div>
     <div class="da-card-body">
@@ -283,13 +417,17 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
 </div>
+{% endif %}
 
 {# ── 6° Segurança ─────────────────────────────────────────────────────────── #}
+{% if perms.axes %}
 <div class="da-section-label">Segurança</div>
 <div class="da-grid">
 
+  {% if perms.axes.view_accessattempt %}
   <a href="/painel/axes/accessattempt/" class="da-card">
     <div class="da-card-icon ic-red">🚫</div>
     <div class="da-card-body">
@@ -298,7 +436,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.axes.view_accesslog %}
   <a href="/painel/axes/accesslog/" class="da-card">
     <div class="da-card-icon ic-blue">📝</div>
     <div class="da-card-body">
@@ -307,7 +447,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
+  {% if perms.axes.view_accessfailurelog %}
   <a href="/painel/axes/accessfailurelog/" class="da-card">
     <div class="da-card-icon ic-orange">⚠️</div>
     <div class="da-card-body">
@@ -316,7 +458,9 @@
     </div>
     <span class="da-card-arrow">›</span>
   </a>
+  {% endif %}
 
 </div>
+{% endif %}
 
 {% endblock %}

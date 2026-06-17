@@ -2,6 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   const gaMeasurementId = document.body.dataset.gaMeasurementId || '';
+  const clarityProjectId = document.body.dataset.clarityProjectId || '';
 
   function carregarGA() {
     if (!gaMeasurementId || window._gaCarregado) return;
@@ -18,6 +19,19 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     window.gtag('js', new Date());
     window.gtag('config', gaMeasurementId);
+
+    // Dispara eventos de ecommerce registrados pelo template (view_item, purchase, etc.)
+    dispararGAEventosCustom();
+  }
+
+  function carregarClarity() {
+    if (!clarityProjectId || window._clarityCarregado) return;
+    window._clarityCarregado = true;
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window,document,'clarity','script',clarityProjectId);
   }
 
   // ─── Navbar: transparente no hero, sólida ao rolar ─────────────────────────
@@ -404,14 +418,27 @@ document.addEventListener('DOMContentLoaded', () => {
       if (dados.status === 'ok') {
         atualizarDrawerConteudo(dados);
         abrirCarrinho();
+        const precoAtc = parseFloat(btn.dataset.produtoPreco || dados.total_valor || 0);
         if (window.fbq) {
           fbq('track', 'AddToCart', {
             content_ids: [produtoId],
             content_type: 'product',
-            value: parseFloat(btn.dataset.produtoPreco || dados.total_valor || 0),
+            contents: [{ id: produtoId, quantity: 1, item_price: precoAtc }],
+            value: precoAtc,
             currency: 'BRL',
           }, { eventID: metaEventId });
         }
+        window.dellaTrackGA('add_to_cart', {
+          currency: 'BRL',
+          value: precoAtc,
+          items: [{
+            item_id: produtoId,
+            item_name: btn.dataset.produtoNome || '',
+            item_category: btn.dataset.produtoCategoria || '',
+            price: precoAtc,
+            quantity: 1,
+          }],
+        });
         btn.innerHTML = '<i class="fas fa-check"></i>';
         setTimeout(() => { btn.innerHTML = textoOriginal; btn.disabled = false; }, 1500);
       } else {
@@ -425,6 +452,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+  function fmtBRL(value) {
+    const partes = value.toFixed(2).split('.');
+    partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return partes.join(',');
+  }
+
+  function atualizarFreteProgressoDrawer(total, totalItens) {
+    const wrap = document.getElementById('drawer-frete-progresso');
+    if (!wrap) return;
+    const meta = parseFloat(wrap.dataset.meta || '0');
+    if (!meta) { wrap.hidden = true; return; }
+    if (totalItens === 0) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+
+    const fill = document.getElementById('drawer-frete-progresso-fill');
+    const msg  = document.getElementById('drawer-frete-progresso-msg');
+    const faltante = Math.max(0, meta - total);
+    const percentual = Math.min(100, (total / meta) * 100);
+    if (fill) fill.style.width = percentual + '%';
+    if (!msg) return;
+    if (faltante <= 0) {
+      wrap.classList.add('conquistado-state');
+      msg.classList.add('conquistado');
+      msg.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Você ganhou frete grátis';
+    } else {
+      wrap.classList.remove('conquistado-state');
+      msg.classList.remove('conquistado');
+      msg.innerHTML = 'Faltam <strong>R$ ' + fmtBRL(faltante) + '</strong> para frete grátis';
+    }
+  }
+
   // ─── Atualizar conteúdo do drawer ─────────────────────────────────────────
   window.atualizarDrawerConteudo = function(dados) {
     const badge      = document.querySelector('.badge-carrinho');
@@ -437,8 +496,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (totalValor && dados.total_valor !== undefined) {
-      const valor = parseFloat(dados.total_valor);
-      totalValor.textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+      totalValor.textContent = 'R$ ' + fmtBRL(parseFloat(dados.total_valor));
+    }
+
+    if (dados.total_valor !== undefined) {
+      atualizarFreteProgressoDrawer(parseFloat(dados.total_valor), dados.total_itens || 0);
     }
 
     if (listaEl && dados.itens !== undefined) {
@@ -453,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="drawer-item-info">
               <p class="drawer-item-nome">${item.nome}</p>
               ${item.variacao ? `<p class="drawer-item-variacao">${item.variacao}</p>` : ''}
-              <p class="drawer-item-preco">R$ ${parseFloat(item.subtotal).toFixed(2).replace('.', ',')}</p>
+              <p class="drawer-item-preco">R$ ${fmtBRL(parseFloat(item.subtotal))}</p>
               <div class="drawer-item-qty">
                 <button class="drawer-qty-btn" data-drawer-action="alterar" data-chave="${item.chave}" data-quantidade="${item.quantidade - 1}">−</button>
                 <span>${item.quantidade}</span>
@@ -538,11 +600,51 @@ document.addEventListener('DOMContentLoaded', () => {
         if (icon) {
           icon.className = dados.na_wishlist ? 'fas fa-heart' : 'far fa-heart';
         }
+        // Pixel AddToWishlist — mesmo event_id do CAPI (deduplicação)
+        if (dados.na_wishlist && dados.meta_event && window.fbq) {
+          fbq('track', 'AddToWishlist', {
+            content_ids: [dados.meta_event.content_id],
+            content_type: 'product',
+            content_name: dados.meta_event.content_name,
+            content_category: dados.meta_event.content_category,
+            value: dados.meta_event.value,
+            currency: 'BRL',
+          }, { eventID: dados.meta_event.id });
+        }
       }
     } catch (err) { /* silencioso */ }
   });
 
+  // ─── Contact — clique no WhatsApp (Pixel + GA4, condicionado a consent) ──────
+  document.addEventListener('click', (e) => {
+    const wa = e.target.closest('.whatsapp-opcao, a[href*="wa.me"]');
+    if (!wa) return;
+    if (window.fbq) {
+      window.fbq('track', 'Contact', { content_category: 'whatsapp' });
+    }
+    window.dellaTrackGA('whatsapp_click', { label: wa.getAttribute('aria-label') || 'whatsapp' });
+  });
+
   // ─── Newsletter (AJAX) ────────────────────────────────────────────────────
+  function obterMensagemNewsletterHTML(dados) {
+    const tituloCss = 'color:var(--dourado);font-family:var(--fonte-titulo);font-style:italic;font-size:1.1rem;text-align:center;margin:0;';
+    const titulo = dados.novo
+      ? 'Obrigada por se inscrever ✦'
+      : 'Você já está cadastrada no nosso clube. Obrigada ✦';
+    let html = '<p style="' + tituloCss + '">' + titulo + '</p>';
+    if (dados.cupom) {
+      const valor = dados.cupom.tipo === 'percentual'
+        ? (parseFloat(dados.cupom.valor)).toString().replace('.', ',') + '% de desconto'
+        : 'R$ ' + dados.cupom.valor + ' de desconto';
+      html += '<div style="margin-top:1rem;text-align:center;font-family:var(--fonte-corpo);">' +
+                '<p style="font-size:.78rem;color:var(--cinza-texto);margin:0 0 .35rem;letter-spacing:.1em;text-transform:uppercase;">Seu cupom de ' + valor + '</p>' +
+                '<p style="font-size:1.25rem;font-weight:600;letter-spacing:.2em;color:var(--preto);margin:0;border:1px dashed var(--cinza-medio);padding:.65rem 1rem;display:inline-block;">' + dados.cupom.codigo + '</p>' +
+                '<p style="font-size:.72rem;color:var(--cinza-texto);margin:.75rem 0 0;line-height:1.5;">Válido por ' + dados.cupom.dias_validade + ' dias. Também enviamos para o seu e-mail.</p>' +
+              '</div>';
+    }
+    return html;
+  }
+
   const formNewsletter = document.getElementById('form-newsletter');
 
   if (formNewsletter) {
@@ -552,8 +654,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
       const btn = formNewsletter.querySelector('button[type="submit"]');
       const aviso = document.getElementById('newsletter-aviso');
+      const optin = document.getElementById('newsletter-optin');
+      const optinErro = document.getElementById('newsletter-optin-erro');
 
       if (!email) return;
+
+      if (optin && !optin.checked) {
+        if (optinErro) optinErro.style.display = 'block';
+        optin.focus();
+        return;
+      }
+      if (optinErro) optinErro.style.display = 'none';
 
       btn.disabled = true;
       btn.textContent = 'Aguarde...';
@@ -571,7 +682,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const dados = await res.json();
 
         if (dados.status === 'ok') {
-          formNewsletter.innerHTML = '<p style="color:var(--dourado);font-family:var(--fonte-titulo);font-style:italic;font-size:1.1rem;">Obrigada por se inscrever ✦</p>';
+          // Pixel Lead — mesmo event_id do CAPI (deduplicação)
+          if (dados.meta_event_id && window.fbq) {
+            fbq('track', 'Lead', {
+              content_name: 'Newsletter',
+              content_category: 'newsletter',
+            }, { eventID: dados.meta_event_id });
+          }
+          formNewsletter.style.display = 'none';
+          const optinLabel = optin ? optin.closest('.newsletter-optin') : null;
+          if (optinLabel) optinLabel.style.display = 'none';
+          if (optinErro) optinErro.style.display = 'none';
+          if (aviso) {
+            aviso.style.cssText = 'margin-top:1rem;';
+            aviso.innerHTML = obterMensagemNewsletterHTML(dados);
+          }
         } else {
           if (aviso) aviso.textContent = dados.erro || 'Tente novamente.';
           btn.disabled = false;
@@ -582,7 +707,169 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.textContent = 'Inscrever-se';
       }
     });
+
+    const optinChk = document.getElementById('newsletter-optin');
+    const optinErroEl = document.getElementById('newsletter-optin-erro');
+    if (optinChk && optinErroEl) {
+      optinChk.addEventListener('change', function () {
+        if (optinChk.checked) optinErroEl.style.display = 'none';
+      });
+    }
   }
+
+  // ─── Busca inline no navbar ───────────────────────────────────────────────
+  const btnBusca          = document.getElementById('btn-busca');
+  const buscaDesktop      = document.getElementById('navbar-busca-desktop');
+  const buscaMobile       = document.getElementById('navbar-busca-mobile');
+  const buscaInputDesktop = document.getElementById('navbar-busca-input');
+  const buscaInputMobile  = document.getElementById('navbar-busca-input-mobile');
+
+  if (btnBusca) {
+    function abrirBusca() {
+      const isMobile = window.innerWidth <= 768;
+      if (isMobile) {
+        buscaMobile?.classList.add('ativo');
+        buscaMobile?.removeAttribute('aria-hidden');
+        buscaInputMobile?.focus();
+      } else {
+        buscaDesktop?.classList.add('ativo');
+        buscaDesktop?.removeAttribute('aria-hidden');
+        setTimeout(() => buscaInputDesktop?.focus(), 50);
+      }
+      btnBusca.setAttribute('aria-expanded', 'true');
+      const icon = document.getElementById('btn-busca-icon');
+      if (icon) { icon.classList.replace('fa-magnifying-glass', 'fa-xmark'); }
+    }
+
+    function fecharBusca() {
+      buscaDesktop?.classList.remove('ativo');
+      buscaMobile?.classList.remove('ativo');
+      buscaDesktop?.setAttribute('aria-hidden', 'true');
+      buscaMobile?.setAttribute('aria-hidden', 'true');
+      btnBusca.setAttribute('aria-expanded', 'false');
+      const icon = document.getElementById('btn-busca-icon');
+      if (icon) { icon.classList.replace('fa-xmark', 'fa-magnifying-glass'); }
+    }
+
+    btnBusca.addEventListener('click', () => {
+      if (btnBusca.getAttribute('aria-expanded') === 'true') {
+        fecharBusca();
+      } else {
+        abrirBusca();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && btnBusca.getAttribute('aria-expanded') === 'true') {
+        fecharBusca();
+      }
+    });
+  }
+
+  // ─── Autocomplete de busca ───────────────────────────────────────────────
+  (function () {
+    const pares = [
+      { input: buscaInputDesktop, lista: document.getElementById('busca-sugestoes-desktop') },
+      { input: buscaInputMobile,  lista: document.getElementById('busca-sugestoes-mobile') },
+    ];
+
+    let debounceTimer = null;
+    let foco = -1;
+
+    function fecharLista(lista) {
+      if (!lista) return;
+      lista.hidden = true;
+      lista.innerHTML = '';
+      foco = -1;
+    }
+
+    function fecharTodasListas() {
+      pares.forEach(({ lista }) => fecharLista(lista));
+    }
+
+    function moverFoco(lista, delta) {
+      const itens = lista.querySelectorAll('.busca-sugestao');
+      if (!itens.length) return;
+      foco = ((foco + delta + itens.length) % itens.length);
+      itens.forEach((el, i) => el.classList.toggle('foco', i === foco));
+      itens[foco]?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function posicionarLista(input, lista) {
+      const rect = input.getBoundingClientRect();
+      lista.style.top    = (rect.bottom + 4) + 'px';
+      lista.style.left   = rect.left + 'px';
+      lista.style.width  = Math.max(rect.width, 240) + 'px';
+      lista.style.right  = 'auto';
+    }
+
+    function renderizarSugestoes(input, lista, sugestoes) {
+      lista.innerHTML = '';
+      if (!sugestoes.length) { lista.hidden = true; return; }
+      sugestoes.forEach((s) => {
+        const li = document.createElement('li');
+        li.className = 'busca-sugestao';
+        li.setAttribute('role', 'option');
+        const iconeClasse = s.tipo === 'categoria' ? 'fas fa-folder-open' : 'fas fa-bag-shopping';
+        li.innerHTML = `<i class="${iconeClasse} busca-sugestao-icone"></i><span>${s.label}</span>`;
+        li.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          window.location.href = s.url;
+        });
+        lista.appendChild(li);
+      });
+      posicionarLista(input, lista);
+      lista.hidden = false;
+      foco = -1;
+    }
+
+    function buscar(input, lista, q) {
+      if (q.length < 2) { fecharLista(lista); return; }
+      fetch(`/busca/autocomplete/?q=${encodeURIComponent(q)}`)
+        .then((r) => r.ok ? r.json() : { sugestoes: [] })
+        .then((data) => { if (input.value.trim() === q) renderizarSugestoes(input, lista, data.sugestoes || []); })
+        .catch(() => {});
+    }
+
+    pares.forEach(({ input, lista }) => {
+      if (!input || !lista) return;
+
+      input.addEventListener('input', () => {
+        const q = input.value.trim();
+        foco = -1;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => buscar(input, lista, q), 220);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (lista.hidden) return;
+        if (e.key === 'ArrowDown')  { e.preventDefault(); moverFoco(lista, 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); moverFoco(lista, -1); }
+        else if (e.key === 'Enter' && foco >= 0) {
+          e.preventDefault();
+          lista.querySelectorAll('.busca-sugestao')[foco]?.dispatchEvent(new MouseEvent('mousedown'));
+        }
+        else if (e.key === 'Escape') { fecharLista(lista); }
+      });
+
+      input.addEventListener('blur', () => setTimeout(() => fecharLista(lista), 150));
+
+      input.setAttribute('aria-expanded', 'false');
+      new MutationObserver(() => {
+        input.setAttribute('aria-expanded', lista.hidden ? 'false' : 'true');
+      }).observe(lista, { attributes: true, attributeFilter: ['hidden'] });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.busca-form-wrapper')) fecharTodasListas();
+    });
+
+    window.addEventListener('resize', () => {
+      pares.forEach(({ input, lista }) => {
+        if (!lista.hidden) posicionarLista(input, lista);
+      });
+    });
+  }());
 
   // ─── Menu mobile ──────────────────────────────────────────────────────────
   const btnMenuMobile     = document.getElementById('btn-menu-mobile');
@@ -787,17 +1074,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const popupFechar     = document.getElementById('popup-newsletter-fechar');
   const formPopup       = document.getElementById('form-popup-newsletter');
 
-    if (popupNewsletter) {
-    const POPUP_KEY = 'della_newsletter_popup';
+  if (popupNewsletter) {
+    const POPUP_KEY         = 'della_newsletter_popup';
+    const FIRST_PAGE_KEY    = 'della_primeira_pagina';
+    const LOGADO_VISTO_KEY  = 'della_logado_popup_visto';
 
-    if (!sessionStorage.getItem(POPUP_KEY)) {
-      setTimeout(() => {
-        // Não abrir se o banner de cookies ainda está visível — evita 2 popups sobrepostos
-        const cookieBanner = document.getElementById('della-cookie-banner');
+    // Usuario logado nao inscrito: data-force-show="1" vem do Django (server-side)
+    const forceShow = popupNewsletter.dataset.forceShow === '1';
+
+    function mostrarPopupApos5s() {
+      setTimeout(function() {
+        var cookieBanner = document.getElementById('della-cookie-banner');
         if (cookieBanner && cookieBanner.style.display !== 'none') return;
         popupNewsletter.style.display = 'flex';
-        sessionStorage.setItem(POPUP_KEY, '1');
       }, 5000);
+    }
+
+    if (forceShow) {
+      // Logado: usa sessionStorage proprio — mostra uma vez por sessao de navegador
+      // sessionStorage e limpo ao fechar a aba/janela, entao aparece de novo na proxima visita
+      if (!sessionStorage.getItem(LOGADO_VISTO_KEY)) {
+        sessionStorage.setItem(LOGADO_VISTO_KEY, '1');
+        mostrarPopupApos5s();
+      }
+    } else {
+      // Anonimo: mostra apenas na primeira pagina da primeira visita (localStorage permanente)
+      var ehPrimeiraPagina = !sessionStorage.getItem(FIRST_PAGE_KEY);
+      sessionStorage.setItem(FIRST_PAGE_KEY, '1');
+      if (!localStorage.getItem(POPUP_KEY) && ehPrimeiraPagina) {
+        localStorage.setItem(POPUP_KEY, '1');
+        mostrarPopupApos5s();
+      }
     }
 
     function fecharPopup() { popupNewsletter.style.display = 'none'; }
@@ -814,6 +1121,14 @@ document.addEventListener('DOMContentLoaded', () => {
       formPopup.addEventListener('submit', async e => {
         e.preventDefault();
         const email = formPopup.querySelector('input[type="email"]').value.trim();
+        const optinChk = document.getElementById('popup-newsletter-optin');
+        const optinErro = document.getElementById('popup-optin-erro');
+        if (optinChk && !optinChk.checked) {
+          if (optinErro) optinErro.style.display = 'block';
+          optinChk.focus();
+          return;
+        }
+        if (optinErro) optinErro.style.display = 'none';
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
         const btn = formPopup.querySelector('button[type="submit"]');
         if (!email) return;
@@ -827,8 +1142,8 @@ document.addEventListener('DOMContentLoaded', () => {
           });
           const dados = await res.json();
           if (dados.status === 'ok') {
-            formPopup.innerHTML = '<p style="color:var(--dourado);font-family:var(--fonte-titulo);font-style:italic;font-size:1.1rem;padding:1rem 0;">Obrigada por se inscrever ✦</p>';
-            setTimeout(fecharPopup, 2500);
+            formPopup.innerHTML = obterMensagemNewsletterHTML(dados);
+            setTimeout(fecharPopup, dados.cupom ? 12000 : 3000);
           } else {
             btn.disabled = false;
             btn.innerHTML = 'Assinar Newsletter <i class="fas fa-chevron-right"></i>';
@@ -838,6 +1153,14 @@ document.addEventListener('DOMContentLoaded', () => {
           btn.innerHTML = 'Assinar Newsletter <i class="fas fa-chevron-right"></i>';
         }
       });
+
+      const popupOptinChk = document.getElementById('popup-newsletter-optin');
+      const popupOptinErroEl = document.getElementById('popup-optin-erro');
+      if (popupOptinChk && popupOptinErroEl) {
+        popupOptinChk.addEventListener('change', () => {
+          if (popupOptinChk.checked) popupOptinErroEl.style.display = 'none';
+        });
+      }
     }
   }
 
@@ -855,7 +1178,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const pixelId = document.body.dataset.metaPixelId;
     if (!pixelId) return;
 
-    // Snippet oficial da Meta — montado dinamicamente para só rodar com consent
+    // Advanced Matching: email/telefone hash so com consent; fbc/fbp sempre
+    const userData = {};
+    const temConsentMarketing = !!(window.dellaConsent && window.dellaConsent.marketing);
+    if (temConsentMarketing) {
+      try {
+        const amEl = document.getElementById('meta-am-data');
+        if (amEl) Object.assign(userData, JSON.parse(amEl.textContent || '{}'));
+      } catch (_) {}
+    }
+    const mFbc = document.cookie.match(/(?:^|;\s*)_fbc=([^;]+)/);
+    const mFbp = document.cookie.match(/(?:^|;\s*)_fbp=([^;]+)/);
+    if (mFbc) userData.fbc = decodeURIComponent(mFbc[1]);
+    if (mFbp) userData.fbp = decodeURIComponent(mFbp[1]);
+
+    // Snippet oficial da Meta
     !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
     n.callMethod.apply(n,arguments):n.queue.push(arguments)};
     if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
@@ -864,7 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
     s.parentNode.insertBefore(t,s)}(window, document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
 
-    fbq('init', pixelId);
+    fbq('init', pixelId, userData);
     fbq('track', 'PageView');
 
     // Dispara eventos custom registrados pelo template (ViewContent, Purchase, etc.)
@@ -902,6 +1239,42 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (e) { /* silencioso */ }
     });
   }
+
+  // ─── GA4 Ecommerce — eventos de página declarados no template ──────────────
+  // Espelho de dispararMetaEventosCustom: só roda depois de carregarGA (consent Análise).
+  function dispararGAEventosCustom() {
+    if (!window.gtag) return;
+    document.querySelectorAll('script[type="application/json"][data-ga-event]').forEach(function (script) {
+      try {
+        const evento = script.dataset.gaEvent;
+        const dados = JSON.parse(script.textContent || '{}');
+        const onceKey = dados._once_key || '';
+        delete dados._once_key;
+
+        if (onceKey) {
+          try {
+            if (sessionStorage.getItem('ga-event:' + onceKey)) return;
+          } catch (e) { /* silencioso */ }
+        }
+
+        window.gtag('event', evento, dados);
+
+        if (onceKey) {
+          try {
+            sessionStorage.setItem('ga-event:' + onceKey, '1');
+          } catch (e) { /* silencioso */ }
+        }
+      } catch (e) { /* silencioso */ }
+    });
+  }
+
+  // ─── Helpers públicos de tracking (silenciosos sem consent) ────────────────
+  window.dellaTrackGA = function (event, params) {
+    try { if (window.gtag) window.gtag('event', event, params || {}); } catch (e) { /* silencioso */ }
+  };
+  window.dellaTrackMeta = function (event, params) {
+    try { if (window.fbq) window.fbq('track', event, params || {}); } catch (e) { /* silencioso */ }
+  };
 
   // ─── Cookie Consent (LGPD) ─────────────────────────────────────────────────
   (function () {
@@ -959,17 +1332,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const existente = lerConsent();
     if (existente) {
       window.dellaConsent = existente;
-      if (existente.analytics) carregarGA();
-      if (existente.marketing) carregarMetaPixel();
+      if (existente.analytics) { carregarGA(); carregarClarity(); }
     } else {
       abrirBanner();
     }
+    // Pixel carrega sempre (PageView, ViewContent, AddToCart sem PII)
+    // AM params (email/telefone hash) so sao incluidos se marketing consent = true
+    carregarMetaPixel();
 
-    // Quando o usuário consentir marketing pela 1ª vez, carrega o Pixel
+    // Quando o usuario consentir, carrega GA/Clarity (Pixel ja esta ativo)
     document.addEventListener('della:consent', function (e) {
       if (!e.detail) return;
-      if (e.detail.analytics) carregarGA();
-      if (e.detail.marketing) carregarMetaPixel();
+      if (e.detail.analytics) { carregarGA(); carregarClarity(); }
     });
 
     const btnAceitarTudo = document.getElementById('della-cookie-aceitar-tudo');
@@ -980,7 +1354,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btnCustomizar = document.getElementById('della-cookie-customizar');
     if (btnCustomizar) btnCustomizar.addEventListener('click', function () {
-      abrirModal(lerConsent() || { analytics: true, marketing: true });
+      abrirModal(lerConsent() || { analytics: false, marketing: false });
     });
 
     const btnFecharModal = document.getElementById('della-cookie-modal-fechar');
@@ -1014,8 +1388,60 @@ document.addEventListener('DOMContentLoaded', () => {
     const linkPrefs = document.getElementById('della-cookie-preferencias-link');
     if (linkPrefs) linkPrefs.addEventListener('click', function (e) {
       e.preventDefault();
-      abrirModal(lerConsent() || { analytics: true, marketing: true });
+      abrirModal(lerConsent() || { analytics: false, marketing: false });
     });
+  })();
+
+  // ─── Tarja de Anúncios ─────────────────────────────────────────────────────
+  (function() {
+    const tarja = document.getElementById('tarja-anuncio');
+    if (!tarja) return;
+
+    const itens = tarja.querySelectorAll('.tarja-item');
+    const total = itens.length;
+    if (total === 0) return;
+
+    tarja.setAttribute('data-total', total);
+
+    let atual = 0;
+    let timer = null;
+    const DURACAO = 5000;
+
+    function irPara(idx) {
+      const anterior = itens[atual];
+      anterior.classList.remove('tarja-ativa');
+      anterior.classList.add('tarja-saindo');
+      setTimeout(function() { anterior.classList.remove('tarja-saindo'); }, 500);
+
+      atual = (idx + total) % total;
+      itens[atual].classList.add('tarja-ativa');
+    }
+
+    function iniciarTimer() {
+      clearInterval(timer);
+      if (total > 1) timer = setInterval(function() { irPara(atual + 1); }, DURACAO);
+    }
+
+    iniciarTimer();
+
+    const btnPrev = document.getElementById('tarja-prev');
+    const btnNext = document.getElementById('tarja-next');
+    if (btnPrev) btnPrev.addEventListener('click', function() { irPara(atual - 1); iniciarTimer(); });
+    if (btnNext) btnNext.addEventListener('click', function() { irPara(atual + 1); iniciarTimer(); });
+  })();
+
+  // ─── Mascara de telefone no formulario de contato ──────────────────────────
+  (function () {
+    var contatoTel = document.querySelector('.contato-form #telefone');
+    if (!contatoTel) return;
+    function aplicarMascaraTel() {
+      var v = contatoTel.value.replace(/\D/g, '').slice(0, 11);
+      if (v.length > 7) v = v.replace(/(\d{2})(\d{1})(\d{4})(\d{0,4}).*/, '($1) $2 $3-$4');
+      else if (v.length > 3) v = v.replace(/(\d{2})(\d)(\d+)/, '($1) $2 $3');
+      else if (v.length > 2) v = v.replace(/(\d{2})(\d+)/, '($1) $2');
+      contatoTel.value = v;
+    }
+    contatoTel.addEventListener('input', aplicarMascaraTel);
   })();
 
   // ─── data-confirm delegation (substitui onclick/onsubmit inline) ───────────

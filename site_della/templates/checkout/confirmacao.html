@@ -153,19 +153,38 @@
 
       <div class="confirmacao-grid">
 
+        {% if pedido.retirada_loja %}
+        <div class="confirmacao-card">
+          <h3 class="confirmacao-card-titulo">Retirada na Loja</h3>
+          <p style="font-weight:500;color:var(--dourado, #c9a96e);">D'ELLA Instore - Show Room</p>
+          <p>Rua Visconde da Luz, 183</p>
+          <p>Vila Nova Conceição - São Paulo/SP</p>
+          <p>CEP 04537-070</p>
+          <p style="margin-top:.75rem;font-size:.85rem;color:var(--cinza-texto);">
+            Seg a Qui: 10h às 19h<br>
+            Sex: 10h às 18h<br>
+            Sáb: confirmar pelo WhatsApp
+          </p>
+          <p style="margin-top:.75rem;font-size:.8rem;color:var(--cinza-texto);">
+            Disponível a partir de 2h após confirmação do pagamento.<br>
+            Enviaremos um e-mail quando seu pedido estiver pronto.
+          </p>
+        </div>
+        {% else %}
         <div class="confirmacao-card">
           <h3 class="confirmacao-card-titulo">Endereço de entrega</h3>
           <p>{{ pedido.nome_completo }}</p>
           <p>{{ pedido.logradouro }}, {{ pedido.numero_entrega }}
-            {% if pedido.complemento %} — {{ pedido.complemento }}{% endif %}
+            {% if pedido.complemento %} - {{ pedido.complemento }}{% endif %}
           </p>
           <p>{{ pedido.bairro }}</p>
-          <p>{{ pedido.cidade }} — {{ pedido.estado }}</p>
+          <p>{{ pedido.cidade }} - {{ pedido.estado }}</p>
           <p>CEP: {{ pedido.cep_entrega|slice:":5" }}-{{ pedido.cep_entrega|slice:"5:" }}</p>
           {% if pedido.transportadora %}
             <p style="margin-top:.75rem;font-weight:500;">{{ pedido.transportadora }}</p>
           {% endif %}
         </div>
+        {% endif %}
 
         <div class="confirmacao-card">
           <h3 class="confirmacao-card-titulo">Valores</h3>
@@ -225,20 +244,43 @@
 {% endblock %}
 
 {% block js_extra %}
-{# Meta Pixel: Purchase — disparado uma vez por pedido confirmado #}
 {% load l10n %}
+{# Purchase (Meta + GA4): so renderiza na primeira exibicao pos-checkout.
+   A flag disparar_tracking e consumida server-side em confirmacao_pedido,
+   entao revisitas (link, Meus Pedidos, outro dispositivo) nao re-disparam. #}
+{% if disparar_tracking %}
+{# Meta Pixel: Purchase #}
 <script type="application/json" data-meta-event="Purchase">
 {
   "value": {{ pedido.total|unlocalize }},
   "currency": "BRL",
   "content_ids": [{% for item in pedido.itens.all %}"{{ item.produto_id }}"{% if not forloop.last %},{% endif %}{% endfor %}],
   "content_type": "product",
+  "contents": [{% for item in pedido.itens.all %}{"id": "{{ item.produto_id }}", "quantity": {{ item.quantidade }}, "item_price": {{ item.preco_unitario|unlocalize }}}{% if not forloop.last %},{% endif %}{% endfor %}],
   "num_items": {{ pedido.itens.count }},
   "order_id": "{{ pedido.numero|escapejs }}",
   "_event_id": "purchase_{{ pedido.numero|escapejs }}",
   "_once_key": "purchase_{{ pedido.numero|escapejs }}"
 }
 </script>
+{# GA4: purchase (Enhanced Ecommerce) - disparado uma vez por pedido (protecao via _once_key) #}
+<script type="application/json" data-ga-event="purchase">
+{
+  "transaction_id": "{{ pedido.numero|escapejs }}",
+  "currency": "BRL",
+  "value": {{ pedido.total|unlocalize }},
+  "shipping": {{ pedido.frete|unlocalize }},
+  "items": [{% for item in pedido.itens.all %}{
+    "item_id": "{{ item.produto_id }}",
+    "item_name": "{{ item.nome_produto|escapejs }}",
+    "item_category": "{{ item.produto.categoria.nome|escapejs }}",
+    "price": {{ item.preco_unitario|unlocalize }},
+    "quantity": {{ item.quantidade }}
+  }{% if not forloop.last %},{% endif %}{% endfor %}],
+  "_once_key": "purchase_{{ pedido.numero|escapejs }}"
+}
+</script>
+{% endif %}
 
 {% if pedido.forma_pagamento == 'pix' and pix_qrcode and pix_via == 'pagseguro' %}
 <script type="application/json" id="checkout-confirmacao-config">

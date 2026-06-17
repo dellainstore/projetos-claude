@@ -150,29 +150,28 @@ def pagseguro_notificacao(request):
             logger.warning('E-mail: falha ao enviar notificação do pedido %s (status %s): %s',
                            reference_id, novo_status, exc)
 
-    return HttpResponse('OK')
+        # Purchase server-side ao confirmar o pagamento (ex: PIX pago fora da
+        # pagina de confirmacao). Dedup: Meta pelo event_id (purchase_<numero>)
+        # e GA4 pelo transaction_id (<numero>) — os mesmos do disparo client-side.
+        # Este bloco so roda na transicao de status, entao dispara uma unica vez.
+        if novo_status == 'pagamento_confirmado':
+            try:
+                from apps.core_utils.meta import enviar_evento_purchase
+                enviar_evento_purchase(pedido)
+            except Exception as exc:
+                logger.warning('Meta CAPI: falha ao enviar Purchase (webhook) do pedido %s: %s',
+                               reference_id, exc)
+            try:
+                from apps.core_utils.ga4 import enviar_ga4_purchase
+                enviar_ga4_purchase(
+                    pedido,
+                    analytics_consent=pedido.consentimento_analytics,
+                    client_id=pedido.ga_client_id,
+                )
+            except Exception as exc:
+                logger.warning('GA4 MP: falha ao enviar purchase (webhook) do pedido %s: %s',
+                               reference_id, exc)
 
-
-# ─── Stone ────────────────────────────────────────────────────────────────────
-
-@csrf_exempt
-def stone_webhook(request):
-    """
-    Webhook de eventos Stone.
-    Atualiza o pedido conforme charge status.
-    TODO: validar header X-Stone-Signature (HMAC) antes de processar.
-    """
-    from apps.pedidos.models import Pedido, HistoricoPedido
-
-    try:
-        payload = json.loads(request.body)
-    except json.JSONDecodeError:
-        return HttpResponse(status=400)
-
-    event_type = payload.get('type', '')
-    logger.info('Webhook Stone recebido: %s', event_type)
-
-    # TODO: processar eventos charge.paid, charge.failed, etc.
     return HttpResponse('OK')
 
 
