@@ -33,3 +33,4 @@ pagseguro_*.json
 
 # Node
 node_modules/
+.github/
