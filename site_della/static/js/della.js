@@ -4,6 +4,40 @@ document.addEventListener('DOMContentLoaded', () => {
   const gaMeasurementId = document.body.dataset.gaMeasurementId || '';
   const clarityProjectId = document.body.dataset.clarityProjectId || '';
 
+  // ─── UTM capture — persiste atribuicao por 30 dias em localStorage e cookie ─
+  (function () {
+    const UTM_KEY     = 'della_utms';
+    const ATTR_COOKIE = 'della_attr';
+    const UTM_TTL     = 30 * 24 * 60 * 60 * 1000;
+    const COOKIE_DAYS = 30;
+    const params      = new URLSearchParams(window.location.search);
+    const keys        = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id'];
+    const captured    = {};
+    keys.forEach(k => { if (params.get(k)) captured[k] = params.get(k); });
+    // Captura gclid e fbclid da URL para incluir no cookie de atribuicao
+    if (params.get('gclid'))  captured.gclid  = params.get('gclid');
+    if (params.get('fbclid')) captured.fbclid = params.get('fbclid');
+    if (Object.keys(captured).length) {
+      captured._ts = Date.now();
+      try { localStorage.setItem(UTM_KEY, JSON.stringify(captured)); } catch (_) {}
+      // Cookie legivel pelo backend: localStorage nao chega ao servidor
+      try {
+        const val = encodeURIComponent(JSON.stringify(captured));
+        const exp = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
+        document.cookie = ATTR_COOKIE + '=' + val + '; expires=' + exp + '; path=/; SameSite=Lax';
+      } catch (_) {}
+    }
+    window.dellaGetUTMs = function () {
+      try {
+        const raw = localStorage.getItem(UTM_KEY);
+        if (!raw) return null;
+        const d = JSON.parse(raw);
+        if (Date.now() - (d._ts || 0) > UTM_TTL) { localStorage.removeItem(UTM_KEY); return null; }
+        return d;
+      } catch (_) { return null; }
+    };
+  })();
+
   function carregarGA() {
     if (!gaMeasurementId || window._gaCarregado) return;
     window._gaCarregado = true;
@@ -532,7 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Remover item pelo drawer
-  window.drawerRemover = async function(chave) {
+  window.drawerRemover = async function(chave, itemData) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
     try {
       const res   = await fetch(`/carrinho/remover/${chave}/`, {
@@ -540,7 +574,21 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'X-CSRFToken': csrfToken },
       });
       const dados = await res.json();
-      if (dados.status === 'ok') window.atualizarDrawerConteudo(dados);
+      if (dados.status === 'ok') {
+        window.atualizarDrawerConteudo(dados);
+        if (itemData) {
+          window.dellaTrackGA('remove_from_cart', {
+            currency: 'BRL',
+            value: parseFloat(itemData.preco || 0) * parseInt(itemData.quantidade || 1, 10),
+            items: [{
+              item_id: String(itemData.id || ''),
+              item_name: itemData.nome || '',
+              price: parseFloat(itemData.preco || 0),
+              quantity: parseInt(itemData.quantidade || 1, 10),
+            }],
+          });
+        }
+      }
     } catch(e) {}
   };
 
@@ -567,7 +615,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!chave) return;
 
     if (drawerBtn.dataset.drawerAction === 'remover') {
-      window.drawerRemover(chave);
+      const itemEl = drawerBtn.closest('.drawer-item');
+      const itemData = itemEl ? {
+        id: itemEl.dataset.produtoId || '',
+        nome: itemEl.querySelector('.drawer-item-nome')?.textContent?.trim() || '',
+        preco: parseFloat((itemEl.querySelector('.drawer-item-preco')?.textContent || '').replace(/[^0-9,]/g, '').replace(',', '.')) || 0,
+        quantidade: parseInt(itemEl.querySelector('.drawer-item-qty span')?.textContent || '1', 10),
+      } : null;
+      window.drawerRemover(chave, itemData);
       return;
     }
 
@@ -1444,6 +1499,34 @@ document.addEventListener('DOMContentLoaded', () => {
     contatoTel.addEventListener('input', aplicarMascaraTel);
   })();
 
+  // ─── select_item — clique em produto no grid de listagem ──────────────────
+  document.addEventListener('click', function (e) {
+    const link = e.target.closest('.produto-card a[data-item-id]');
+    if (!link) return;
+    window.dellaTrackGA('select_item', {
+      item_list_id: document.body.dataset.itemListId || 'loja',
+      item_list_name: document.body.dataset.itemListName || 'Listagem',
+      items: [{
+        item_id: link.dataset.itemId || '',
+        item_name: link.dataset.itemName || '',
+        item_category: link.dataset.itemCategory || '',
+        price: parseFloat(link.dataset.itemPrice || 0),
+        index: parseInt(link.dataset.itemIndex || 0, 10),
+      }],
+    });
+  });
+
+  // ─── search — rastreamento de busca (GA4 + Meta Pixel) ────────────────────
+  document.querySelectorAll('.busca-form-wrapper form, form[action*="/loja/"]').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      const input = form.querySelector('input[name="q"]');
+      const q = (input ? input.value : '').trim();
+      if (!q) return;
+      window.dellaTrackGA('search', { search_term: q });
+      if (window.fbq) fbq('track', 'Search', { search_string: q });
+    });
+  });
+
   // ─── data-confirm delegation (substitui onclick/onsubmit inline) ───────────
   document.addEventListener('click', function (e) {
     const el = e.target.closest('[data-confirm]');
@@ -1466,3 +1549,134 @@ document.addEventListener('DOMContentLoaded', () => {
   }, true);
 
 });
+
+// ─── Exit-intent popup (captura email carrinho abandonado) ───────────────────
+(function () {
+  var STORAGE_KEY = 'della_popup_cart';
+
+  function jaExibido() {
+    try { return sessionStorage.getItem(STORAGE_KEY) === '1'; } catch (e) { return false; }
+  }
+  function marcarExibido() {
+    try { sessionStorage.setItem(STORAGE_KEY, '1'); } catch (e) {}
+  }
+
+  function abrir() {
+    var el = document.getElementById('popup-carrinho-email');
+    if (!el) return;
+    el.classList.add('popup-ativo');
+    el.removeAttribute('aria-hidden');
+    var input = el.querySelector('#popup-carrinho-email-input');
+    if (input) setTimeout(function () { input.focus(); }, 320);
+  }
+
+  function fechar() {
+    var el = document.getElementById('popup-carrinho-email');
+    if (!el) return;
+    el.classList.remove('popup-ativo');
+    el.setAttribute('aria-hidden', 'true');
+    marcarExibido();
+  }
+
+  function init() {
+    var popup = document.getElementById('popup-carrinho-email');
+    if (!popup) return;
+    if (jaExibido()) return;
+    if (!window._dellaTemCarrinho) return;
+
+    popup.setAttribute('aria-hidden', 'true');
+
+    popup.addEventListener('click', function (e) {
+      if (e.target === popup) fechar();
+    });
+    var btnFechar = popup.querySelector('.popup-carrinho-fechar');
+    if (btnFechar) btnFechar.addEventListener('click', fechar);
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && popup.classList.contains('popup-ativo')) fechar();
+    });
+
+    var form = document.getElementById('popup-carrinho-form');
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var input = document.getElementById('popup-carrinho-email-input');
+        var btn   = document.getElementById('popup-carrinho-btn');
+        var email = (input ? input.value : '').trim();
+        if (!email) return;
+
+        if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+
+        var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content
+                   || (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+
+        fetch('/analytics/capturar-email-popup/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+          body: JSON.stringify({ email: email }),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (form) form.style.display = 'none';
+          var msg = document.getElementById('popup-carrinho-msg');
+          if (msg) {
+            msg.style.display = 'block';
+            if (data.codigo) {
+              var codigoEl = msg.querySelector('.popup-carrinho-codigo');
+              if (codigoEl) codigoEl.textContent = data.codigo;
+            }
+          }
+          marcarExibido();
+        })
+        .catch(function () {
+          if (btn) { btn.disabled = false; btn.textContent = 'Quero meu cupom'; }
+        });
+      });
+    }
+
+    // Desktop: mouse saindo pelo topo (exit-intent)
+    function onMouseLeave(e) {
+      if (e.clientY <= 0 && !jaExibido()) {
+        document.removeEventListener('mouseleave', onMouseLeave);
+        setTimeout(abrir, 400);
+      }
+    }
+    document.addEventListener('mouseleave', onMouseLeave);
+
+    // Mobile: visibilitychange (usuario troca de app / minimiza)
+    var mobileTriggered = false;
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden' && !jaExibido() && !mobileTriggered) {
+        mobileTriggered = true;
+      }
+      if (document.visibilityState === 'visible' && mobileTriggered && !jaExibido()) {
+        mobileTriggered = false;
+        setTimeout(abrir, 600);
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+// ─── D'ELLA Analytics interno ────────────────────────────────────────────────
+window.dellaTrack = function (tipo, dados) {
+  try {
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content
+              || (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    fetch('/analytics/evento/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrf,
+        'X-Analytics-Source': 'della-tracker',
+      },
+      body: JSON.stringify(Object.assign({ tipo: tipo }, dados || {})),
+      keepalive: true,
+    }).catch(function () {});
+  } catch (_) {}
+};

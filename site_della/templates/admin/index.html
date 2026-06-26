@@ -21,6 +21,11 @@
       🚚 Dashboard de Pedidos
     </a>
     {% endif %}
+    {% if perms.pedidos.view_pedido %}
+    <a href="/painel/marketing/" class="da-welcome-btn da-welcome-btn-primary">
+      📈 Marketing e Atribuicao
+    </a>
+    {% endif %}
     {% if perms.conteudo.view_instagrampost %}
     <a href="/painel/conteudo/instagrampost/" class="da-welcome-btn da-welcome-btn-ghost">
       📷 Feed do Instagram
@@ -81,6 +86,17 @@
     <div class="da-card-body">
       <strong>Posts Instagram</strong>
       <small>Feed importado e exibido na loja</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+  {% endif %}
+
+  {% if perms.conteudo.view_linkbio %}
+  <a href="{% url 'admin:conteudo_linkbio_changelist' %}" class="da-card">
+    <div class="da-card-icon ic-purple">🔗</div>
+    <div class="da-card-body">
+      <strong>Links da Bio (Instagram)</strong>
+      <small>Botões da página /links exibida no perfil</small>
     </div>
     <span class="da-card-arrow">›</span>
   </a>

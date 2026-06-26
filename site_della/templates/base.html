@@ -591,5 +591,47 @@
 
 {% block js_extra %}{% endblock %}
 
+{# Eventos de tracking flash (login / sign_up / CompleteRegistration) consumidos
+   na primeira pagina carregada apos a acao. O context processor tracking_flash
+   le e apaga as flags de sessao, entao nao disparam novamente em revisitas. #}
+{% if track_login %}
+<script type="application/json" data-ga-event="login">{"method": "email"}</script>
+{% endif %}
+{% if track_signup_event_id %}
+<script type="application/json" data-ga-event="sign_up">{"method": "email"}</script>
+<script type="application/json" data-meta-event="CompleteRegistration">
+{"content_name": "Cadastro", "status": true, "currency": "BRL", "_event_id": "{{ track_signup_event_id|escapejs }}"}
+</script>
+{% endif %}
+
+{% if not user.is_authenticated %}
+<script>window._dellaTemCarrinho = {% if request.session.carrinho_della %}true{% else %}false{% endif %};</script>
+<div id="popup-carrinho-email" class="popup-carrinho-overlay" role="dialog" aria-modal="true" aria-label="Oferta exclusiva">
+  <div class="popup-carrinho-box">
+    <button class="popup-carrinho-fechar" aria-label="Fechar">&times;</button>
+    <img src="{% static 'images/brand/logo-della.webp' %}" alt="D'ELLA" class="popup-carrinho-logo-img">
+    <div class="popup-carrinho-logo-instore">I N S T O R E</div>
+    <h2 class="popup-carrinho-titulo">Esqueceu algo?</h2>
+    <p class="popup-carrinho-subtitulo">
+      Deixe seu e-mail e receba um cupom de <strong>5% de desconto</strong> para finalizar sua compra.
+    </p>
+    <form id="popup-carrinho-form" novalidate>
+      <input type="email" id="popup-carrinho-email-input"
+             placeholder="Seu melhor e-mail" autocomplete="email" required>
+      <button type="submit" id="popup-carrinho-btn">Quero meu cupom</button>
+      <p class="popup-carrinho-lgpd">Ao enviar, voce concorda em receber e-mails da D'ELLA Instore.</p>
+    </form>
+    <div id="popup-carrinho-msg" style="display:none;">
+      <div class="popup-carrinho-check">&#10003;</div>
+      <p class="popup-carrinho-msg-texto">
+        Cupom enviado para seu e-mail!<br>
+        Use <strong class="popup-carrinho-codigo"></strong> no checkout.<br>
+        <span class="popup-carrinho-msg-validade">Valido por 24h.</span>
+      </p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 </body>
 </html>

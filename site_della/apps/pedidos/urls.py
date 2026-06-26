@@ -11,6 +11,7 @@ urlpatterns = [
     path('remover/<str:item_id>/', views.remover_do_carrinho, name='remover'),
     path('atualizar/', views.atualizar_carrinho, name='atualizar'),
     path('checkout/', views.checkout, name='checkout'),
+    path('checkout/capturar-email/', views.capturar_email_checkout, name='capturar_email_checkout'),
     path('checkout/endereco/', views.checkout_endereco, name='checkout_endereco'),
     path('checkout/entrega/', views.checkout_entrega, name='checkout_entrega'),
     path('checkout/pagamento/', views.checkout_pagamento, name='checkout_pagamento'),

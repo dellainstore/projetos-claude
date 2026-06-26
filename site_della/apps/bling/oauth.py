@@ -50,6 +50,7 @@ def exchange_code(code: str, redirect_uri: str):
             'Authorization': f'Basic {_b64_credentials()}',
             'Content-Type': 'application/x-www-form-urlencoded',
             'Accept': 'application/json',
+            'enable-jwt': '1',
         },
         data={
             'grant_type':   'authorization_code',
@@ -74,6 +75,7 @@ def refresh_token(token_obj):
             'Authorization': f'Basic {_b64_credentials()}',
             'Content-Type': 'application/x-www-form-urlencoded',
             'Accept': 'application/json',
+            'enable-jwt': '1',
         },
         data={
             'grant_type':    'refresh_token',

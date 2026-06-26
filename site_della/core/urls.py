@@ -10,6 +10,8 @@ from apps.core_utils.admin_views import (
     relatorio as admin_relatorio,
     instagram_refresh,
     dashboard_pedidos as admin_dashboard_pedidos,
+    dashboard_marketing as admin_dashboard_marketing,
+    dashboard_marketing_export as admin_dashboard_marketing_export,
 )
 from apps.core_utils.admin_verificacao import admin_verificar_view
 from apps.produtos.views import feed_meta_xml
@@ -29,6 +31,8 @@ urlpatterns = [
     path('csp-report/', csp_report, name='csp_report'),
     path('painel/relatorio/', admin_relatorio, name='admin_relatorio'),
     path('painel/pedidos/dashboard/', admin_dashboard_pedidos, name='admin_dashboard_pedidos'),
+    path('painel/marketing/', admin_dashboard_marketing, name='admin_marketing'),
+    path('painel/marketing/export/', admin_dashboard_marketing_export, name='admin_marketing_export'),
     path('painel/instagram/refresh/', instagram_refresh, name='admin_instagram_refresh'),
     # Verificação de e-mail a cada 30 dias (deve vir antes de painel/)
     path('painel/verificar/', admin_verificar_view, name='admin_verificar'),
@@ -52,6 +56,9 @@ urlpatterns = [
 
     # Webhooks Bling (retorno de NF, pedidos)
     path('bling/', include('apps.bling.urls', namespace='bling')),
+
+    # Analytics interno (endpoint de eventos client-side)
+    path('analytics/', include('apps.analytics.urls', namespace='analytics')),
 ]
 
 # Serve arquivos de media em desenvolvimento

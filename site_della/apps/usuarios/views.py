@@ -42,6 +42,8 @@ def login_view(request):
             if not request.POST.get('lembrar'):
                 # sessão expira ao fechar o browser
                 request.session.set_expiry(0)
+            # Flag consumida pelo context processor tracking_flash na proxima pagina
+            request.session['_track_login'] = True
             next_url = request.GET.get('next', '')
             # segurança: só redirecionar para URLs relativas
             if next_url and next_url.startswith('/'):
@@ -84,20 +86,23 @@ def cadastro(request):
             usuario = form.save()
             login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
 
-            # Evento CompleteRegistration (CAPI). user_data é montado a partir do
-            # usuário já autenticado (e-mail, CPF, nome com hash SHA-256). Só envia
-            # com consentimento de marketing — verificado dentro do helper.
+            # Evento CompleteRegistration (CAPI + Pixel). O mesmo event_id e compartilhado
+            # entre o disparo server-side (CAPI) e o client-side (Pixel via session flash),
+            # garantindo deduplicacao correta na plataforma Meta.
             try:
                 from apps.core_utils.meta import enviar_evento_meta, gerar_evento_id
+                cr_event_id = gerar_evento_id('completeregistration')
                 enviar_evento_meta(
                     request,
                     event_name='CompleteRegistration',
-                    event_id=gerar_evento_id('completeregistration'),
+                    event_id=cr_event_id,
                     event_source_url=request.build_absolute_uri(),
                     custom_data={'content_name': 'Cadastro', 'status': True, 'currency': 'BRL'},
                 )
+                # Compartilha event_id com o Pixel client-side (via session flash)
+                request.session['_track_signup_event_id'] = cr_event_id
             except Exception:
-                pass
+                request.session['_track_signup_event_id'] = ''
 
             messages.success(request, f'Bem-vinda, {usuario.nome}! Sua conta foi criada com sucesso.')
             return redirect('usuarios:minha_conta')

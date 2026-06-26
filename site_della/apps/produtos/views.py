@@ -404,6 +404,15 @@ def loja(request, categoria_slug=None, parent_slug=None):
     # Modo parcial (AJAX): devolve só o grid e a paginação, sem o layout completo
     if request.GET.get('_partial') == '1' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return render(request, 'produtos/_loja_grid.html', context)
+    try:
+        from apps.analytics.services import obter_ou_criar_sessao, registrar_evento
+        _sessao = obter_ou_criar_sessao(request)
+        if _sessao:
+            registrar_evento(_sessao, 'lista_visualizada',
+                             pagina_url=request.path,
+                             categoria_nome=categoria_ativa.nome if categoria_ativa else '')
+    except Exception:
+        pass
     return render(request, 'produtos/loja.html', context)
 
 
@@ -641,6 +650,17 @@ def detalhe_produto(request, slug):
         )
     except Exception:
         pass
+    try:
+        from apps.analytics.services import obter_ou_criar_sessao, registrar_evento
+        _sessao = obter_ou_criar_sessao(request)
+        if _sessao:
+            registrar_evento(_sessao, 'produto_visualizado',
+                             pagina_url=request.path,
+                             produto_slug=produto.slug,
+                             produto_nome=produto.nome,
+                             categoria_nome=produto.categoria.nome if produto.categoria_id else '')
+    except Exception:
+        pass
     return render(request, 'produtos/detalhe.html', context)
 
 
@@ -719,6 +739,17 @@ def busca(request):
             pass
 
     context = {'q': q, 'resultados': resultados, 'meta_search_event_id': meta_search_event_id}
+    if q:
+        try:
+            from apps.analytics.services import obter_ou_criar_sessao, registrar_evento
+            _sessao = obter_ou_criar_sessao(request)
+            if _sessao:
+                registrar_evento(_sessao, 'busca_realizada',
+                                 pagina_url=request.path,
+                                 busca_termo=q[:200],
+                                 busca_resultados=resultados.count() if hasattr(resultados, 'count') else len(list(resultados)))
+        except Exception:
+            pass
     return render(request, 'produtos/busca.html', context)
 
 
@@ -785,6 +816,16 @@ def toggle_wishlist(request, produto_id):
         except Exception:
             pass
 
+        try:
+            from apps.analytics.services import obter_ou_criar_sessao, registrar_evento
+            _sessao = obter_ou_criar_sessao(request)
+            if _sessao:
+                registrar_evento(_sessao, 'wishlist_adicionado',
+                                 produto_slug=produto.slug,
+                                 produto_nome=produto.nome,
+                                 categoria_nome=categoria_nome)
+        except Exception:
+            pass
         return JsonResponse({
             'status': 'ok',
             'na_wishlist': True,

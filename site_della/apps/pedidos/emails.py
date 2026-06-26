@@ -188,7 +188,7 @@ def enviar_confirmacao_entrega(pedido) -> bool:
         return True
 
     try:
-        link_avaliacao = f'{SITE_URL}/avaliacoes/pedido/{pedido.numero}/'
+        link_avaliacao = f'{SITE_URL}/avaliacoes/pedido/{pedido.numero}/?utm_source=email&utm_medium=email&utm_campaign=entregue'
         ctx = {'pedido': pedido, 'site_url': SITE_URL, 'link_avaliacao': link_avaliacao, **_ctx_base()}
         html = render_to_string('emails/entregue_avaliacao.html', ctx)
         texto = _texto_entregue(pedido)
@@ -260,7 +260,7 @@ def enviar_email_carrinho_abandonado(ca) -> bool:
             {**item, 'subtotal': _brl(item.get('subtotal', 0)), 'imagem': _abs_url(item.get('imagem', ''))}
             for item in ca.itens
         ]
-        link_recuperar = f'{SITE_URL}/carrinho/recuperar/{ca.token}/'
+        link_recuperar = f'{SITE_URL}/carrinho/recuperar/{ca.token}/?utm_source=email&utm_medium=email&utm_campaign=carrinho_abandonado'
         ctx = {
             'ca': ca,
             'itens': itens_fmt,
@@ -273,9 +273,14 @@ def enviar_email_carrinho_abandonado(ca) -> bool:
         html = render_to_string('emails/carrinho_abandonado.html', ctx)
         texto = _texto_carrinho_abandonado(ca)
 
-        nome_curto = (ca.nome or '').split()[0] if ca.nome else 'cliente'
+        nome_curto = (ca.nome or '').split()[0] if ca.nome else ''
+        subject = (
+            f"{nome_curto}, sua selecao Della Instore ainda esta disponivel"
+            if nome_curto
+            else "Sua selecao Della Instore ainda esta disponivel"
+        )
         msg = EmailMultiAlternatives(
-            subject    = f"{nome_curto} sua seleção Della Instore ainda está disponível",
+            subject    = subject,
             body       = texto,
             from_email = settings.DEFAULT_FROM_EMAIL,
             to         = [ca.email],
@@ -344,6 +349,52 @@ def enviar_email_cupom_newsletter(cupom_emitido) -> bool:
 
     except Exception as exc:
         logger.error('Falha ao enviar e-mail de cupom newsletter para %s: %s', cupom_emitido.email, exc)
+        return False
+
+
+def enviar_email_cupom_carrinho_popup(cupom_emitido) -> bool:
+    """Envia email com cupom gerado pelo popup de exit-intent do carrinho."""
+    try:
+        from django.templatetags.static import static
+        whatsapp = getattr(settings, 'WHATSAPP_NUMBER_1', '5511988879928')
+        logo_url = SITE_URL + static('images/brand/logo-della.png')
+
+        template = cupom_emitido.cupom_template
+        if template.tipo == 'percentual':
+            valor_fmt = f'{int(template.valor) if template.valor == int(template.valor) else template.valor}%'
+        else:
+            valor_fmt = f'R$ {_brl(template.valor)}'
+
+        ctx = {
+            'cupom': cupom_emitido,
+            'template': template,
+            'valor_fmt': valor_fmt,
+            'dias_validade': template.dias_validade_pos_emissao,
+            'expira_em': cupom_emitido.expira_em,
+            'site_url': SITE_URL,
+            'whatsapp_number': whatsapp,
+            'logo_url': logo_url,
+        }
+        html  = render_to_string('emails/cupom_carrinho_popup.html', ctx)
+        texto = (
+            f'Seu cupom de {valor_fmt} de desconto para finalizar sua compra: {cupom_emitido.codigo}\n'
+            f'Valido por {template.dias_validade_pos_emissao} dia(s) a partir de hoje.\n\n'
+            f'Use no checkout em {SITE_URL}.\n'
+        )
+
+        msg = EmailMultiAlternatives(
+            subject    = f"Seu cupom de {valor_fmt}: finalize sua compra D'ELLA Instore",
+            body       = texto,
+            from_email = settings.DEFAULT_FROM_EMAIL,
+            to         = [cupom_emitido.email],
+        )
+        msg.attach_alternative(html, 'text/html')
+        msg.send()
+        logger.info('E-mail cupom popup enviado para %s (codigo %s)', cupom_emitido.email, cupom_emitido.codigo)
+        return True
+
+    except Exception as exc:
+        logger.error('Falha ao enviar e-mail cupom popup para %s: %s', cupom_emitido.email, exc)
         return False
 
 
@@ -566,7 +617,7 @@ def _texto_cancelamento(pedido, estornado: bool) -> str:
 
 def _texto_entregue(pedido) -> str:
     nome = pedido.nome_completo.split()[0]
-    link_avaliacao = f'{SITE_URL}/avaliacoes/pedido/{pedido.numero}/'
+    link_avaliacao = f'{SITE_URL}/avaliacoes/pedido/{pedido.numero}/?utm_source=email&utm_medium=email&utm_campaign=entregue'
     linhas = [
         f'Olá, {nome}!',
         '',

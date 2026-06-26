@@ -1,11 +1,16 @@
-{% load static della_filters %}
+{% load static della_filters l10n %}
 <p class="loja-contador" id="loja-contador">{{ total_produtos }} peça{{ total_produtos|pluralize:",s" }}</p>
 
 {% if page_obj.object_list %}
 <div class="loja-grid" id="loja-grid">
   {% for produto in page_obj %}
   <article class="produto-card fade-in" aria-label="{{ produto.nome }}">
-    <a href="{{ produto.get_absolute_url }}" class="produto-card-foto-link">
+    <a href="{{ produto.get_absolute_url }}" class="produto-card-foto-link"
+       data-item-id="{{ produto.pk }}"
+       data-item-name="{{ produto.nome|escapejs }}"
+       data-item-category="{{ produto.categoria.nome|default:''|escapejs }}"
+       data-item-price="{{ produto.preco_atual|unlocalize }}"
+       data-item-index="{{ forloop.counter0 }}">
       <div class="produto-card-foto">
         {% with img=produto.imagem_principal %}
           {% if img %}
@@ -32,7 +37,12 @@
       </div>
     </a>
     <div class="produto-card-info">
-      <a href="{{ produto.get_absolute_url }}" class="produto-card-nome">{{ produto.nome }}</a>
+      <a href="{{ produto.get_absolute_url }}" class="produto-card-nome"
+         data-item-id="{{ produto.pk }}"
+         data-item-name="{{ produto.nome|escapejs }}"
+         data-item-category="{{ produto.categoria.nome|default:''|escapejs }}"
+         data-item-price="{{ produto.preco_atual|unlocalize }}"
+         data-item-index="{{ forloop.counter0 }}">{{ produto.nome }}</a>
       <div class="produto-card-preco">
         {% if produto.em_promocao %}
           <span class="preco-de">R$ {{ produto.preco_base_exibicao|brl_price }}</span>

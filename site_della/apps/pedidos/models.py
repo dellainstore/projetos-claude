@@ -37,23 +37,25 @@ def gerar_numero_pedido():
 
 class CarrinhoAbandonado(models.Model):
     """
-    Snapshot do carrinho de um cliente autenticado que não finalizou a compra.
-    Gerado/atualizado cada vez que um item é adicionado ao carrinho.
-    Deletado quando o checkout é concluído com sucesso.
+    Snapshot do carrinho de um cliente (logado ou guest) que nao finalizou a compra.
+    Gerado/atualizado cada vez que um item e adicionado ao carrinho (logados)
+    ou quando o guest informa o e-mail no checkout (guests).
     """
     cliente = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='carrinhos_abandonados', verbose_name='Cliente',
+        null=True, blank=True,
     )
-    email = models.EmailField('E-mail', max_length=254)
-    nome  = models.CharField('Nome', max_length=240, blank=True)
+    email    = models.EmailField('E-mail', max_length=254)
+    nome     = models.CharField('Nome', max_length=240, blank=True)
+    telefone = models.CharField('Telefone', max_length=20, blank=True)
     itens_json = models.JSONField('Itens do carrinho')
     total = models.DecimalField('Total', max_digits=10, decimal_places=2, default=0)
 
     email_enviado    = models.BooleanField('E-mail enviado', default=False)
     email_enviado_em = models.DateTimeField('E-mail enviado em', null=True, blank=True)
     recuperado       = models.BooleanField('Recuperado (compra feita)', default=False)
-    token            = models.UUIDField('Token de recuperação', default=uuid.uuid4, editable=False, unique=True)
+    token            = models.UUIDField('Token de recuperacao', default=uuid.uuid4, editable=False, unique=True)
 
     criado_em     = models.DateTimeField('Criado em', auto_now_add=True)
     atualizado_em = models.DateTimeField('Atualizado em', auto_now=True)
@@ -62,7 +64,13 @@ class CarrinhoAbandonado(models.Model):
         verbose_name        = 'Carrinho Abandonado'
         verbose_name_plural = 'Carrinhos Abandonados'
         ordering            = ['-atualizado_em']
-        unique_together     = [('cliente',)]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['cliente'],
+                condition=models.Q(cliente__isnull=False),
+                name='pedidos_carrinhoabandonado_cliente_unique',
+            )
+        ]
 
     def __str__(self):
         return f'{self.email} — R$ {self.total} ({self.atualizado_em.strftime("%d/%m/%Y %H:%M")})'
@@ -97,7 +105,8 @@ class Cupom(models.Model):
         ('manual',           'Manual (criado pelo admin)'),
         ('newsletter',       'Newsletter (gerado ao se inscrever)'),
         ('primeira_compra',  'Primeira compra'),
-        ('aniversario',      'Aniversário'),
+        ('aniversario',      'Aniversario'),
+        ('carrinho_popup',   'Carrinho (popup de saida)'),
     ]
 
     codigo = models.CharField('Código', max_length=50, unique=True,
@@ -347,6 +356,25 @@ class Pedido(models.Model):
     consentimento_marketing = models.BooleanField('Consentiu marketing (Meta)', default=False)
     consentimento_analytics = models.BooleanField('Consentiu analise (GA4)', default=False)
     ga_client_id = models.CharField('GA4 client_id (_ga)', max_length=50, blank=True)
+
+    # Atribuicao de campanha (snapshots do checkout — para analise de ROI por campanha)
+    utm_source   = models.CharField('UTM Source',   max_length=200, blank=True)
+    utm_medium   = models.CharField('UTM Medium',   max_length=200, blank=True)
+    utm_campaign = models.CharField('UTM Campaign', max_length=200, blank=True)
+    utm_content  = models.CharField('UTM Content',  max_length=200, blank=True)
+    utm_term     = models.CharField('UTM Term',     max_length=200, blank=True)
+    utm_id       = models.CharField('UTM ID',       max_length=200, blank=True)
+    gclid        = models.CharField('Google Click ID (gclid)', max_length=300, blank=True)
+    fbclid       = models.CharField('Meta Click ID (fbclid)',  max_length=300, blank=True)
+
+    ga_session_id = models.CharField('GA4 session_id', max_length=50, blank=True,
+                                     help_text='ID da sessao GA4 (cookie _ga_<stream>) capturado no checkout. '
+                                               'Necessario para o Measurement Protocol atribuir o purchase '
+                                               'a uma sessao e ao canal de origem correto.')
+
+    # Flag de idempotencia: garante que o CAPI purchase nao seja enviado duas vezes
+    # (uma pelo checkout e outra pelo webhook para cartao aprovado imediatamente)
+    capi_purchase_enviado = models.BooleanField('CAPI purchase enviado', default=False)
 
     # Entrega
     retirada_loja = models.BooleanField('Retirar na loja', default=False)

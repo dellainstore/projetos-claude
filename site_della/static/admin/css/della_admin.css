@@ -450,6 +450,16 @@ nav.toplinks { padding: 0.5rem 0.9rem !important; }
   background-color: transparent !important;
 }
 
+/* th scope="row" = campo list_display_links (ex: ordem, nome) renderizado como <th> no tbody */
+#result_list tbody th {
+  padding: 0.6rem 0.9rem !important;
+  vertical-align: middle !important;
+  border: none !important;
+  color: var(--da-text) !important;
+  background-color: transparent !important;
+  font-weight: 500 !important;
+}
+
 #result_list td a, #result_list td a:visited { color: var(--da-brand) !important; font-weight: 500 !important; text-decoration: none !important; }
 #result_list td a:hover { color: var(--da-gold) !important; }
 

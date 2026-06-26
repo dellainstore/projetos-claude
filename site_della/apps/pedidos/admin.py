@@ -109,6 +109,8 @@ class PedidoAdmin(DellaAdminMixin, admin.ModelAdmin):
         'cupom_codigo', 'codigo_vendedor_str',
         'bling_pedido_id',
         'criado_em', 'atualizado_em',
+        'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id',
+        'gclid', 'fbclid',
     )
 
     fieldsets = (
@@ -140,6 +142,14 @@ class PedidoAdmin(DellaAdminMixin, admin.ModelAdmin):
         }),
         ('Bling', {
             'fields': ('bling_pedido_id',),
+            'classes': ('collapse',),
+        }),
+        ('Atribuicao (Marketing)', {
+            'fields': (
+                'utm_source', 'utm_medium', 'utm_campaign',
+                'utm_content', 'utm_term', 'utm_id',
+                'gclid', 'fbclid',
+            ),
             'classes': ('collapse',),
         }),
         ('Observações', {
@@ -671,16 +681,16 @@ class CodigoVendedorAdmin(DellaAdminMixin, admin.ModelAdmin):
 @admin.register(CarrinhoAbandonado)
 class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
     list_display = (
-        'email', 'nome', 'quantidade_itens_display', 'total_formatado',
+        'email', 'nome', 'telefone', 'quantidade_itens_display', 'total_formatado',
         'badge_status', 'atualizado_em', 'acoes_linha',
     )
     list_display_links = ('email',)
     list_filter = ('email_enviado', 'recuperado')
-    search_fields = ('email', 'nome', 'cliente__cpf')
+    search_fields = ('email', 'nome', 'telefone', 'cliente__cpf')
     date_hierarchy = 'atualizado_em'
     ordering = ('-atualizado_em',)
     readonly_fields = (
-        'cliente', 'email', 'nome', 'total', 'itens_resumo',
+        'cliente', 'email', 'nome', 'telefone', 'total', 'itens_resumo',
         'email_enviado', 'email_enviado_em', 'recuperado',
         'criado_em', 'atualizado_em',
     )
@@ -713,7 +723,7 @@ class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
 
     fieldsets = (
         ('Cliente', {
-            'fields': ('cliente', 'email', 'nome'),
+            'fields': ('cliente', 'email', 'nome', 'telefone'),
         }),
         ('Carrinho', {
             'fields': ('total', 'itens_resumo'),
@@ -737,7 +747,9 @@ class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
     total_formatado.short_description = 'Total'
 
     def badge_status(self, obj):
-        if obj.recuperado:
+        if obj.recuperado and obj.email_enviado:
+            cor, label = '#27ae60', 'Recuperado (e-mail enviado)'
+        elif obj.recuperado:
             cor, label = '#27ae60', 'Recuperado'
         elif obj.email_enviado:
             cor, label = '#2980b9', 'E-mail enviado'

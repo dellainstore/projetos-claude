@@ -20,18 +20,27 @@ class VariacaoInlineForm(forms.ModelForm):
         if instance and instance.pk and instance.usa_sync_bling:
             campo = self.fields.get('estoque')
             if campo is not None:
-                campo.widget.attrs['readonly'] = 'readonly'
+                campo.widget.attrs['disabled'] = 'disabled'
                 campo.widget.attrs['style'] = 'background:#f5f5f5;cursor:not-allowed;'
-                campo.widget.attrs['title'] = '🔒 Sincronizado pelo Bling'
+                campo.widget.attrs['title'] = 'Sincronizado pelo Bling'
 
     def clean(self):
         cleaned = super().clean()
         instance = self.instance
-        sync_atual_no_post = cleaned.get('usa_sync_bling')
+        sync_ativo_no_post = cleaned.get('usa_sync_bling')
         sync_no_banco = bool(instance and instance.pk and instance.usa_sync_bling)
-        if sync_no_banco and sync_atual_no_post:
-            # Field may be absent from POST (disabled JS widget doesn't submit).
-            # Clear any resulting validation error and restore the DB value.
+
+        if sync_ativo_no_post:
+            # Sync ativo: campo estoque pode estar ausente do POST (disabled).
+            # Para variacao existente: mantém o valor do banco até o Bling sincronizar.
+            # Para variacao nova: começa com 0, o Bling atualiza no próximo ciclo.
+            self.errors.pop('estoque', None)
+            if instance and instance.pk:
+                cleaned['estoque'] = instance.estoque
+            else:
+                cleaned.setdefault('estoque', 0)
+        elif sync_no_banco:
+            # Sync estava ativo mas foi desativado: mantém o valor atual do banco.
             self.errors.pop('estoque', None)
             cleaned['estoque'] = instance.estoque
         return cleaned

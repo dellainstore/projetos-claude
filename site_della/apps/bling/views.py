@@ -463,6 +463,25 @@ def _processar_webhook_pedido_v1(data: dict, evento: str):
         )
         return
 
+    # Atualiza codigo de rastreio se o pedido ainda nao tem.
+    # O payload v1 nao inclui o objeto transporte, entao sempre buscamos via GET
+    # na API do Bling. Isso cobre o caso de "Objeto de postagem" comprado no Bling:
+    # o Bling envia order.updated sem transporte no payload, mas a API ja tem o codigo.
+    if not pedido.codigo_rastreio:
+        try:
+            from apps.bling.api import BlingAPI
+            api = BlingAPI()
+            resp = api.consultar_pedido_venda(bling_id, retry=False)
+            rastreio = _extrair_rastreio_transporte(resp.get('data', {}).get('transporte', {}))
+            if rastreio:
+                pedido.codigo_rastreio = rastreio
+                pedido.save(update_fields=['codigo_rastreio', 'atualizado_em'])
+                logger.info('Pedido %s: rastreio atualizado via v1 webhook GET Bling -> %s',
+                            pedido.numero, rastreio)
+        except Exception as exc:
+            logger.warning('Pedido %s: falha ao consultar rastreio na API Bling (v1): %s',
+                           pedido.numero, exc)
+
     # Pedido do site: cancelamento via situacao.valor=2
     situacao_valor = (data.get('situacao') or {}).get('valor')
     if situacao_valor == 2 and pedido.status != 'cancelado':

@@ -20,9 +20,9 @@ def _capturar_estado_anterior_sync(sender, instance, **kwargs):
     """Guarda `usa_sync_bling` e `ativo` antes do save para comparar no post_save."""
     if instance.pk:
         try:
-            anterior = sender.objects.only('usa_sync_bling', 'ativo').get(pk=instance.pk)
+            anterior = sender.objects.only('usa_sync_bling', 'ativa').get(pk=instance.pk)
             instance._sync_anterior = anterior.usa_sync_bling
-            instance._ativo_anterior = anterior.ativo
+            instance._ativo_anterior = anterior.ativa
         except sender.DoesNotExist:
             instance._sync_anterior = False
             instance._ativo_anterior = False
@@ -40,7 +40,7 @@ def _sincronizar_estoque_ao_ativar(sender, instance, created, **kwargs):
     )
     variacao_reativada = (
         not getattr(instance, '_ativo_anterior', True)
-        and instance.ativo
+        and instance.ativa
         and instance.usa_sync_bling
     )
     if not (sync_ativou or variacao_reativada):

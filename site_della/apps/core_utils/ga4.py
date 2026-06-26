@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 _ENDPOINT = 'https://www.google-analytics.com/mp/collect'
 
 
-def enviar_ga4_purchase(pedido, *, analytics_consent: bool, client_id: str = '') -> bool:
+def enviar_ga4_purchase(pedido, *, analytics_consent: bool, client_id: str = '',
+                        session_id: str = '') -> bool:
     """
     Envia o evento purchase ao GA4 via Measurement Protocol.
 
@@ -31,6 +32,9 @@ def enviar_ga4_purchase(pedido, *, analytics_consent: bool, client_id: str = '')
       mesma identidade/atribuicao do disparo client-side. Sem ele, usa um fallback
       deterministico derivado do numero do pedido (a dedup por transaction_id ainda
       funciona, mas a atribuicao de sessao fica prejudicada).
+    - session_id: o session_id GA4 (cookie _ga_<stream>) capturado no checkout.
+      Sem ele o GA4 nao consegue vincular o purchase a uma sessao existente e o
+      canal de origem aparece como 'Unassigned' no relatorio.
     """
     measurement_id = getattr(settings, 'GA_MEASUREMENT_ID', '') or ''
     api_secret = getattr(settings, 'GA_API_SECRET', '') or ''
@@ -48,32 +52,40 @@ def enviar_ga4_purchase(pedido, *, analytics_consent: bool, client_id: str = '')
         client_id = f'{pedido.pk}.{int(pedido.criado_em.timestamp())}'
 
     items = list(pedido.itens.select_related('produto').all())
+
+    params = {
+        'transaction_id': pedido.numero,
+        'currency': 'BRL',
+        'value': float(pedido.total),
+        'shipping': float(pedido.frete),
+        'tax': 0,
+        'coupon': getattr(pedido, 'cupom_codigo', '') or '',
+        'items': [
+            {
+                'item_id': str(item.produto_id),
+                'item_name': item.nome_produto,
+                'item_category': (
+                    item.produto.categoria.nome
+                    if item.produto and item.produto.categoria_id
+                    else ''
+                ),
+                'price': float(item.preco_unitario),
+                'quantity': item.quantidade,
+            }
+            for item in items
+        ],
+    }
+    if session_id:
+        # session_id vincula o evento a uma sessao real — essencial para atribuicao
+        # de canal. engagement_time_msec evita que o GA4 descarte o evento.
+        params['session_id'] = session_id
+        params['engagement_time_msec'] = 1
+
     payload = {
         'client_id': client_id,
         'non_personalized_ads': False,
-        'events': [{
-            'name': 'purchase',
-            'params': {
-                'transaction_id': pedido.numero,
-                'currency': 'BRL',
-                'value': float(pedido.total),
-                'shipping': float(pedido.frete),
-                'items': [
-                    {
-                        'item_id': str(item.produto_id),
-                        'item_name': item.nome_produto,
-                        'item_category': (
-                            item.produto.categoria.nome
-                            if item.produto and item.produto.categoria_id
-                            else ''
-                        ),
-                        'price': float(item.preco_unitario),
-                        'quantity': item.quantidade,
-                    }
-                    for item in items
-                ],
-            },
-        }],
+        'timestamp_micros': int(pedido.criado_em.timestamp() * 1_000_000),
+        'events': [{'name': 'purchase', 'params': params}],
     }
 
     try:

@@ -5,81 +5,524 @@
 {% block navbar_class %}solida{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
+{% block head_extra %}
+<style>
+/* ── Checkout guest (single-page) ─────────────────────────────────── */
+.co-wrapper {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: calc(var(--navbar-total) + 1.5rem) 1rem 3rem;
+}
+.co-body {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 3rem;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .co-body { grid-template-columns: 1fr; }
+  .co-sidebar { order: -1; }
+}
+
+/* Formulario */
+.co-secao {
+  margin-bottom: 1.75rem;
+}
+.co-secao-titulo {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  margin-bottom: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.co-secao-titulo a {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: #3b7dd8;
+  text-decoration: none;
+}
+.co-secao-titulo a:hover { text-decoration: underline; }
+
+/* Inputs flutuantes */
+.co-field {
+  position: relative;
+  margin-bottom: 0.6rem;
+}
+.co-input {
+  width: 100%;
+  padding: 1.35rem 0.85rem 0.45rem;
+  border: 1px solid #d0d0d0;
+  border-radius: 5px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: #fff;
+  color: #1a1a1a;
+  outline: none;
+  transition: border-color .15s;
+  box-sizing: border-box;
+  appearance: none;
+}
+.co-input:focus { border-color: #1a1a1a; }
+.co-field label {
+  position: absolute;
+  top: 50%;
+  left: 0.85rem;
+  transform: translateY(-50%);
+  font-size: 0.9rem;
+  color: #888;
+  pointer-events: none;
+  transition: top .15s, font-size .15s, color .15s;
+  white-space: nowrap;
+}
+.co-input:not(:placeholder-shown) ~ label,
+.co-input:focus ~ label {
+  top: 0.38rem;
+  transform: none;
+  font-size: 0.68rem;
+  color: #666;
+}
+/* CEP: input esta dentro de .co-cep-wrap, usar :has() para floating label */
+.co-field:has(.co-cep-wrap .co-input:not(:placeholder-shown)) > label,
+.co-field:has(.co-cep-wrap .co-input:focus) > label {
+  top: 0.38rem;
+  transform: none;
+  font-size: 0.68rem;
+  color: #666;
+}
+.co-field--error .co-input { border-color: #c0392b; }
+.co-error {
+  display: block;
+  color: #c0392b;
+  font-size: 0.78rem;
+  margin-top: 0.15rem;
+  padding-left: 0.2rem;
+}
+
+/* Complemento sem floating label (tem placeholder real) */
+.co-field--plain .co-input { padding: 0.7rem 0.85rem; }
+
+/* Grid de 2 colunas nos campos */
+.co-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 0.6rem;
+}
+.co-grid-2--3-1 { grid-template-columns: 3fr 1fr; }
+
+/* CEP com icone de lupa */
+.co-cep-wrap {
+  position: relative;
+}
+.co-cep-wrap .co-input { padding-right: 2.6rem; }
+.co-btn-cep {
+  position: absolute;
+  right: 0;
+  top: 0; bottom: 0;
+  width: 2.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+.co-btn-cep:hover { color: #1a1a1a; }
+a.co-cep-link {
+  font-size: 0.78rem;
+  color: #3b7dd8;
+  text-decoration: none;
+  display: block;
+  margin-top: 0.2rem;
+}
+a.co-cep-link:hover { text-decoration: underline; }
+
+/* Sem numero */
+.co-sem-numero {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: #555;
+  margin-top: 0.2rem;
+  cursor: pointer;
+}
+.co-sem-numero input { cursor: pointer; }
+
+/* Parcelas sem floating label */
+.co-parcelas-wrap .co-input { padding: 0.7rem 2rem 0.7rem 0.85rem; }
+
+/* Select estilo igual ao input */
+.co-select {
+  padding: 0.85rem 2rem 0.85rem 0.85rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  cursor: pointer;
+}
+
+/* Checkbox opcoes */
+.co-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: #333;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+.co-check-row input[type="checkbox"] { cursor: pointer; width: 15px; height: 15px; }
+
+/* Frete */
+.co-frete-opcoes { display: flex; flex-direction: column; gap: 0; }
+.co-frete-item {
+  border: 1px solid #d0d0d0;
+  border-bottom: none;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  background: #fff;
+  transition: background .1s;
+}
+.co-frete-item:first-child { border-radius: 5px 5px 0 0; }
+.co-frete-item:last-child  { border-bottom: 1px solid #d0d0d0; border-radius: 0 0 5px 5px; }
+.co-frete-item:only-child  { border-radius: 5px; }
+.co-frete-item:hover { background: #fafafa; }
+.co-frete-item input[type="radio"] { accent-color: #1a1a1a; }
+.co-frete-info { flex: 1; }
+.co-frete-nome { font-size: 0.9rem; font-weight: 500; }
+.co-frete-prazo { font-size: 0.78rem; color: #777; margin-top: 0.1rem; }
+.co-frete-preco { font-size: 0.9rem; font-weight: 600; white-space: nowrap; }
+.co-frete-loading { color: #888; font-size: 0.88rem; padding: 0.75rem 0; }
+.co-frete-erro { color: #c0392b; font-size: 0.85rem; padding: 0.5rem 0; display: none; }
+.co-frete-vazio { color: #999; font-size: 0.85rem; padding: 0.5rem 0; }
+/* Skeleton */
+.co-sk-frete { display: flex; flex-direction: column; gap: 0; }
+.co-sk-item {
+  border: 1px solid #e8e8e8;
+  border-bottom: none;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  animation: co-pulse 1.4s ease-in-out infinite;
+}
+.co-sk-item:first-child { border-radius: 5px 5px 0 0; }
+.co-sk-item:last-child { border-bottom: 1px solid #e8e8e8; border-radius: 0 0 5px 5px; }
+.co-sk-circ { width: 16px; height: 16px; border-radius: 50%; background: #e0e0e0; flex-shrink: 0; }
+.co-sk-lines { flex: 1; }
+.co-sk-ln { height: 11px; background: #e0e0e0; border-radius: 3px; margin-bottom: 5px; }
+.co-sk-ln:last-child { width: 55%; margin-bottom: 0; }
+.co-sk-preco { width: 52px; height: 13px; background: #e0e0e0; border-radius: 3px; }
+@keyframes co-pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+/* Pagamento */
+.co-seg-info {
+  font-size: 0.8rem;
+  color: #3b7dd8;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.co-pag-opcoes { border: 1px solid #d0d0d0; border-radius: 5px; overflow: hidden; }
+.co-pag-item { border-bottom: 1px solid #d0d0d0; }
+.co-pag-item:last-child { border-bottom: none; }
+.co-pag-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  background: #f9f9f9;
+  user-select: none;
+}
+.co-pag-item--ativo .co-pag-header { background: #fff; }
+.co-pag-radio {
+  width: 18px; height: 18px;
+  border: 2px solid #bbb;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .15s;
+}
+.co-pag-item--ativo .co-pag-radio {
+  border-color: #1a1a1a;
+}
+.co-pag-item--ativo .co-pag-radio::after {
+  content: '';
+  width: 9px; height: 9px;
+  background: #1a1a1a;
+  border-radius: 50%;
+}
+.co-pag-label { font-size: 0.9rem; font-weight: 500; flex: 1; }
+.co-pag-logos { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+.co-pag-logos img { height: 22px; border-radius: 3px; }
+.co-pag-logos .co-mais { font-size: 0.72rem; color: #666; background: #f0f0f0; border-radius: 3px; padding: 1px 5px; }
+.co-pag-content { display: none; padding: 1rem; border-top: 1px solid #ececec; }
+.co-pag-item--ativo .co-pag-content { display: block; }
+.co-pag-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.6rem; }
+@media (max-width: 540px) { .co-pag-field-row { grid-template-columns: 1fr; } }
+.co-icon-input { position: relative; }
+.co-icon-input .co-input { padding-right: 2.2rem; }
+.co-icon-input .co-field-icon {
+  position: absolute;
+  right: 0.7rem; top: 50%; transform: translateY(-50%);
+  color: #aaa; font-size: 0.9rem; pointer-events: none;
+}
+.co-pix-info { display: flex; align-items: flex-start; gap: 1rem; padding: 0.5rem 0; }
+.co-pix-icone { font-size: 2.5rem; color: var(--dourado, #b8960c); flex-shrink: 0; }
+.co-pix-txt p { font-size: 0.9rem; margin-bottom: 0.35rem; }
+.co-pix-txt ul { list-style: none; padding: 0; margin: 0; }
+.co-pix-txt ul li { font-size: 0.82rem; color: #555; display: flex; gap: 0.35rem; align-items: center; margin-bottom: 0.25rem; }
+.co-indisponivel { text-align: center; padding: 1rem 0; color: #888; font-size: 0.88rem; }
+.co-indisponivel i { display: block; margin-bottom: 0.5rem; }
+
+/* Salvar cartao */
+.co-salvar-cartao { margin-top: 1rem; }
+.co-salvar-info { font-size: 0.78rem; color: #888; margin-top: 0.2rem; padding-left: 1.4rem; }
+
+/* Informacoes adicionais */
+.co-adicionais { background: #f9f9f9; border: 1px solid #e8e8e8; border-radius: 6px; padding: 1rem; }
+
+/* Erros gerais */
+.co-erros-gerais {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.88rem;
+  color: #b91c1c;
+}
+
+/* Botao pagar agora */
+.co-btn-pagar {
+  width: 100%;
+  padding: 1rem;
+  background: #1a1a1a;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  transition: background .15s, opacity .15s;
+}
+.co-btn-pagar:hover { background: #333; }
+.co-btn-pagar:disabled { opacity: .6; cursor: not-allowed; }
+
+/* Footer links */
+.co-footer {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e8e8e8;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.85rem;
+}
+.co-footer a {
+  font-size: 0.78rem;
+  color: #3b7dd8;
+  text-decoration: none;
+}
+.co-footer a:hover { text-decoration: underline; }
+
+/* Sidebar */
+.co-sidebar {
+  position: sticky;
+  top: calc(var(--navbar-total) + 1rem);
+  background: #f9f9f9;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+@media (max-width: 860px) {
+  .co-sidebar { position: static; }
+}
+.co-resumo-titulo { font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; }
+.co-resumo-itens { margin-bottom: 1rem; }
+.co-resumo-item {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #ececec;
+}
+.co-resumo-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.co-item-foto { width: 60px; height: 80px; border-radius: 4px; overflow: hidden; flex-shrink: 0; background: #fff; border: 1px solid #e8e8e8; position: relative; }
+.co-item-foto img { width: 100%; height: 100%; object-fit: contain; }
+.co-item-info { flex: 1; }
+.co-item-nome { font-size: 0.85rem; font-weight: 500; line-height: 1.3; }
+.co-item-var { font-size: 0.78rem; color: #888; margin-top: 0.1rem; }
+.co-item-qty-ctrl { display: flex; align-items: center; gap: 0.25rem; margin-top: 0.35rem; }
+.co-qty-btn {
+  width: 22px; height: 22px; border: 1px solid #ccc; border-radius: 3px;
+  background: #fff; cursor: pointer; font-size: 0.85rem; display: flex;
+  align-items: center; justify-content: center;
+  transition: background .1s;
+}
+.co-qty-btn:hover { background: #f0f0f0; }
+.co-qty-val { font-size: 0.82rem; min-width: 20px; text-align: center; }
+.co-remover-btn { color: #999; border-color: #e0e0e0; }
+.co-remover-btn:hover { color: #c0392b; background: #fef2f2; border-color: #fca5a5; }
+.co-item-preco { font-size: 0.9rem; font-weight: 500; white-space: nowrap; }
+.co-resumo-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  color: #555;
+  margin-bottom: 0.4rem;
+}
+.co-resumo-linha.desconto { color: #27ae60; }
+.co-resumo-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #d0d0d0;
+}
+.co-cupom-box { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid #ececec; }
+.co-cupom-titulo { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.35rem; }
+.co-cupom-row { display: flex; gap: 0.5rem; }
+.co-cupom-row .checkout-input { flex: 1; padding: 0.5rem 0.65rem; font-size: 0.72rem !important; text-transform: none !important; }
+.co-cupom-row .btn-cupom { padding: 0.5rem 0.75rem; font-size: 0.82rem; }
+.co-cupom-feedback { font-size: 0.78rem; margin-top: 0.3rem; }
+.co-cupom-feedback.ok { color: #27ae60; }
+.co-cupom-feedback.erro { color: #c0392b; }
+.co-selos {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #ececec;
+  font-size: 0.75rem;
+  color: #888;
+}
+.co-selos span { display: flex; align-items: center; gap: 0.3rem; }
+
+/* Frete erro visivel */
+.co-frete-erro.visivel { display: block; }
+
+/* Pix logo inline */
+.pix-logo-inline {
+  height: 20px;
+  vertical-align: middle;
+}
+
+/* Guest lock overlay */
+.co-guest-lock {
+  position: relative;
+}
+.co-lock-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.88);
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 4rem;
+  border-radius: 5px;
+  backdrop-filter: blur(2px);
+  pointer-events: all;
+}
+.co-lock-msg {
+  background: #fff;
+  border: 1px solid #e8dece;
+  border-radius: 8px;
+  padding: 1.1rem 1.6rem;
+  font-size: 0.88rem;
+  color: #777;
+  text-align: center;
+  box-shadow: 0 2px 12px rgba(0,0,0,.06);
+}
+.co-lock-msg i {
+  display: block;
+  font-size: 1.3rem;
+  margin-bottom: 0.5rem;
+  color: #c9a96e;
+}
+</style>
+{% endblock %}
+
 {% block conteudo %}
-<div class="checkout-wrapper">
-
-  
-  <div class="checkout-stepper" aria-label="Etapas do checkout">
-    <div class="stepper-item ativo" data-step="1">
-      <span class="stepper-num">1</span>
-      <span class="stepper-label">Dados e entrega</span>
-    </div>
-    <div class="stepper-line"></div>
-    <div class="stepper-item" data-step="2">
-      <span class="stepper-num">2</span>
-      <span class="stepper-label">Frete</span>
-    </div>
-    <div class="stepper-line"></div>
-    <div class="stepper-item" data-step="3">
-      <span class="stepper-num">3</span>
-      <span class="stepper-label">Pagamento</span>
-    </div>
-  </div>
-
+<div class="co-wrapper">
   <form method="post" id="form-checkout" novalidate>
     {% csrf_token %}
 
-    
     {{ form.opcao_frete }}
     {{ form.servico_frete_nome }}
     {{ form.valor_frete }}
     {{ form.prazo_frete }}
 
-    <div class="checkout-body">
+    <div class="co-body">
 
-      
-      <div class="checkout-etapas">
+      <!-- ════════════════ COLUNA ESQUERDA (formulário) ════════════════ -->
+      <div class="co-form-col">
 
-        
         {% if form.non_field_errors %}
-        <div class="checkout-erros">
-          {% for erro in form.non_field_errors %}<p>{{ erro }}</p>{% endfor %}
+        <div class="co-erros-gerais">
+          {% for e in form.non_field_errors %}{{ e }}{% endfor %}
         </div>
         {% endif %}
 
-        
-        <section class="checkout-secao" id="secao-1" aria-labelledby="titulo-secao-1">
-          <h2 class="checkout-secao-titulo" id="titulo-secao-1">
-            <span class="secao-num">1</span> Seus dados
+        <!-- ── CONTATO ──────────────────────────────────────────────── -->
+        <section class="co-secao">
+          <h2 class="co-secao-titulo">
+            Contato
+            {% if not request.user.is_authenticated %}
+            <a href="{% url 'usuarios:login' %}?next=/carrinho/checkout/">Fazer login</a>
+            {% endif %}
           </h2>
 
-          <div class="checkout-grid-2">
-            <div class="checkout-campo {% if form.nome_completo.errors %}erro{% endif %}">
-              <label for="{{ form.nome_completo.id_for_label }}">Nome completo *</label>
-              {{ form.nome_completo }}
-              {% for e in form.nome_completo.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
-            </div>
-            <div class="checkout-campo {% if form.email.errors %}erro{% endif %}">
-              <label for="{{ form.email.id_for_label }}">E-mail *</label>
-              {{ form.email }}
-              {% for e in form.email.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
-            </div>
-            <div class="checkout-campo {% if form.cpf.errors %}erro{% endif %}">
-              <label for="{{ form.cpf.id_for_label }}">CPF *</label>
-              {{ form.cpf }}
-              {% for e in form.cpf.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
-            </div>
-            <div class="checkout-campo {% if form.telefone.errors %}erro{% endif %}">
-              <label for="{{ form.telefone.id_for_label }}">Telefone</label>
-              {{ form.telefone }}
-            </div>
+          <div class="co-field {% if form.email.errors %}co-field--error{% endif %}">
+            {{ form.email }}
+            <label for="{{ form.email.id_for_label }}">E-mail</label>
+            {% for e in form.email.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
           </div>
 
-          <h3 class="checkout-sub-titulo">Endereço de entrega</h3>
+          <label class="co-check-row" for="{{ form.newsletter_optin.id_for_label }}">
+            {{ form.newsletter_optin }}
+            <span>Enviar novidades e ofertas para mim por e-mail</span>
+          </label>
+        </section>
+
+        {% if not request.user.is_authenticated %}
+        <div id="co-guest-lock" class="co-guest-lock">
+          <div class="co-lock-overlay" id="co-lock-overlay">
+            <div class="co-lock-msg">
+              <i class="fas fa-envelope"></i>
+              Informe seu e-mail para continuar
+            </div>
+          </div>
+        {% endif %}
+
+        <!-- ── ENTREGA ──────────────────────────────────────────────── -->
+        <section class="co-secao">
+          <h2 class="co-secao-titulo">Entrega</h2>
 
           {% if enderecos %}
-          <div class="checkout-enderecos-salvos">
-            <p class="checkout-enderecos-label">Selecione um endereço cadastrado:</p>
+          <div class="checkout-enderecos-salvos" style="margin-bottom:1rem;">
+            <p style="font-size:0.85rem;color:#555;margin-bottom:0.5rem;">Selecione um endereço cadastrado:</p>
             <div class="checkout-enderecos-lista" role="radiogroup" aria-label="Endereços salvos">
               {% for end in enderecos %}
               <div class="checkout-endereco-card" data-endereco-pk="{{ end.pk }}"
@@ -99,7 +542,7 @@
                     {% if end.principal %}<span class="badge-principal">Principal</span>{% endif %}
                   </span>
                   <span class="checkout-endereco-detalhe" data-campo="linha1">{{ end.logradouro }}, {{ end.numero }}{% if end.complemento %}, {{ end.complemento }}{% endif %}</span>
-                  <span class="checkout-endereco-cidade" data-campo="linha2">{{ end.bairro }} — {{ end.cidade }}/{{ end.estado }} · {{ end.get_cep_formatado }}</span>
+                  <span class="checkout-endereco-cidade" data-campo="linha2">{{ end.bairro }} - {{ end.cidade }}/{{ end.estado }} - {{ end.get_cep_formatado }}</span>
                 </label>
                 <button type="button" class="endereco-card-toggle" aria-expanded="false"
                         aria-controls="end-edit-{{ end.pk }}" aria-label="Editar este endereço">
@@ -109,15 +552,14 @@
                   <div class="endereco-edit-grid">
                     <div class="endereco-edit-campo">
                       <label>CEP</label>
-                      <input type="text" data-edit-field="cep" inputmode="numeric" maxlength="9"
-                             value="{{ end.get_cep_formatado }}">
+                      <input type="text" data-edit-field="cep" inputmode="numeric" maxlength="9" value="{{ end.get_cep_formatado }}">
                     </div>
                     <div class="endereco-edit-campo endereco-edit-col2">
                       <label>Rua / Avenida</label>
                       <input type="text" data-edit-field="logradouro" value="{{ end.logradouro }}">
                     </div>
                     <div class="endereco-edit-campo">
-                      <label>Número</label>
+                      <label>Numero</label>
                       <input type="text" data-edit-field="numero" value="{{ end.numero }}">
                     </div>
                     <div class="endereco-edit-campo">
@@ -134,8 +576,7 @@
                     </div>
                     <div class="endereco-edit-campo endereco-edit-uf">
                       <label>UF</label>
-                      <input type="text" data-edit-field="estado" maxlength="2" value="{{ end.estado }}"
-                             style="text-transform:uppercase">
+                      <input type="text" data-edit-field="estado" maxlength="2" value="{{ end.estado }}" style="text-transform:uppercase">
                     </div>
                   </div>
                   <p class="endereco-edit-erro" hidden></p>
@@ -155,343 +596,367 @@
           </div>
           {% endif %}
 
-          <div id="bloco-endereco-novo" class="{% if enderecos %}hidden{% endif %}">
-          <div class="checkout-grid-cep">
-            <div class="checkout-campo {% if form.cep.errors %}erro{% endif %}">
-              <label for="{{ form.cep.id_for_label }}">CEP *</label>
-              <div class="cep-wrapper">
+          <div id="bloco-endereco-novo" {% if enderecos %}style="display:none"{% endif %}>
+
+            <!-- País -->
+            <div class="co-field co-field--plain" style="margin-bottom:0.6rem;">
+              <select class="co-input co-select" disabled style="color:#333;">
+                <option selected>Brasil</option>
+              </select>
+            </div>
+
+            <!-- Nome completo -->
+            <div class="co-field {% if form.nome_completo.errors %}co-field--error{% endif %}">
+              {{ form.nome_completo }}
+              <label for="{{ form.nome_completo.id_for_label }}">Nome completo</label>
+              {% for e in form.nome_completo.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
+            </div>
+
+            <!-- CEP -->
+            <div class="co-field {% if form.cep.errors %}co-field--error{% endif %}">
+              <div class="co-cep-wrap">
                 {{ form.cep }}
-                <button type="button" id="btn-buscar-cep" class="btn-cep" aria-label="Buscar CEP">
+                <button type="button" id="btn-buscar-cep" class="co-btn-cep" aria-label="Buscar CEP">
                   <i class="fas fa-search"></i>
                 </button>
               </div>
-              <a href="https://buscacepinter.correios.com.br/" target="_blank" rel="noopener noreferrer"
-                 class="link-nao-sei-cep">Não sei meu CEP</a>
-              {% for e in form.cep.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
+              <label for="{{ form.cep.id_for_label }}">CEP</label>
+              {% for e in form.cep.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
             </div>
-          </div>
+            <a href="https://buscacepinter.correios.com.br/" target="_blank" rel="noopener noreferrer" class="co-cep-link">Não sei meu CEP</a>
 
-          <div id="campos-endereco" class="checkout-grid-end {% if not form.cep.value %}hidden{% endif %}">
-            <div class="checkout-campo col-span-2 {% if form.logradouro.errors %}erro{% endif %}">
-              <label for="{{ form.logradouro.id_for_label }}">Rua / Avenida *</label>
-              {{ form.logradouro }}
-              {% for e in form.logradouro.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
-            </div>
-            <div class="checkout-campo {% if form.numero_entrega.errors %}erro{% endif %}">
-              <label for="{{ form.numero_entrega.id_for_label }}">Número *</label>
-              <div class="num-wrapper">
-                {{ form.numero_entrega }}
-                <label class="sem-numero-toggle" for="id_sem_numero">
-                  <input type="checkbox" id="id_sem_numero"> Sem número (S/N)
-                </label>
+            <!-- Endereço / Número -->
+            <div id="campos-endereco" {% if not form.cep.value %}style="display:none"{% endif %}>
+              <div class="co-grid-2 co-grid-2--3-1">
+                <div class="co-field {% if form.logradouro.errors %}co-field--error{% endif %}">
+                  {{ form.logradouro }}
+                  <label for="{{ form.logradouro.id_for_label }}">Endereço</label>
+                  {% for e in form.logradouro.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
+                </div>
+                <div class="co-field {% if form.numero_entrega.errors %}co-field--error{% endif %}">
+                  {{ form.numero_entrega }}
+                  <label for="{{ form.numero_entrega.id_for_label }}">Número</label>
+                  {% for e in form.numero_entrega.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
+                </div>
               </div>
-              {% for e in form.numero_entrega.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
-            </div>
-            <div class="checkout-campo">
-              <label for="{{ form.complemento.id_for_label }}">Complemento</label>
-              {{ form.complemento }}
-            </div>
-            <div class="checkout-campo {% if form.bairro.errors %}erro{% endif %}">
-              <label for="{{ form.bairro.id_for_label }}">Bairro *</label>
-              {{ form.bairro }}
-              {% for e in form.bairro.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
-            </div>
-            <div class="checkout-campo {% if form.cidade.errors %}erro{% endif %}">
-              <label for="{{ form.cidade.id_for_label }}">Cidade *</label>
-              {{ form.cidade }}
-              {% for e in form.cidade.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
-            </div>
-            <div class="checkout-campo {% if form.estado.errors %}erro{% endif %}">
-              <label for="{{ form.estado.id_for_label }}">UF *</label>
-              {{ form.estado }}
-              {% for e in form.estado.errors %}<span class="campo-erro">{{ e }}</span>{% endfor %}
-            </div>
-          </div>
-          </div>
+              <label class="co-sem-numero" for="id_sem_numero" style="margin-bottom:0.4rem;">
+                <input type="checkbox" id="id_sem_numero"> Sem número (S/N)
+              </label>
 
-          <div class="checkout-secao-footer">
-            <button type="button" class="btn-primario" id="btn-ir-frete">
-              Continuar para entrega <i class="fas fa-arrow-right"></i>
-            </button>
-          </div>
-        </section>
-
-        
-        <section class="checkout-secao bloqueada" id="secao-2" aria-labelledby="titulo-secao-2">
-          <h2 class="checkout-secao-titulo" id="titulo-secao-2">
-            <span class="secao-num">2</span> Opções de entrega
-          </h2>
-
-          <div id="frete-loading" class="frete-loading hidden">
-            <div class="skeleton-frete-opcao">
-              <div><div class="skeleton-linha" style="width:52%;height:13px;margin-bottom:6px;"></div><div class="skeleton-linha" style="width:35%;height:11px;"></div></div>
-              <div class="skeleton-linha" style="width:14%;height:13px;"></div>
-            </div>
-            <div class="skeleton-frete-opcao">
-              <div><div class="skeleton-linha" style="width:44%;height:13px;margin-bottom:6px;"></div><div class="skeleton-linha" style="width:28%;height:11px;"></div></div>
-              <div class="skeleton-linha" style="width:14%;height:13px;"></div>
-            </div>
-          </div>
-
-          <div id="frete-opcoes" class="frete-opcoes">
-            
-          </div>
-
-          <div id="frete-erro" class="frete-erro hidden">
-            Não foi possível calcular o frete. Verifique o CEP e tente novamente.
-          </div>
-
-          <div class="checkout-secao-footer">
-            <button type="button" class="btn-secundario" id="btn-voltar-dados">
-              <i class="fas fa-arrow-left"></i> Voltar
-            </button>
-            <button type="button" class="btn-primario" id="btn-ir-pagamento">
-              Continuar para pagamento <i class="fas fa-arrow-right"></i>
-            </button>
-          </div>
-        </section>
-
-        
-        <section class="checkout-secao bloqueada" id="secao-3" aria-labelledby="titulo-secao-3">
-          <h2 class="checkout-secao-titulo" id="titulo-secao-3">
-            <span class="secao-num">3</span> Pagamento
-          </h2>
-
-          <div class="pagamento-tabs" role="tablist" aria-label="Forma de pagamento">
-            <button type="button" role="tab" class="pagamento-tab ativa" data-tab="pix"
-                    aria-selected="true" aria-controls="tab-pix">
-              <i class="fas fa-qrcode"></i> Pix
-            </button>
-            <button type="button" role="tab" class="pagamento-tab" data-tab="cartao"
-                    aria-selected="false" aria-controls="tab-cartao">
-              <i class="far fa-credit-card"></i> Cartão de crédito
-            </button>
-          </div>
-
-          <div id="tab-pix" role="tabpanel" class="pagamento-tabpanel ativo">
-            <input type="radio" name="forma_pagamento" value="pix" id="radio_pix"
-                   checked class="sr-only">
-
-            <div class="pix-info">
-              <div class="pix-icone-wrapper">
-                <i class="fas fa-qrcode" style="font-size:3rem;color:var(--dourado);"></i>
+              <!-- Complemento (sem floating label) -->
+              <div class="co-field co-field--plain">
+                {{ form.complemento }}
               </div>
-              <div>
-                <p class="pix-titulo">Pague com Pix</p>
-                <ul class="pix-vantagens">
-                  <li><i class="fas fa-check"></i> Pagamento disponível para testes</li>
-                  <li><i class="fas fa-check"></i> O QR Code será exibido após confirmar o pedido</li>
-                  <li><i class="fas fa-check"></i> Confirmação manual enquanto o gateway dinâmico não é liberado</li>
-                </ul>
-                <p class="pix-instrucao">
-                  Neste momento o checkout usa Pix estático para viabilizar os testes do fluxo do pedido.
-                </p>
+
+              <!-- Bairro -->
+              <div class="co-field {% if form.bairro.errors %}co-field--error{% endif %}">
+                {{ form.bairro }}
+                <label for="{{ form.bairro.id_for_label }}">Bairro</label>
+                {% for e in form.bairro.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
+              </div>
+
+              <!-- Cidade / Estado -->
+              <div class="co-grid-2">
+                <div class="co-field {% if form.cidade.errors %}co-field--error{% endif %}">
+                  {{ form.cidade }}
+                  <label for="{{ form.cidade.id_for_label }}">Cidade</label>
+                  {% for e in form.cidade.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
+                </div>
+                <div class="co-field {% if form.estado.errors %}co-field--error{% endif %}">
+                  {{ form.estado }}
+                  <label for="{{ form.estado.id_for_label }}">Estado</label>
+                  {% for e in form.estado.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div id="tab-cartao" role="tabpanel" class="pagamento-tabpanel">
-            <input type="radio" name="forma_pagamento" value="cartao_credito" id="radio_cartao"
-                   class="sr-only">
-            <input type="hidden" name="cartao_salvo_id" id="cartao-salvo-id" value="">
-
-            {% if cartao_habilitado %}
-
-            {# ── Cartões salvos ───────────────────────────────────────────── #}
-            {% if cartoes_salvos %}
-            <div class="checkout-cartoes-salvos" id="bloco-cartoes-salvos">
-              <p class="checkout-enderecos-label">Selecione um cartão salvo:</p>
-              <div class="checkout-enderecos-lista" role="radiogroup" aria-label="Cartões salvos">
-                {% for cartao in cartoes_salvos %}
-                <label class="checkout-endereco-card checkout-cartao-card {% if cartao.esta_vencido %}cartao-vencido{% endif %}"
-                       for="cartao_{{ cartao.pk }}">
-                  <input type="radio" class="sr-only" name="_cartao_salvo_radio"
-                         id="cartao_{{ cartao.pk }}" value="{{ cartao.pk }}"
-                         {% if forloop.first and not cartao.esta_vencido %}checked{% endif %}
-                         {% if cartao.esta_vencido %}disabled{% endif %}>
-                  <span class="checkout-endereco-apelido">
-                    <i class="far fa-credit-card"></i> {{ cartao.descricao }}
-                    {% if cartao.esta_vencido %}
-                      <span class="badge-vencido">Vencido</span>
-                    {% endif %}
-                  </span>
-                  <span class="checkout-endereco-detalhe">{{ cartao.nome_titular }}</span>
-                  <span class="checkout-endereco-cidade">Validade: {{ cartao.validade_display }}</span>
-                </label>
-                {% endfor %}
-                <label class="checkout-endereco-card checkout-endereco-novo" for="cartao_novo">
-                  <input type="radio" class="sr-only" name="_cartao_salvo_radio" id="cartao_novo" value="novo">
-                  <span class="checkout-endereco-apelido"><i class="fas fa-plus"></i> Novo cartão</span>
-                  <span class="checkout-endereco-detalhe">Informar um cartão diferente</span>
-                </label>
-              </div>
+            <!-- Telefone -->
+            <div class="co-field">
+              {{ form.telefone }}
+              <label for="{{ form.telefone.id_for_label }}">Telefone (opcional)</label>
             </div>
+
+            {% if not request.user.is_authenticated %}
+            <label class="co-check-row" for="id_salvar_info" style="margin-top:0.5rem;">
+              <input type="checkbox" id="id_salvar_info">
+              <span>Salvar minhas informações para a próxima vez</span>
+            </label>
             {% endif %}
 
-            {# ── Formulário de cartão novo ─────────────────────────────────── #}
-            <div id="bloco-cartao-novo" {% if cartoes_salvos %}class="hidden"{% endif %}>
-              <div class="checkout-grid-2">
-                <div class="checkout-campo" style="grid-column:1 / -1;">
-                  <label for="card-holder">Nome impresso no cartão *</label>
-                  <input type="text" id="card-holder" class="checkout-input" placeholder="NOME COMO ESTÁ NO CARTÃO" autocomplete="cc-name">
-                </div>
-                <div class="checkout-campo" style="grid-column:1 / -1;">
-                  <label for="card-number">Número do cartão *</label>
-                  <input type="text" id="card-number" class="checkout-input" placeholder="0000 0000 0000 0000" inputmode="numeric" autocomplete="cc-number">
-                </div>
-                <div class="checkout-campo">
-                  <label for="card-expiry">Validade *</label>
-                  <input type="text" id="card-expiry" class="checkout-input" placeholder="MM/AA" inputmode="numeric" autocomplete="cc-exp">
-                </div>
-                <div class="checkout-campo">
-                  <label for="card-cvv">CVV *</label>
-                  <input type="text" id="card-cvv" class="checkout-input" placeholder="123" inputmode="numeric" autocomplete="cc-csc">
-                </div>
+          </div>{# /bloco-endereco-novo #}
+        </section>
+
+        <!-- ── FORMA DE FRETE ───────────────────────────────────────── -->
+        <section class="co-secao" id="secao-frete">
+          <h2 class="co-secao-titulo">Forma de frete</h2>
+
+          <div id="frete-skeleton" class="co-sk-frete" style="display:none;">
+            <div class="co-sk-item">
+              <div class="co-sk-circ"></div>
+              <div class="co-sk-lines">
+                <div class="co-sk-ln" style="width:60%;"></div>
+                <div class="co-sk-ln"></div>
               </div>
-
-              {# ── Checkbox salvar cartão ───────────────────────────────────── #}
-              {% if user.is_authenticated %}
-              <div class="checkout-salvar-cartao" style="margin-top:1.25rem;">
-                <label class="salvar-cartao-label" for="salvar-cartao-check">
-                  <input type="checkbox" name="salvar_cartao" id="salvar-cartao-check" value="on">
-                  <span class="salvar-cartao-texto">Salvar este cartão com segurança para compras futuras.</span>
-                </label>
-                <p class="salvar-cartao-info">
-                  (Seus dados serão armazenados de forma tokenizada pelo PagBank. Você poderá remover o cartão salvo a qualquer momento.)
-                </p>
+              <div class="co-sk-preco"></div>
+            </div>
+            <div class="co-sk-item">
+              <div class="co-sk-circ"></div>
+              <div class="co-sk-lines">
+                <div class="co-sk-ln" style="width:50%;"></div>
+                <div class="co-sk-ln"></div>
               </div>
-              {% endif %}
+              <div class="co-sk-preco"></div>
             </div>
+          </div>
 
-            {# ── Parcelas (sempre visível quando cartão) ───────────────────── #}
-            <div class="checkout-campo" style="margin-top:1rem;" id="bloco-parcelas">
-              <label for="{{ form.parcelas.id_for_label }}">Parcelas</label>
-              {{ form.parcelas }}
-            </div>
+          <div id="frete-opcoes" class="co-frete-opcoes"></div>
+          <p id="frete-erro" class="co-frete-erro">Não foi possível calcular o frete. Verifique o CEP e tente novamente.</p>
+          <p id="frete-vazio" class="co-frete-vazio">Informe o CEP para ver as opções de frete.</p>
+        </section>
 
-            <input type="hidden" name="pagseguro_card_encrypted" id="pagseguro-card-encrypted">
-            <p id="cartao-erro" class="campo-erro hidden" style="margin-top:1rem;"></p>
-            <p style="color:#666;font-size:0.9rem;margin-top:1rem;">
-              {% if pagseguro_sandbox %}
-              Checkout em modo sandbox para testes da integração PagBank.
-              {% else %}
-              Pagamento processado com tokenização PagBank em ambiente de produção.
-              {% endif %}
-            </p>
-            {% else %}
-            <div class="pagamento-em-breve">
-              <i class="far fa-credit-card" style="font-size:2rem;color:var(--dourado);display:block;margin-bottom:0.75rem;"></i>
-              <p class="pix-titulo">Cartão de crédito</p>
-              <p style="color:#888;font-size:0.9rem;margin-top:0.5rem;">
-                {% if pagseguro_sandbox %}
-                Cartão em sandbox ainda indisponível nesta tela porque a chave pública do PagBank não foi carregada com as credenciais atuais.
-                {% else %}
-                Pagamento por cartão temporariamente indisponível enquanto finalizamos a liberação do gateway.
+        <!-- ── PAGAMENTO ────────────────────────────────────────────── -->
+        <section class="co-secao">
+          <h2 class="co-secao-titulo">Pagamento</h2>
+          <p class="co-seg-info"><i class="fas fa-lock"></i> Todas as transações são seguras e criptografadas.</p>
+
+          <div class="co-pag-opcoes">
+
+            <!-- Cartao de credito -->
+            <div class="co-pag-item co-pag-item--ativo">
+              <label class="co-pag-header" for="radio_cartao">
+                <input type="radio" name="forma_pagamento" id="radio_cartao" value="cartao_credito" checked class="sr-only">
+                <span class="co-pag-radio"></span>
+                <span class="co-pag-label">Cartão de crédito</span>
+                <div class="co-pag-logos">
+                  <img src="{% static 'images/payment/visa.svg' %}" alt="Visa" onerror="this.style.display='none'">
+                  <img src="{% static 'images/payment/mastercard.svg' %}" alt="Mastercard" onerror="this.style.display='none'">
+                  <img src="{% static 'images/payment/elo.svg' %}" alt="Elo" onerror="this.style.display='none'">
+                  <span class="co-mais">+5</span>
+                </div>
+              </label>
+              <div class="co-pag-content">
+                <input type="hidden" name="cartao_salvo_id" id="cartao-salvo-id" value="">
+
+                {% if cartoes_salvos %}
+                <div id="bloco-cartoes-salvos" style="margin-bottom:1rem;">
+                  <p style="font-size:0.82rem;color:#555;margin-bottom:0.5rem;">Selecione um cartão salvo:</p>
+                  <div class="checkout-enderecos-lista" role="radiogroup" aria-label="Cartões salvos">
+                    {% for cartao in cartoes_salvos %}
+                    <label class="checkout-endereco-card checkout-cartao-card {% if cartao.esta_vencido %}cartao-vencido{% endif %}"
+                           for="cartao_{{ cartao.pk }}">
+                      <input type="radio" class="sr-only" name="_cartao_salvo_radio"
+                             id="cartao_{{ cartao.pk }}" value="{{ cartao.pk }}"
+                             {% if forloop.first and not cartao.esta_vencido %}checked{% endif %}
+                             {% if cartao.esta_vencido %}disabled{% endif %}>
+                      <span class="checkout-endereco-apelido">
+                        <i class="far fa-credit-card"></i> {{ cartao.descricao }}
+                        {% if cartao.esta_vencido %}<span class="badge-vencido">Vencido</span>{% endif %}
+                      </span>
+                      <span class="checkout-endereco-detalhe">{{ cartao.nome_titular }}</span>
+                      <span class="checkout-endereco-cidade">Validade: {{ cartao.validade_display }}</span>
+                    </label>
+                    {% endfor %}
+                    <label class="checkout-endereco-card checkout-endereco-novo" for="cartao_novo">
+                      <input type="radio" class="sr-only" name="_cartao_salvo_radio" id="cartao_novo" value="novo">
+                      <span class="checkout-endereco-apelido"><i class="fas fa-plus"></i> Novo cartão</span>
+                      <span class="checkout-endereco-detalhe">Informar um cartão diferente</span>
+                    </label>
+                  </div>
+                </div>
                 {% endif %}
-              </p>
+
+                <div id="bloco-cartao-novo" {% if cartoes_salvos %}style="display:none"{% endif %}>
+                  {% if cartao_habilitado %}
+                  <!-- Número do cartão -->
+                  <div class="co-field co-icon-input" style="margin-bottom:0.6rem;">
+                    <input type="text" id="card-number" class="co-input" placeholder=" " inputmode="numeric" autocomplete="cc-number">
+                    <label for="card-number">Número do cartão</label>
+                    <i class="fas fa-lock co-field-icon"></i>
+                  </div>
+                  <!-- Validade / CVV -->
+                  <div class="co-pag-field-row">
+                    <div class="co-field" style="margin-bottom:0.6rem;">
+                      <input type="text" id="card-expiry" class="co-input" placeholder=" " inputmode="numeric" autocomplete="cc-exp">
+                      <label for="card-expiry">Data de vencimento (MM/AA)</label>
+                    </div>
+                    <div class="co-field co-icon-input" style="margin-bottom:0.6rem;">
+                      <input type="text" id="card-cvv" class="co-input" placeholder=" " inputmode="numeric" autocomplete="cc-csc">
+                      <label for="card-cvv">Código de segurança</label>
+                      <i class="far fa-question-circle co-field-icon"></i>
+                    </div>
+                  </div>
+                  <!-- Nome no cartão -->
+                  <div class="co-field" style="margin-bottom:0.6rem;">
+                    <input type="text" id="card-holder" class="co-input" placeholder=" " autocomplete="cc-name">
+                    <label for="card-holder">Nome no cartão</label>
+                  </div>
+                  <!-- Parcelamento -->
+                  <div class="co-parcelas-wrap" style="margin-bottom:0.6rem;">
+                    <label for="id_parcelas" style="font-size:0.78rem;color:#666;display:block;margin-bottom:0.3rem;">Parcelamento</label>
+                    {{ form.parcelas }}
+                  </div>
+                  <!-- Endereço de faturamento -->
+                  <label class="co-check-row" for="id_billing_same">
+                    <input type="checkbox" id="id_billing_same" checked>
+                    <span>Usar o endereço de entrega como endereço de faturamento</span>
+                  </label>
+                  <!-- Salvar cartão -->
+                  {% if request.user.is_authenticated %}
+                  <div class="co-salvar-cartao">
+                    <label class="co-check-row" for="salvar-cartao-check">
+                      <input type="checkbox" name="salvar_cartao" id="salvar-cartao-check" value="on">
+                      <span>Salvar este cartão com segurança para compras futuras.</span>
+                    </label>
+                    <p class="co-salvar-info">Dados armazenados de forma tokenizada pelo PagBank.</p>
+                  </div>
+                  {% endif %}
+                  <input type="hidden" name="pagseguro_card_encrypted" id="pagseguro-card-encrypted">
+                  <p id="cartao-erro" style="color:#c0392b;font-size:0.85rem;margin-top:0.5rem;display:none;"></p>
+                  {% else %}
+                  <div class="co-indisponivel">
+                    <i class="far fa-credit-card" style="font-size:1.8rem;color:var(--dourado,#b8960c);"></i>
+                    <p>Pagamento por cartão temporariamente indisponível.</p>
+                  </div>
+                  {% endif %}
+                </div>{# /bloco-cartao-novo #}
+              </div>
             </div>
-            {% endif %}
-          </div>
 
-          <div class="checkout-campo" style="margin-top:1rem;">
-            <label for="{{ form.observacao.id_for_label }}">Observações (opcional)</label>
-            {{ form.observacao }}
-          </div>
+            <!-- PIX -->
+            <div class="co-pag-item">
+              <label class="co-pag-header" for="radio_pix">
+                <input type="radio" name="forma_pagamento" id="radio_pix" value="pix" class="sr-only">
+                <span class="co-pag-radio"></span>
+                <span class="co-pag-label">PIX</span>
+                <svg class="pix-logo-inline" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-label="Pix"><path fill="#32bcad" d="M391 246.5l-67.4-67.4a11 11 0 00-15.5 0l-44.2 44.2a25.6 25.6 0 01-36.2 0l-44.2-44.2a11 11 0 00-15.6 0L101 246.5a25.3 25.3 0 000 35.8l67.4 67.4a11 11 0 0015.6 0l44.2-44.2a25.6 25.6 0 0136.2 0l44.2 44.2a11 11 0 0015.5 0L391 282.3a25.3 25.3 0 000-35.8zm-188-133.6l38.8-38.8a25.6 25.6 0 0136.2 0l38.8 38.8a8.1 8.1 0 01-5.7 13.7h-102a8.1 8.1 0 01-5.7-13.7zm113.8 262.2l-38.8 38.8a25.6 25.6 0 01-36.2 0l-38.8-38.8a8.1 8.1 0 015.7-13.7h102a8.1 8.1 0 015.7 13.7z"/></svg>
+              </label>
+              <div class="co-pag-content">
+                <div class="co-pix-info">
+                  <div class="co-pix-icone"><i class="fas fa-qrcode"></i></div>
+                  <div class="co-pix-txt">
+                    <p style="font-weight:600;">Pague com Pix</p>
+                    <ul>
+                      <li><i class="fas fa-check" style="color:#27ae60;"></i> Aprovação instantânea</li>
+                      <li><i class="fas fa-check" style="color:#27ae60;"></i> O QR Code será exibido após confirmar o pedido</li>
+                      <li><i class="fas fa-check" style="color:#27ae60;"></i> Válido por 30 minutos</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-          <div class="checkout-secao-footer">
-            <button type="button" class="btn-secundario" id="btn-voltar-frete">
-              <i class="fas fa-arrow-left"></i> Voltar
-            </button>
-            <button type="submit" class="btn-primario btn-confirmar" id="btn-confirmar">
-              <i class="fas fa-lock"></i> Confirmar pedido
-            </button>
+          </div>{# /co-pag-opcoes #}
+        </section>
+
+        <!-- ── INFORMACOES ADICIONAIS (CPF/CNPJ) ────────────────────── -->
+        <section class="co-secao">
+          <h2 class="co-secao-titulo">Informações adicionais</h2>
+          <div class="co-adicionais">
+            <div class="co-field {% if form.cpf.errors %}co-field--error{% endif %}">
+              {{ form.cpf }}
+              <label for="{{ form.cpf.id_for_label }}">CPF/CNPJ</label>
+              {% for e in form.cpf.errors %}<span class="co-error">{{ e }}</span>{% endfor %}
+            </div>
           </div>
         </section>
 
-      </div>
+        {% if not request.user.is_authenticated %}
+        </div>{# /co-guest-lock #}
+        {% endif %}
 
-      
-      <aside class="checkout-resumo" aria-label="Resumo do pedido">
-        <h2 class="checkout-resumo-titulo">Resumo</h2>
+        <!-- ── BOTAO PAGAR AGORA ─────────────────────────────────────── -->
+        <button type="submit" class="co-btn-pagar" id="btn-confirmar">
+          <i class="fas fa-lock"></i> Pagar agora
+        </button>
 
-        <div class="checkout-resumo-itens">
+        <!-- ── FOOTER LINKS ─────────────────────────────────────────── -->
+        <div class="co-footer">
+          <a href="{% url 'produtos:trocas_devolucoes' %}">Política de reembolso</a>
+          <a href="{% url 'produtos:meios_pagamento' %}">Frete e pagamento</a>
+          <a href="{% url 'produtos:politica_privacidade' %}">Política de privacidade</a>
+          <a href="{% url 'produtos:termos_uso' %}">Termos de serviço</a>
+        </div>
+
+      </div>{# /co-form-col #}
+
+      <!-- ════════════════ SIDEBAR (resumo) ════════════════ -->
+      <aside class="co-sidebar" aria-label="Resumo do pedido">
+        <h2 class="co-resumo-titulo">Resumo do pedido</h2>
+
+        <div class="co-resumo-itens">
           {% for item in itens %}
-          <div class="resumo-item" data-chave="{{ item.chave }}">
-            <div class="resumo-item-foto">
+          <div class="co-resumo-item" data-chave="{{ item.chave }}">
+            <div class="co-item-foto">
               {% if item.imagem %}
-                <img src="{{ item.imagem }}" alt="{{ item.nome }}" loading="lazy">
-              {% else %}
-                <div class="resumo-item-sem-foto"></div>
+                <img src="{{ item.imagem }}" alt="{{ item.nome }}" loading="lazy" width="60" height="80">
               {% endif %}
             </div>
-            <div class="resumo-item-info">
-              <p class="resumo-item-nome">{{ item.nome }}</p>
-              {% if item.variacao_desc %}
-                <p class="resumo-item-var">{{ item.variacao_desc }}</p>
-              {% endif %}
-              <div class="resumo-item-qty-ctrl">
-                <button type="button" class="resumo-qty-btn" data-acao="menos">−</button>
-                <span class="resumo-qty-valor">{{ item.quantidade }}</span>
-                <button type="button" class="resumo-qty-btn" data-acao="mais">+</button>
-                <button type="button" class="resumo-qty-btn resumo-remover-btn" data-acao="remover" title="Remover item"><i class="fas fa-trash-alt"></i></button>
+            <div class="co-item-info">
+              <p class="co-item-nome">{{ item.nome }}</p>
+              {% if item.variacao_desc %}<p class="co-item-var">{{ item.variacao_desc }}</p>{% endif %}
+              <div class="co-item-qty-ctrl">
+                <button type="button" class="co-qty-btn" data-acao="menos">−</button>
+                <span class="co-qty-val">{{ item.quantidade }}</span>
+                <button type="button" class="co-qty-btn" data-acao="mais">+</button>
+                <button type="button" class="co-qty-btn co-remover-btn" data-acao="remover" title="Remover"><i class="fas fa-times"></i></button>
               </div>
             </div>
-            <p class="resumo-item-preco">R$ <span class="resumo-item-subtotal">{{ item.subtotal|brl_price }}</span></p>
+            <p class="co-item-preco">R$ <span class="co-item-subtotal">{{ item.subtotal|brl_price }}</span></p>
           </div>
           {% endfor %}
         </div>
 
-        <div class="checkout-resumo-linha">
-          <span>Subtotal</span>
-          <span id="resumo-subtotal-valor">R$ {{ subtotal|brl_price }}</span>
-        </div>
-        <div class="checkout-resumo-linha hidden" id="resumo-desconto-linha" style="color:#27ae60;">
-          <span>Desconto</span>
-          <span id="resumo-desconto-valor">−R$ 0,00</span>
-        </div>
-        <div class="checkout-resumo-linha" id="resumo-frete-linha">
-          <span>Frete</span>
-          <span id="resumo-frete-valor" class="text-gray-400 text-sm">A calcular</span>
-        </div>
-        <div class="checkout-resumo-total">
-          <span>Total</span>
-          <span id="resumo-total">R$ {{ subtotal|brl_price }}</span>
-        </div>
-
-        <div class="checkout-cupom-sidebar">
-          <div class="checkout-campo cupom-linha">
-            <label for="{{ form.cupom_codigo.id_for_label }}"><i class="fas fa-tag"></i> Cupom de desconto</label>
-            <div class="cupom-input-wrapper">
-              {{ form.cupom_codigo }}
-              <button type="button" id="btn-aplicar-cupom" class="btn-cupom">Aplicar</button>
-            </div>
-            <p id="cupom-feedback" class="cupom-feedback hidden"></p>
+        <!-- Cupom -->
+        <div class="co-cupom-box">
+          <div class="co-cupom-titulo"><i class="fas fa-tag"></i> Cupom de desconto</div>
+          <div class="co-cupom-row">
+            {{ form.cupom_codigo }}
+            <button type="button" id="btn-aplicar-cupom" class="btn-cupom">Aplicar</button>
           </div>
-          <div class="checkout-campo" style="margin-top:0.75rem;">
-            <label for="{{ form.codigo_vendedor_codigo.id_for_label }}">Código do vendedor</label>
-            <div class="cupom-input-wrapper">
+          <p id="cupom-feedback" class="co-cupom-feedback" style="display:none;"></p>
+          <div style="margin-top:0.5rem;">
+            <div class="co-cupom-titulo" style="margin-top:0.35rem;">Código do vendedor</div>
+            <div class="co-cupom-row">
               {{ form.codigo_vendedor_codigo }}
               <button type="button" id="btn-aplicar-vendedor" class="btn-cupom">Aplicar</button>
             </div>
-            <p id="vendedor-feedback" class="cupom-feedback hidden"></p>
+            <p id="vendedor-feedback" class="co-cupom-feedback" style="display:none;"></p>
           </div>
         </div>
 
-        <div class="checkout-resumo-selos">
+        <!-- Totais -->
+        <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #e0e0e0;">
+          <div class="co-resumo-linha">
+            <span>Subtotal</span>
+            <span id="resumo-subtotal-valor">R$ {{ subtotal|brl_price }}</span>
+          </div>
+          <div class="co-resumo-linha desconto" id="resumo-desconto-linha" style="display:none;">
+            <span>Desconto</span>
+            <span id="resumo-desconto-valor">-R$ 0,00</span>
+          </div>
+          <div class="co-resumo-linha">
+            <span>Frete</span>
+            <span id="resumo-frete-valor" style="color:#aaa;font-size:0.82rem;">A calcular</span>
+          </div>
+          <div class="co-resumo-total">
+            <span>Total</span>
+            <span id="resumo-total">R$ {{ subtotal|brl_price }}</span>
+          </div>
+        </div>
+
+        <div class="co-selos">
           <span><i class="fas fa-lock"></i> Compra segura</span>
           <span><i class="fas fa-shield-alt"></i> Dados protegidos</span>
           <span><i class="fas fa-undo-alt"></i> 30 dias p/ troca</span>
         </div>
       </aside>
 
-    </div>
+    </div>{# /co-body #}
   </form>
-
 </div>
 {% endblock %}
 
 {% block js_extra %}
-{# Meta Pixel: InitiateCheckout #}
 {% load l10n %}
 <script type="application/json" data-meta-event="InitiateCheckout">
 {
@@ -501,7 +966,6 @@
   "_event_id": "{{ meta_initiatecheckout_event_id|escapejs }}"
 }
 </script>
-{# GA4: begin_checkout (Enhanced Ecommerce) - disparado pelo della.js apos carregar o gtag #}
 <script type="application/json" data-ga-event="begin_checkout">
 {
   "currency": "BRL",
@@ -524,7 +988,6 @@
   "messages": {% if messages %}true{% else %}false{% endif %}
 }
 </script>
-{# SDK PagSeguro sempre carregado (independente da chave pública) — PagSeguro deve existir no submit #}
 <script src="https://assets.pagseguro.com.br/checkout-sdk-js/rc/dist/browser/pagseguro.min.js"></script>
 <script src="{% static 'js/checkout-index.js' %}"></script>
 {% if pagseguro_public_key and not pagamentos_temporariamente_indisponiveis %}

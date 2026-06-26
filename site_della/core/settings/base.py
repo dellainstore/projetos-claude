@@ -44,6 +44,7 @@ LOCAL_APPS = [
     'apps.bling',
     'apps.usuarios',
     'apps.core_utils',  # utilitários compartilhados (cache, sanitize, management commands)
+    'apps.analytics',   # rastreamento interno de eventos
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -63,6 +64,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # anti-clickjacking
     'axes.middleware.AxesMiddleware',                  # brute force protection
     'csp.middleware.CSPMiddleware',                    # Content-Security-Policy
+    'apps.analytics.middleware.AnalyticsMiddleware',          # analytics interno
     'apps.core_utils.middleware.MetaCAPIPageViewMiddleware',  # CAPI PageView sempre
 ]
 
@@ -83,6 +85,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'apps.produtos.context_processors.categorias_menu',
                 'apps.produtos.context_processors.newsletter_status',
+                'apps.produtos.context_processors.tracking_flash',
                 'apps.pedidos.context_processors.carrinho_info',
             ],
             # auto-escape ativo por padrão — nunca usar |safe sem necessidade

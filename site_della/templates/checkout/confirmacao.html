@@ -270,6 +270,8 @@
   "currency": "BRL",
   "value": {{ pedido.total|unlocalize }},
   "shipping": {{ pedido.frete|unlocalize }},
+  "tax": 0,
+  "coupon": "{{ pedido.cupom_codigo|escapejs }}",
   "items": [{% for item in pedido.itens.all %}{
     "item_id": "{{ item.produto_id }}",
     "item_name": "{{ item.nome_produto|escapejs }}",

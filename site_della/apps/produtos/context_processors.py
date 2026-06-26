@@ -48,6 +48,39 @@ def newsletter_status(request):
     }
 
 
+def tracking_flash(request):
+    """
+    Le e consome flags de tracking de sessao (login, signup) para disparo
+    client-side de eventos GA4 e Meta Pixel na proxima pagina carregada apos
+    a acao. Limpa os flags para que nao disparem novamente em revisitas.
+    """
+    track_login = False
+    track_signup_event_id = ''
+
+    if hasattr(request, 'session'):
+        if request.session.get('_track_login'):
+            track_login = True
+            try:
+                del request.session['_track_login']
+                request.session.modified = True
+            except KeyError:
+                pass
+
+        signup_event_id = request.session.get('_track_signup_event_id', '')
+        if signup_event_id:
+            track_signup_event_id = signup_event_id
+            try:
+                del request.session['_track_signup_event_id']
+                request.session.modified = True
+            except KeyError:
+                pass
+
+    return {
+        'track_login': track_login,
+        'track_signup_event_id': track_signup_event_id,
+    }
+
+
 def categorias_menu(request):
     """
     Injeta categorias ativas, números de WhatsApp e frases da tarja em todos os templates.

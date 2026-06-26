@@ -4,57 +4,55 @@ from apps.core_utils.sanitize import sanitize_name, sanitize_text, sanitize_phon
 
 
 class CheckoutForm(forms.Form):
-    """Formulário único do checkout: dados pessoais + endereço de entrega."""
 
-    # ── Dados pessoais ────────────────────────────────────────────────────────
-    nome_completo = forms.CharField(
-        max_length=240,
-        widget=forms.TextInput(attrs={
-            'placeholder': 'Nome completo',
-            'autocomplete': 'name',
-            'class': 'checkout-input',
-        }),
-        error_messages={'required': 'Informe seu nome completo.'},
-    )
+    # ── Contato ───────────────────────────────────────────────────────────────
     email = forms.EmailField(
         max_length=254,
         widget=forms.EmailInput(attrs={
-            'placeholder': 'E-mail',
+            'placeholder': ' ',
             'autocomplete': 'email',
-            'class': 'checkout-input',
+            'class': 'co-input',
+            'id': 'id_email',
         }),
         error_messages={'required': 'Informe seu e-mail.'},
     )
-    cpf = forms.CharField(
-        max_length=14,
+    newsletter_optin = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'id': 'id_newsletter_optin'}),
+    )
+
+    # ── Entrega: dados pessoais ───────────────────────────────────────────────
+    nome_completo = forms.CharField(
+        max_length=240,
         widget=forms.TextInput(attrs={
-            'placeholder': '000.000.000-00',
-            'autocomplete': 'off',
-            'inputmode': 'numeric',
-            'class': 'checkout-input',
-            'id': 'id_cpf',
+            'placeholder': ' ',
+            'autocomplete': 'name',
+            'class': 'co-input',
+            'id': 'id_nome_completo',
         }),
-        error_messages={'required': 'Informe seu CPF.'},
+        error_messages={'required': 'Informe seu nome completo.'},
     )
     telefone = forms.CharField(
         max_length=20,
         required=False,
         widget=forms.TextInput(attrs={
-            'placeholder': '(11) 99999-9999',
+            'placeholder': ' ',
             'autocomplete': 'tel',
             'inputmode': 'tel',
-            'class': 'checkout-input',
+            'class': 'co-input',
+            'id': 'id_telefone',
         }),
     )
 
-    # ── Endereço de entrega ───────────────────────────────────────────────────
+    # ── Endereco de entrega ───────────────────────────────────────────────────
     cep = forms.CharField(
         max_length=9,
         widget=forms.TextInput(attrs={
-            'placeholder': '00000-000',
+            'placeholder': ' ',
             'autocomplete': 'postal-code',
             'inputmode': 'numeric',
-            'class': 'checkout-input',
+            'class': 'co-input',
             'id': 'id_cep',
         }),
         error_messages={'required': 'Informe o CEP.'},
@@ -62,9 +60,9 @@ class CheckoutForm(forms.Form):
     logradouro = forms.CharField(
         max_length=200,
         widget=forms.TextInput(attrs={
-            'placeholder': 'Rua / Avenida',
+            'placeholder': ' ',
             'autocomplete': 'street-address',
-            'class': 'checkout-input',
+            'class': 'co-input',
             'id': 'id_logradouro',
         }),
         error_messages={'required': 'Informe o logradouro.'},
@@ -72,26 +70,28 @@ class CheckoutForm(forms.Form):
     numero_entrega = forms.CharField(
         max_length=20,
         widget=forms.TextInput(attrs={
-            'placeholder': 'Número',
+            'placeholder': ' ',
             'autocomplete': 'off',
-            'class': 'checkout-input',
+            'class': 'co-input',
+            'id': 'id_numero_entrega',
         }),
-        error_messages={'required': 'Informe o número.'},
+        error_messages={'required': 'Informe o numero.'},
     )
     complemento = forms.CharField(
         max_length=100,
         required=False,
         widget=forms.TextInput(attrs={
-            'placeholder': 'Complemento (opcional)',
+            'placeholder': 'Apartamento, bloco etc.',
             'autocomplete': 'off',
-            'class': 'checkout-input',
+            'class': 'co-input',
+            'id': 'id_complemento',
         }),
     )
     bairro = forms.CharField(
         max_length=100,
         widget=forms.TextInput(attrs={
-            'placeholder': 'Bairro',
-            'class': 'checkout-input',
+            'placeholder': ' ',
+            'class': 'co-input',
             'id': 'id_bairro',
         }),
         error_messages={'required': 'Informe o bairro.'},
@@ -99,8 +99,8 @@ class CheckoutForm(forms.Form):
     cidade = forms.CharField(
         max_length=100,
         widget=forms.TextInput(attrs={
-            'placeholder': 'Cidade',
-            'class': 'checkout-input',
+            'placeholder': ' ',
+            'class': 'co-input',
             'id': 'id_cidade',
         }),
         error_messages={'required': 'Informe a cidade.'},
@@ -108,16 +108,16 @@ class CheckoutForm(forms.Form):
     estado = forms.CharField(
         max_length=2,
         widget=forms.TextInput(attrs={
-            'placeholder': 'UF',
+            'placeholder': ' ',
             'maxlength': '2',
             'style': 'text-transform:uppercase',
-            'class': 'checkout-input',
+            'class': 'co-input',
             'id': 'id_estado',
         }),
         error_messages={'required': 'Informe o estado.'},
     )
 
-    # ── Entrega ───────────────────────────────────────────────────────────────
+    # ── Entrega (frete) ───────────────────────────────────────────────────────
     opcao_frete = forms.CharField(
         required=False,
         widget=forms.HiddenInput(attrs={'id': 'id_opcao_frete'}),
@@ -139,18 +139,31 @@ class CheckoutForm(forms.Form):
     # ── Pagamento ─────────────────────────────────────────────────────────────
     forma_pagamento = forms.ChoiceField(
         choices=[
+            ('cartao_credito', 'Cartao de Credito'),
             ('pix',            'Pix'),
-            ('cartao_credito', 'Cartão de Crédito'),
         ],
-        widget=forms.RadioSelect(attrs={'class': 'pagamento-radio'}),
-        initial='pix',
+        widget=forms.RadioSelect(attrs={'class': 'sr-only'}),
+        initial='cartao_credito',
         error_messages={'required': 'Selecione a forma de pagamento.'},
     )
     parcelas = forms.ChoiceField(
-        choices=[(i, f'{i}x') for i in range(1, 13)],
+        choices=[(i, f'{i}x') for i in range(1, 6)],
         required=False,
         initial='1',
-        widget=forms.Select(attrs={'class': 'checkout-input checkout-select', 'id': 'id_parcelas'}),
+        widget=forms.Select(attrs={'class': 'co-input co-select', 'id': 'id_parcelas'}),
+    )
+
+    # ── Informacoes adicionais (CPF/CNPJ) ────────────────────────────────────
+    cpf = forms.CharField(
+        max_length=18,
+        widget=forms.TextInput(attrs={
+            'placeholder': ' ',
+            'autocomplete': 'off',
+            'inputmode': 'numeric',
+            'class': 'co-input',
+            'id': 'id_cpf',
+        }),
+        error_messages={'required': 'Informe seu CPF ou CNPJ.'},
     )
 
     # ── Cupom / Vendedor ──────────────────────────────────────────────────────
@@ -158,47 +171,50 @@ class CheckoutForm(forms.Form):
         max_length=50,
         required=False,
         widget=forms.TextInput(attrs={
-            'placeholder': 'Código do cupom (opcional)',
+            'placeholder': 'Codigo do cupom (opcional)',
             'autocomplete': 'off',
             'class': 'checkout-input checkout-input--cupom',
             'id': 'id_cupom_codigo',
-            'style': 'text-transform:uppercase',
         }),
     )
     codigo_vendedor_codigo = forms.CharField(
         max_length=20,
         required=False,
         widget=forms.TextInput(attrs={
-            'placeholder': 'Código do vendedor (opcional)',
+            'placeholder': 'Codigo do vendedor (opcional)',
             'autocomplete': 'off',
             'class': 'checkout-input checkout-input--vendedor',
             'id': 'id_codigo_vendedor_codigo',
-            'style': 'text-transform:uppercase',
         }),
     )
 
-    # ── Observação ────────────────────────────────────────────────────────────
+    # ── Observacao ────────────────────────────────────────────────────────────
     observacao = forms.CharField(
         max_length=300,
         required=False,
         widget=forms.Textarea(attrs={
-            'placeholder': 'Observações sobre o pedido (opcional)',
+            'placeholder': 'Observacoes sobre o pedido (opcional)',
             'rows': 3,
             'class': 'checkout-input checkout-textarea',
         }),
     )
 
     def clean_cpf(self):
-        cpf_raw = self.cleaned_data.get('cpf', '')
-        try:
-            return validate_cpf(cpf_raw)
-        except Exception:
-            raise forms.ValidationError('CPF inválido.')
+        raw = self.cleaned_data.get('cpf', '')
+        digits = re.sub(r'\D', '', raw)
+        if len(digits) == 11:
+            try:
+                return validate_cpf(raw)
+            except Exception:
+                raise forms.ValidationError('CPF invalido.')
+        elif len(digits) == 14:
+            return digits
+        raise forms.ValidationError('CPF/CNPJ invalido.')
 
     def clean_cep(self):
         cep = re.sub(r'\D', '', self.cleaned_data.get('cep', ''))
         if len(cep) != 8:
-            raise forms.ValidationError('CEP inválido.')
+            raise forms.ValidationError('CEP invalido.')
         return cep
 
     def clean_nome_completo(self):

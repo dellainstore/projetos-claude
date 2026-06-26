@@ -154,23 +154,51 @@ def pagseguro_notificacao(request):
         # pagina de confirmacao). Dedup: Meta pelo event_id (purchase_<numero>)
         # e GA4 pelo transaction_id (<numero>) — os mesmos do disparo client-side.
         # Este bloco so roda na transicao de status, entao dispara uma unica vez.
+        # capi_purchase_enviado evita re-envio se o checkout ja disparou (cartao
+        # aprovado imediatamente cujo webhook chega segundos depois).
         if novo_status == 'pagamento_confirmado':
-            try:
-                from apps.core_utils.meta import enviar_evento_purchase
-                enviar_evento_purchase(pedido)
-            except Exception as exc:
-                logger.warning('Meta CAPI: falha ao enviar Purchase (webhook) do pedido %s: %s',
-                               reference_id, exc)
+            pedido.refresh_from_db(fields=['capi_purchase_enviado'])
+            if not pedido.capi_purchase_enviado:
+                try:
+                    from apps.core_utils.meta import enviar_evento_purchase
+                    enviado = enviar_evento_purchase(pedido)
+                    if enviado:
+                        from apps.pedidos.models import Pedido as _Pedido
+                        _Pedido.objects.filter(pk=pedido.pk).update(capi_purchase_enviado=True)
+                except Exception as exc:
+                    logger.warning('Meta CAPI: falha ao enviar Purchase (webhook) do pedido %s: %s',
+                                   reference_id, exc)
+            else:
+                logger.info('Meta CAPI: Purchase do pedido %s ja enviado pelo checkout, pulando.', reference_id)
             try:
                 from apps.core_utils.ga4 import enviar_ga4_purchase
                 enviar_ga4_purchase(
                     pedido,
                     analytics_consent=pedido.consentimento_analytics,
                     client_id=pedido.ga_client_id,
+                    session_id=getattr(pedido, 'ga_session_id', '') or '',
                 )
             except Exception as exc:
                 logger.warning('GA4 MP: falha ao enviar purchase (webhook) do pedido %s: %s',
                                reference_id, exc)
+            try:
+                from apps.analytics.models import EventoAnalytics
+                evento_pedido = (
+                    EventoAnalytics.objects
+                    .filter(tipo='pedido_finalizado', pedido_numero=pedido.numero)
+                    .select_related('sessao')
+                    .first()
+                )
+                if evento_pedido:
+                    EventoAnalytics.objects.create(
+                        sessao=evento_pedido.sessao,
+                        tipo='pagamento_confirmado',
+                        pedido_numero=pedido.numero,
+                        valor_total=pedido.total,
+                        forma_pagamento=pedido.forma_pagamento,
+                    )
+            except Exception:
+                pass
 
     return HttpResponse('OK')
 

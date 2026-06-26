@@ -25,9 +25,9 @@
         if (!input) return;
 
         const locked = checkbox.checked;
-        // readOnly preserves the value in POST; disabled would strip it and break server validation
-        input.disabled = false;
-        input.readOnly = locked;
+        // disabled strips the value from POST; server-side clean() trata o campo ausente.
+        input.disabled = locked;
+        input.readOnly = false;
         input.style.background = locked ? '#f5f5f5' : '';
         input.style.cursor = locked ? 'not-allowed' : '';
         input.title = locked ? HELP_TEXT : '';

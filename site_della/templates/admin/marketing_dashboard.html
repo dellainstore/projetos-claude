@@ -1,0 +1,702 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Marketing e Atribuicao | D'ELLA Instore{% endblock %}
+
+{% block content_title %}{% endblock %}
+
+{% block content %}
+<style>
+/* ── Reset / Base ─────────────────────────────────────────────────────────── */
+.mkt * { box-sizing: border-box; }
+.mkt a { color: inherit; text-decoration: none; }
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.mkt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.mkt-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.45rem;
+}
+.mkt-header p {
+  margin: 0;
+  color: #666;
+  font-size: 13px;
+}
+
+/* ── Filtro de período ────────────────────────────────────────────────────── */
+.mkt-periodo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.mkt-periodo a {
+  text-decoration: none;
+  color: #555;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.mkt-periodo a:hover { background: #f0f0f0; }
+.mkt-periodo a.ativo {
+  background: #0a0a0a;
+  color: #fff;
+  border-color: #0a0a0a;
+}
+
+/* ── Formulário de período personalizado ─────────────────────────────────── */
+.mkt-custom-form {
+  display: none;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.mkt-custom-form.ativo { display: flex; }
+.mkt-custom-form label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mkt-custom-form input[type="date"] {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #222;
+}
+.mkt-custom-form button {
+  background: #0a0a0a;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── Grid de cards ────────────────────────────────────────────────────────── */
+.mkt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.mkt-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.mkt-card .rotulo {
+  color: #888;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.mkt-card .valor {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #0a0a0a;
+  line-height: 1.1;
+}
+.mkt-card .apoio {
+  margin-top: 6px;
+  color: #777;
+  font-size: 12px;
+}
+.mkt-card.dourado .valor { color: #b8892a; }
+.mkt-card.verde   .valor { color: #2d9e6e; }
+.mkt-card.azul    .valor { color: #2980b9; }
+
+/* ── Card de atribuição ──────────────────────────────────────────────────── */
+.mkt-attr-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+}
+.mkt-attr-card h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #555;
+}
+.mkt-attr-bar-wrap {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.mkt-attr-bar {
+  flex: 1;
+  min-width: 160px;
+  height: 12px;
+  border-radius: 999px;
+  background: #f0f0f0;
+  overflow: hidden;
+}
+.mkt-attr-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #2d9e6e;
+  transition: width .4s;
+}
+.mkt-attr-stats {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+}
+.mkt-attr-stat strong { font-size: 1.3rem; font-weight: 800; }
+.mkt-attr-stat.ok   strong { color: #2d9e6e; }
+.mkt-attr-stat.warn strong { color: #e67e22; }
+.mkt-attr-stat.pct  strong { color: #2980b9; }
+
+/* ── Seções de tabela ────────────────────────────────────────────────────── */
+.mkt-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.mkt-section {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.mkt-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f8f8f8;
+  border-bottom: 1px solid #e5e5e5;
+}
+.mkt-section-head h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #555;
+}
+.mkt-section-head .mkt-ordenar {
+  display: flex;
+  gap: 4px;
+}
+.mkt-section-head .mkt-ordenar a {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #666;
+  background: #fff;
+  text-decoration: none;
+}
+.mkt-section-head .mkt-ordenar a.ativo {
+  background: #0a0a0a;
+  color: #fff;
+  border-color: #0a0a0a;
+}
+.mkt-export-btns {
+  display: flex;
+  gap: 4px;
+}
+.mkt-export-btn {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #555;
+  background: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mkt-export-btn:hover { background: #f0f0f0; }
+
+/* ── Tabelas ──────────────────────────────────────────────────────────────── */
+.mkt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.mkt-table th {
+  padding: 9px 12px;
+  color: #888;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  text-align: left;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+}
+.mkt-table th.num, .mkt-table td.num { text-align: right; }
+.mkt-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #f5f5f5;
+  color: #333;
+}
+.mkt-table tr:last-child td { border-bottom: none; }
+.mkt-table tr:hover td { background: #f9f9f9; }
+
+/* ── Barra de progresso inline ───────────────────────────────────────────── */
+.mkt-bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mkt-bar-inline {
+  flex: 1;
+  min-width: 60px;
+  height: 6px;
+  border-radius: 999px;
+  background: #f0f0f0;
+  overflow: hidden;
+}
+.mkt-bar-inline-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #c9a96e;
+}
+.mkt-bar-pct { font-size: 11px; color: #999; min-width: 32px; }
+
+/* ── Badge de origem ─────────────────────────────────────────────────────── */
+.mkt-origem-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f0f0f0;
+  color: #555;
+}
+.mkt-origem-badge.instagram { background: #fce4ec; color: #c2185b; }
+.mkt-origem-badge.facebook  { background: #e3f2fd; color: #1565c0; }
+.mkt-origem-badge.google    { background: #e8f5e9; color: #2e7d32; }
+.mkt-origem-badge.whatsapp  { background: #e8f5e9; color: #1b5e20; }
+.mkt-origem-badge.email     { background: #fff3e0; color: #e65100; }
+.mkt-origem-badge.tiktok    { background: #fce4ec; color: #880e4f; }
+
+/* ── Pedidos recentes ─────────────────────────────────────────────────────── */
+.mkt-recentes {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.mkt-recentes .mkt-section-head { border-radius: 0; }
+
+/* ── Vazio ────────────────────────────────────────────────────────────────── */
+.mkt-vazio {
+  padding: 24px;
+  text-align: center;
+  color: #aaa;
+  font-size: 13px;
+}
+
+/* ── Status badge ─────────────────────────────────────────────────────────── */
+.mkt-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: #eee;
+  color: #555;
+}
+</style>
+
+<div class="mkt">
+
+{# ── Header ──────────────────────────────────────────────────────────────── #}
+<div class="mkt-header">
+  <div>
+    <h1>Marketing e Atribuicao</h1>
+    <p>Origem das vendas e performance de campanhas — {{ label_periodo }}</p>
+  </div>
+  <div class="mkt-periodo">
+    <a href="?periodo=hoje"{% if periodo == 'hoje' %} class="ativo"{% endif %}>Hoje</a>
+    <a href="?periodo=ontem"{% if periodo == 'ontem' %} class="ativo"{% endif %}>Ontem</a>
+    <a href="?periodo=7d"{% if periodo == '7d' %} class="ativo"{% endif %}>7 dias</a>
+    <a href="?periodo=30d"{% if periodo == '30d' %} class="ativo"{% endif %}>30 dias</a>
+    <a href="?periodo=mes"{% if periodo == 'mes' %} class="ativo"{% endif %}>Este mês</a>
+    <a href="#" id="mkt-btn-custom"{% if periodo == 'personalizado' %} class="ativo"{% endif %}>Personalizado</a>
+  </div>
+</div>
+
+{# ── Formulário período personalizado ─────────────────────────────────────── #}
+<form method="get" class="mkt-custom-form{% if periodo == 'personalizado' %} ativo{% endif %}" id="mkt-form-custom">
+  <input type="hidden" name="periodo" value="personalizado">
+  <label>
+    De
+    <input type="date" name="data_inicio" value="{{ data_inicio_str }}" required>
+  </label>
+  <label>
+    Até
+    <input type="date" name="data_fim" value="{{ data_fim_str }}" required>
+  </label>
+  <button type="submit">Filtrar</button>
+</form>
+
+{# ── Resumo geral ─────────────────────────────────────────────────────────── #}
+<div class="mkt-grid">
+  <div class="mkt-card dourado">
+    <div class="rotulo">Faturamento</div>
+    <div class="valor">R$ {{ total_faturado }}</div>
+    <div class="apoio">{{ total_pedidos }} pedido{{ total_pedidos|pluralize }}</div>
+  </div>
+  <div class="mkt-card">
+    <div class="rotulo">Ticket Médio</div>
+    <div class="valor">R$ {{ ticket_medio }}</div>
+    <div class="apoio">por pedido pago</div>
+  </div>
+  <div class="mkt-card azul">
+    <div class="rotulo">Clientes</div>
+    <div class="valor">{{ total_clientes }}</div>
+    <div class="apoio">únicos no período</div>
+  </div>
+  <div class="mkt-card verde">
+    <div class="rotulo">Novos Clientes</div>
+    <div class="valor">{{ novos }}</div>
+    <div class="apoio">primeira compra no período</div>
+  </div>
+  <div class="mkt-card">
+    <div class="rotulo">Recorrentes</div>
+    <div class="valor">{{ recorrentes }}</div>
+    <div class="apoio">já compraram antes</div>
+  </div>
+  <div class="mkt-card">
+    <div class="rotulo">Pedidos Pagos</div>
+    <div class="valor">{{ total_pedidos }}</div>
+    <div class="apoio">confirmados / enviados / entregues</div>
+  </div>
+</div>
+
+{# ── Qualidade de atribuição ──────────────────────────────────────────────── #}
+<div class="mkt-attr-card">
+  <h3>Qualidade de Atribuicao</h3>
+  <div class="mkt-attr-bar-wrap">
+    <div class="mkt-attr-bar">
+      <div class="mkt-attr-fill" style="width:{{ pct_attr }}%"></div>
+    </div>
+    <div class="mkt-attr-stats">
+      <div class="mkt-attr-stat pct">
+        <strong>{{ pct_attr }}%</strong>
+        <div>atribuídos</div>
+      </div>
+      <div class="mkt-attr-stat ok">
+        <strong>{{ com_utm }}</strong>
+        <div>com UTM</div>
+      </div>
+      <div class="mkt-attr-stat warn">
+        <strong>{{ sem_utm }}</strong>
+        <div>sem UTM</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Tabelas: Origem, Campanha, Mídia ─────────────────────────────────────── #}
+<div class="mkt-sections">
+
+  {# Vendas por Origem #}
+  <div class="mkt-section">
+    <div class="mkt-section-head">
+      <h3>Vendas por Origem</h3>
+      <div class="mkt-export-btns">
+        <a class="mkt-export-btn" href="/painel/marketing/export/?tipo=origem&formato=csv&periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}">CSV</a>
+        <a class="mkt-export-btn" href="/painel/marketing/export/?tipo=origem&formato=xlsx&periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}">Excel</a>
+      </div>
+    </div>
+    {% if por_origem %}
+    <table class="mkt-table">
+      <thead>
+        <tr>
+          <th>Origem</th>
+          <th class="num">Pedidos</th>
+          <th class="num">Receita</th>
+          <th class="num">Ticket</th>
+          <th>%</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in por_origem %}
+        <tr>
+          <td>
+            {% with src=row.utm_source|lower %}
+            <span class="mkt-origem-badge
+              {% if 'instagram' in src %}instagram
+              {% elif 'facebook' in src or 'fb' == src %}facebook
+              {% elif 'google' in src %}google
+              {% elif 'whatsapp' in src %}whatsapp
+              {% elif 'email' in src %}email
+              {% elif 'tiktok' in src %}tiktok
+              {% endif %}">{{ row.utm_source }}</span>
+            {% endwith %}
+          </td>
+          <td class="num">{{ row.pedidos }}</td>
+          <td class="num">R$ {{ row.receita_fmt }}</td>
+          <td class="num">R$ {{ row.ticket_fmt }}</td>
+          <td>
+            <div class="mkt-bar-cell">
+              <div class="mkt-bar-inline">
+                <div class="mkt-bar-inline-fill" style="width:{{ row.pct }}%"></div>
+              </div>
+              <span class="mkt-bar-pct">{{ row.pct }}%</span>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="mkt-vazio">Nenhum dado no período.</div>
+    {% endif %}
+  </div>
+
+  {# Vendas por Mídia #}
+  <div class="mkt-section">
+    <div class="mkt-section-head">
+      <h3>Vendas por Mídia</h3>
+      <div class="mkt-export-btns">
+        <a class="mkt-export-btn" href="/painel/marketing/export/?tipo=midia&formato=csv&periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}">CSV</a>
+        <a class="mkt-export-btn" href="/painel/marketing/export/?tipo=midia&formato=xlsx&periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}">Excel</a>
+      </div>
+    </div>
+    {% if por_midia %}
+    <table class="mkt-table">
+      <thead>
+        <tr>
+          <th>Mídia</th>
+          <th class="num">Pedidos</th>
+          <th class="num">Receita</th>
+          <th>Participação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in por_midia %}
+        <tr>
+          <td>{{ row.utm_medium }}</td>
+          <td class="num">{{ row.pedidos }}</td>
+          <td class="num">R$ {{ row.receita_fmt }}</td>
+          <td>
+            <div class="mkt-bar-cell">
+              <div class="mkt-bar-inline">
+                <div class="mkt-bar-inline-fill" style="width:{{ row.pct }}%"></div>
+              </div>
+              <span class="mkt-bar-pct">{{ row.pct }}%</span>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="mkt-vazio">Nenhum dado no período.</div>
+    {% endif %}
+  </div>
+
+</div>{# /mkt-sections 1 #}
+
+{# ── Campanhas (tabela completa com ordenação) ────────────────────────────── #}
+<div class="mkt-section" style="margin-bottom:20px">
+  <div class="mkt-section-head">
+    <h3>Vendas por Campanha</h3>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="mkt-ordenar">
+        <a href="?periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}&ordenar_campanha=receita"
+           class="{% if ordenar_campanha == 'receita' %}ativo{% endif %}">Receita</a>
+        <a href="?periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}&ordenar_campanha=pedidos"
+           class="{% if ordenar_campanha == 'pedidos' %}ativo{% endif %}">Pedidos</a>
+        <a href="?periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}&ordenar_campanha=ticket"
+           class="{% if ordenar_campanha == 'ticket' %}ativo{% endif %}">Ticket</a>
+      </div>
+      <div class="mkt-export-btns">
+        <a class="mkt-export-btn" href="/painel/marketing/export/?tipo=campanha&formato=csv&periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}">CSV</a>
+        <a class="mkt-export-btn" href="/painel/marketing/export/?tipo=campanha&formato=xlsx&periodo={{ periodo }}&data_inicio={{ data_inicio_str }}&data_fim={{ data_fim_str }}">Excel</a>
+      </div>
+    </div>
+  </div>
+  {% if por_campanha %}
+  <table class="mkt-table">
+    <thead>
+      <tr>
+        <th>Campanha</th>
+        <th class="num">Pedidos</th>
+        <th class="num">Receita</th>
+        <th class="num">Ticket Médio</th>
+        <th>%</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in por_campanha %}
+      <tr>
+        <td>{{ row.utm_campaign }}</td>
+        <td class="num">{{ row.pedidos }}</td>
+        <td class="num">R$ {{ row.receita_fmt }}</td>
+        <td class="num">R$ {{ row.ticket_fmt }}</td>
+        <td>
+          <div class="mkt-bar-cell">
+            <div class="mkt-bar-inline">
+              <div class="mkt-bar-inline-fill" style="width:{{ row.pct }}%"></div>
+            </div>
+            <span class="mkt-bar-pct">{{ row.pct }}%</span>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="mkt-vazio">Nenhuma campanha no período.</div>
+  {% endif %}
+</div>
+
+{# ── Top 10: Origens + Campanhas ──────────────────────────────────────────── #}
+<div class="mkt-sections" style="margin-bottom:20px">
+
+  <div class="mkt-section">
+    <div class="mkt-section-head"><h3>Top 10 Origens por Faturamento</h3></div>
+    {% if top_origens %}
+    <table class="mkt-table">
+      <thead><tr><th>#</th><th>Origem</th><th class="num">Receita</th><th class="num">Pedidos</th></tr></thead>
+      <tbody>
+        {% for row in top_origens %}
+        <tr>
+          <td style="color:#bbb;font-size:12px;font-weight:700">{{ forloop.counter }}</td>
+          <td>{{ row.utm_source }}</td>
+          <td class="num">R$ {{ row.receita_fmt }}</td>
+          <td class="num">{{ row.pedidos }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="mkt-vazio">Nenhum dado.</div>
+    {% endif %}
+  </div>
+
+  <div class="mkt-section">
+    <div class="mkt-section-head"><h3>Top 10 Campanhas por Faturamento</h3></div>
+    {% if top_campanhas %}
+    <table class="mkt-table">
+      <thead><tr><th>#</th><th>Campanha</th><th class="num">Receita</th><th class="num">Pedidos</th></tr></thead>
+      <tbody>
+        {% for row in top_campanhas %}
+        <tr>
+          <td style="color:#bbb;font-size:12px;font-weight:700">{{ forloop.counter }}</td>
+          <td>{{ row.utm_campaign }}</td>
+          <td class="num">R$ {{ row.receita_fmt }}</td>
+          <td class="num">{{ row.pedidos }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="mkt-vazio">Nenhuma campanha.</div>
+    {% endif %}
+  </div>
+
+</div>{# /mkt-sections 2 #}
+
+{# ── Pedidos Recentes ─────────────────────────────────────────────────────── #}
+<div class="mkt-recentes">
+  <div class="mkt-section-head">
+    <h3>Pedidos Recentes com Atribuicao</h3>
+    <a href="{% url 'admin:pedidos_pedido_changelist' %}?o=-7" class="mkt-export-btn">Ver todos</a>
+  </div>
+  {% if pedidos_recentes %}
+  <table class="mkt-table">
+    <thead>
+      <tr>
+        <th>Pedido</th>
+        <th>Cliente</th>
+        <th class="num">Valor</th>
+        <th>Origem</th>
+        <th>Campanha</th>
+        <th>Data</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in pedidos_recentes %}
+      <tr>
+        <td>
+          <a href="{% url 'admin:pedidos_pedido_changelist' %}?q={{ p.numero }}" style="color:#2980b9;font-size:12px;font-family:monospace">
+            {{ p.numero|slice:":12" }}
+          </a>
+        </td>
+        <td style="font-size:12px">{{ p.nome_completo|default:p.email|truncatechars:22 }}</td>
+        <td class="num">R$ {{ p.total_fmt }}</td>
+        <td>
+          {% if p.utm_source != '—' %}
+          {% with src=p.utm_source|lower %}
+          <span class="mkt-origem-badge
+            {% if 'instagram' in src %}instagram
+            {% elif 'facebook' in src or 'fb' == src %}facebook
+            {% elif 'google' in src %}google
+            {% elif 'whatsapp' in src %}whatsapp
+            {% elif 'email' in src %}email
+            {% elif 'tiktok' in src %}tiktok
+            {% endif %}">{{ p.utm_source|truncatechars:15 }}</span>
+          {% endwith %}
+          {% else %}
+          <span style="color:#ccc;font-size:12px">direto</span>
+          {% endif %}
+        </td>
+        <td style="font-size:12px;color:#555">{{ p.utm_campaign|default:"—"|truncatechars:20 }}</td>
+        <td style="font-size:12px;color:#888">{{ p.criado_em_fmt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="mkt-vazio">Nenhum pedido no período.</div>
+  {% endif %}
+</div>
+
+</div>{# /mkt #}
+
+<script>
+(function () {
+  var btn = document.getElementById('mkt-btn-custom');
+  var form = document.getElementById('mkt-form-custom');
+  if (btn && form) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      form.classList.toggle('ativo');
+    });
+  }
+})();
+</script>
+{% endblock %}
