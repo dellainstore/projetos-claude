@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block titulo %}{% if obj %}Editar{% else %}Nova{% endif %} Funcionária | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">{% if obj %}Editar Funcionária{% else %}Nova Funcionária{% endif %}</h1>
+  <p class="ds-page-subtitulo">Dados de cadastro e vínculo com Bling</p>
+</div>
+
+<div class="ds-form-section" style="max-width:500px;">
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_nome">Nome de exibição</label>
+      <input class="ds-input" type="text" id="id_nome" name="nome"
+             value="{{ obj.nome|default:'' }}" placeholder="Ex: Tina" required>
+      <p style="font-size:0.75rem;color:var(--cinza-texto);margin-top:0.25rem;">Nome curto usado nos relatórios.</p>
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_nome_bling">Nome no Bling</label>
+      <input class="ds-input" type="text" id="id_nome_bling" name="nome_bling"
+             value="{{ obj.nome_bling|default:'' }}" placeholder="Ex: TINA DIAS" required
+             style="font-family:monospace;text-transform:uppercase;">
+      <p style="font-size:0.75rem;color:var(--cinza-texto);margin-top:0.25rem;">
+        Nome exato como aparece como vendedora nos pedidos do Bling. Será convertido para maiúsculas automaticamente.
+      </p>
+    </div>
+
+    <div class="ds-form-group" style="display:flex;align-items:center;gap:0.5rem;">
+      <input type="checkbox" id="id_ativo" name="ativo" {% if not obj or obj.ativo %}checked{% endif %}>
+      <label for="id_ativo" class="ds-label" style="margin-bottom:0;">Funcionária ativa</label>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;margin-top:1.5rem;">
+      <button type="submit" class="ds-btn ds-btn--primario">
+        {% if obj %}Salvar alterações{% else %}Cadastrar{% endif %}
+      </button>
+      <a href="{% url 'metas:cadastro_funcionarios' %}" class="ds-btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

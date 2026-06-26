@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+
+{% block titulo %}Pedidos Em Andamento{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <div>
+    <h1 class="ds-page-title">Pedidos Em Andamento</h1>
+    <p class="ds-page-subtitle">Pedidos em andamento — {{ total }} pedido{{ total|pluralize:"" }}</p>
+  </div>
+  <a href="{% url 'pedidos:dashboard' %}" class="ds-btn ds-btn--secondary">&#8592; Pedidos Pendentes</a>
+</div>
+
+{% if linhas %}
+<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;">
+  <input
+    id="filtro-andamento"
+    type="text"
+    placeholder="Filtrar por número, cliente ou situação..."
+    oninput="filtrarAndamento()"
+    style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:280px;">
+  <span id="andamento-count" style="font-size:.85rem;color:#6b7280;">{{ total }} pedido{{ total|pluralize:"" }}</span>
+</div>
+
+<div class="ds-card">
+  <div class="ds-table-wrapper">
+    <table class="ds-table" id="tabela-andamento">
+      <thead>
+        <tr>
+          <th>Nº Pedido</th>
+          <th>Data</th>
+          <th>Dias Aberto</th>
+          <th>Cliente</th>
+          <th class="num">Valor</th>
+          <th>Situação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linha in linhas %}
+        <tr data-busca="{{ linha.pedido.numero|lower }} {{ linha.pedido.cliente_nome|lower }} {{ linha.pedido.situacao_nome|lower }}"
+            {% if linha.alerta %}style="background:#fef9c3;"{% endif %}>
+          <td><strong>{{ linha.pedido.numero|default:linha.pedido.bling_id }}</strong></td>
+          <td>{{ linha.pedido.data_pedido|date:"d/m/Y" }}</td>
+          <td style="{% if linha.alerta %}color:#d97706;font-weight:700;{% endif %}">
+            {{ linha.dias_em_aberto }}d
+            {% if linha.alerta %} &#9888;{% endif %}
+          </td>
+          <td>{{ linha.pedido.cliente_nome|default:"—" }}</td>
+          <td class="num">{{ linha.pedido.valor_total|brl }}</td>
+          <td>
+            <span class="ds-badge ds-badge--warning">
+              {{ linha.pedido.situacao_nome }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function filtrarAndamento() {
+  const q = document.getElementById('filtro-andamento').value.toLowerCase();
+  const linhas = document.querySelectorAll('#tabela-andamento tbody tr');
+  let visiveis = 0;
+  linhas.forEach(tr => {
+    const busca = (tr.dataset.busca || '').toLowerCase();
+    const visivel = !q || busca.includes(q);
+    tr.style.display = visivel ? '' : 'none';
+    if (visivel) visiveis++;
+  });
+  const cnt = document.getElementById('andamento-count');
+  if (cnt) cnt.textContent = visiveis + ' pedido' + (visiveis !== 1 ? 's' : '');
+}
+</script>
+{% else %}
+<div class="ds-alert ds-alert--success">
+  <strong>&#10003; Sem pedidos em andamento!</strong>
+  Nenhum pedido em andamento encontrado. Se acabou de sincronizar, os dados estão atualizados.
+</div>
+{% endif %}
+{% endblock %}

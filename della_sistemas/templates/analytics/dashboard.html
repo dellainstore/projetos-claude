@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Analytics do Site | D'ELLA Sistemas{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block css_extra %}
+<style>
+  .an-titulo {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.4rem; font-weight: 400;
+    color: var(--preto);
+    margin-bottom: 0.25rem;
+  }
+  .an-subtitulo {
+    font-size: 0.82rem;
+    color: var(--cinza-texto);
+    margin-bottom: 1.25rem;
+  }
+
+  /* Filtro de periodo */
+  .an-filtro {
+    display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;
+    margin-bottom: 0.65rem;
+    background: var(--branco);
+    border: 1px solid var(--cinza-medio);
+    border-radius: 10px;
+    padding: 0.65rem 1rem;
+  }
+  .an-filtro-label {
+    font-size: 0.82rem; color: var(--cinza-texto);
+    margin-right: 0.25rem; white-space: nowrap; line-height: 1;
+  }
+  .an-filtro-tab {
+    padding: 0.35rem 0.85rem;
+    border: 1px solid var(--cinza-medio); border-radius: 6px;
+    font-size: 0.82rem; cursor: pointer; background: transparent;
+    color: var(--cinza-texto); text-decoration: none;
+    transition: background 0.15s, color 0.15s; white-space: nowrap; font-family: inherit;
+  }
+  .an-filtro-tab:hover { background: var(--cinza-claro); color: var(--preto); }
+  .an-filtro-tab.ativo { background: var(--dourado); color: var(--branco); border-color: var(--dourado); font-weight: 600; }
+
+  /* Formulario personalizado */
+  .an-custom-form {
+    display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+    background: var(--cinza-claro); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 0.6rem 1rem; margin-bottom: 1rem;
+  }
+  .an-custom-form.oculto { display: none; }
+  .an-data-label { font-size: 0.82rem; color: var(--cinza-texto); display: flex; align-items: center; gap: 0.3rem; }
+  .an-data-input {
+    padding: 0.3rem 0.5rem; border: 1px solid var(--cinza-medio); border-radius: 6px;
+    font-size: 0.82rem; background: var(--branco); color: var(--preto);
+  }
+
+  /* Secoes */
+  .an-secao-titulo {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 0.95rem; font-weight: 400; color: var(--preto);
+    margin-bottom: 0.65rem; padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--cinza-medio);
+  }
+
+  /* Ao Vivo */
+  .an-ao-vivo-card {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; min-height: 80px;
+  }
+  .av-dot {
+    display: inline-block; width: 10px; height: 10px; background: #22c55e;
+    border-radius: 50%; margin-right: 0.45rem; animation: av-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes av-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .av-vivos { font-size: 0.95rem; color: var(--preto); margin-bottom: 0.65rem; }
+  .av-vivos strong { font-size: 1.3rem; font-weight: 700; }
+  .av-vazio { font-size: 0.85rem; color: var(--cinza-texto); }
+  .av-paginas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+  .av-paginas li {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.78rem; padding: 0.15rem 0; border-bottom: 1px solid var(--cinza-claro);
+  }
+  .av-paginas li:last-child { border-bottom: none; }
+  .av-pagina-url { color: var(--cinza-texto); font-family: monospace; }
+  .av-pagina-total {
+    font-weight: 600; color: var(--preto); background: var(--cinza-claro);
+    border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.75rem;
+  }
+
+  /* Cards de resumo */
+  .an-cards-grid {
+    display: grid; gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    margin-bottom: 0.75rem;
+  }
+  .an-card {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 1.1rem 1.1rem 0.9rem;
+    display: flex; flex-direction: column; gap: 0.3rem;
+  }
+  .an-card-label { font-size: 0.75rem; color: var(--cinza-texto); text-transform: uppercase; letter-spacing: 0.04em; }
+  .an-card-valor { font-size: 1.5rem; font-weight: 700; color: var(--preto); line-height: 1.1; }
+  .an-taxa-frase {
+    font-size: 0.82rem; color: var(--cinza-texto); margin-bottom: 1.5rem;
+    padding: 0.5rem 1rem; background: var(--cinza-claro); border-radius: 8px;
+  }
+  .an-taxa-frase strong { color: var(--preto); }
+
+  /* Funil */
+  .an-funil {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+    display: flex; flex-direction: column; gap: 0.65rem;
+  }
+  .an-funil-etapa { display: flex; flex-direction: column; gap: 0.2rem; }
+  .an-funil-info {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 0.82rem; color: var(--cinza-texto);
+  }
+  .an-funil-label { font-weight: 600; color: var(--preto); }
+  .an-funil-nums { font-size: 0.75rem; }
+  .an-funil-barra-bg { height: 12px; background: var(--cinza-claro); border-radius: 6px; overflow: hidden; }
+  .an-funil-barra-fill { height: 100%; background: var(--dourado); border-radius: 6px; transition: width 0.4s ease; }
+  .an-funil-etapa:first-child .an-funil-barra-fill { background: #3b82f6; }
+  .an-funil-queda {
+    font-size: 0.72rem; color: #ef4444; margin-top: 0.1rem; text-align: right;
+  }
+
+  /* Tabelas de produtos */
+  .an-tabelas-grid {
+    display: grid; gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    margin-bottom: 1.5rem;
+  }
+  .an-tabela-bloco { background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px; overflow: hidden; }
+  .an-tabela-titulo {
+    padding: 0.65rem 1rem; font-size: 0.8rem; font-weight: 600;
+    color: var(--cinza-texto); text-transform: uppercase; letter-spacing: 0.04em;
+    background: var(--cinza-claro); border-bottom: 1px solid var(--cinza-medio);
+    text-align: center;
+  }
+  .an-tabela { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .an-tabela td { padding: 0.5rem 1rem; border-bottom: 1px solid var(--cinza-medio); vertical-align: middle; }
+  .an-tabela tr:last-child td { border-bottom: none; }
+  .an-tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .an-vazio { padding: 1rem; font-size: 0.82rem; color: var(--cinza-texto); text-align: center; }
+
+  /* Origens */
+  .an-origens {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem;
+  }
+  .an-origens-linha {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.6rem 1rem; border-bottom: 1px solid var(--cinza-medio); font-size: 0.84rem;
+  }
+  .an-origens-linha:last-child { border-bottom: none; }
+  .an-origens-nome { min-width: 130px; font-weight: 500; color: var(--preto); }
+  .an-origens-barra-bg { flex: 1; height: 8px; background: var(--cinza-claro); border-radius: 4px; overflow: hidden; }
+  .an-origens-fill { height: 100%; background: var(--dourado); border-radius: 4px; }
+  .an-origens-total { min-width: 40px; text-align: right; color: var(--cinza-texto); font-size: 0.78rem; }
+
+  /* Carrinhos recentes */
+  .an-carrinhos {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem;
+  }
+  .an-cart-row {
+    display: grid; grid-template-columns: 90px 1fr 70px 80px;
+    gap: 0.75rem; padding: 0.6rem 1rem; border-bottom: 1px solid var(--cinza-medio);
+    align-items: start; font-size: 0.82rem;
+  }
+  .an-cart-row:last-child { border-bottom: none; }
+  .an-cart-header { background: var(--cinza-claro); font-weight: 600; font-size: 0.76rem; color: var(--cinza-texto); text-transform: uppercase; letter-spacing: 0.03em; }
+  .an-cart-quando { color: var(--cinza-texto); font-size: 0.76rem; }
+  .an-cart-item { font-size: 0.78rem; line-height: 1.4; }
+  .an-cart-item-nome { color: var(--preto); }
+  .an-cart-item-qtd { color: var(--cinza-texto); margin-left: 0.3rem; }
+  .an-cart-total { text-align: center; font-weight: 600; font-size: 0.82rem; }
+  .an-cart-status { text-align: center; }
+  .an-badge-comprou { background: #dcfce7; color: #166534; border-radius: 12px; padding: 0.15rem 0.5rem; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+  .an-badge-abandonou { background: #fee2e2; color: #991b1b; border-radius: 12px; padding: 0.15rem 0.5rem; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+
+  /* Grafico de trafego */
+  .an-chart-card {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 1.25rem 1.25rem 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .an-chart-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;
+  }
+  .an-chart-header-left { min-width: 0; }
+  .an-chart-titulo-label {
+    font-size: 0.82rem; font-weight: 600; color: var(--cinza-texto);
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.2rem;
+  }
+  .an-chart-back-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--dourado); font-size: 0.8rem; font-weight: 600;
+    padding: 0; text-decoration: underline; text-underline-offset: 2px;
+    display: none;
+  }
+  .an-chart-back-btn:hover { opacity: 0.75; }
+  .an-chart-pills { display: flex; gap: 0.55rem; flex-wrap: wrap; }
+  .an-chart-pill {
+    background: var(--cinza-claro); border: 1px solid var(--cinza-medio);
+    border-radius: 8px; padding: 0.35rem 0.7rem;
+  }
+  .an-chart-pill-label { font-size: 0.72rem; color: var(--cinza-texto); }
+  .an-chart-pill-valor { font-size: 0.82rem; font-weight: 600; color: var(--preto); }
+  .an-chart-pill-valor span { font-weight: 400; color: var(--cinza-texto); font-size: 0.72rem; }
+  .an-chart-pill--quiet .an-chart-pill-valor { color: var(--cinza-texto); }
+  .an-chart-canvas-wrap { position: relative; height: 220px; }
+  .an-chart-hint {
+    text-align: center; font-size: 0.72rem; color: var(--cinza-texto);
+    margin-top: 0.4rem;
+  }
+
+  /* Aviso sem config */
+  .an-sem-config {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 2rem 1.5rem; text-align: center;
+  }
+  .an-sem-config h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .an-sem-config p { font-size: 0.85rem; color: var(--cinza-texto); }
+  .an-sem-config code {
+    display: block; background: var(--cinza-claro); padding: 0.5rem 1rem;
+    border-radius: 6px; font-size: 0.8rem; margin: 0.75rem auto; max-width: 500px;
+    text-align: left; white-space: pre;
+  }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<h1 class="an-titulo">Site D'ELLA — Analise de Visitas e Vendas</h1>
+<p class="an-subtitulo">Dados do site dellainstore.com. Atualizado automaticamente.</p>
+
+{% if sem_config %}
+<div class="an-sem-config">
+  <h2>Banco de dados nao configurado</h2>
+  <p>Para ativar o painel, adicione ao arquivo <strong>.env</strong> do della_sistemas:</p>
+  <code>DELLA_SITE_DB_NAME=della_site
+DELLA_SITE_DB_USER=della_readonly
+DELLA_SITE_DB_PASSWORD=Della@RO2026!</code>
+  <p>E certifique-se de ter rodado o script SQL de criacao do usuario readonly no PostgreSQL.</p>
+</div>
+{% else %}
+
+<!-- Filtro de periodo -->
+<div class="an-filtro">
+  <span class="an-filtro-label">Periodo:</span>
+  <a href="?periodo=hoje" class="an-filtro-tab {% if filtro == 'hoje' %}ativo{% endif %}">Hoje</a>
+  <a href="?periodo=7d"   class="an-filtro-tab {% if filtro == '7d' %}ativo{% endif %}">Ultimos 7 dias</a>
+  <a href="?periodo=30d"  class="an-filtro-tab {% if filtro == '30d' %}ativo{% endif %}">Ultimos 30 dias</a>
+  <button type="button" onclick="toggleCustomPeriodo(this)" class="an-filtro-tab {% if filtro == 'custom' %}ativo{% endif %}">Personalizado</button>
+</div>
+<form id="an-form-custom" class="an-custom-form{% if filtro != 'custom' %} oculto{% endif %}" method="get" action="">
+  <input type="hidden" name="periodo" value="custom">
+  <label class="an-data-label">De&nbsp;<input type="date" name="de" value="{{ de_val }}" class="an-data-input"></label>
+  <label class="an-data-label">Ate&nbsp;<input type="date" name="ate" value="{{ ate_val }}" class="an-data-input"></label>
+  <button type="submit" class="an-filtro-tab ativo">Ver</button>
+</form>
+<script>
+function toggleCustomPeriodo(btn) {
+  var form = document.getElementById('an-form-custom');
+  var aberto = form.classList.toggle('oculto');
+  btn.classList.toggle('ativo', !aberto);
+}
+</script>
+<div style="margin-bottom:1.5rem;"></div>
+
+
+<!-- AO VIVO -->
+<div class="an-secao-titulo">Ao vivo agora</div>
+<div class="an-ao-vivo-card"
+     hx-get="{% url 'analytics:ao_vivo' %}"
+     hx-trigger="load, every 30s"
+     hx-swap="innerHTML">
+  <div style="font-size:0.8rem;color:var(--cinza-texto);">Carregando...</div>
+</div>
+
+<!-- RESUMO -->
+<div class="an-secao-titulo">Resumo do periodo</div>
+<div class="an-cards-grid">
+  <div class="an-card">
+    <div class="an-card-label">Paginas vistas</div>
+    <div class="an-card-valor">{{ resumo.visitas }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Visitantes unicos</div>
+    <div class="an-card-valor">{{ resumo.visitantes }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Pedidos feitos</div>
+    <div class="an-card-valor">{{ resumo.pedidos }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Itens vendidos</div>
+    <div class="an-card-valor">{{ resumo.itens_vendidos }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Receita</div>
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ resumo.receita|brl }}</div>
+  </div>
+</div>
+{% if resumo.visitantes > 0 %}
+<div class="an-taxa-frase">
+  Media de <strong>{{ resumo.media_paginas }} paginas</strong> por visitante.
+  &nbsp;|&nbsp;
+  A cada 100 visitantes, <strong>{{ resumo.taxa }}</strong> {% if resumo.taxa == 1 %}virou compra{% else %}viraram compra{% endif %}.
+  {% if resumo.carrinhos_abandonados > 0 %}
+  &nbsp;|&nbsp;
+  <strong>{{ resumo.carrinhos_abandonados }}</strong> {% if resumo.carrinhos_abandonados == 1 %}carrinho abandonado{% else %}carrinhos abandonados{% endif %}.
+  {% if resumo.checkouts_abandonados > 0 %}
+  <strong>{{ resumo.checkouts_abandonados }}</strong> no checkout.
+  {% endif %}
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- FUNIL DE COMPRA -->
+{% if funil %}
+<div class="an-secao-titulo">Funil de compra</div>
+<div class="an-funil">
+  {% for etapa in funil %}
+  <div class="an-funil-etapa">
+    <div class="an-funil-info">
+      <span class="an-funil-label">{{ etapa.label }}</span>
+      <span class="an-funil-nums">{{ etapa.total }} pessoas &nbsp;({{ etapa.pct }}%)</span>
+    </div>
+    <div class="an-funil-barra-bg">
+      <div class="an-funil-barra-fill" style="width:{{ etapa.pct|pct_css }}%"></div>
+    </div>
+    {% if etapa.queda > 0 %}
+    <div class="an-funil-queda">{{ etapa.queda }} saiu nesta etapa</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- CARRINHOS RECENTES -->
+{% if carrinhos %}
+<div class="an-secao-titulo">Carrinhos recentes</div>
+<p style="font-size:0.82rem;color:var(--cinza-texto);margin-bottom:0.75rem;">Ultimas sessoes que adicionaram produtos ao carrinho.</p>
+<div class="an-carrinhos">
+  <div class="an-cart-row an-cart-header">
+    <div>Quando</div>
+    <div>Produtos adicionados</div>
+    <div style="text-align:center;">Itens</div>
+    <div style="text-align:center;">Status</div>
+  </div>
+  {% for c in carrinhos %}
+  <div class="an-cart-row">
+    <div class="an-cart-quando">{{ c.ultima_acao|date:"d/m H\hi" }}</div>
+    <div class="an-cart-item">
+      {% for item in c.itens %}
+      <span class="an-cart-item-nome">{{ item.nome }}</span>
+      {% if item.qtd > 1 %}<span class="an-cart-item-qtd">({{ item.qtd }}x)</span>{% endif %}
+      {% if not forloop.last %}<br>{% endif %}
+      {% endfor %}
+    </div>
+    <div class="an-cart-total">{{ c.total_itens }}</div>
+    <div class="an-cart-status">
+      {% if c.comprou %}
+      <span class="an-badge-comprou">Comprou</span>
+      {% else %}
+      <span class="an-badge-abandonou">Abandonou</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- PRODUTOS -->
+<div class="an-secao-titulo">Produtos em destaque</div>
+<div class="an-tabelas-grid">
+
+  <div class="an-tabela-bloco">
+    <div class="an-tabela-titulo">Mais vistos</div>
+    {% if produtos.mais_vistos %}
+    <table class="an-tabela">
+      {% for p in produtos.mais_vistos %}
+      <tr>
+        <td>{{ p.produto_nome|default:p.produto_slug|truncatechars:40 }}</td>
+        <td class="num">{{ p.total }}x</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="an-vazio">Nenhum dado ainda</div>
+    {% endif %}
+  </div>
+
+  <div class="an-tabela-bloco">
+    <div class="an-tabela-titulo">Mais adicionados ao carrinho</div>
+    {% if produtos.mais_adicionados %}
+    <table class="an-tabela">
+      {% for p in produtos.mais_adicionados %}
+      <tr>
+        <td>{{ p.produto_nome|default:p.produto_slug|truncatechars:40 }}</td>
+        <td class="num">{{ p.total }}x</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="an-vazio">Nenhum dado ainda</div>
+    {% endif %}
+  </div>
+
+  <div class="an-tabela-bloco">
+    <div class="an-tabela-titulo">Mais vendidos</div>
+    {% if produtos.mais_vendidos %}
+    <table class="an-tabela">
+      {% for p in produtos.mais_vendidos %}
+      <tr>
+        <td>{{ p.produto_nome|default:p.produto_slug|truncatechars:40 }}</td>
+        <td class="num">{{ p.total }}x</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="an-vazio">Nenhum dado ainda</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- ORIGENS -->
+<div class="an-secao-titulo">De onde vieram os visitantes</div>
+{% if origens %}
+<div class="an-origens">
+  {% for o in origens %}
+  <div class="an-origens-linha">
+    <div class="an-origens-nome">{{ o.origem }}</div>
+    <div class="an-origens-barra-bg">
+      <div class="an-origens-fill" style="width:{{ o.pct|pct_css }}%"></div>
+    </div>
+    <div class="an-origens-total">{{ o.total }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="an-sem-config" style="margin-bottom:1.5rem;">
+  <p style="margin:0;">Sem dados de origem no periodo selecionado. Os dados aparecem conforme as pessoas chegam pelo Google, Instagram, etc.</p>
+</div>
+{% endif %}
+
+{% if trafico %}
+<!-- GRAFICO TRAFEGO SEMANAL -->
+<div class="an-secao-titulo">Trafego ao longo do periodo</div>
+<div class="an-chart-card">
+  <div class="an-chart-header">
+    <div class="an-chart-header-left">
+      <div class="an-chart-titulo-label" id="an-chart-titulo-label">Visitas por dia da semana</div>
+      <button class="an-chart-back-btn" id="an-chart-back-btn" onclick="anVoltarSemana()">&#8592; Ver semana completa</button>
+    </div>
+    <div class="an-chart-pills">
+      {% if trafico.pico_dia %}
+      <div class="an-chart-pill">
+        <div class="an-chart-pill-label">Dia com mais visitas</div>
+        <div class="an-chart-pill-valor">{{ trafico.pico_dia }} <span>({{ trafico.pico_dia_total }})</span></div>
+      </div>
+      {% endif %}
+      {% if trafico.pico_hora is not None %}
+      <div class="an-chart-pill">
+        <div class="an-chart-pill-label">Horario de pico</div>
+        <div class="an-chart-pill-valor">{{ trafico.pico_hora }}h&nbsp;&ndash;&nbsp;{{ trafico.pico_hora }}h59</div>
+      </div>
+      {% endif %}
+      {% if trafico.menor_dia %}
+      <div class="an-chart-pill an-chart-pill--quiet">
+        <div class="an-chart-pill-label">Dia mais tranquilo</div>
+        <div class="an-chart-pill-valor">{{ trafico.menor_dia }} <span>({{ trafico.menor_dia_total }})</span></div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="an-chart-canvas-wrap">
+    <canvas id="an-chart-semanal"></canvas>
+    <canvas id="an-chart-horario" style="display:none;"></canvas>
+  </div>
+  <div class="an-chart-hint" id="an-chart-hint">Clique em um dia para ver por horario</div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block js_extra %}
+{% if trafico %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var dados = {{ trafico_json|safe }};
+  if (!dados || !dados.por_dia) return;
+
+  var DOURADO      = '#c9a96e';
+  var DOURADO_HVR  = '#b8924a';
+  var GRID_CLR     = '#f0ece4';
+  var TEXT_CLR     = '#666666';
+  var PRETO        = '#1a1a1a';
+  var RADIUS       = 5;
+
+  var chartSemanal = null;
+  var chartHorario = null;
+
+  var ctxS = document.getElementById('an-chart-semanal');
+  var ctxH = document.getElementById('an-chart-horario');
+
+  function tooltipOpts(msgSuffix) {
+    return {
+      backgroundColor: PRETO,
+      titleColor: '#ffffff',
+      bodyColor: '#ffffff',
+      padding: 10,
+      cornerRadius: 6,
+      displayColors: false,
+      callbacks: {
+        label: function (c) { return c.parsed.y + ' visita' + (c.parsed.y !== 1 ? 's' : '') + (msgSuffix || ''); }
+      }
+    };
+  }
+
+  function scaleOpts() {
+    return {
+      y: {
+        beginAtZero: true,
+        grid: { color: GRID_CLR },
+        ticks: { precision: 0, color: TEXT_CLR, font: { size: 11 } },
+        border: { color: '#eeede8' }
+      },
+      x: {
+        grid: { display: false },
+        ticks: { color: TEXT_CLR, font: { size: 11 } },
+        border: { color: '#eeede8' }
+      }
+    };
+  }
+
+  function criarChartSemanal() {
+    if (chartSemanal) chartSemanal.destroy();
+    chartSemanal = new Chart(ctxS, {
+      type: 'bar',
+      data: {
+        labels: dados.labels,
+        datasets: [{
+          data: dados.por_dia,
+          backgroundColor: DOURADO,
+          hoverBackgroundColor: DOURADO_HVR,
+          borderRadius: RADIUS,
+          borderSkipped: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: tooltipOpts(' (clique para detalhar)')
+        },
+        scales: scaleOpts(),
+        onClick: function (e, els) {
+          if (els && els.length > 0) mostrarHorario(els[0].index);
+        },
+        onHover: function (e, els) {
+          ctxS.style.cursor = (els && els.length > 0) ? 'pointer' : 'default';
+        }
+      }
+    });
+  }
+
+  function mostrarHorario(idx) {
+    ctxS.style.display = 'none';
+    ctxH.style.display = 'block';
+    document.getElementById('an-chart-titulo-label').textContent =
+      'Visitas por horario - ' + dados.labels_full[idx];
+    document.getElementById('an-chart-back-btn').style.display = 'inline-block';
+    document.getElementById('an-chart-hint').style.display = 'none';
+
+    if (chartHorario) chartHorario.destroy();
+    chartHorario = new Chart(ctxH, {
+      type: 'bar',
+      data: {
+        labels: dados.horas,
+        datasets: [{
+          data: dados.por_dia_hora[idx],
+          backgroundColor: DOURADO,
+          hoverBackgroundColor: DOURADO_HVR,
+          borderRadius: 4,
+          borderSkipped: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: tooltipOpts('') },
+        scales: scaleOpts()
+      }
+    });
+  }
+
+  window.anVoltarSemana = function () {
+    ctxH.style.display = 'none';
+    ctxS.style.display = 'block';
+    document.getElementById('an-chart-titulo-label').textContent = 'Visitas por dia da semana';
+    document.getElementById('an-chart-back-btn').style.display = 'none';
+    document.getElementById('an-chart-hint').style.display = '';
+    if (chartHorario) { chartHorario.destroy(); chartHorario = null; }
+  };
+
+  criarChartSemanal();
+})();
+</script>
+{% endif %}
+{% endblock %}

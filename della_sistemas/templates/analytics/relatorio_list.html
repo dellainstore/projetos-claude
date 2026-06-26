@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block titulo %}Resumo Semanal | D'ELLA Sistemas{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block css_extra %}
+<style>
+  .rl-titulo {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.4rem; font-weight: 400; color: var(--preto); margin-bottom: 0.25rem;
+  }
+  .rl-subtitulo { font-size: 0.82rem; color: var(--cinza-texto); margin-bottom: 1.5rem; }
+
+  .rl-lista { display: flex; flex-direction: column; gap: 0.75rem; }
+  .rl-item {
+    background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px;
+    padding: 1rem 1.25rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  }
+  .rl-periodo {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1rem; font-weight: 400; color: var(--preto);
+  }
+  .rl-gerado { font-size: 0.78rem; color: var(--cinza-texto); margin-top: 0.2rem; }
+  .rl-btn-download {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    background: var(--preto); color: var(--branco); text-decoration: none;
+    padding: 0.5rem 1.1rem; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
+    letter-spacing: 0.04em; white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .rl-btn-download:hover { background: var(--dourado); }
+
+  .rl-vazio {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 2.5rem 1.5rem; text-align: center;
+    color: var(--cinza-texto); font-size: 0.9rem;
+  }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<h1 class="rl-titulo">Resumo Semanal</h1>
+<p class="rl-subtitulo">Gerado toda segunda-feira as 7h com analise de IA da semana anterior.</p>
+
+{% if relatorios %}
+<div class="rl-lista">
+  {% for rel in relatorios %}
+  <div class="rl-item">
+    <div>
+      <div class="rl-periodo">
+        Semana: {{ rel.semana_inicio|date:"d/m/Y" }} &agrave; {{ rel.semana_fim|date:"d/m/Y" }}
+      </div>
+      <div class="rl-gerado">Gerado em {{ rel.gerado_em|date:"d/m/Y \a\s H\h" }}</div>
+    </div>
+    <a href="{% url 'analytics:relatorio_download' rel.pk %}" class="rl-btn-download">
+      &#128196; Baixar PDF
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="rl-vazio">
+  <p style="margin:0 0 0.5rem;font-size:1.1rem;">Nenhum relatorio gerado ainda.</p>
+  <p style="margin:0;">O primeiro sera gerado automaticamente na proxima segunda-feira as 7h.</p>
+</div>
+{% endif %}
+
+{% endblock %}

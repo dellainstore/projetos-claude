@@ -1,0 +1,13 @@
+<div class="ds-form-section-titulo" style="margin-bottom:0.75rem;">Cores disponíveis</div>
+<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;">
+  {% for cor in cores %}
+  <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" onclick="onCorSelecionada('{{ cor|escapejs }}')">{{ cor }}</button>
+  {% endfor %}
+</div>
+<div class="ds-form-group" style="margin-top:0.5rem;">
+  <label class="ds-label">Ou nova cor</label>
+  <div style="display:flex;gap:0.5rem;align-items:flex-end;">
+    <input class="ds-input" type="text" id="input-nova-cor" placeholder="EX: TERRACOTA" style="flex:1;">
+    <button type="button" class="ds-btn ds-btn--dourado ds-btn--sm" onclick="onCorSelecionada(document.getElementById('input-nova-cor').value.trim().toUpperCase())">Usar</button>
+  </div>
+</div>

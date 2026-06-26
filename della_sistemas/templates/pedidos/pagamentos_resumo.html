@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+
+{% block titulo %}Resumo de Pagamentos{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <div>
+    <h1 class="ds-page-title">Resumo de Pagamentos</h1>
+    <p class="ds-page-subtitle">Visão geral dos recebimentos pendentes — {{ total_pedidos_pendentes }} pedido{{ total_pedidos_pendentes|pluralize:"" }} aguardando baixa</p>
+  </div>
+  <div style="display:flex;gap:.5rem;">
+    <a href="{% url 'pedidos:pagamentos_pendentes' %}" class="ds-btn ds-btn--secondary">
+      &#128176; Ver Pendentes
+    </a>
+    <a href="{% url 'pedidos:pagamentos_confirmados' %}" class="ds-btn ds-btn--secondary">
+      &#10003; Confirmados
+    </a>
+  </div>
+</div>
+
+{# ── Cards de totais ── #}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-bottom:2rem;">
+
+  {# Card: Pago #}
+  <div class="ds-card" style="border-left:4px solid #2563eb;padding:1.5rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+      <span style="font-size:.85rem;font-weight:600;color:#2563eb;text-transform:uppercase;letter-spacing:.05em;">
+        &#10003; Pago
+      </span>
+      <span style="font-size:.75rem;color:#6b7280;">baixas confirmadas 2026</span>
+    </div>
+    <div style="font-size:2rem;font-weight:700;color:#2563eb;">
+      {{ total_pago|brl }}
+    </div>
+    <div style="font-size:.8rem;color:#6b7280;margin-top:.5rem;">
+      Total recebido e baixado
+    </div>
+  </div>
+
+  {# Card: Em atraso #}
+  <div class="ds-card" style="border-left:4px solid #dc2626;padding:1.5rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+      <span style="font-size:.85rem;font-weight:600;color:#dc2626;text-transform:uppercase;letter-spacing:.05em;">
+        &#9888; Em Atraso
+      </span>
+      <span style="font-size:.75rem;color:#6b7280;">vencimento &lt; hoje</span>
+    </div>
+    <div style="font-size:2rem;font-weight:700;color:#dc2626;">
+      {{ total_atraso|brl }}
+    </div>
+    <div style="font-size:.8rem;color:#6b7280;margin-top:.5rem;">
+      {{ pedidos_atraso|length }} pedido{{ pedidos_atraso|length|pluralize:"" }} em atraso
+    </div>
+  </div>
+
+  {# Card: A receber (futuro) #}
+  <div class="ds-card" style="border-left:4px solid #059669;padding:1.5rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+      <span style="font-size:.85rem;font-weight:600;color:#059669;text-transform:uppercase;letter-spacing:.05em;">
+        &#9651; A Receber
+      </span>
+      <span style="font-size:.75rem;color:#6b7280;">vencimento &ge; hoje</span>
+    </div>
+    <div style="font-size:2rem;font-weight:700;color:#059669;">
+      {{ total_futuro|brl }}
+    </div>
+    <div style="font-size:.8rem;color:#6b7280;margin-top:.5rem;">
+      Total agendado para receber
+    </div>
+  </div>
+
+</div>
+
+{# ── Lista de pedidos em atraso ── #}
+{% if pedidos_atraso %}
+<div class="ds-card">
+  <div style="padding:1rem 1.25rem .75rem;border-bottom:1px solid #f3f4f6;">
+    <h2 style="font-size:1rem;font-weight:700;color:#dc2626;margin:0;">
+      &#9888; Pedidos em Atraso ({{ pedidos_atraso|length }})
+    </h2>
+    <p style="font-size:.8rem;color:#6b7280;margin:.25rem 0 0;">Pedidos com parcelas vencidas não baixadas</p>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="ds-table">
+      <thead>
+        <tr>
+          <th>Nº Pedido</th>
+          <th>Data Pedido</th>
+          <th>Cliente</th>
+          <th class="num">Valor Pendente</th>
+          <th>Situação</th>
+          <th>Parcelas Vencidas</th>
+          <th>Venc. Mais Antiga</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p, valor_atraso, data_ref in pedidos_atraso %}
+        {% with parcelas=p.parcelas.all %}
+        <tr>
+          <td><strong>{{ p.numero|default:p.bling_id }}</strong></td>
+          <td style="font-size:.85rem;">{{ p.data_pedido|date:"d/m/Y" }}</td>
+          <td>{{ p.cliente_nome|default:"—" }}</td>
+          <td class="num" style="color:#dc2626;font-weight:700;">
+            {{ valor_atraso|brl }}
+          </td>
+          <td><span class="ds-badge ds-badge--success">{{ p.situacao_nome }}</span></td>
+          <td style="font-size:.8rem;">
+            {% if parcelas %}
+              {% for parc in parcelas %}
+              {% if not parc.baixada and parc.data_vencimento and parc.data_vencimento < hoje %}
+              <div style="color:#dc2626;">
+                Parc. {{ parc.numero }}: {{ parc.valor|brl }}
+                <span style="color:#9ca3af;font-size:.75rem;">· venc. {{ parc.data_vencimento|date:"d/m/Y" }}</span>
+              </div>
+              {% endif %}
+              {% endfor %}
+            {% else %}
+              <span style="color:#9ca3af;">{{ data_ref|date:"d/m/Y"|default:"—" }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size:.8rem;color:#dc2626;font-weight:600;white-space:nowrap;">
+            {{ data_ref|date:"d/m/Y" }}
+          </td>
+          <td>
+            <a href="{% url 'pedidos:pagamentos_pendentes' %}" class="ds-btn ds-btn--sm ds-btn--secondary">
+              Baixar
+            </a>
+          </td>
+        </tr>
+        {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="ds-alert ds-alert--success">
+  <strong>&#10003; Sem atrasos!</strong>
+  Não há pedidos com parcelas vencidas pendentes de baixa.
+</div>
+{% endif %}
+
+{% endblock %}

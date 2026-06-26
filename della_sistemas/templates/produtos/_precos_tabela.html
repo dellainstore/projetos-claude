@@ -1,0 +1,50 @@
+{% if cores %}
+<table class="tabela-precos">
+  <thead>
+    <tr>
+      <th class="col-check"><input type="checkbox" id="check-all-header" class="check-cor-header" title="Selecionar todos"></th>
+      <th class="col-sku">SKU</th>
+      <th class="col-cor">COR</th>
+      <th class="col-preco">VAREJO</th>
+      <th class="col-preco">ATACADO</th>
+      <th class="col-preco">CUSTO</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in cores %}
+    <tr>
+      <td class="col-check">
+        <input type="checkbox" name="cores" value="{{ c.color_key }}" class="check-cor">
+      </td>
+      <td class="col-sku">{{ c.sku }}</td>
+      <td class="col-cor"><strong>{{ c.color_key }}</strong></td>
+      <td class="col-preco">
+        {% if c.varejo %}R$ {{ c.varejo|floatformat:2 }}{% else %}<span class="preco-vazio">—</span>{% endif %}
+      </td>
+      <td class="col-preco">
+        {% if c.atacado %}R$ {{ c.atacado|floatformat:2 }}{% else %}<span class="preco-vazio">—</span>{% endif %}
+      </td>
+      <td class="col-preco">
+        {% if c.custo %}R$ {{ c.custo|floatformat:2 }}{% else %}<span class="preco-vazio">—</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+  const allHeader = document.getElementById('check-all-header');
+  if (allHeader) {
+    allHeader.addEventListener('change', () => {
+      document.querySelectorAll('.check-cor').forEach(cb => cb.checked = allHeader.checked);
+      if (typeof atualizarBotao === 'function') atualizarBotao();
+    });
+  }
+  if (typeof vincularCheckboxes === 'function') vincularCheckboxes();
+  if (typeof atualizarBotao === 'function') atualizarBotao();
+</script>
+{% else %}
+<p style="color:var(--cinza-texto);padding:2rem 0;text-align:center">
+  Nenhuma cor encontrada para este modelo no catálogo ativo.
+</p>
+{% endif %}

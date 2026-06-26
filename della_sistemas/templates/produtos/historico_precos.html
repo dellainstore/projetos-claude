@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}Histórico de Preços | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+.tabs-precos { display: flex; gap: 0.5rem; }
+.tabs-precos a {
+  padding: 0.35rem 0.9rem; border-radius: 20px; font-size: 0.8rem;
+  color: var(--cinza-texto); text-decoration: none;
+  border: 1px solid var(--cinza-medio);
+}
+.tabs-precos a.ativo { background: var(--preto); color: var(--branco); border-color: var(--preto); }
+
+.tabela-hist { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+.tabela-hist th {
+  padding: 0.55rem 0.75rem; text-align: left;
+  font-size: 0.7rem; color: var(--cinza-texto); text-transform: uppercase;
+  letter-spacing: 0.06em; border-bottom: 2px solid var(--cinza-medio); white-space: nowrap;
+}
+.tabela-hist td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--cinza-medio); vertical-align: middle; }
+.tabela-hist tr:last-child td { border-bottom: none; }
+.tabela-hist tr:hover td { background: var(--cinza-claro); }
+
+.badge-tipo { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.badge-tipo.varejo   { background: #e8f5e8; color: #2d7a2d; }
+.badge-tipo.custo    { background: #e8eef5; color: #2d5a8a; }
+.badge-tipo.atacado  { background: #f5ede8; color: #8a4a2d; }
+
+.preco-antes  { color: var(--cinza-texto); text-decoration: line-through; font-size: 0.82rem; }
+.preco-depois { color: var(--preto); font-weight: 600; }
+.seta-preco   { color: var(--dourado); margin: 0 0.3rem; }
+
+.paginacao { display: flex; align-items: center; gap: 0.5rem; justify-content: center; margin-top: 1.5rem; flex-wrap: wrap; }
+.paginacao a, .paginacao span {
+  padding: 0.35rem 0.7rem; border-radius: 5px; font-size: 0.82rem;
+  border: 1px solid var(--cinza-medio); text-decoration: none; color: var(--cinza-texto);
+}
+.paginacao a:hover { border-color: var(--dourado); color: var(--dourado); }
+.paginacao span.atual { background: var(--dourado); color: var(--preto); border-color: var(--dourado); font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header flex-between">
+  <div>
+    <h1 class="ds-page-titulo">Preços</h1>
+    <p class="ds-page-subtitulo">Histórico de alterações de preço</p>
+  </div>
+  <div class="tabs-precos">
+    <a href="{% url 'produtos:precos' %}">Ajustar Preços</a>
+    <a href="{% url 'produtos:historico_precos' %}" class="ativo">Histórico</a>
+  </div>
+</div>
+
+<!-- Filtros -->
+<form method="get" class="ds-form-section" style="margin-bottom:1.25rem;" id="form-filtros">
+  <div class="ds-form-section-titulo">Filtros</div>
+
+  <!-- Botões de período -->
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+    {% for val, label in periodos %}
+    <button type="button" data-periodo="{{ val }}"
+            class="ds-btn ds-btn--sm btn-periodo {% if filtros.periodo == val %}ds-btn--primario{% else %}ds-btn--outline{% endif %}">
+      {{ label }}
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- Datas personalizadas -->
+  <div id="div-datas-custom"
+       style="display:{% if filtros.periodo == 'personalizado' %}grid{% else %}none{% endif %};
+              grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
+    <div class="ds-form-group">
+      <label class="ds-label">Data início</label>
+      <input class="ds-input" type="date" name="data_inicio" value="{{ filtros.data_inicio }}">
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Data fim</label>
+      <input class="ds-input" type="date" name="data_fim" value="{{ filtros.data_fim }}">
+    </div>
+  </div>
+
+  <input type="hidden" name="periodo" value="{{ filtros.periodo }}" id="input-periodo">
+
+  <!-- Filtros secundários -->
+  <div class="ds-form-grid">
+    <div class="ds-form-group">
+      <label class="ds-label">Modelo</label>
+      <input class="ds-input" type="text" name="modelo" value="{{ filtros.base_name }}" placeholder="Ex: BODY ADRIANA">
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Cor</label>
+      <input class="ds-input" type="text" name="cor" value="{{ filtros.color_key }}" placeholder="Ex: PRETO">
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Tipo de preço</label>
+      <select class="ds-input" name="tipo">
+        <option value="">Todos</option>
+        <option value="varejo"   {% if filtros.tipo == 'varejo' %}selected{% endif %}>Varejo</option>
+        <option value="custo"    {% if filtros.tipo == 'custo' %}selected{% endif %}>Custo</option>
+        <option value="atacado"  {% if filtros.tipo == 'atacado' %}selected{% endif %}>Atacado</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="flex-end mt-2" style="gap:0.5rem;">
+    <button type="submit" class="ds-btn ds-btn--primario ds-btn--sm">Filtrar</button>
+    <a href="{% url 'produtos:historico_precos' %}" class="ds-btn ds-btn--outline ds-btn--sm">Limpar</a>
+  </div>
+</form>
+
+<!-- Resultado -->
+{% if hist.registros %}
+<div style="font-size:0.8rem;color:var(--cinza-texto);margin-bottom:0.75rem;">
+  {{ hist.total }} registro(s) encontrado(s)
+</div>
+
+<div class="ds-table-wrapper">
+  <table class="tabela-hist">
+    <thead>
+      <tr>
+        <th>Data/Hora</th>
+        <th>Modelo</th>
+        <th>Cor</th>
+        <th>SKU</th>
+        <th>Tipo</th>
+        <th>Alteração</th>
+        <th>Usuário</th>
+        {% if pode_alterar_preco %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in hist.registros %}
+      <tr>
+        <td style="white-space:nowrap;color:var(--cinza-texto);font-size:0.8rem;">
+          {% if r.alterado_em_dt %}
+            {{ r.alterado_em_dt|date:"d/m/Y H:i" }}
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ r.base_name }}</td>
+        <td>{{ r.color_key }}</td>
+        <td style="font-size:0.8rem;color:var(--cinza-texto);">{{ r.sku|default:"—" }}</td>
+        <td><span class="badge-tipo {{ r.tipo }}">{{ r.tipo }}</span></td>
+        <td style="white-space:nowrap;">
+          {% if r.valor_antes is not None %}
+          <span class="preco-antes">{{ r.valor_antes|brl }}</span>
+          <span class="seta-preco">→</span>
+          {% endif %}
+          <span class="preco-depois">{{ r.valor_novo|brl }}</span>
+        </td>
+        <td style="font-size:0.82rem;">{{ r.usuario }}</td>
+        {% if pode_alterar_preco %}
+        <td>
+          <form method="post" action="{% url 'produtos:excluir_preco' r.id %}"
+                onsubmit="return confirm('Excluir este registro de preço?')">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="ds-btn ds-btn--perigo ds-btn--sm">Excluir</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Paginação -->
+{% if hist.total_paginas > 1 %}
+<div class="paginacao">
+  {% if pagina > 1 %}
+  <a href="?pagina={{ pagina|add:-1 }}&periodo={{ filtros.periodo }}&modelo={{ filtros.base_name }}&cor={{ filtros.color_key }}&tipo={{ filtros.tipo }}&data_inicio={{ filtros.data_inicio }}&data_fim={{ filtros.data_fim }}">&laquo; Anterior</a>
+  {% endif %}
+  <span class="atual">{{ pagina }} / {{ hist.total_paginas }}</span>
+  {% if pagina < hist.total_paginas %}
+  <a href="?pagina={{ pagina|add:1 }}&periodo={{ filtros.periodo }}&modelo={{ filtros.base_name }}&cor={{ filtros.color_key }}&tipo={{ filtros.tipo }}&data_inicio={{ filtros.data_inicio }}&data_fim={{ filtros.data_fim }}">Próxima &raquo;</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div style="text-align:center;padding:3rem;color:var(--cinza-texto);">
+  Nenhum registro encontrado para o período selecionado.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block js_extra %}
+<script>
+const inputPeriodo = document.getElementById('input-periodo');
+const divCustom = document.getElementById('div-datas-custom');
+
+document.querySelectorAll('.btn-periodo').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const val = this.dataset.periodo;
+    inputPeriodo.value = val;
+    document.querySelectorAll('.btn-periodo').forEach(b => {
+      b.classList.remove('ds-btn--primario');
+      b.classList.add('ds-btn--outline');
+    });
+    this.classList.remove('ds-btn--outline');
+    this.classList.add('ds-btn--primario');
+    divCustom.style.display = val === 'personalizado' ? 'grid' : 'none';
+    if (val !== 'personalizado') {
+      document.getElementById('form-filtros').submit();
+    }
+  });
+});
+</script>
+{% endblock %}

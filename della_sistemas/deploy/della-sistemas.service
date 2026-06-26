@@ -1,0 +1,37 @@
+[Unit]
+Description=Gunicorn — D'ELLA Sistemas (painel interno)
+After=network.target
+
+[Service]
+User=neto
+Group=www-data
+SupplementaryGroups=www-data
+WorkingDirectory=/var/www/della-sistemas/projetos-claude/della_sistemas
+
+EnvironmentFile=/var/www/della-sistemas/projetos-claude/della_sistemas/.env
+
+ExecStart=/var/www/della-sistemas/projetos-claude/della_sistemas/.venv/bin/gunicorn \
+    --workers 2 \
+    --worker-class sync \
+    --bind unix:/run/della-sistemas/gunicorn.sock \
+    --timeout 120 \
+    --max-requests 500 \
+    --max-requests-jitter 50 \
+    --log-level info \
+    --error-logfile /home/neto/logs/della-sistemas/error.log \
+    --access-logfile /home/neto/logs/della-sistemas/access.log \
+    config.wsgi:application
+
+ExecReload=/bin/kill -s HUP $MAINPID
+
+Restart=on-failure
+RestartSec=5
+
+RuntimeDirectory=della-sistemas
+RuntimeDirectoryMode=0775
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

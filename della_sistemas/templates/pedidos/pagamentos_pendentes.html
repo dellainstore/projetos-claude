@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+
+{% block titulo %}Pagamentos Pendentes{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <div>
+    <h1 class="ds-page-title">Pagamentos Pendentes</h1>
+    <p class="ds-page-subtitle">Pedidos atendidos aguardando confirmação (2026) — <span id="pend-count">{{ total }}</span> pedido{{ total|pluralize:"" }}</p>
+  </div>
+  <div style="display:flex;gap:.5rem;">
+    <a href="{% url 'pedidos:pagamentos_resumo' %}" class="ds-btn ds-btn--secondary">
+      &#128200; Resumo
+    </a>
+    <a href="{% url 'pedidos:pagamentos_confirmados' %}" class="ds-btn ds-btn--secondary">
+      &#10003; Confirmados
+    </a>
+  </div>
+</div>
+
+{% if pedidos %}
+<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;">
+  <input
+    id="filtro-forma-pend"
+    type="text"
+    placeholder="Filtrar por forma de pagamento..."
+    oninput="filtrarTabela()"
+    style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:240px;">
+  <div style="display:flex;flex-wrap:wrap;gap:.35rem;">
+    {% for chip in chips_forma %}
+    <button type="button" onclick="setFiltro('{{ chip }}')"
+      style="padding:.25rem .65rem;border:1px solid #d1d5db;border-radius:99px;font-size:.8rem;background:#f9fafb;cursor:pointer;white-space:nowrap;"
+      class="chip-filtro">
+      {{ chip }}
+    </button>
+    {% endfor %}
+    <button type="button" onclick="setFiltro('')"
+      style="padding:.25rem .65rem;border:1px solid #d1d5db;border-radius:99px;font-size:.8rem;background:#f9fafb;cursor:pointer;">
+      Todos
+    </button>
+  </div>
+</div>
+
+<div class="ds-card" style="overflow-x:auto;">
+  <table class="ds-table" id="tabela-pend" style="min-width:1100px;">
+    <thead>
+      <tr>
+        <th>Nº Pedido</th>
+        <th>Data</th>
+        <th>Cliente</th>
+        <th class="num">Valor</th>
+        <th>Situação</th>
+        <th>Forma Pgto (Bling)</th>
+        <th>Forma Conferida</th>
+        <th>Data Correta</th>
+        <th></th>
+      </tr>
+    </thead>
+
+    {% for p in pedidos %}
+    {% with parcelas=p.parcelas.all %}
+    {% with qtd_parcelas=parcelas|length %}
+    <tbody id="grupo-pedido-{{ p.pk }}" data-forma="{{ p.forma_pagamento|lower }}">
+
+      {# ── Linha principal do pedido ── #}
+      <tr id="row-pedido-{{ p.pk }}">
+        <td>
+          {% if qtd_parcelas > 1 %}
+          <button type="button"
+            id="toggle-{{ p.pk }}"
+            onclick="toggleParcelas({{ p.pk }}, {{ qtd_parcelas }})"
+            title="Expandir parcelas"
+            style="background:none;border:none;cursor:pointer;padding:0 .3rem 0 0;font-size:.9rem;color:#6366f1;">
+            &#9658;
+          </button>
+          {% endif %}
+          <strong>{{ p.numero|default:p.bling_id }}</strong>
+          {% if qtd_parcelas > 1 %}
+          <span style="font-size:.75rem;color:#6b7280;margin-left:.2rem;">({{ qtd_parcelas }}x)</span>
+          {% endif %}
+        </td>
+        <td>{{ p.data_pedido|date:"d/m/Y" }}</td>
+        <td>{{ p.cliente_nome|default:"—" }}</td>
+        <td class="num">
+          <strong>{{ p.valor_total|brl }}</strong>
+        </td>
+        <td><span class="ds-badge ds-badge--success">{{ p.situacao_nome }}</span></td>
+        <td style="white-space:nowrap;">
+          {% if qtd_parcelas > 1 %}
+            <span style="font-size:.8rem;color:#6366f1;font-weight:600;">{{ qtd_parcelas }} parcelas</span>
+            {% for parc in parcelas %}
+            <br><span style="font-size:.72rem;color:#6b7280;">
+              {{ parc.numero }}. {{ parc.forma_pagamento|default:"?" }}
+              {% if parc.data_vencimento %}
+              · {{ parc.data_vencimento|date:"d/m" }}
+              {% if parc.data_vencimento < hoje %}<span style="color:#dc2626;font-weight:600;"> ⚠</span>{% endif %}
+              {% endif %}
+            </span>
+            {% endfor %}
+          {% else %}
+            <span style="font-size:.85rem;">{{ p.forma_pagamento|default:"—" }}</span>
+            {% if p.data_pagamento %}
+            <br><span style="font-size:.75rem;color:#6b7280;">{{ p.data_pagamento|date:"d/m/Y" }}</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>
+          <select
+            name="forma_conferida"
+            form="form-baixa-{{ p.pk }}"
+            style="width:100%;min-width:160px;padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.82rem;background:#fff;">
+            <option value="">selecionar</option>
+            {% for f in formas_lista %}
+            <option value="{{ f }}" {% if f == p.forma_corrigida %}selected{% endif %}>{{ f }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td>
+          <input
+            type="date"
+            name="data_conferida"
+            form="form-baixa-{{ p.pk }}"
+            value="{{ p.data_corrigida|default:p.data_pagamento|date:'Y-m-d' }}"
+            style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.85rem;"
+          >
+        </td>
+        <td style="white-space:nowrap;vertical-align:middle;">
+          <form id="form-baixa-{{ p.pk }}"></form>
+          <button
+            type="button"
+            class="ds-btn ds-btn--sm ds-btn--secondary"
+            style="margin-bottom:.3rem;"
+            hx-post="{% url 'pedidos:salvar_correcao' p.pk %}"
+            hx-include="[form='form-baixa-{{ p.pk }}']"
+            hx-target="#status-correcao-{{ p.pk }}"
+            hx-swap="outerHTML"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+            title="Salvar correção sem dar baixa"
+          >
+            &#128190; Salvar
+          </button>
+          <span id="status-correcao-{{ p.pk }}"></span>
+          <br>
+          {% if user.pode_dar_baixa %}
+          <button
+            type="button"
+            class="ds-btn ds-btn--sm ds-btn--primary"
+            hx-post="{% url 'pedidos:dar_baixa' p.pk %}"
+            hx-include="[form='form-baixa-{{ p.pk }}']"
+            hx-target="#grupo-pedido-{{ p.pk }}"
+            hx-swap="outerHTML"
+            hx-confirm="Confirmar baixa {% if qtd_parcelas > 1 %}de todas as {{ qtd_parcelas }} parcelas{% endif %}do pedido #{{ p.numero }}?"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          >
+            &#10003; {% if qtd_parcelas > 1 %}Baixar Tudo{% else %}Dar Baixa{% endif %}
+          </button>
+          {% endif %}
+        </td>
+      </tr>
+
+      {# ── Linhas de parcelas (visíveis só quando expandido) ── #}
+      {% if qtd_parcelas > 1 %}
+      {% for parcela in parcelas %}
+      <tr id="row-parcela-{{ parcela.pk }}"
+          class="linha-parcela-{{ p.pk }}"
+          style="display:none;background:#f8faff;">
+        <td style="padding-left:2.2rem;font-size:.82rem;color:#374151;">
+          <span style="color:#6366f1;font-weight:600;">↳ {{ parcela.numero }}/{{ qtd_parcelas }}</span>
+        </td>
+        <td></td>
+        <td></td>
+        <td class="num" style="font-size:.88rem;">
+          {{ parcela.valor|brl }}
+          {% if parcela.data_vencimento %}
+          <br>
+          <span style="font-size:.72rem;{% if parcela.data_vencimento < hoje %}color:#dc2626;font-weight:600;{% else %}color:#6b7280;{% endif %}">
+            {{ parcela.data_vencimento|date:"d/m/Y" }}
+            {% if parcela.data_vencimento < hoje %} ⚠{% endif %}
+          </span>
+          {% endif %}
+        </td>
+        <td></td>
+        <td style="font-size:.82rem;color:#374151;white-space:nowrap;">
+          {{ parcela.forma_pagamento|default:"—" }}
+        </td>
+        <td>
+          {% if not parcela.baixada %}
+          <form id="form-parcela-{{ parcela.pk }}"></form>
+          <select
+            name="forma_conferida"
+            form="form-parcela-{{ parcela.pk }}"
+            style="width:100%;min-width:140px;padding:.25rem .4rem;border:1px solid #d1d5db;border-radius:4px;font-size:.78rem;background:#fff;">
+            <option value="">selecionar</option>
+            {% for f in formas_lista %}
+            <option value="{{ f }}">{{ f }}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <span style="color:#166534;font-size:.78rem;">{{ parcela.forma_efetiva|default:"—" }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if not parcela.baixada %}
+          <input
+            type="date"
+            name="data_conferida"
+            form="form-parcela-{{ parcela.pk }}"
+            value="{{ parcela.data_vencimento|date:'Y-m-d' }}"
+            style="padding:.25rem .4rem;border:1px solid #d1d5db;border-radius:4px;font-size:.82rem;"
+          >
+          {% else %}
+          <span style="color:#166534;font-size:.78rem;">{{ parcela.data_efetiva|date:"d/m/Y"|default:"—" }}</span>
+          {% endif %}
+        </td>
+        <td style="white-space:nowrap;">
+          {% if user.pode_dar_baixa %}
+          {% if parcela.baixada %}
+          <span style="color:#166534;font-size:.82rem;font-weight:600;">&#10003; Baixada</span>
+          {% else %}
+          <button
+            type="button"
+            class="ds-btn ds-btn--sm ds-btn--secondary"
+            hx-post="{% url 'pedidos:dar_baixa_parcela' parcela.pk %}"
+            hx-include="[form='form-parcela-{{ parcela.pk }}']"
+            hx-target="#row-parcela-{{ parcela.pk }}"
+            hx-swap="outerHTML"
+            hx-confirm="Baixar Parcela {{ parcela.numero }} ({{ parcela.valor|brl }})?"
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          >
+            &#10003; Baixar Esta
+          </button>
+          {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% endif %}
+
+    </tbody>
+    {% endwith %}
+    {% endwith %}
+    {% endfor %}
+
+  </table>
+</div>
+
+{% else %}
+<div class="ds-alert ds-alert--success">
+  <strong>&#10003; Nenhum pagamento pendente!</strong>
+  Todos os pedidos atendidos já foram baixados ou ainda não há pedidos atendidos sincronizados em 2026.
+</div>
+{% endif %}
+
+<script>
+function filtrarTabela() {
+  const q = document.getElementById('filtro-forma-pend').value.toLowerCase();
+  const grupos = document.querySelectorAll('#tabela-pend tbody');
+  let visiveis = 0;
+  grupos.forEach(tbody => {
+    const forma = (tbody.dataset.forma || '').toLowerCase();
+    const visivel = !q || forma.includes(q);
+    tbody.style.display = visivel ? '' : 'none';
+    if (visivel) visiveis++;
+  });
+  const cnt = document.getElementById('pend-count');
+  if (cnt) cnt.textContent = visiveis;
+
+  document.querySelectorAll('.chip-filtro').forEach(btn => {
+    const match = btn.textContent.trim().toLowerCase() === q;
+    btn.style.background = match ? '#e0e7ff' : '#f9fafb';
+    btn.style.borderColor = match ? '#6366f1' : '#d1d5db';
+  });
+}
+
+function setFiltro(valor) {
+  document.getElementById('filtro-forma-pend').value = valor;
+  filtrarTabela();
+}
+
+function toggleParcelas(pedidoId, qtd) {
+  const linhas = document.querySelectorAll('.linha-parcela-' + pedidoId);
+  const btn = document.getElementById('toggle-' + pedidoId);
+  const expandido = linhas.length > 0 && linhas[0].style.display !== 'none';
+  linhas.forEach(tr => { tr.style.display = expandido ? 'none' : ''; });
+  if (btn) btn.innerHTML = expandido ? '&#9658;' : '&#9660;';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+
+{% block titulo %}Pagamentos Confirmados{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <div>
+    <h1 class="ds-page-title">Pagamentos Confirmados</h1>
+    <p class="ds-page-subtitle">Baixas realizadas (2026) — <span id="conf-count">{{ total }}</span> confirmação{{ total|pluralize:"ões" }}</p>
+  </div>
+  <a href="{% url 'pedidos:pagamentos_pendentes' %}" class="ds-btn ds-btn--secondary">
+    &#128176; Ver Pendentes
+  </a>
+</div>
+
+{% if baixas %}
+<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;">
+  <input
+    id="filtro-forma-conf"
+    type="text"
+    placeholder="Filtrar por forma de pagamento..."
+    oninput="filtrarTabela()"
+    style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:240px;">
+  <div style="display:flex;flex-wrap:wrap;gap:.35rem;">
+    {% for chip in chips_forma %}
+    <button type="button" onclick="setFiltro('{{ chip }}')"
+      style="padding:.25rem .65rem;border:1px solid #d1d5db;border-radius:99px;font-size:.8rem;background:#f9fafb;cursor:pointer;white-space:nowrap;"
+      class="chip-filtro">
+      {{ chip }}
+    </button>
+    {% endfor %}
+    <button type="button" onclick="setFiltro('')"
+      style="padding:.25rem .65rem;border:1px solid #d1d5db;border-radius:99px;font-size:.8rem;background:#f9fafb;cursor:pointer;">
+      Todos
+    </button>
+  </div>
+</div>
+
+<div class="ds-card" style="overflow-x:auto;">
+  <table class="ds-table" id="tabela-conf" style="min-width:1050px;">
+    <thead>
+      <tr>
+        <th>Nº Pedido</th>
+        <th>Data</th>
+        <th>Cliente</th>
+        <th class="num">Valor</th>
+        <th>Situação</th>
+        <th>Forma (Bling)</th>
+        <th>Forma Confirmada</th>
+        <th>Data Confirmada</th>
+        <th>Baixado por</th>
+        <th>Baixado em</th>
+      </tr>
+    </thead>
+
+    {% for b in baixas %}
+    {% with parcelas=b.pedido.parcelas.all %}
+    {% with qtd=parcelas|length %}
+    <tbody id="grupo-conf-{{ b.pk }}" data-forma="{{ b.forma_efetiva|lower|default:b.pedido.forma_pagamento|lower }}">
+
+      {# ── Linha principal da baixa ── #}
+      <tr>
+        <td>
+          {% if qtd > 1 %}
+          <button type="button"
+            onclick="toggleConf({{ b.pk }}, {{ qtd }})"
+            id="toggle-conf-{{ b.pk }}"
+            title="Expandir parcelas"
+            style="background:none;border:none;cursor:pointer;padding:0 .3rem 0 0;font-size:.9rem;color:#6366f1;">
+            &#9658;
+          </button>
+          {% endif %}
+          <strong>{{ b.pedido.numero|default:b.pedido.bling_id }}</strong>
+          {% if qtd > 1 %}
+          <span style="font-size:.75rem;color:#6b7280;">({{ qtd }}x)</span>
+          {% endif %}
+        </td>
+        <td>{{ b.pedido.data_pedido|date:"d/m/Y" }}</td>
+        <td>{{ b.pedido.cliente_nome|default:"—" }}</td>
+        <td class="num">{{ b.pedido.valor_total|brl }}</td>
+        <td><span class="ds-badge ds-badge--success">{{ b.pedido.situacao_nome }}</span></td>
+        <td style="font-size:.85rem;">
+          {% if qtd > 1 %}
+          <span style="font-size:.8rem;color:#6366f1;">{{ qtd }} parcelas</span>
+          {% else %}
+          {{ b.pedido.forma_pagamento|default:"—" }}
+          {% endif %}
+        </td>
+        <td style="font-size:.85rem;">
+          {% if b.forma_efetiva %}
+            {% if b.forma_efetiva != b.pedido.forma_pagamento %}
+              <span style="color:#1d4ed8;font-weight:600;">{{ b.forma_efetiva }}</span>
+            {% else %}
+              {{ b.forma_efetiva }}
+            {% endif %}
+          {% else %}
+            <span style="color:#9ca3af;">—</span>
+          {% endif %}
+        </td>
+        <td style="font-size:.85rem;">
+          {% if b.data_efetiva %}
+            {% if b.data_efetiva != b.pedido.data_pagamento %}
+              <span style="color:#1d4ed8;font-weight:600;">{{ b.data_efetiva|date:"d/m/Y" }}</span>
+            {% else %}
+              {{ b.data_efetiva|date:"d/m/Y" }}
+            {% endif %}
+          {% else %}
+            <span style="color:#9ca3af;">—</span>
+          {% endif %}
+        </td>
+        <td style="font-size:.82rem;">{{ b.confirmado_por|default:"Sistema" }}</td>
+        <td style="font-size:.82rem;">{{ b.confirmado_em|date:"d/m/Y H:i" }}</td>
+      </tr>
+
+      {# ── Linhas de parcelas ── #}
+      {% if qtd > 1 %}
+      {% for parcela in parcelas %}
+      <tr class="linha-conf-{{ b.pk }}" style="display:none;background:#f8faff;">
+        <td style="padding-left:2.2rem;font-size:.82rem;">
+          <span style="color:#6366f1;font-weight:600;">↳ {{ parcela.numero }}/{{ qtd }}</span>
+        </td>
+        <td></td>
+        <td></td>
+        <td class="num" style="font-size:.85rem;">{{ parcela.valor|brl }}</td>
+        <td></td>
+        <td style="font-size:.82rem;">{{ parcela.forma_pagamento|default:"—" }}</td>
+        <td style="font-size:.82rem;">
+          {% if parcela.forma_efetiva %}
+          {% if parcela.forma_efetiva != parcela.forma_pagamento %}
+          <span style="color:#1d4ed8;font-weight:600;">{{ parcela.forma_efetiva }}</span>
+          {% else %}
+          {{ parcela.forma_efetiva }}
+          {% endif %}
+          {% else %}
+          <span style="color:#9ca3af;">—</span>
+          {% endif %}
+        </td>
+        <td style="font-size:.82rem;">
+          {% if parcela.data_efetiva %}
+          <span {% if parcela.data_efetiva != parcela.data_vencimento %}style="color:#1d4ed8;font-weight:600;"{% endif %}>
+            {{ parcela.data_efetiva|date:"d/m/Y" }}
+          </span>
+          {% elif parcela.data_vencimento %}
+          <span style="color:#9ca3af;">{{ parcela.data_vencimento|date:"d/m/Y" }}</span>
+          {% else %}
+          <span style="color:#9ca3af;">—</span>
+          {% endif %}
+        </td>
+        <td style="font-size:.82rem;">
+          {% if parcela.baixada_por %}{{ parcela.baixada_por }}{% else %}<span style="color:#9ca3af;">—</span>{% endif %}
+        </td>
+        <td style="font-size:.82rem;">
+          {% if parcela.baixada_em %}{{ parcela.baixada_em|date:"d/m/Y H:i" }}{% else %}<span style="color:#9ca3af;">—</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% endif %}
+
+    </tbody>
+    {% endwith %}
+    {% endwith %}
+    {% endfor %}
+
+  </table>
+</div>
+{% else %}
+<div class="ds-alert ds-alert--info">
+  Nenhuma baixa registrada ainda. Confirme os pagamentos em <a href="{% url 'pedidos:pagamentos_pendentes' %}">Pagamentos Pendentes</a>.
+</div>
+{% endif %}
+
+<script>
+function filtrarTabela() {
+  const q = document.getElementById('filtro-forma-conf').value.toLowerCase();
+  const grupos = document.querySelectorAll('#tabela-conf tbody');
+  let visiveis = 0;
+  grupos.forEach(tbody => {
+    const forma = (tbody.dataset.forma || '').toLowerCase();
+    const visivel = !q || forma.includes(q);
+    tbody.style.display = visivel ? '' : 'none';
+    if (visivel) visiveis++;
+  });
+  const cnt = document.getElementById('conf-count');
+  if (cnt) cnt.textContent = visiveis;
+  document.querySelectorAll('.chip-filtro').forEach(btn => {
+    const match = btn.textContent.trim().toLowerCase() === q;
+    btn.style.background = match ? '#e0e7ff' : '#f9fafb';
+    btn.style.borderColor = match ? '#6366f1' : '#d1d5db';
+  });
+}
+
+function setFiltro(valor) {
+  document.getElementById('filtro-forma-conf').value = valor;
+  filtrarTabela();
+}
+
+function toggleConf(baixaId, qtd) {
+  const linhas = document.querySelectorAll('.linha-conf-' + baixaId);
+  const btn = document.getElementById('toggle-conf-' + baixaId);
+  const expandido = linhas.length > 0 && linhas[0].style.display !== 'none';
+  linhas.forEach(tr => { tr.style.display = expandido ? 'none' : ''; });
+  if (btn) btn.innerHTML = expandido ? '&#9658;' : '&#9660;';
+}
+</script>
+{% endblock %}

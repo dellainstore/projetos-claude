@@ -1,0 +1,20 @@
+{% if ao_vivo.visitantes > 0 %}
+<div class="av-vivos">
+  <span class="av-dot"></span>
+  <strong>{{ ao_vivo.visitantes }}</strong>
+  {% if ao_vivo.visitantes == 1 %}pessoa{% else %}pessoas{% endif %} no site agora
+</div>
+{% else %}
+<div class="av-vazio">Nenhuma visita nos ultimos 5 minutos</div>
+{% endif %}
+
+{% if ao_vivo.paginas %}
+<ul class="av-paginas">
+  {% for p in ao_vivo.paginas %}
+  <li>
+    <span class="av-pagina-url">{{ p.pagina_url|truncatechars:60 }}</span>
+    <span class="av-pagina-total">{{ p.total }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

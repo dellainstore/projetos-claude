@@ -1,0 +1,41 @@
+{% if preco_varejo or preco_custo or preco_atacado %}
+<div class="preco-info">
+  {% if preco_varejo %}
+  <div class="preco-box">
+    <div class="label">Varejo</div>
+    <div class="valor">R$ {{ preco_varejo|floatformat:2 }}</div>
+  </div>
+  {% endif %}
+  {% if preco_atacado %}
+  <div class="preco-box">
+    <div class="label">Atacado</div>
+    <div class="valor">R$ {{ preco_atacado|floatformat:2 }}</div>
+  </div>
+  {% endif %}
+  {% if preco_custo %}
+  <div class="preco-box">
+    <div class="label">Custo</div>
+    <div class="valor">R$ {{ preco_custo|floatformat:2 }}</div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="tamanhos-grid" id="tamanhos-grid">
+  {% for tam in tamanhos %}
+  <div class="tamanho-item">
+    <span class="tamanho-label">{{ tam }}</span>
+    <input class="tamanho-input ds-input" type="number" min="0" step="1" value="0"
+           name="qty_{{ tam }}" placeholder="0">
+  </div>
+  {% endfor %}
+</div>
+<div style="margin-top:1rem;">
+  <label class="ds-label">Ou novo tamanho</label>
+  <div style="display:flex;gap:0.5rem;align-items:flex-end;">
+    <input class="ds-input" type="text" id="input-novo-tamanho" placeholder="EX: XGG ou 46"
+           style="flex:1;max-width:180px;"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();adicionarTamanho();}">
+    <button type="button" class="ds-btn ds-btn--dourado ds-btn--sm" onclick="adicionarTamanho()">Adicionar</button>
+  </div>
+</div>

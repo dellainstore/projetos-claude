@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block titulo %}Incluir Estoque | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+.step-card { background:var(--branco);border:1px solid var(--cinza-medio);border-radius:10px;padding:1.5rem;margin-bottom:1rem; }
+.tamanhos-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:0.75rem;margin-top:0.75rem; }
+.tamanho-item { display:flex;flex-direction:column;align-items:center;gap:0.3rem; }
+.tamanho-label { font-size:0.75rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--cinza-texto); }
+.tamanho-input { width:100%;text-align:center;padding:0.5rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:1rem;font-weight:600; }
+.preco-info { display:flex;gap:1rem;margin:0.75rem 0; }
+.preco-box { background:var(--cinza-claro);border-radius:6px;padding:0.5rem 0.85rem; }
+.preco-box .label { font-size:0.6rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--cinza-texto); }
+.preco-box .valor { font-size:1.1rem;font-weight:600;color:var(--preto); }
+.autocomplete-lista { position:absolute;z-index:50;background:var(--branco);border:1px solid var(--cinza-medio);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-height:220px;overflow-y:auto;width:100%; }
+.autocomplete-lista div { padding:0.55rem 0.85rem;cursor:pointer;font-size:0.85rem; }
+.autocomplete-lista div:hover { background:var(--cinza-claro); }
+.campo-wrapper { position:relative; }
+.pendente-card { border:1px solid var(--cinza-medio);border-radius:8px;padding:1rem;margin-bottom:0.75rem; }
+.pendente-card-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.4rem; }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Incluir Estoque</h1>
+  <p class="ds-page-subtitulo">Registrar entrada de mercadoria</p>
+</div>
+
+<form method="post" action="{% url 'produtos:incluir_submit' %}" id="form-incluir" style="max-width:760px;">
+  {% csrf_token %}
+
+  <!-- Fornecedor -->
+  <div class="step-card">
+    <div class="ds-form-section-titulo">1. Fornecedor</div>
+    <div class="ds-form-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="ds-form-group">
+        <label class="ds-label">Selecionar fornecedor</label>
+        <select class="ds-select" id="sel-supplier" onchange="onSupplierSelect(this)">
+          <option value="">— selecione —</option>
+          <option value="__nova__">+ Nova fornecedora</option>
+          {% for s in suppliers %}
+          <option value="{{ s }}">{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ds-form-group" id="div-nova-supplier" style="display:none;">
+        <label class="ds-label">Nome da nova fornecedora</label>
+        <input class="ds-input" type="text" id="input-nova-supplier" placeholder="NOME EM MAIÚSCULO">
+      </div>
+    </div>
+    <input type="hidden" name="supplier_name" id="hid-supplier">
+  </div>
+
+  <!-- Tipo de inclusão -->
+  <div class="step-card" id="step-modo" style="display:none;">
+    <div class="ds-form-section-titulo">2. Tipo de Inclusão</div>
+    <div style="display:flex;gap:1rem;">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+        <input type="radio" name="modo" value="existente" checked onchange="onModoChange(this.value)">
+        <span style="font-size:0.85rem;font-weight:500;">Modelo existente</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+        <input type="radio" name="modo" value="novo" onchange="onModoChange(this.value)">
+        <span style="font-size:0.85rem;font-weight:500;">Novo modelo</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Modelo -->
+  <div class="step-card" id="step-modelo" style="display:none;">
+    <div class="ds-form-section-titulo">3. Modelo</div>
+    <div class="ds-form-group">
+      <label class="ds-label" id="lbl-base">Buscar modelo</label>
+      <div class="campo-wrapper">
+        <input class="ds-input" type="text" id="input-base" placeholder="Digite o nome do modelo..."
+               autocomplete="off"
+               hx-get="{% url 'produtos:htmx_bases' %}"
+               hx-trigger="input changed delay:350ms"
+               hx-target="#bases-lista"
+               hx-include="#q-base-hidden"
+               oninput="document.getElementById('q-base-hidden').value=this.value">
+        <input type="hidden" id="q-base-hidden" name="q" value="">
+        <div id="bases-lista" class="autocomplete-lista" style="display:none;"></div>
+      </div>
+      <input type="hidden" name="base" id="hid-base">
+    </div>
+
+    <!-- Campo nome livre para novo modelo -->
+    <div class="ds-form-group" id="div-base-nova" style="display:none;">
+      <label class="ds-label">Nome do novo modelo</label>
+      <input class="ds-input" type="text" id="input-base-nova"
+             placeholder="EX: BODY NOVA MODELO"
+             oninput="onBaseNova(this.value)">
+    </div>
+  </div>
+
+  <!-- Cor -->
+  <div class="step-card" id="step-cor" style="display:none;">
+    <div class="ds-form-section-titulo">4. Cor</div>
+    <div id="cores-container"
+         hx-get="{% url 'produtos:htmx_cores' %}"
+         hx-trigger="revealed"
+         hx-vals="js:{base: document.getElementById('hid-base').value}">
+    </div>
+    <input type="hidden" name="cor" id="hid-cor">
+  </div>
+
+  <!-- Template (para novo modelo ou cor nova) -->
+  <div class="step-card" id="step-template" style="display:none;">
+    <div class="ds-form-section-titulo" id="lbl-template">Template de referência</div>
+    <div class="ds-form-group">
+      <label class="ds-label">Buscar produto template</label>
+      <input class="ds-input" type="text" id="input-template" placeholder="SKU ou nome..."
+             autocomplete="off"
+             hx-get="{% url 'produtos:htmx_templates' %}"
+             hx-trigger="input changed delay:350ms"
+             hx-target="#templates-lista"
+             hx-include="#q-tpl-hidden"
+             oninput="document.getElementById('q-tpl-hidden').value=this.value">
+      <input type="hidden" id="q-tpl-hidden" name="q" value="">
+      <div id="templates-lista" class="autocomplete-lista" style="display:none;"></div>
+    </div>
+    <input type="hidden" name="template_id" id="hid-template-id">
+    <div id="template-selecionado" style="margin-top:0.5rem;"></div>
+  </div>
+
+  <!-- Tamanhos e quantidades -->
+  <div class="step-card" id="step-tamanhos" style="display:none;">
+    <div class="ds-form-section-titulo">5. Quantidades por Tamanho</div>
+    <div id="tamanhos-container"></div>
+  </div>
+
+  <!-- Botão submit -->
+  <div id="div-submit" style="display:none;margin-top:0.5rem;">
+    <button type="submit" class="ds-btn ds-btn--primario" style="width:100%;justify-content:center;">
+      Enviar Inclusão
+    </button>
+  </div>
+
+</form>
+
+{% endblock %}
+
+{% block js_extra %}
+<script src="{{ STATIC_URL }}js/htmx.min.js"></script>
+<script>
+let modoAtual = "existente";
+
+function onSupplierSelect(sel) {
+  const val = sel.value;
+  const divNova = document.getElementById('div-nova-supplier');
+  const hidSupplier = document.getElementById('hid-supplier');
+
+  if (val === '__nova__') {
+    divNova.style.display = 'flex';
+    hidSupplier.value = '';
+  } else {
+    divNova.style.display = 'none';
+    hidSupplier.value = val;
+  }
+
+  // Mostrar próximo step se fornecedor escolhido
+  if (val && val !== '__nova__') {
+    document.getElementById('step-modo').style.display = 'block';
+    document.getElementById('step-modelo').style.display = 'block';
+    document.getElementById('lbl-base').textContent = 'Buscar modelo existente';
+    document.getElementById('input-base').style.display = 'block';
+    document.getElementById('div-base-nova').style.display = 'none';
+  }
+}
+
+document.getElementById('input-nova-supplier').addEventListener('input', function() {
+  const v = this.value.trim().toUpperCase();
+  document.getElementById('hid-supplier').value = v;
+  if (v) {
+    document.getElementById('step-modo').style.display = 'block';
+    document.getElementById('step-modelo').style.display = 'block';
+  }
+});
+
+function onModoChange(modo) {
+  modoAtual = modo;
+  const inputBase = document.getElementById('input-base');
+  const divBaseNova = document.getElementById('div-base-nova');
+  const lblBase = document.getElementById('lbl-base');
+
+  if (modo === 'existente') {
+    inputBase.style.display = 'block';
+    divBaseNova.style.display = 'none';
+    lblBase.textContent = 'Buscar modelo existente';
+  } else {
+    inputBase.style.display = 'none';
+    divBaseNova.style.display = 'block';
+    lblBase.textContent = 'Nome do novo modelo';
+  }
+  // Reset downstream
+  resetApartirDe('cor');
+}
+
+function onBaseSelecionada(base) {
+  document.getElementById('hid-base').value = base;
+  document.getElementById('input-base').value = base;
+  document.getElementById('bases-lista').style.display = 'none';
+
+  // Carregar cores via HTMX
+  const coresContainer = document.getElementById('cores-container');
+  htmx.ajax('GET', '{% url "produtos:htmx_cores" %}?base=' + encodeURIComponent(base), {target: '#cores-container'});
+  document.getElementById('step-cor').style.display = 'block';
+}
+
+function onBaseNova(val) {
+  const base = val.trim().toUpperCase();
+  document.getElementById('hid-base').value = base;
+  if (base.length > 2) {
+    document.getElementById('step-cor').style.display = 'block';
+    document.getElementById('step-template').style.display = 'block';
+    document.getElementById('lbl-template').textContent = 'Template de referência (obrigatório para novo modelo)';
+  }
+}
+
+function onCorSelecionada(cor) {
+  document.getElementById('hid-cor').value = cor;
+  document.getElementById('step-tamanhos').style.display = 'block';
+
+  const base = document.getElementById('hid-base').value;
+  htmx.ajax('GET', '{% url "produtos:htmx_tamanhos" %}?base=' + encodeURIComponent(base) + '&cor=' + encodeURIComponent(cor), {target: '#tamanhos-container'});
+  document.getElementById('div-submit').style.display = 'block';
+}
+
+function onTemplateSelecionado(id, nome) {
+  document.getElementById('hid-template-id').value = id;
+  document.getElementById('template-selecionado').innerHTML =
+    '<span style="font-size:0.8rem;color:var(--dourado);font-weight:600;">✓ Template: ' + nome + '</span>';
+  document.getElementById('templates-lista').style.display = 'none';
+}
+
+function resetApartirDe(from) {
+  const passos = ['cor', 'template', 'tamanhos', 'submit'];
+  const idx = passos.indexOf(from);
+  if (idx >= 0) {
+    ['step-cor','step-template','step-tamanhos','div-submit'].slice(idx).forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    document.getElementById('hid-cor').value = '';
+  }
+}
+
+function toggleEditReq(id) {
+  const el = document.getElementById('edit-req-' + id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function adicionarTamanho() {
+  const input = document.getElementById('input-novo-tamanho');
+  if (!input) return;
+  const tam = input.value.trim().toUpperCase();
+  if (!tam) return;
+
+  const grid = document.querySelector('#tamanhos-container .tamanhos-grid');
+  if (!grid) return;
+
+  if (document.querySelector('input[name="qty_' + tam + '"]')) {
+    input.value = '';
+    return;
+  }
+
+  const item = document.createElement('div');
+  item.className = 'tamanho-item';
+  item.innerHTML =
+    '<span class="tamanho-label">' + tam + '</span>' +
+    '<input class="tamanho-input ds-input" type="number" min="0" step="1" value="0" name="qty_' + tam + '" placeholder="0">';
+  grid.appendChild(item);
+  input.value = '';
+  item.querySelector('input[type="number"]').focus();
+}
+
+// Fechar autocomplete ao clicar fora
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.campo-wrapper')) {
+    document.querySelectorAll('.autocomplete-lista').forEach(el => el.style.display = 'none');
+  }
+});
+
+// Mostrar lista quando HTMX retornar resultado
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (e.detail.target.id === 'bases-lista' || e.detail.target.id === 'templates-lista') {
+    e.detail.target.style.display = e.detail.target.innerHTML.trim() ? 'block' : 'none';
+  }
+});
+</script>
+{% endblock %}

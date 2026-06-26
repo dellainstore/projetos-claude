@@ -1,0 +1,10 @@
+[Unit]
+Description=D'ELLA Sistemas — Executar pipeline a cada 5 minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=della-pipeline.service
+
+[Install]
+WantedBy=timers.target

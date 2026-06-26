@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block titulo %}D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <div>
+    <h1 class="ds-page-titulo">D'ELLA Sistemas</h1>
+    <p class="ds-page-subtitulo">Bem-vindo, {{ user.get_full_name|default:user.username }} — {{ user.get_papel_display }}</p>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;margin-top:.5rem;">
+
+  {# ── PRODUTOS ─────────────────────────────────────── #}
+  {% if user.pode_incluir or user.pode_aprovar or user.is_superadmin %}
+  <div class="ds-card" style="padding:0;overflow:hidden;">
+    <div style="background:rgba(201,169,110,0.12);padding:1rem 1.25rem;border-bottom:1px solid #f0ede8;display:flex;align-items:center;gap:.75rem;">
+      <span style="font-size:1.4rem;">&#128230;</span>
+      <span style="font-weight:700;font-size:1rem;color:var(--preto);">Produtos</span>
+    </div>
+    <div style="padding:.75rem 1.25rem;display:flex;flex-direction:column;gap:.1rem;">
+      {% if user.pode_incluir %}
+      <a href="{% url 'produtos:incluir' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;color:#c9a96e;">+</span>
+        <span style="font-size:.9rem;">Incluir Estoque</span>
+      </a>
+      {% endif %}
+      {% if user.pode_aprovar %}
+      <a href="{% url 'produtos:aprovacoes' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;color:#2d9e6e;">&#10003;</span>
+        <span style="font-size:.9rem;">Aprovações</span>
+      </a>
+      <a href="{% url 'produtos:precos' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">$</span>
+        <span style="font-size:.9rem;">Preços</span>
+      </a>
+      {% endif %}
+      {% if user.is_superadmin %}
+      <a href="{% url 'produtos:manutencao' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#9881;</span>
+        <span style="font-size:.9rem;">Manutenção</span>
+      </a>
+      {% endif %}
+      <a href="{% url 'produtos:resumo' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#9783;</span>
+        <span style="font-size:.9rem;">Resumo</span>
+      </a>
+      <div style="padding:.3rem .5rem .1rem;font-size:.75rem;color:#9ca3af;font-weight:600;letter-spacing:.05em;text-transform:uppercase;">Histórico</div>
+      <a href="{% url 'produtos:historico' %}" style="display:flex;align-items:center;gap:.6rem;padding:.45rem .5rem .45rem 1.5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="font-size:.85rem;">&#8250; Inclusões</span>
+      </a>
+      {% if user.pode_aprovar %}
+      <a href="{% url 'produtos:historico_precos' %}" style="display:flex;align-items:center;gap:.6rem;padding:.45rem .5rem .45rem 1.5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="font-size:.85rem;">&#8250; Preços</span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── METAS ────────────────────────────────────────── #}
+  {% if user.pode_ver_metas or user.pode_cadastrar_metas %}
+  <div class="ds-card" style="padding:0;overflow:hidden;">
+    <div style="background:rgba(99,102,241,0.08);padding:1rem 1.25rem;border-bottom:1px solid #f0ede8;display:flex;align-items:center;gap:.75rem;">
+      <span style="font-size:1.4rem;">&#127919;</span>
+      <span style="font-weight:700;font-size:1rem;color:var(--preto);">Metas</span>
+    </div>
+    <div style="padding:.75rem 1.25rem;display:flex;flex-direction:column;gap:.1rem;">
+      {% if user.pode_cadastrar_metas %}
+      <a href="{% url 'metas:cadastro_funcionarios' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;color:#6366f1;">+</span>
+        <span style="font-size:.9rem;">Cadastro de Metas</span>
+      </a>
+      {% endif %}
+      {% if user.pode_ver_metas %}
+      <a href="{% url 'metas:dashboard' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#9776;</span>
+        <span style="font-size:.9rem;">Dashboard de Metas</span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── PEDIDOS ──────────────────────────────────────── #}
+  {% if user.pode_ver_pedidos %}
+  <div class="ds-card" style="padding:0;overflow:hidden;">
+    <div style="background:rgba(16,185,129,0.08);padding:1rem 1.25rem;border-bottom:1px solid #f0ede8;display:flex;align-items:center;gap:.75rem;">
+      <span style="font-size:1.4rem;">&#128203;</span>
+      <span style="font-weight:700;font-size:1rem;color:var(--preto);">Pedidos</span>
+    </div>
+    <div style="padding:.75rem 1.25rem;display:flex;flex-direction:column;gap:.1rem;">
+      <a href="{% url 'pedidos:pendentes' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#9675;</span>
+        <span style="font-size:.9rem;">Pedidos Em Andamento</span>
+      </a>
+      <a href="{% url 'pedidos:dashboard' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#9776;</span>
+        <span style="font-size:.9rem;">Pedidos Pendentes (alertas)</span>
+      </a>
+      <a href="{% url 'pedidos:historico' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#8635;</span>
+        <span style="font-size:.9rem;">Pedidos Alterados</span>
+      </a>
+      <div style="padding:.3rem .5rem .1rem;font-size:.75rem;color:#9ca3af;font-weight:600;letter-spacing:.05em;text-transform:uppercase;">Pagamentos</div>
+      <a href="{% url 'pedidos:pagamentos_pendentes' %}" style="display:flex;align-items:center;gap:.6rem;padding:.45rem .5rem .45rem 1.5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="font-size:.85rem;">&#8250; Pendentes</span>
+      </a>
+      <a href="{% url 'pedidos:pagamentos_confirmados' %}" style="display:flex;align-items:center;gap:.6rem;padding:.45rem .5rem .45rem 1.5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="font-size:.85rem;">&#8250; Confirmados</span>
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+
+  {# ── SITE ─────────────────────────────────────────── #}
+  {% if user.pode_ver_analytics %}
+  <div class="ds-card" style="padding:0;overflow:hidden;">
+    <div style="background:rgba(14,165,233,0.08);padding:1rem 1.25rem;border-bottom:1px solid #f0ede8;display:flex;align-items:center;gap:.75rem;">
+      <span style="font-size:1.4rem;">&#128202;</span>
+      <span style="font-weight:700;font-size:1rem;color:var(--preto);">Site</span>
+    </div>
+    <div style="padding:.75rem 1.25rem;display:flex;flex-direction:column;gap:.1rem;">
+      <a href="{% url 'analytics:dashboard' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#9776;</span>
+        <span style="font-size:.9rem;">Dashboard de Analytics</span>
+      </a>
+      <a href="{% url 'analytics:relatorio_list' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#128196;</span>
+        <span style="font-size:.9rem;">Relatorios Semanais</span>
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

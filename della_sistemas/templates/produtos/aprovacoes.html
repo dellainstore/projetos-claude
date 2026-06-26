@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block titulo %}Aprovações | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+.aprov-card { background:var(--branco);border:1px solid var(--cinza-medio);border-radius:10px;padding:1.5rem;margin-bottom:1.25rem; }
+.aprov-header { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem; }
+.aprov-edit-input { width:100%;padding:0.35rem 0.5rem;border:1px solid var(--cinza-medio);border-radius:5px;font-size:0.85rem;background:var(--cinza-claro); }
+.aprov-edit-input:focus { outline:none;border-color:var(--dourado);background:var(--branco); }
+.aprov-edit-num { width:72px;text-align:center;padding:0.35rem 0.4rem;border:1px solid var(--cinza-medio);border-radius:5px;font-size:0.85rem;background:var(--cinza-claro); }
+.aprov-edit-num:focus { outline:none;border-color:var(--dourado);background:var(--branco); }
+.autocomplete-lista { position:absolute;z-index:50;background:var(--branco);border:1px solid var(--cinza-medio);border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.1);max-height:200px;overflow-y:auto;width:100%; }
+.autocomplete-lista div { padding:0.55rem 0.85rem;cursor:pointer;font-size:0.82rem; }
+.autocomplete-lista div:hover { background:var(--cinza-claro); }
+.campo-wrapper { position:relative; }
+.alerta-tempo { background:#fff8e1;border:1px solid #f0c040;border-radius:6px;padding:0.55rem 0.85rem;font-size:0.8rem;color:#7a5c00;margin-bottom:0.75rem; }
+.sem-template { background:#fff3f3;border:1px solid #f5a0a0;border-radius:6px;padding:0.5rem 0.75rem;font-size:0.8rem;color:#8b0000;margin-bottom:0.75rem; }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Aprovações</h1>
+  <p class="ds-page-subtitulo">Solicitações pendentes de aprovação</p>
+</div>
+
+{% if not requests_list %}
+<div class="ds-form-section" style="text-align:center;padding:3rem;">
+  <div style="font-size:2rem;margin-bottom:0.75rem;">&#10003;</div>
+  <p style="font-weight:500;">Nenhuma pendência no momento.</p>
+  <p class="text-muted" style="font-size:0.82rem;margin-top:0.25rem;">Todas as solicitações foram processadas.</p>
+</div>
+{% else %}
+
+{% for req in requests_list %}
+<div class="aprov-card">
+  <div class="aprov-header">
+    <div>
+      <strong style="font-size:0.95rem;">#{{ req.request_id }} — {{ req.type }}</strong>
+      <span class="ds-status ds-status--pendente" style="margin-left:0.5rem;">PENDENTE</span>
+    </div>
+    <div class="text-muted" style="font-size:0.75rem;">Por: {{ req.created_by }}</div>
+  </div>
+
+  {% if not req.tem_template %}
+  <div class="sem-template">
+    &#9888; Produto novo no Bling — selecione um <strong>template</strong> abaixo antes de aprovar.
+  </div>
+  {% endif %}
+
+  <div class="alerta-tempo">
+    &#9203; Criar produtos no Bling pode demorar 30–90 segundos. Clique em Aprovar e aguarde — não feche a página.
+  </div>
+
+  <form method="post" action="{% url 'produtos:aprovar' req.request_id %}"
+        onsubmit="onAprovarSubmit(event, this)">
+    {% csrf_token %}
+    <input type="hidden" name="item_count" value="{{ req.items|length }}">
+
+    <!-- Modelo -->
+    <div class="ds-form-group" style="margin-bottom:0.75rem;">
+      <label class="ds-label">Modelo</label>
+      <input class="ds-input" type="text" name="base_override"
+             value="{{ req.base }}" style="max-width:400px;text-transform:uppercase;">
+    </div>
+
+    <!-- Template Bling -->
+    <div class="ds-form-group" style="margin-bottom:1rem;">
+      <label class="ds-label">
+        Template Bling
+        {% if not req.template_product_id %}<span style="color:#c00;">*obrigatório</span>{% endif %}
+      </label>
+      <div class="campo-wrapper" style="max-width:480px;">
+        <input class="ds-input" type="text"
+               id="input-tpl-{{ req.request_id }}"
+               value="{{ req.template_label }}"
+               placeholder="Buscar SKU ou nome do produto..."
+               autocomplete="off"
+               hx-get="{% url 'produtos:htmx_templates' %}"
+               hx-trigger="input changed delay:350ms"
+               hx-target="#tpl-lista-{{ req.request_id }}"
+               hx-include="#q-tpl-{{ req.request_id }}"
+               oninput="document.getElementById('q-tpl-{{ req.request_id }}').value=this.value">
+        <input type="hidden" id="q-tpl-{{ req.request_id }}" name="q" value="">
+        <div id="tpl-lista-{{ req.request_id }}" class="autocomplete-lista" style="display:none;"></div>
+      </div>
+      <input type="hidden" name="template_product_id_override" id="hid-tpl-{{ req.request_id }}"
+             value="{{ req.template_product_id|default:'' }}">
+      <div id="tpl-sel-{{ req.request_id }}" style="margin-top:0.3rem;font-size:0.8rem;color:var(--dourado);font-weight:600;">
+        {% if req.template_product_id %}&#10003; {{ req.template_label }}{% endif %}
+      </div>
+    </div>
+
+    <!-- Itens editáveis -->
+    <div class="ds-table-wrapper" style="margin-bottom:1rem;">
+      <table class="ds-table">
+        <thead>
+          <tr>
+            <th style="width:36px;">#</th>
+            <th>Cor</th>
+            <th>Tamanho</th>
+            <th>Qtd</th>
+            <th>Fornecedor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in req.items %}
+          <tr>
+            <td class="text-muted" style="font-size:0.8rem;">{{ forloop.counter }}</td>
+            <td>
+              <input class="aprov-edit-input" type="text"
+                     name="item_color_{{ forloop.counter0 }}"
+                     value="{{ item.color|default:'' }}"
+                     style="text-transform:uppercase;">
+            </td>
+            <td>
+              <input class="aprov-edit-input" type="text"
+                     name="item_size_{{ forloop.counter0 }}"
+                     value="{{ item.size|default:'' }}"
+                     style="text-transform:uppercase;max-width:90px;">
+            </td>
+            <td>
+              <input class="aprov-edit-num" type="number"
+                     name="item_qty_{{ forloop.counter0 }}"
+                     value="{{ item.qty|default:0 }}" min="0" step="1">
+            </td>
+            <td>
+              <input class="aprov-edit-input" type="text"
+                     name="item_supplier_{{ forloop.counter0 }}"
+                     value="{{ item.supplier_name|default:'' }}"
+                     style="text-transform:uppercase;">
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">Sem itens</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+      <button type="submit" name="acao" value="aprovar"
+              class="ds-btn ds-btn--primario" id="btn-aprovar-{{ req.request_id }}">
+        &#10003; Aprovar
+      </button>
+      <button type="submit" name="acao" value="rejeitar" class="ds-btn ds-btn--perigo"
+              onclick="return confirm('Rejeitar solicitação #{{ req.request_id }}?')">
+        &#10005; Rejeitar
+      </button>
+      <span id="spinner-{{ req.request_id }}" style="display:none;font-size:0.82rem;color:var(--cinza-texto);">
+        &#9203; Processando no Bling, aguarde...
+      </span>
+    </div>
+  </form>
+</div>
+{% endfor %}
+
+{% endif %}
+{% endblock %}
+
+{% block js_extra %}
+<script src="{{ STATIC_URL }}js/htmx.min.js"></script>
+<script>
+function onTemplateAprovSelecionado(reqId, id, label) {
+  document.getElementById('hid-tpl-' + reqId).value = id;
+  document.getElementById('input-tpl-' + reqId).value = label;
+  document.getElementById('tpl-sel-' + reqId).innerHTML = '&#10003; ' + label;
+  document.getElementById('tpl-lista-' + reqId).style.display = 'none';
+}
+
+function onAprovarSubmit(event, form) {
+  const btn = form.querySelector('button[value="aprovar"]');
+  if (event.submitter && event.submitter.value !== 'aprovar') return;
+  if (btn) btn.disabled = true;
+  const reqId = btn ? btn.id.replace('btn-aprovar-', '') : '';
+  const spinner = document.getElementById('spinner-' + reqId);
+  if (spinner) spinner.style.display = 'inline';
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.campo-wrapper')) {
+    document.querySelectorAll('.autocomplete-lista').forEach(el => el.style.display = 'none');
+  }
+});
+
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  const target = e.detail.target;
+  if (target && target.classList.contains('autocomplete-lista')) {
+    target.style.display = target.innerHTML.trim() ? 'block' : 'none';
+    // Reescreve os onclick para passar o reqId correto
+    const reqId = target.id.replace('tpl-lista-', '');
+    target.querySelectorAll('div[onclick]').forEach(div => {
+      const orig = div.getAttribute('onclick');
+      div.setAttribute('onclick', orig.replace('onTemplateSelecionado(', 'onTemplateAprovSelecionado(' + reqId + ','));
+    });
+  }
+});
+</script>
+{% endblock %}

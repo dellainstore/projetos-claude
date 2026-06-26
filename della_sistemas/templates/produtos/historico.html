@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}Histórico | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Histórico de Inclusões</h1>
+  <p class="ds-page-subtitulo">{{ tabela|length }} registro(s) no período</p>
+</div>
+
+<!-- Filtros -->
+<form method="get" class="ds-form-section" style="margin-bottom:1.25rem;" id="form-filtros">
+  <div class="ds-form-section-titulo">Filtros</div>
+
+  <!-- Botões de período rápido (JS gerencia estado ativo) -->
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;" id="div-botoes-periodo">
+    {% for val, label in periodos %}
+    <button type="button" data-periodo="{{ val }}"
+            class="ds-btn ds-btn--sm btn-periodo {% if filtros.periodo == val %}ds-btn--primario{% else %}ds-btn--outline{% endif %}">
+      {{ label }}
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- Datas personalizadas (só aparece quando periodo=personalizado) -->
+  <div id="div-datas-custom"
+       style="display:{% if filtros.periodo == 'personalizado' %}grid{% else %}none{% endif %};
+              grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
+    <div class="ds-form-group">
+      <label class="ds-label">Data início</label>
+      <input class="ds-input" type="date" name="data_inicio" value="{{ filtros.data_inicio }}">
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Data fim</label>
+      <input class="ds-input" type="date" name="data_fim" value="{{ filtros.data_fim }}">
+    </div>
+  </div>
+
+  <input type="hidden" name="periodo" value="{{ filtros.periodo }}" id="input-periodo">
+
+  <div class="ds-form-grid">
+    <div class="ds-form-group">
+      <label class="ds-label">Produto contém</label>
+      <input class="ds-input" type="text" name="produto" value="{{ filtros.produto }}">
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label">Status</label>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;padding-top:0.3rem;">
+        {% for val, label in status_opcoes %}
+        <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;cursor:pointer;">
+          <input type="checkbox" name="status" value="{{ val }}"
+                 {% if val in filtros.status %}checked{% endif %}>
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="flex-end mt-2" style="gap:0.5rem;">
+    <button type="submit" class="ds-btn ds-btn--primario ds-btn--sm">Filtrar</button>
+    <a href="{% url 'produtos:historico' %}" class="ds-btn ds-btn--outline ds-btn--sm">Limpar</a>
+  </div>
+</form>
+
+<!-- Tabela -->
+{% if tabela %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Data</th>
+        <th>Produto</th>
+        <th>Cor</th>
+        <th>Tam.</th>
+        <th>Qtd</th>
+        <th>Fornecedor</th>
+        <th>SKU</th>
+        <th>Status</th>
+        <th>Custo</th>
+        {% if user.is_gestor_or_above %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in tabela %}
+      <tr>
+        <td class="text-muted">{{ row.move_id }}</td>
+        <td>{{ row.data }}</td>
+        <td>{{ row.produto }}</td>
+        <td>{{ row.cor }}</td>
+        <td><strong>{{ row.tamanho }}</strong></td>
+        <td><strong>{{ row.qty }}</strong></td>
+        <td>{{ row.fornecedor }}</td>
+        <td class="text-muted" style="font-size:0.75rem;">{{ row.sku }}</td>
+        <td>
+          <span class="ds-status
+            {% if row.status == 'DONE' %}ds-status--aprovado
+            {% elif row.status == 'PENDING' %}ds-status--pendente
+            {% elif row.status == 'ERROR' %}ds-status--rejeitado
+            {% endif %}">
+            {{ row.status }}
+          </span>
+          {% if row.erro %}<span title="{{ row.erro }}" style="cursor:help;color:var(--vermelho);"> !</span>{% endif %}
+        </td>
+        <td>{% if row.custo %}{{ row.custo|brl }}{% else %}—{% endif %}</td>
+        {% if user.is_gestor_or_above %}
+        <td>
+          <form method="post" action="{% url 'produtos:excluir_move' row.move_id %}"
+                onsubmit="return confirm('Excluir lançamento #{{ row.move_id }}?')">
+            {% csrf_token %}
+            <button type="submit" class="ds-btn ds-btn--perigo ds-btn--sm">Excluir</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Resumo por fornecedor -->
+{% if resumo %}
+<h2 style="font-size:1rem;font-weight:500;margin:1.5rem 0 0.75rem;">Resumo por Fornecedor / Produto / Tamanho</h2>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr><th>Fornecedor</th><th>Produto</th><th>Tamanho</th><th>Total Qtd</th></tr>
+    </thead>
+    <tbody>
+      {% for r in resumo %}
+      <tr>
+        <td>{{ r.fornecedor }}</td>
+        <td>{{ r.produto }}</td>
+        <td>{{ r.tamanho }}</td>
+        <td><strong>{{ r.qty }}</strong></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% else %}
+<div class="ds-form-section" style="text-align:center;padding:2.5rem;">
+  <p class="text-muted">Nenhum registro para o período/filtro selecionado.</p>
+</div>
+{% endif %}
+
+<script>
+  const inputPeriodo = document.getElementById('input-periodo');
+  const divDatas = document.getElementById('div-datas-custom');
+
+  document.querySelectorAll('.btn-periodo').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const val = this.dataset.periodo;
+
+      // Atualiza estado visual de todos os botões
+      document.querySelectorAll('.btn-periodo').forEach(b => {
+        b.classList.remove('ds-btn--primario');
+        b.classList.add('ds-btn--outline');
+      });
+      this.classList.remove('ds-btn--outline');
+      this.classList.add('ds-btn--primario');
+
+      // Atualiza hidden input
+      inputPeriodo.value = val;
+
+      if (val === 'personalizado') {
+        divDatas.style.display = 'grid';
+        // Não submete — espera o usuário preencher as datas e clicar em Filtrar
+      } else {
+        divDatas.style.display = 'none';
+        // Submete imediatamente
+        document.getElementById('form-filtros').submit();
+      }
+    });
+  });
+</script>
+{% endblock %}

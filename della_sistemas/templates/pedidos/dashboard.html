@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+
+{% block titulo %}Pedidos Pendentes{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <div>
+    <h1 class="ds-page-title">Pedidos Pendentes</h1>
+    <p class="ds-page-subtitle">Alertas e controle de pedidos em tempo real</p>
+  </div>
+  {% include "pedidos/_sync_widget.html" %}
+</div>
+
+{% if em_aberto or em_andamento_antigos or revertidos %}
+<div style="margin-bottom:1.25rem;display:flex;align-items:center;gap:.75rem;">
+  <input
+    id="filtro-dashboard"
+    type="text"
+    placeholder="Filtrar por número, cliente ou situação..."
+    oninput="filtrarDashboard()"
+    style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:300px;">
+  <span id="dash-count" style="font-size:.85rem;color:#6b7280;"></span>
+</div>
+{% endif %}
+
+{% if not em_aberto and not em_andamento_antigos and not revertidos %}
+<div class="ds-alert ds-alert--success">
+  <strong>&#10003; Tudo certo!</strong> Nenhum alerta de pedidos no momento.
+  {% if not user.pode_sync_pedidos %}
+  <span style="color:#6b7280;font-size:.85em;">Sincronize os pedidos para atualizar.</span>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Alerta 1: Em Aberto -->
+{% if em_aberto %}
+<div class="ds-card" style="border-left:4px solid #dc2626;margin-bottom:1.5rem;">
+  <div class="ds-card-header" style="display:flex;align-items:center;gap:.75rem;">
+    <span style="font-size:1.25rem;">&#128308;</span>
+    <div>
+      <h2 class="ds-card-title" style="color:#dc2626;margin:0;">
+        {{ em_aberto|length }} pedido{{ em_aberto|length|pluralize:"s" }} em aberto há mais de {{ dias_limite_andamento }} dias
+      </h2>
+      <p class="ds-card-subtitle" style="margin:0;">Alerta crítico — pedidos em aberto devem ser cancelados, movidos para em andamento ou atendidos</p>
+    </div>
+  </div>
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead>
+        <tr>
+          <th>Nº Pedido</th>
+          <th>Data</th>
+          <th>Dias</th>
+          <th>Cliente</th>
+          <th class="num">Valor</th>
+          <th>Situação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linha in em_aberto %}
+        <tr class="dash-row" data-busca="{{ linha.pedido.numero|lower }} {{ linha.pedido.cliente_nome|lower }} {{ linha.pedido.situacao_nome|lower }}">
+          <td><strong>{{ linha.pedido.numero|default:linha.pedido.bling_id }}</strong></td>
+          <td>{{ linha.pedido.data_pedido|date:"d/m/Y" }}</td>
+          <td style="color:#dc2626;font-weight:700;">{{ linha.dias }}d</td>
+          <td>{{ linha.pedido.cliente_nome|default:"—" }}</td>
+          <td class="num">{{ linha.pedido.valor_total|brl }}</td>
+          <td><span class="ds-badge ds-badge--danger">{{ linha.pedido.situacao_nome }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Alerta 2: Em Andamento > 3 dias -->
+{% if em_andamento_antigos %}
+<div class="ds-card" style="border-left:4px solid #d97706;margin-bottom:1.5rem;">
+  <div class="ds-card-header" style="display:flex;align-items:center;gap:.75rem;">
+    <span style="font-size:1.25rem;">&#9888;</span>
+    <div>
+      <h2 class="ds-card-title" style="color:#d97706;margin:0;">
+        {{ em_andamento_antigos|length }} pedido{{ em_andamento_antigos|length|pluralize:"s" }} em andamento há mais de {{ dias_limite_andamento }} dias
+      </h2>
+      <p class="ds-card-subtitle" style="margin:0;">Pedidos que deveriam ter sido fechados — solicite o atendimento</p>
+    </div>
+  </div>
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead>
+        <tr>
+          <th>Nº Pedido</th>
+          <th>Data</th>
+          <th>Dias</th>
+          <th>Cliente</th>
+          <th class="num">Valor</th>
+          <th>Situação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linha in em_andamento_antigos %}
+        <tr class="dash-row" data-busca="{{ linha.pedido.numero|lower }} {{ linha.pedido.cliente_nome|lower }} {{ linha.pedido.situacao_nome|lower }}">
+          <td><strong>{{ linha.pedido.numero|default:linha.pedido.bling_id }}</strong></td>
+          <td>{{ linha.pedido.data_pedido|date:"d/m/Y" }}</td>
+          <td style="color:#d97706;font-weight:700;">{{ linha.dias }}d</td>
+          <td>{{ linha.pedido.cliente_nome|default:"—" }}</td>
+          <td class="num">{{ linha.pedido.valor_total|brl }}</td>
+          <td><span class="ds-badge ds-badge--warning">{{ linha.pedido.situacao_nome }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Alerta 3: Revertidos de Atendido -->
+{% if revertidos %}
+<div class="ds-card" style="border-left:4px solid #ea580c;margin-bottom:1.5rem;">
+  <div class="ds-card-header" style="display:flex;align-items:center;gap:.75rem;">
+    <span style="font-size:1.25rem;">&#8635;</span>
+    <div>
+      <h2 class="ds-card-title" style="color:#ea580c;margin:0;">
+        {{ revertidos|length }} pedido{{ revertidos|length|pluralize:"s" }} revertido{{ revertidos|length|pluralize:"s" }} de Atendido
+      </h2>
+      <p class="ds-card-subtitle" style="margin:0;">Pedidos que estavam como atendido e tiveram a situação alterada</p>
+    </div>
+  </div>
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead>
+        <tr>
+          <th>Nº Pedido</th>
+          <th>Data</th>
+          <th>Cliente</th>
+          <th class="num">Valor</th>
+          <th>Situação Atual</th>
+          <th>Atualizado em</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in revertidos %}
+        <tr class="dash-row" data-busca="{{ p.numero|lower }} {{ p.cliente_nome|lower }} {{ p.situacao_nome|lower }}">
+          <td><strong>{{ p.numero|default:p.bling_id }}</strong></td>
+          <td>{{ p.data_pedido|date:"d/m/Y" }}</td>
+          <td>{{ p.cliente_nome|default:"—" }}</td>
+          <td class="num">{{ p.valor_total|brl }}</td>
+          <td><span class="ds-badge ds-badge--warning">{{ p.situacao_nome }}</span></td>
+          <td>{{ p.atualizado_em|date:"d/m/Y H:i" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+function filtrarDashboard() {
+  const q = document.getElementById('filtro-dashboard').value.toLowerCase();
+  const linhas = document.querySelectorAll('.dash-row');
+  let visiveis = 0;
+  linhas.forEach(tr => {
+    const busca = (tr.dataset.busca || '').toLowerCase();
+    const visivel = !q || busca.includes(q);
+    tr.style.display = visivel ? '' : 'none';
+    if (visivel) visiveis++;
+  });
+  const cnt = document.getElementById('dash-count');
+  if (cnt) cnt.textContent = q ? visiveis + ' resultado' + (visiveis !== 1 ? 's' : '') : '';
+}
+</script>
+
+<!-- Links rápidos -->
+<div style="display:flex;gap:1rem;margin-top:2rem;flex-wrap:wrap;">
+  <a href="{% url 'pedidos:pendentes' %}" class="ds-btn ds-btn--secondary">
+    &#128203; Ver Pedidos Em Andamento
+  </a>
+  <a href="{% url 'pedidos:pagamentos_pendentes' %}" class="ds-btn ds-btn--secondary">
+    &#128176; Ver Pagamentos Pendentes
+  </a>
+</div>
+{% endblock %}

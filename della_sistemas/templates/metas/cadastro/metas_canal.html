@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block titulo %}Metas de Canal | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Metas de Canal</h1>
+  <p class="ds-page-subtitulo">Meta mensal por canal de venda — {{ mes_nome }}/{{ ano }}</p>
+</div>
+
+<!-- Submenu cadastro -->
+<div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+  <a href="{% url 'metas:cadastro_funcionarios' %}" class="ds-btn" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Funcionárias</a>
+  <a href="{% url 'metas:metas_individual' %}" class="ds-btn" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Metas Individuais</a>
+  <a href="{% url 'metas:metas_canal' %}" class="ds-btn ds-btn--primario" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Metas de Canal</a>
+</div>
+
+<!-- Seletor de mês -->
+<form method="get" style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem;">
+  <select name="ano" style="padding:0.4rem 0.75rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.88rem;">
+    {% for a in anos %}
+    <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
+  <select name="mes" style="padding:0.4rem 0.75rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.88rem;">
+    {% for num, nome in meses %}
+    <option value="{{ num }}" {% if num == mes %}selected{% endif %}>{{ nome }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="ds-btn ds-btn--primario">Filtrar</button>
+</form>
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="ano" value="{{ ano }}">
+  <input type="hidden" name="mes" value="{{ mes }}">
+
+  <div class="ds-form-section" style="max-width:500px;">
+    <p style="font-size:0.82rem;color:var(--cinza-texto);margin-bottom:1.25rem;">
+      Defina a meta de faturamento para cada canal em <strong>{{ mes_nome }}/{{ ano }}</strong>.
+      Deixe em branco para remover a meta do canal neste mês.
+    </p>
+
+    {% for linha in linhas %}
+    <div class="ds-form-group">
+      <label class="ds-label" for="meta_{{ linha.canal_key }}">{{ linha.canal_label }}</label>
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        <span style="font-size:0.9rem;color:var(--cinza-texto);">R$</span>
+        <input class="ds-input" type="number" id="meta_{{ linha.canal_key }}" name="meta_{{ linha.canal_key }}"
+               value="{{ linha.valor_atual }}"
+               step="0.01" min="0" placeholder="0,00"
+               style="max-width:200px;">
+      </div>
+    </div>
+    {% endfor %}
+
+    <div style="margin-top:1.5rem;">
+      <button type="submit" class="ds-btn ds-btn--primario">Salvar Metas de Canal — {{ mes_nome }}/{{ ano }}</button>
+    </div>
+  </div>
+</form>
+
+<div class="ds-form-section" style="margin-top:1rem;background:var(--cinza-claro);border:none;">
+  <p style="font-size:0.78rem;color:var(--cinza-texto);">
+    <strong>Nota:</strong> Show Room SP e Anacã SP também aceitam meta de canal para períodos anteriores a Jul/2026
+    (quando não havia metas individuais). A partir de Jul/2026, o dashboard calcula automaticamente a meta
+    dessas lojas a partir da soma das metas individuais das funcionárias.
+  </p>
+</div>
+{% endblock %}

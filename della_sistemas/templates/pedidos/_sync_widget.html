@@ -1,0 +1,65 @@
+{% if sync_state.running %}
+<div id="sync-widget"
+     hx-get="{% url 'pedidos:sync_status' %}"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML"
+     style="min-width:260px;">
+  <div style="font-size:.8rem;color:#6b7280;margin-bottom:.35rem;">
+    &#8635; {{ sync_state.modo }} — {{ sync_state.pct }}%
+  </div>
+  <div style="background:#e5e7eb;border-radius:999px;height:8px;overflow:hidden;">
+    <div style="background:#c9a96e;height:100%;width:{{ sync_state.pct }}%;transition:width .4s;"></div>
+  </div>
+  <div style="font-size:.75rem;color:#9ca3af;margin-top:.25rem;">{{ sync_state.msg }}</div>
+</div>
+
+{% elif sync_state.result %}
+<div id="sync-widget" style="min-width:260px;">
+  <div style="color:#16a34a;font-weight:600;margin-bottom:.35rem;">
+    &#10003; {{ sync_state.modo }} concluído
+  </div>
+  <div style="font-size:.8rem;color:#6b7280;">
+    {{ sync_state.result.inserted }} novos &middot;
+    {{ sync_state.result.updated }} atualizados &middot;
+    {{ sync_state.result.errors }} erros
+  </div>
+  <button onclick="location.reload()" class="ds-btn ds-btn--secondary" style="margin-top:.5rem;font-size:.8rem;padding:.25rem .75rem;">
+    &#8635; Recarregar página
+  </button>
+</div>
+
+{% elif sync_state.error %}
+<div id="sync-widget" style="min-width:260px;">
+  <div style="color:#dc2626;font-weight:600;margin-bottom:.25rem;">&#9888; Erro no sync</div>
+  <div style="font-size:.75rem;color:#6b7280;">{{ sync_state.error }}</div>
+  {% if user.pode_sync_pedidos %}
+  <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;">
+    <form hx-post="{% url 'pedidos:sync_start' %}" hx-target="#sync-widget" hx-swap="outerHTML" style="margin:0">
+      {% csrf_token %}
+      <button type="submit" class="ds-btn ds-btn--secondary" style="font-size:.8rem;padding:.25rem .75rem;">
+        &#8635; Tentar novamente (30d)
+      </button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+{% else %}
+<div id="sync-widget" style="display:flex;gap:.5rem;flex-wrap:wrap;">
+  {% if user.pode_sync_pedidos %}
+  <form hx-post="{% url 'pedidos:sync_start' %}" hx-target="#sync-widget" hx-swap="outerHTML" style="margin:0">
+    {% csrf_token %}
+    <button type="submit" class="ds-btn ds-btn--secondary">
+      &#8635; Sync 30 dias
+    </button>
+  </form>
+  <form hx-post="{% url 'pedidos:sync_start' %}" hx-target="#sync-widget" hx-swap="outerHTML" style="margin:0">
+    {% csrf_token %}
+    <input type="hidden" name="completo" value="1">
+    <button type="submit" class="ds-btn ds-btn--secondary" style="font-size:.85rem;">
+      &#8635; Sync Completo 2026
+    </button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}

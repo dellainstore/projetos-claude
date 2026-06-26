@@ -1,0 +1,68 @@
+{% load metas_extras %}
+{% if job.status == "done" or job.status == "error" %}
+<div id="job-status-box" style="background:var(--branco);border:1px solid var(--cinza-medio);border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;position:relative;">
+  <button type="button"
+          onclick="document.getElementById('job-status-box').remove()"
+          style="position:absolute;top:0.75rem;right:1rem;background:none;border:none;cursor:pointer;color:var(--cinza-texto);font-size:1rem;line-height:1;">✕</button>
+
+  {% if job.status == "error" %}
+    <p style="color:#dc2626;font-weight:600;margin:0;">Erro ao processar preços.</p>
+    {% for err in job.erros %}<p style="color:#dc2626;font-size:0.82rem;margin:0.25rem 0 0;">{{ err }}</p>{% endfor %}
+
+  {% elif job.ok == 0 and job.skip > 0 and not job.erros %}
+    <p style="color:var(--cinza-texto);margin:0;">
+      Todos os {{ job.skip }} preço(s) já estavam corretos — nenhuma alteração necessária.
+    </p>
+
+  {% else %}
+    <p style="font-weight:600;margin:0 0 0.25rem;">
+      {% if job.ok > 0 %}
+        ✓ {{ job.ok }} preço(s) enviado(s) ao Bling.
+      {% endif %}
+      {% if job.skip > 0 %}
+        <span style="color:var(--cinza-texto);font-weight:400;font-size:0.88rem;">{{ job.skip }} já estavam corretos.</span>
+      {% endif %}
+    </p>
+    {% for err in job.erros %}
+      <p style="color:#dc2626;font-size:0.82rem;margin:0.2rem 0 0;">⚠ {{ err }}</p>
+    {% endfor %}
+    {% for av in job.avisos %}
+      <p style="color:#d97706;font-size:0.82rem;margin:0.2rem 0 0;">{{ av }}</p>
+    {% endfor %}
+    {% if job.csv_atacado %}
+      <p style="color:#d97706;font-size:0.82rem;margin:0.5rem 0 0.5rem;">
+        Preços de atacado salvos localmente. Importe o arquivo abaixo em <strong>Cadastros → Lista de Preços</strong> no Bling.
+      </p>
+      <a href="{% url 'produtos:download_csv_job' job.job_id %}"
+         class="ds-btn ds-btn--outline ds-btn--sm"
+         style="display:inline-flex;">
+        Baixar CSV atacado para o Bling
+      </a>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% else %}
+{# status = pending | running — continua fazendo polling #}
+{% with pct=job.feitos|pct_de:job.total %}
+<div id="job-status-box"
+     hx-get="{% url 'produtos:job_precos_status' job.job_id %}"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML"
+     style="background:var(--branco);border:1px solid var(--cinza-medio);border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+    <span style="font-weight:600;font-size:0.9rem;">Atualizando preços no Bling...</span>
+    <span style="font-size:0.82rem;color:var(--cinza-texto);">{{ job.feitos }} / {{ job.total }}</span>
+  </div>
+
+  <div style="background:var(--cinza-claro);border-radius:999px;height:8px;overflow:hidden;">
+    <div style="background:var(--dourado);height:100%;width:{{ pct }}%;transition:width 0.4s ease;border-radius:999px;min-width:{% if job.feitos > 0 %}4{% else %}0{% endif %}px;"></div>
+  </div>
+
+  <p style="font-size:0.78rem;color:var(--cinza-texto);margin:0.5rem 0 0;">
+    {{ job.ok }} atualizados · {{ job.skip }} inalterados · {{ job.erros|length }} erro(s)
+  </p>
+</div>
+{% endwith %}
+{% endif %}

@@ -1,0 +1,11 @@
+[Unit]
+Description=D'ELLA Sistemas — Processar Pipeline (oneshot)
+
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/var/www/della-sistemas/projetos-claude/della_sistemas
+EnvironmentFile=/var/www/della-sistemas/projetos-claude/della_sistemas/.env
+ExecStart=/var/www/della-sistemas/projetos-claude/della_sistemas/.venv/bin/python manage.py processar_pipeline
+StandardOutput=journal
+StandardError=journal

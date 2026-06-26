@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block titulo %}Cadastro de Funcionárias | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <h1 class="ds-page-titulo">Cadastro de Metas</h1>
+    <p class="ds-page-subtitulo">Funcionárias e metas mensais</p>
+  </div>
+  <a href="{% url 'metas:funcionario_novo' %}" class="ds-btn ds-btn--primario">+ Nova Funcionária</a>
+</div>
+
+<!-- Submenu cadastro -->
+<div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+  <a href="{% url 'metas:cadastro_funcionarios' %}" class="ds-btn ds-btn--primario" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Funcionárias</a>
+  <a href="{% url 'metas:metas_individual' %}" class="ds-btn" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Metas Individuais</a>
+  <a href="{% url 'metas:metas_canal' %}" class="ds-btn" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Metas de Canal</a>
+</div>
+
+{% if not funcionarios %}
+<div class="ds-form-section" style="text-align:center;padding:3rem;">
+  <div style="font-size:2rem;margin-bottom:0.75rem;">&#128101;</div>
+  <p style="font-weight:500;">Nenhuma funcionária cadastrada.</p>
+  <p class="text-muted" style="font-size:0.82rem;margin-top:0.25rem;">Clique em "+ Nova Funcionária" para começar.</p>
+</div>
+{% else %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>Nome no Bling</th>
+        <th>Status</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for func in funcionarios %}
+      <tr {% if not func.ativo %}style="opacity:0.5;"{% endif %}>
+        <td><strong>{{ func.nome }}</strong></td>
+        <td style="font-size:0.82rem;color:var(--cinza-texto);font-family:monospace;">{{ func.nome_bling }}</td>
+        <td>
+          {% if func.ativo %}
+          <span class="ds-status ds-status--ok">Ativa</span>
+          {% else %}
+          <span class="ds-status ds-status--pendente">Inativa</span>
+          {% endif %}
+        </td>
+        <td style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <a href="{% url 'metas:funcionario_editar' func.pk %}" class="ds-btn" style="font-size:0.78rem;padding:0.25rem 0.6rem;">Editar</a>
+          <form method="post" action="{% url 'metas:funcionario_toggle' func.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="ds-btn {% if func.ativo %}ds-btn--perigo{% endif %}" style="font-size:0.78rem;padding:0.25rem 0.6rem;"
+                    onclick="return confirm('{% if func.ativo %}Desativar{% else %}Reativar{% endif %} {{ func.nome }}?')">
+              {% if func.ativo %}Desativar{% else %}Reativar{% endif %}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

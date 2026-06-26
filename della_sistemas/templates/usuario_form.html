@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}{{ acao }} Usuário | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+.form-usuario-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+@media (max-width: 860px) { .form-usuario-layout { grid-template-columns: 1fr; } }
+
+/* Árvore de permissões */
+.perms-container {
+  background: var(--branco);
+  border: 1px solid var(--cinza-medio);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.perms-titulo {
+  padding: 1rem 1.25rem;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--cinza-texto);
+  border-bottom: 1px solid var(--cinza-medio);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.perms-titulo button {
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em;
+  background: none; border: none; cursor: pointer;
+  color: var(--dourado); text-transform: uppercase; padding: 0;
+}
+
+.perm-grupo {
+  border-bottom: 1px solid var(--cinza-medio);
+}
+.perm-grupo:last-child { border-bottom: none; }
+
+.perm-grupo-header {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.85rem 1.25rem;
+  cursor: pointer; user-select: none;
+  background: var(--cinza-claro);
+}
+.perm-grupo-header:hover { background: #efefed; }
+
+.perm-grp-check {
+  width: 16px; height: 16px;
+  accent-color: var(--dourado);
+  cursor: pointer; flex-shrink: 0;
+}
+.perm-grupo-nome {
+  font-size: 0.85rem; font-weight: 600; color: var(--preto);
+  flex: 1; cursor: pointer;
+}
+.perm-chevron {
+  font-size: 0.75rem; color: var(--cinza-texto);
+  transition: transform 0.2s; display: inline-block;
+}
+.perm-chevron.aberto { transform: rotate(90deg); }
+
+.perm-items {
+  display: none;
+  padding: 0.25rem 0 0.5rem;
+}
+.perm-items.aberto { display: block; }
+
+.perm-item {
+  display: flex; align-items: center; gap: 0.65rem;
+  padding: 0.5rem 1.25rem 0.5rem 3rem;
+  cursor: pointer; font-size: 0.84rem; color: var(--preto);
+}
+.perm-item:hover { background: var(--cinza-claro); }
+.perm-item input[type=checkbox] {
+  width: 15px; height: 15px;
+  accent-color: var(--dourado);
+  cursor: pointer; flex-shrink: 0;
+}
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">{{ acao }} Usuário</h1>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="form-usuario-layout">
+
+    <!-- Dados do usuário -->
+    <div class="ds-form-section">
+      <div class="ds-form-section-titulo">Dados do Usuário</div>
+
+      <div class="ds-form-group">
+        <label class="ds-label">Login (username)</label>
+        <input class="ds-input" name="username" type="text" required
+               value="{{ usuario.username|default:'' }}"
+               {% if acao == 'Editar' %}readonly style="background:var(--cinza-claro);color:var(--cinza-texto);"{% endif %}>
+      </div>
+
+      <div class="ds-form-group">
+        <label class="ds-label">Nome completo</label>
+        <input class="ds-input" name="nome" type="text" required
+               value="{{ usuario.get_full_name|default:'' }}">
+      </div>
+
+      <div class="ds-form-group">
+        <label class="ds-label">E-mail</label>
+        <input class="ds-input" name="email" type="email"
+               value="{{ usuario.email|default:'' }}">
+      </div>
+
+      <div class="ds-form-group">
+        <label class="ds-label">
+          Senha
+          {% if acao == 'Editar' %}
+          <span style="font-weight:400;color:var(--cinza-texto);font-size:0.8rem;">(deixe em branco para manter)</span>
+          {% endif %}
+        </label>
+        <input class="ds-input" name="password" type="password"
+               autocomplete="new-password"
+               {% if acao == 'Criar' %}required{% endif %}>
+      </div>
+
+      <div class="flex-end mt-2" style="gap:0.75rem;">
+        <a href="{% url 'core:usuarios' %}" class="ds-btn ds-btn--outline">Cancelar</a>
+        <button type="submit" class="ds-btn ds-btn--primario">Salvar</button>
+      </div>
+    </div>
+
+    <!-- Permissões -->
+    <div class="perms-container">
+      <div class="perms-titulo">
+        <span>Permissões</span>
+        <div style="display:flex;gap:1rem;">
+          <button type="button" onclick="marcarTodos(true)">Marcar tudo</button>
+          <button type="button" onclick="marcarTodos(false)">Desmarcar tudo</button>
+        </div>
+      </div>
+
+      {% for grupo in permission_tree %}
+      <div class="perm-grupo" id="grp-{{ grupo.id }}">
+        <div class="perm-grupo-header" onclick="toggleGrupo('{{ grupo.id }}')">
+          <input type="checkbox" class="perm-grp-check" id="grp-check-{{ grupo.id }}"
+                 onchange="toggleGrupoCheck('{{ grupo.id }}', this.checked)"
+                 onclick="event.stopPropagation()">
+          <label class="perm-grupo-nome" for="grp-check-{{ grupo.id }}"
+                 onclick="event.preventDefault(); toggleGrupo('{{ grupo.id }}')">
+            {{ grupo.label }}
+          </label>
+          <span class="perm-chevron" id="chv-{{ grupo.id }}">&#9658;</span>
+        </div>
+        <div class="perm-items" id="items-{{ grupo.id }}">
+          {% for perm in grupo.perms %}
+          <label class="perm-item">
+            <input type="checkbox" name="perm_{{ grupo.id }}__{{ perm.id }}" value="1"
+                   class="perm-child-{{ grupo.id }}"
+                   {% if usuario.permissoes %}
+                     {% if usuario.permissoes|get_perm:grupo.id|get_perm:perm.id %}checked{% endif %}
+                   {% endif %}
+                   onchange="atualizarGrupo('{{ grupo.id }}')">
+            {{ perm.label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</form>
+{% endblock %}
+
+{% block js_extra %}
+<script>
+function toggleGrupo(id) {
+  const items = document.getElementById('items-' + id);
+  const chv = document.getElementById('chv-' + id);
+  const isOpen = items.classList.toggle('aberto');
+  chv.classList.toggle('aberto', isOpen);
+}
+
+function toggleGrupoCheck(id, checked) {
+  document.querySelectorAll('.perm-child-' + id).forEach(cb => cb.checked = checked);
+}
+
+function atualizarGrupo(id) {
+  const cbs = document.querySelectorAll('.perm-child-' + id);
+  const grpCheck = document.getElementById('grp-check-' + id);
+  const total = cbs.length;
+  const marcados = [...cbs].filter(c => c.checked).length;
+  grpCheck.indeterminate = marcados > 0 && marcados < total;
+  grpCheck.checked = marcados === total;
+}
+
+function marcarTodos(val) {
+  document.querySelectorAll('.perm-items input[type=checkbox]').forEach(cb => cb.checked = val);
+  document.querySelectorAll('.perm-grp-check').forEach(cb => {
+    cb.checked = val;
+    cb.indeterminate = false;
+  });
+}
+
+// Inicializa estado dos checkboxes de grupo
+document.addEventListener('DOMContentLoaded', () => {
+  {% for grupo in permission_tree %}
+  atualizarGrupo('{{ grupo.id }}');
+  {% endfor %}
+
+  // Abre o primeiro grupo por padrão
+  toggleGrupo('{{ permission_tree.0.id }}');
+});
+</script>
+{% endblock %}

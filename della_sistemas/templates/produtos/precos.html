@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block titulo %}Preços | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+.precos-layout { display: grid; grid-template-columns: 300px 1fr; gap: 1.5rem; align-items: start; }
+@media (max-width: 900px) { .precos-layout { grid-template-columns: 1fr; } }
+
+.precos-painel {
+  background: var(--branco);
+  border: 1px solid var(--cinza-medio);
+  border-radius: 10px;
+  padding: 1.5rem;
+  position: sticky;
+  top: calc(var(--header-h) + 1rem);
+}
+
+.campo-wrapper { position: relative; }
+.autocomplete-lista {
+  position: absolute; z-index: 50;
+  background: var(--branco);
+  border: 1px solid var(--cinza-medio);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  max-height: 220px; overflow-y: auto;
+  width: 100%;
+}
+.autocomplete-lista div { padding: 0.55rem 0.85rem; cursor: pointer; font-size: 0.85rem; }
+.autocomplete-lista div:hover { background: var(--cinza-claro); }
+
+.precos-campo-valor {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+.precos-campo-valor label { font-size: 0.82rem; color: var(--cinza-texto); }
+.precos-campo-valor input { text-align: right; }
+
+.tabela-precos-actions {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--cinza-medio);
+}
+.check-cor { accent-color: var(--dourado); width: 15px; height: 15px; cursor: pointer; }
+.loading-msg { color: var(--cinza-texto); font-size: 0.88rem; padding: 2rem 0; text-align: center; }
+
+/* Tabela de preços */
+.tabela-precos { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.tabela-precos thead tr { border-bottom: 2px solid var(--cinza-medio); }
+.tabela-precos thead th {
+  padding: 0.75rem 1rem;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--cinza-texto); text-transform: uppercase;
+}
+.tabela-precos tbody tr { border-bottom: 1px solid var(--cinza-medio); }
+.tabela-precos tbody tr:last-child { border-bottom: none; }
+.tabela-precos tbody tr:hover { background: var(--cinza-claro); }
+.tabela-precos td { padding: 0.85rem 1rem; vertical-align: middle; }
+.col-check { width: 44px; text-align: center !important; }
+.col-sku { width: 90px; text-align: center; color: var(--cinza-texto); font-size: 0.8rem; }
+.col-cor { text-align: left; }
+.col-preco { width: 120px; text-align: center; font-variant-numeric: tabular-nums; }
+.preco-vazio { color: var(--cinza-texto); }
+
+.tabs-precos { display: flex; gap: 0.5rem; }
+.tabs-precos a {
+  padding: 0.35rem 0.9rem; border-radius: 20px; font-size: 0.8rem;
+  color: var(--cinza-texto); text-decoration: none;
+  border: 1px solid var(--cinza-medio);
+}
+.tabs-precos a.ativo { background: var(--preto); color: var(--branco); border-color: var(--preto); }
+
+.upload-section {
+  background: var(--branco);
+  border: 1px solid var(--cinza-medio);
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header flex-between">
+  <div>
+    <h1 class="ds-page-titulo">Preços</h1>
+    <p class="ds-page-subtitulo">Ajuste varejo, custo e atacado por modelo e cor</p>
+  </div>
+  <div class="tabs-precos">
+    <a href="{% url 'produtos:precos' %}" class="ativo">Ajustar Preços</a>
+    <a href="{% url 'produtos:historico_precos' %}">Histórico</a>
+  </div>
+</div>
+
+{% if job %}
+  {% include "produtos/_precos_job_status.html" %}
+{% endif %}
+
+<form id="form-precos" method="post" action="{% url 'produtos:aplicar_precos' %}">
+  {% csrf_token %}
+  <input type="hidden" name="base_name" id="hidden-base-name">
+
+  <div class="precos-layout">
+
+    <!-- Painel lateral -->
+    <div class="precos-painel">
+      <div class="ds-form-section-titulo">Modelo</div>
+
+      <!-- Autocomplete de modelo -->
+      <div class="ds-form-group" style="margin-bottom:1.25rem;">
+        <label class="ds-label">Buscar modelo</label>
+        <div class="campo-wrapper">
+          <input class="ds-input" type="text" id="input-modelo" name="q"
+                 placeholder="Digite o nome..."
+                 autocomplete="off"
+                 hx-get="{% url 'produtos:htmx_modelos_precos' %}"
+                 hx-trigger="input changed delay:300ms"
+                 hx-target="#modelos-lista"
+                 hx-include="this">
+          <div id="modelos-lista" class="autocomplete-lista" style="display:none;"></div>
+        </div>
+        <div id="modelo-selecionado-tag" style="display:none;margin-top:0.5rem;">
+          <span id="modelo-selecionado-nome" style="font-size:0.82rem;color:var(--dourado);font-weight:600;"></span>
+          <button type="button" onclick="limparModelo()" style="background:none;border:none;cursor:pointer;color:var(--cinza-texto);font-size:0.75rem;margin-left:0.5rem;">✕ limpar</button>
+        </div>
+      </div>
+
+      <div class="ds-form-section-titulo" style="margin-top:1rem;">Novos valores</div>
+      <p style="font-size:0.75rem;color:var(--cinza-texto);margin-bottom:0.75rem;">Deixe em branco para não alterar</p>
+
+      <div class="precos-campo-valor">
+        <label>Varejo (R$)</label>
+        <input class="ds-input" type="text" name="varejo" id="inp-varejo" placeholder="0,00" autocomplete="off">
+      </div>
+      <div class="precos-campo-valor">
+        <label>Custo (R$)</label>
+        <input class="ds-input" type="text" name="custo" id="inp-custo" placeholder="0,00" autocomplete="off">
+      </div>
+      <div class="precos-campo-valor">
+        <label>Atacado (R$)</label>
+        <input class="ds-input" type="text" name="atacado" id="inp-atacado" placeholder="0,00" autocomplete="off">
+      </div>
+
+      <button type="submit" class="ds-btn ds-btn--dourado" id="btn-aplicar"
+              style="width:100%;justify-content:center;margin-top:1rem;" disabled>
+        Aplicar aos selecionados
+      </button>
+      <p class="loading-msg" id="info-sel" style="padding:0.5rem 0;font-size:0.78rem;">
+        Selecione um modelo e as cores desejadas
+      </p>
+    </div>
+
+    <!-- Tabela de cores -->
+    <div>
+      <div id="acoes-tabela" style="display:none;" class="ds-table-wrapper" style="margin-bottom:0;border-bottom:none;border-radius:10px 10px 0 0;">
+        <div class="tabela-precos-actions">
+          <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" id="btn-sel-todos">Selecionar todos</button>
+          <span style="font-size:0.8rem;color:var(--cinza-texto);" id="sel-count">0 cor(es) selecionada(s)</span>
+        </div>
+      </div>
+
+      <div id="tabela-precos-wrap">
+        <div class="ds-form-section" style="text-align:center;padding:2.5rem;border-style:dashed;">
+          <p class="text-muted">Digite um modelo acima para ver as cores e preços atuais.</p>
+        </div>
+      </div>
+      <span id="loading-tabela" class="htmx-indicator loading-msg">Buscando preços no Bling...</span>
+    </div>
+
+  </div>
+</form>
+
+{% if pode_exportar %}
+<!-- Exportar CSV de Atacado para Bling -->
+<div class="upload-section">
+  <div class="ds-form-section-titulo">Exportar Preços de Atacado para o Bling</div>
+  <p style="font-size:0.82rem;color:var(--cinza-texto);margin-bottom:1.25rem;">
+    Importe o arquivo gerado no Bling em <strong>Cadastros → Lista de Preços</strong>.
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.5rem;">
+
+    <div style="border:1px solid var(--cinza-medio);border-radius:8px;padding:1.25rem;">
+      <div style="font-weight:600;font-size:0.88rem;margin-bottom:0.4rem;">Exportar Tudo</div>
+      <p style="font-size:0.8rem;color:var(--cinza-texto);margin-bottom:0.9rem;">
+        Gera o CSV completo com o preço de atacado mais recente de cada produto.
+      </p>
+      <a href="{% url 'produtos:exportar_atacado_csv' %}" class="ds-btn ds-btn--outline ds-btn--sm">
+        Baixar XLSX — todos os produtos
+      </a>
+    </div>
+
+    <div style="border:1px solid var(--cinza-medio);border-radius:8px;padding:1.25rem;">
+      <div style="font-weight:600;font-size:0.88rem;margin-bottom:0.4rem;">Exportar Últimas Alterações</div>
+      <p style="font-size:0.8rem;color:var(--cinza-texto);margin-bottom:0.9rem;">
+        Gera o CSV apenas com produtos alterados desde a última exportação (novos ou com preço modificado).
+        Após baixar, esses itens são marcados como exportados.
+      </p>
+      <a href="{% url 'produtos:exportar_atacado_ultimas' %}" class="ds-btn ds-btn--dourado ds-btn--sm">
+        Baixar XLSX — últimas alterações
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block js_extra %}
+<script>
+const formPrecos    = document.getElementById('form-precos');
+const hiddenBase    = document.getElementById('hidden-base-name');
+const btnAplicar    = document.getElementById('btn-aplicar');
+const infoSel       = document.getElementById('info-sel');
+const acoes         = document.getElementById('acoes-tabela');
+const selCount      = document.getElementById('sel-count');
+const btnSelTodos   = document.getElementById('btn-sel-todos');
+const inputModelo   = document.getElementById('input-modelo');
+const modelosLista  = document.getElementById('modelos-lista');
+const modeloTag     = document.getElementById('modelo-selecionado-tag');
+const modeloNome    = document.getElementById('modelo-selecionado-nome');
+
+function onModeloPrecoSelecionado(nome) {
+  hiddenBase.value = nome;
+  inputModelo.value = nome;
+  modeloNome.textContent = '✓ ' + nome;
+  modeloTag.style.display = 'block';
+  modelosLista.style.display = 'none';
+
+  // Dispara carregamento de cores via HTMX
+  htmx.ajax('GET', '{% url "produtos:htmx_precos_cores" %}?modelo=' + encodeURIComponent(nome), {
+    target: '#tabela-precos-wrap',
+    indicator: '#loading-tabela',
+  });
+  acoes.style.display = 'block';
+  atualizarBotao();
+}
+
+function limparModelo() {
+  hiddenBase.value = '';
+  inputModelo.value = '';
+  modeloTag.style.display = 'none';
+  acoes.style.display = 'none';
+  document.getElementById('tabela-precos-wrap').innerHTML =
+    '<div class="ds-form-section" style="text-align:center;padding:2.5rem;border-style:dashed;"><p class="text-muted">Digite um modelo acima para ver as cores e preços atuais.</p></div>';
+  atualizarBotao();
+}
+
+// Mostrar/ocultar lista de modelos após HTMX retornar
+document.body.addEventListener('htmx:afterSwap', (e) => {
+  if (e.detail.target.id === 'modelos-lista') {
+    modelosLista.style.display = modelosLista.innerHTML.trim() ? 'block' : 'none';
+  }
+  if (e.detail.target.id === 'tabela-precos-wrap') {
+    vincularCheckboxes();
+    atualizarBotao();
+  }
+});
+
+// Fechar lista ao clicar fora
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.campo-wrapper')) {
+    modelosLista.style.display = 'none';
+  }
+});
+
+function vincularCheckboxes() {
+  document.querySelectorAll('.check-cor').forEach(cb => {
+    cb.addEventListener('change', atualizarBotao);
+  });
+}
+
+function atualizarBotao() {
+  const n = document.querySelectorAll('.check-cor:checked').length;
+  const temModelo = hiddenBase.value !== '';
+  selCount.textContent = `${n} cor(es) selecionada(s)`;
+  btnAplicar.disabled = !(temModelo && n > 0);
+  infoSel.textContent = n > 0
+    ? `${n} cor(es) — preencha os valores e clique em Aplicar`
+    : 'Selecione as cores que deseja ajustar';
+}
+
+let todosSel = false;
+btnSelTodos.addEventListener('click', () => {
+  todosSel = !todosSel;
+  document.querySelectorAll('.check-cor').forEach(cb => cb.checked = todosSel);
+  btnSelTodos.textContent = todosSel ? 'Desmarcar todos' : 'Selecionar todos';
+  atualizarBotao();
+});
+
+formPrecos.addEventListener('submit', (e) => {
+  if (!hiddenBase.value || !document.querySelectorAll('.check-cor:checked').length) {
+    e.preventDefault();
+    return;
+  }
+  btnAplicar.disabled = true;
+  btnAplicar.textContent = 'Enviando...';
+});
+</script>
+{% endblock %}

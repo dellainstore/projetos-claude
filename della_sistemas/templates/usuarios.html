@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block titulo %}Usuários | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header flex-between">
+  <div>
+    <h1 class="ds-page-titulo">Usuários</h1>
+    <p class="ds-page-subtitulo">Gerenciar acessos e permissões</p>
+  </div>
+  <a href="{% url 'core:usuario_criar' %}" class="ds-btn ds-btn--primario">+ Novo Usuário</a>
+</div>
+
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>Usuário</th>
+        <th>Nome</th>
+        <th>E-mail</th>
+        <th>Papel</th>
+        <th>Status</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in usuarios %}
+      <tr>
+        <td><strong>{{ u.username }}</strong></td>
+        <td>{{ u.get_full_name|default:"—" }}</td>
+        <td>{{ u.email|default:"—" }}</td>
+        <td><span class="ds-status {% if u.papel == 'superadmin' %}ds-status--processado{% elif u.papel == 'gestor' %}ds-status--aprovado{% elif u.papel == 'viewer' %}ds-status--pendente{% else %}ds-status--pendente{% endif %}">{{ u.get_papel_display }}</span></td>
+        <td>
+          {% if u.is_active %}
+          <span class="ds-status ds-status--aprovado">Ativo</span>
+          {% else %}
+          <span class="ds-status ds-status--rejeitado">Inativo</span>
+          {% endif %}
+        </td>
+        <td>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <a href="{% url 'core:usuario_editar' u.pk %}" class="ds-btn ds-btn--outline ds-btn--sm">Editar</a>
+            {% if u != request.user %}
+            <form method="post" action="{% url 'core:usuario_desativar' u.pk %}" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="ds-btn ds-btn--perigo ds-btn--sm"
+                onclick="return confirm('Confirmar?')">
+                {% if u.is_active %}Desativar{% else %}Ativar{% endif %}
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-center text-muted" style="padding:2rem;">Nenhum usuário cadastrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#c9a96e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="D'ELLA">
+  <title>{% block titulo %}D'ELLA Sistemas{% endblock %}</title>
+
+  <link rel="manifest" href="{{ STATIC_URL }}manifest.json">
+  <link rel="icon" type="image/svg+xml" href="{{ STATIC_URL }}favicon.svg">
+  <link rel="icon" type="image/png" href="{{ STATIC_URL }}favicon.png">
+  <link rel="apple-touch-icon" href="{{ STATIC_URL }}icons/icon-192.png">
+  <link rel="stylesheet" href="{{ STATIC_URL }}css/della_sistemas.css">
+  {% block css_extra %}{% endblock %}
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <header class="ds-header">
+    <button class="ds-menu-toggle" id="btn-menu-toggle" aria-label="Abrir menu">&#9776;</button>
+
+    <a href="{% url 'core:home' %}" class="ds-header-logo">
+      <div class="ds-header-logo-marca">
+        <img src="{{ STATIC_URL }}icons/logo-della.webp" alt="D'ELLA" class="ds-header-logo-img">
+        <span class="ds-header-logo-instore">Instore</span>
+      </div>
+      <span class="ds-header-logo-sistemas">Sistemas</span>
+    </a>
+
+    <div class="ds-header-spacer"></div>
+
+    {% if user.is_authenticated %}
+    <div class="ds-header-user">
+      <div>
+        <div class="ds-header-user-nome">{{ user.get_full_name|default:user.username }}</div>
+        <div class="ds-header-user-papel">{{ user.get_papel_display }}</div>
+      </div>
+      <form method="post" action="{% url 'core:logout' %}" style="margin:0">
+        {% csrf_token %}
+        <button type="submit" class="ds-btn-logout">Sair</button>
+      </form>
+    </div>
+    {% endif %}
+  </header>
+
+  <!-- ── Overlay mobile ──────────────────────────────────────────────────── -->
+  <div class="ds-sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div class="ds-layout">
+
+    <!-- ── Sidebar ───────────────────────────────────────────────────────── -->
+    <aside class="ds-sidebar" id="ds-sidebar">
+
+      <!-- Home -->
+      <div class="ds-nav-section">
+        <a href="{% url 'core:home' %}"
+           class="ds-nav-link {% if request.resolver_match.url_name == 'home' %}ativo{% endif %}">
+          <span class="ds-nav-icon">&#8962;</span>
+          Dashboard
+        </a>
+      </div>
+
+      <div class="ds-nav-separador"></div>
+
+      <!-- Produtos (expansível) -->
+      {% if user.pode_incluir or user.pode_aprovar or user.is_superadmin %}
+      <div class="ds-nav-group">
+        <div class="ds-nav-link ds-nav-group-toggle {% if request.resolver_match.app_names and 'produtos' in request.resolver_match.app_names %}ativo{% endif %}"
+             onclick="toggleNav('produtos')">
+          <span class="ds-nav-icon">&#128188;</span>
+          Produtos
+          <span class="ds-nav-chevron" id="chv-nav-produtos">&#9658;</span>
+        </div>
+        <div class="ds-nav-subitens" id="sub-produtos">
+          {% if user.pode_incluir %}
+          <a href="{% url 'produtos:incluir' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'incluir' %}ativo{% endif %}">
+            <span class="ds-nav-icon">+</span>
+            Incluir Estoque
+          </a>
+          {% endif %}
+          {% if user.pode_aprovar %}
+          <a href="{% url 'produtos:aprovacoes' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'aprovacoes' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#10003;</span>
+            Aprovações
+          </a>
+          {% endif %}
+          {% if user.pode_aprovar %}
+          <a href="{% url 'produtos:precos' %}"
+             class="ds-nav-sublink {% if 'precos' in request.resolver_match.url_name %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#36;</span>
+            Preços
+          </a>
+          {% endif %}
+          <!-- Histórico (nested) -->
+          <div class="ds-nav-group">
+            <div class="ds-nav-sublink ds-nav-group-toggle {% if 'historico' in request.resolver_match.url_name and request.resolver_match.namespace != 'pedidos' %}ativo{% endif %}"
+                 onclick="toggleNav('historico')">
+              <span class="ds-nav-icon">&#9776;</span>
+              Histórico
+              <span class="ds-nav-chevron" id="chv-nav-historico">&#9658;</span>
+            </div>
+            <div class="ds-nav-subitens" id="sub-historico">
+              <a href="{% url 'produtos:historico' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'historico' and request.resolver_match.namespace != 'pedidos' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#43;</span>
+                Inclusões
+              </a>
+              {% if user.pode_aprovar %}
+              <a href="{% url 'produtos:historico_precos' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'historico_precos' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#36;</span>
+                Preços
+              </a>
+              {% endif %}
+            </div>
+          </div>
+          {% if user.is_superadmin %}
+          <a href="{% url 'produtos:manutencao' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'manutencao' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9881;</span>
+            Manutenção
+          </a>
+          {% endif %}
+          <a href="{% url 'produtos:resumo' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'resumo' and request.resolver_match.namespace == 'produtos' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9783;</span>
+            Resumo
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Metas (expansível) -->
+      {% if user.pode_ver_metas or user.pode_cadastrar_metas %}
+      <div class="ds-nav-group">
+        <div class="ds-nav-link ds-nav-group-toggle {% if 'metas' in request.resolver_match.app_names %}ativo{% endif %}"
+             onclick="toggleNav('metas')">
+          <span class="ds-nav-icon">&#127919;</span>
+          Metas
+          <span class="ds-nav-chevron" id="chv-nav-metas">&#9658;</span>
+        </div>
+        <div class="ds-nav-subitens" id="sub-metas">
+          {% if user.pode_cadastrar_metas %}
+          <a href="{% url 'metas:cadastro_funcionarios' %}"
+             class="ds-nav-sublink {% if 'cadastro' in request.resolver_match.url_name|default:'' %}ativo{% endif %}">
+            <span class="ds-nav-icon">+</span>
+            Cadastro de Metas
+          </a>
+          {% endif %}
+          {% if user.pode_ver_metas %}
+          <a href="{% url 'metas:dashboard' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'dashboard' and 'metas' in request.resolver_match.app_names %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9776;</span>
+            Metas
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Pedidos (expansível) -->
+      {% if user.pode_ver_pedidos %}
+      <div class="ds-nav-group">
+        <div class="ds-nav-link ds-nav-group-toggle {% if request.resolver_match.app_names and 'pedidos' in request.resolver_match.app_names %}ativo{% endif %}"
+             onclick="toggleNav('pedidos')">
+          <span class="ds-nav-icon">&#128203;</span>
+          Pedidos
+          <span class="ds-nav-chevron" id="chv-nav-pedidos">&#9658;</span>
+        </div>
+        <div class="ds-nav-subitens" id="sub-pedidos">
+          <a href="{% url 'pedidos:pendentes' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'pendentes' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9675;</span>
+            Pedidos Em Andamento
+          </a>
+          <a href="{% url 'pedidos:dashboard' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'dashboard' and 'pedidos' in request.resolver_match.app_names %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9776;</span>
+            Pedidos Pendentes
+          </a>
+          <!-- Pagamentos (nested) -->
+          <div class="ds-nav-group">
+            <div class="ds-nav-sublink ds-nav-group-toggle {% if 'pagamentos' in request.resolver_match.url_name|default:'' %}ativo{% endif %}"
+                 onclick="toggleNav('pagamentos')">
+              <span class="ds-nav-icon">&#36;</span>
+              Pagamentos
+              <span class="ds-nav-chevron" id="chv-nav-pagamentos">&#9658;</span>
+            </div>
+            <div class="ds-nav-subitens" id="sub-pagamentos">
+              <a href="{% url 'pedidos:pagamentos_resumo' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'pagamentos_resumo' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9636;</span>
+                Resumo
+              </a>
+              <a href="{% url 'pedidos:pagamentos_pendentes' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'pagamentos_pendentes' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9711;</span>
+                Pendentes
+              </a>
+              <a href="{% url 'pedidos:pagamentos_confirmados' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'pagamentos_confirmados' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#10003;</span>
+                Confirmados
+              </a>
+            </div>
+          </div>
+          <a href="{% url 'pedidos:historico' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'historico' and request.resolver_match.namespace == 'pedidos' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#8635;</span>
+            Pedidos Alterados
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Site (Analytics + Relatorio Semanal) -->
+      {% if user.pode_ver_analytics %}
+      <div class="ds-nav-group">
+        <div class="ds-nav-link ds-nav-group-toggle {% if request.resolver_match.namespace == 'analytics' %}ativo{% endif %}"
+             onclick="toggleNav('site')">
+          <span class="ds-nav-icon">&#128200;</span>
+          Site
+          <span class="ds-nav-chevron" id="chv-nav-site">&#9658;</span>
+        </div>
+        <div class="ds-nav-subitens" id="sub-site">
+          <a href="{% url 'analytics:dashboard' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'analytics' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#128202;</span>
+            Analytics do Site
+          </a>
+          <a href="{% url 'analytics:relatorio_list' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'relatorio_list' or request.resolver_match.url_name == 'relatorio_download' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#128196;</span>
+            Resumo Semanal
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if user.pode_ver_em_breve %}
+      <div class="ds-nav-separador"></div>
+
+      <!-- Em breve -->
+      <div class="ds-nav-section">
+        <div class="ds-nav-section-titulo">Em breve</div>
+
+        <span class="ds-nav-link desabilitado">
+          <span class="ds-nav-icon">&#128202;</span>
+          Estoque
+          <span class="ds-badge-em-breve">breve</span>
+        </span>
+
+        <span class="ds-nav-link desabilitado">
+          <span class="ds-nav-icon">&#128176;</span>
+          Financeiro
+          <span class="ds-badge-em-breve">breve</span>
+        </span>
+      </div>
+      {% endif %}
+
+      <div class="ds-nav-separador"></div>
+
+      <!-- Admin -->
+      {% if user.is_superadmin %}
+      <div class="ds-nav-section">
+        <div class="ds-nav-section-titulo">Administração</div>
+        <a href="{% url 'core:usuarios' %}"
+           class="ds-nav-link {% if 'usuario' in request.resolver_match.url_name %}ativo{% endif %}">
+          <span class="ds-nav-icon">&#128101;</span>
+          Usuários
+        </a>
+      </div>
+      {% endif %}
+
+    </aside>
+
+    <!-- ── Tab colapsar sidebar (desktop) ───────────────────────────────────── -->
+    <button class="ds-sidebar-tab" id="sidebar-tab" onclick="toggleSidebar()" title="Recolher/expandir menu" aria-label="Recolher menu">
+      <span id="sidebar-tab-icon">&#9664;</span>
+    </button>
+
+    <!-- ── Conteúdo principal ─────────────────────────────────────────────── -->
+    <main class="ds-main">
+
+      <!-- Mensagens Django -->
+      {% if messages %}
+      <div class="ds-messages">
+        {% for msg in messages %}
+        <div class="ds-alert ds-alert--{{ msg.tags|default:'info' }}">
+          {{ msg }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% block conteudo %}{% endblock %}
+
+    </main>
+
+  </div><!-- .ds-layout -->
+
+  <script>
+    // Sidebar toggle mobile
+    const sidebar  = document.getElementById('ds-sidebar');
+    const overlay  = document.getElementById('sidebar-overlay');
+    const btnToggle = document.getElementById('btn-menu-toggle');
+
+    function abrirSidebar() {
+      sidebar.classList.add('aberta');
+      overlay.classList.add('visivel');
+      document.body.style.overflow = 'hidden';
+    }
+    function fecharSidebar() {
+      sidebar.classList.remove('aberta');
+      overlay.classList.remove('visivel');
+      document.body.style.overflow = '';
+    }
+
+    btnToggle.addEventListener('click', () => {
+      sidebar.classList.contains('aberta') ? fecharSidebar() : abrirSidebar();
+    });
+    overlay.addEventListener('click', fecharSidebar);
+
+    // Nav group toggle (submenus)
+    function toggleNav(id) {
+      const sub = document.getElementById('sub-' + id);
+      const chv = document.getElementById('chv-nav-' + id);
+      if (!sub) return;
+      const open = sub.classList.toggle('aberto');
+      if (chv) chv.classList.toggle('aberto', open);
+    }
+
+    // Auto-abrir grupo ativo ao carregar
+    document.addEventListener('DOMContentLoaded', () => {
+      if (document.querySelector('.ds-nav-sublink.ativo')) {
+        document.querySelectorAll('.ds-nav-subitens').forEach(sub => {
+          if (sub.querySelector('.ativo')) {
+            sub.classList.add('aberto');
+            const chv = document.getElementById('chv-nav-' + sub.id.replace('sub-', ''));
+            if (chv) chv.classList.add('aberto');
+          }
+        });
+      }
+    });
+
+    // PWA install prompt
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredPrompt = e;
+    });
+
+    // Sidebar colapsar/expandir (desktop)
+    function toggleSidebar() {
+      const colapsada = document.body.classList.toggle('sidebar-colapsada');
+      const icon = document.getElementById('sidebar-tab-icon');
+      if (icon) icon.innerHTML = colapsada ? '&#9654;' : '&#9664;';
+      localStorage.setItem('ds-sidebar-colapsada', colapsada ? '1' : '0');
+    }
+    // Restaurar estado ao carregar
+    (function() {
+      if (localStorage.getItem('ds-sidebar-colapsada') === '1') {
+        document.body.classList.add('sidebar-colapsada');
+        const icon = document.getElementById('sidebar-tab-icon');
+        if (icon) icon.innerHTML = '&#9654;';
+      }
+    })();
+  </script>
+  <script src="{{ STATIC_URL }}js/htmx.min.js"></script>
+  {% block js_extra %}{% endblock %}
+</body>
+</html>

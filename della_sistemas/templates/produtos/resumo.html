@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block titulo %}Produtos — Resumo{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <div>
+    <h1 class="ds-page-title">Resumo de Produtos</h1>
+    <p class="ds-page-subtitle">Movimentações e estatísticas do módulo de estoque</p>
+  </div>
+</div>
+
+<div class="ds-cards-grid">
+  <div class="ds-card ds-card--dourado">
+    <div class="ds-card-rotulo">Pendentes de Aprovação</div>
+    <div class="ds-card-valor">{{ stats.pendentes }}</div>
+    <div class="ds-card-apoio">Inclusões aguardando aprovação</div>
+  </div>
+  <div class="ds-card">
+    <div class="ds-card-rotulo">Incluídos Hoje</div>
+    <div class="ds-card-valor">{{ stats.incluidos_hoje }}</div>
+    <div class="ds-card-apoio">Movimentações de hoje</div>
+  </div>
+  <div class="ds-card ds-card--verde">
+    <div class="ds-card-rotulo">Aprovados este Mês</div>
+    <div class="ds-card-valor">{{ stats.aprovados_mes }}</div>
+    <div class="ds-card-apoio">Total processado no mês</div>
+  </div>
+  <div class="ds-card">
+    <div class="ds-card-rotulo">Produtos no Catálogo</div>
+    <div class="ds-card-valor">{{ stats.total_produtos }}</div>
+    <div class="ds-card-apoio">Variantes sincronizadas</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-bottom:2rem;">
+  {% if user.pode_incluir %}
+  <a href="{% url 'produtos:incluir' %}" style="text-decoration:none;">
+    <div class="ds-card" style="cursor:pointer;transition:all 0.25s;">
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <div style="width:44px;height:44px;background:rgba(201,169,110,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">+</div>
+        <div>
+          <div style="font-weight:600;font-size:0.9rem;margin-bottom:0.2rem;">Incluir Estoque</div>
+          <div class="text-muted" style="font-size:0.75rem;">Nova movimentação de estoque</div>
+        </div>
+      </div>
+    </div>
+  </a>
+  {% endif %}
+  {% if user.pode_aprovar %}
+  <a href="{% url 'produtos:aprovacoes' %}" style="text-decoration:none;">
+    <div class="ds-card" style="cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <div style="width:44px;height:44px;background:rgba(45,158,110,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">&#10003;</div>
+        <div>
+          <div style="font-weight:600;font-size:0.9rem;margin-bottom:0.2rem;">Aprovações</div>
+          <div class="text-muted" style="font-size:0.75rem;">
+            {% if stats.pendentes > 0 %}
+              <span style="color:var(--dourado);font-weight:600;">{{ stats.pendentes }} pendente{{ stats.pendentes|pluralize:"s" }}</span>
+            {% else %}
+              Nenhum pendente
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </a>
+  {% endif %}
+  <a href="{% url 'produtos:historico' %}" style="text-decoration:none;">
+    <div class="ds-card" style="cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <div style="width:44px;height:44px;background:rgba(10,10,10,0.06);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">&#9776;</div>
+        <div>
+          <div style="font-weight:600;font-size:0.9rem;margin-bottom:0.2rem;">Histórico</div>
+          <div class="text-muted" style="font-size:0.75rem;">Ver todas as inclusões</div>
+        </div>
+      </div>
+    </div>
+  </a>
+</div>
+
+{% if ultimas_inclusoes %}
+<h2 style="font-size:1rem;font-weight:500;margin-bottom:1rem;color:var(--preto);">Últimas Inclusões</h2>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Produto / SKU</th>
+        <th>Qtd</th>
+        <th>Por</th>
+        <th>Status</th>
+        <th>Data</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for req in ultimas_inclusoes %}
+      <tr>
+        <td class="text-muted">{{ req.request_id }}</td>
+        <td>{{ req.produto_nome }}</td>
+        <td><strong>{{ req.qtd }}</strong></td>
+        <td>{{ req.created_by }}</td>
+        <td><span class="ds-status ds-status--{{ req.status|lower }}">{{ req.status }}</span></td>
+        <td class="text-muted">{{ req.data }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="ds-paginacao">
+    <a href="{% url 'produtos:historico' %}" class="ds-btn ds-btn--outline ds-btn--sm">Ver todo histórico</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

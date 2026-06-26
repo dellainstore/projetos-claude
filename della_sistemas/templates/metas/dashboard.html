@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Metas | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+  /* ── Filtro de período ─────────────────────────────────────── */
+  .metas-filtro {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    background: var(--branco);
+    border: 1px solid var(--cinza-medio);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+  }
+  .filtro-tabs { display: flex; gap: 0.35rem; }
+  .filtro-tab {
+    padding: 0.38rem 0.9rem;
+    border: 1px solid var(--cinza-medio);
+    border-radius: 6px;
+    font-size: 0.83rem;
+    cursor: pointer;
+    background: transparent;
+    color: var(--cinza-texto);
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .filtro-tab:hover { background: var(--cinza-claro); color: var(--preto); }
+  .filtro-tab.ativo { background: var(--dourado); color: var(--branco); border-color: var(--dourado); font-weight: 600; }
+  .filtro-custom { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  .filtro-custom select {
+    padding: 0.38rem 0.7rem;
+    border: 1px solid var(--cinza-medio);
+    border-radius: 6px;
+    font-size: 0.83rem;
+    background: var(--branco);
+  }
+  .filtro-sep { color: var(--cinza-medio); font-size: 0.9rem; margin: 0 0.15rem; }
+
+  /* ── Cards ────────────────────────────────────────────────── */
+  .metas-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); margin-bottom: 1.5rem; }
+
+  .meta-card {
+    background: var(--branco);
+    border: 1px solid var(--cinza-medio);
+    border-radius: 10px;
+    padding: 1.1rem 1.1rem 0.9rem;
+    display: flex; flex-direction: column; gap: 0.5rem;
+  }
+  .meta-card.sem-meta { background: var(--cinza-claro); }
+  .meta-card-nome { font-weight: 600; font-size: 0.9rem; color: var(--preto); }
+  .meta-card-realizado { font-size: 1.2rem; font-weight: 700; color: var(--preto); }
+  .meta-card-pecas { font-size: 0.75rem; color: var(--cinza-texto); }
+  .meta-card-linha { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--cinza-texto); }
+
+  .meta-pct { font-size: 0.78rem; font-weight: 600; text-align: right; }
+  .meta-pct.atingida { color: #22c55e; }
+  .meta-pct.pendente  { color: var(--cinza-texto); }
+
+  /* ── Sections ─────────────────────────────────────────────── */
+  .metas-section-titulo {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.0rem; font-weight: 400;
+    color: var(--preto);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--cinza-medio);
+  }
+
+  /* ── Tabelas ──────────────────────────────────────────────── */
+  .metas-tabela-wrapper { background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; }
+  .metas-tabela { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  .metas-tabela th { background: var(--cinza-claro); padding: 0.6rem 1rem; text-align: left; font-weight: 600; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cinza-texto); border-bottom: 1px solid var(--cinza-medio); }
+  .metas-tabela td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--cinza-medio); vertical-align: middle; }
+  .metas-tabela tr:last-child td { border-bottom: none; }
+  .metas-tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .sem-dados { text-align: center; padding: 3rem; color: var(--cinza-texto); }
+  .sem-dados .icone { font-size: 2.5rem; margin-bottom: 0.75rem; }
+
+  .tag-sem-meta { font-size: 0.68rem; background: var(--cinza-medio); color: var(--cinza-texto); padding: 0.1rem 0.4rem; border-radius: 3px; }
+  .tag-com-meta  { font-size: 0.68rem; background: #dcfce7; color: #16a34a; padding: 0.1rem 0.4rem; border-radius: 3px; }
+
+  .totais-bar { background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px; padding: 1rem 1.25rem; display: flex; gap: 2rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .totais-bar .item { display: flex; flex-direction: column; gap: 0.1rem; }
+  .totais-bar .item-val { font-size: 1.35rem; font-weight: 700; }
+  .totais-bar .item-label { font-size: 0.72rem; color: var(--cinza-texto); text-transform: uppercase; letter-spacing: 0.04em; }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Metas</h1>
+  <p class="ds-page-subtitulo">{{ periodo_label }}</p>
+</div>
+
+<!-- Filtro de período -->
+<div class="metas-filtro">
+  <div class="filtro-tabs">
+    <a href="?filtro=atual" class="filtro-tab {% if filtro == 'atual' %}ativo{% endif %}">
+      Mês Atual
+    </a>
+    <a href="?filtro=passado" class="filtro-tab {% if filtro == 'passado' %}ativo{% endif %}">
+      Mês Anterior
+    </a>
+    <button type="button" onclick="toggleCustom()" class="filtro-tab {% if filtro == 'custom' %}ativo{% endif %}">
+      Personalizado
+    </button>
+  </div>
+
+  <form id="form-custom" method="get" class="filtro-custom" {% if filtro != 'custom' %}style="display:none;"{% endif %}>
+    <input type="hidden" name="filtro" value="custom">
+    <span style="font-size:0.8rem;color:var(--cinza-texto);white-space:nowrap;">De</span>
+    <select name="mes_ini">
+      {% for num, nome in meses_nomes %}
+      <option value="{{ num }}" {% if num == mes_ini and filtro == 'custom' %}selected{% endif %}>{{ nome }}</option>
+      {% endfor %}
+    </select>
+    <select name="ano_ini">
+      {% for a in anos_disponiveis %}
+      <option value="{{ a }}" {% if a == ano_ini and filtro == 'custom' %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+    <span style="font-size:0.8rem;color:var(--cinza-texto);white-space:nowrap;">até</span>
+    <select name="mes_fim">
+      {% for num, nome in meses_nomes %}
+      <option value="{{ num }}" {% if num == mes_fim and filtro == 'custom' %}selected{% endif %}>{{ nome }}</option>
+      {% endfor %}
+    </select>
+    <select name="ano_fim">
+      {% for a in anos_disponiveis %}
+      <option value="{{ a }}" {% if a == ano_fim and filtro == 'custom' %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="ds-btn ds-btn--primario" style="padding:0.38rem 0.9rem;font-size:0.83rem;">Ver</button>
+    <span style="font-size:0.72rem;color:var(--cinza-texto);">máx. 12 meses</span>
+  </form>
+</div>
+
+{% if sem_dados %}
+<div class="sem-dados">
+  <div class="icone">&#128202;</div>
+  <p><strong>Sem dados para {{ mes_nome }}/{{ ano }}</strong></p>
+  <p style="margin-top:0.5rem;font-size:0.85rem;">O CSV de vendas ainda não tem registros para este mês.</p>
+</div>
+
+{% else %}
+
+<!-- Totais gerais -->
+<div class="totais-bar">
+  <div class="item">
+    <span class="item-val">{{ totais.total|brl }}</span>
+    <span class="item-label">Faturamento total</span>
+  </div>
+  <div class="item">
+    <span class="item-val">{{ totais.pecas }}</span>
+    <span class="item-label">Peças vendidas</span>
+  </div>
+  <div class="item">
+    <span class="item-val">{{ total_pedidos }}</span>
+    <span class="item-label">Pedidos</span>
+  </div>
+</div>
+
+{% if meta_total > 0 %}
+<!-- Meta Geral -->
+<div style="background:var(--branco);border:1px solid var(--cinza-medio);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.5rem;">
+    <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--cinza-texto);">Meta Geral do Período</span>
+    <span style="font-size:1rem;font-weight:700;">{{ pct_meta_total|floatformat:1 }}%</span>
+  </div>
+  <div style="height:8px;background:#e8e8e6;border-radius:4px;overflow:hidden;margin-bottom:0.75rem;">
+    <div style="height:8px;width:{{ pct_meta_total|pct_css }}%;max-width:100%;background:{% if pct_meta_total >= 100 %}#22c55e{% else %}#c9a96e{% endif %};border-radius:4px;"></div>
+  </div>
+  <div style="display:flex;gap:1.5rem;font-size:0.82rem;flex-wrap:wrap;align-items:center;">
+    <span>Meta: <strong>{{ meta_total|brl }}</strong></span>
+    <span>Realizado: <strong>{{ totais.total|brl }}</strong></span>
+    {% if faltam_total > 0 %}
+    <span style="color:var(--cinza-texto);">Faltam: <strong>{{ faltam_total|brl }}</strong></span>
+    {% if por_semana_total > 0 %}
+    <span style="color:var(--cinza-texto);font-size:0.78rem;">≈ {{ por_semana_total|brl }}/semana ({{ dias_restantes }} dias úteis restantes)</span>
+    {% endif %}
+    {% else %}
+    <span style="color:#22c55e;font-weight:600;">&#10003; Meta atingida!</span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Metas individuais -->
+{% if modo_individual and individual %}
+<h2 class="metas-section-titulo">Metas Individuais</h2>
+<div class="metas-grid">
+  {% for item in individual %}
+  <div class="meta-card {% if not item.tem_meta %}sem-meta{% endif %}">
+    <div class="meta-card-nome">{{ item.nome }}</div>
+    <div class="meta-card-realizado">{{ item.realizado|brl }}</div>
+    <div class="meta-card-pecas">{{ item.pecas }} peças</div>
+    {% if item.tem_meta %}
+    <div style="font-size:0.78rem;color:var(--cinza-texto);">Meta: {{ item.meta|brl }}</div>
+    <div style="font-size:0.78rem;color:var(--cinza-texto);">
+      {% if item.pct < 100 %}Faltam: {{ item.faltam|brl }}{% else %}<span style="color:#22c55e;font-weight:600;">&#10003; Atingida</span>{% endif %}
+    </div>
+    <div style="height:6px;background:#e8e8e6;border-radius:3px;overflow:hidden;margin:0.25rem 0;">
+      <div style="height:6px;width:{{ item.pct|pct_css }}%;max-width:100%;background:{% if item.pct >= 100 %}#22c55e{% else %}#c9a96e{% endif %};border-radius:3px;"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="meta-pct {% if item.pct >= 100 %}atingida{% else %}pendente{% endif %}">{{ item.pct|floatformat:1 }}%</div>
+    </div>
+    {% if item.por_semana > 0 %}
+    <div style="font-size:0.72rem;color:var(--cinza-texto);border-top:1px solid #f0f0f0;margin-top:0.3rem;padding-top:0.3rem;">
+      ≈ {{ item.por_semana|brl }}/semana
+    </div>
+    {% endif %}
+    {% else %}
+    <div style="font-size:0.75rem;color:var(--cinza-texto);">Sem meta neste mês</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Metas de canal (incluindo Londrina) -->
+{% if canais %}
+<h2 class="metas-section-titulo">Metas por Canal</h2>
+<div class="metas-grid">
+  {% for canal in canais %}
+  <div class="meta-card {% if not canal.tem_meta %}sem-meta{% endif %}">
+    <div class="meta-card-nome">{{ canal.label }}</div>
+    <div class="meta-card-realizado">{{ canal.realizado|brl }}</div>
+    <div class="meta-card-pecas">{{ canal.pecas }} peças</div>
+    {% if canal.tem_meta %}
+    <div style="font-size:0.78rem;color:var(--cinza-texto);">Meta: {{ canal.meta|brl }}</div>
+    <div style="font-size:0.78rem;color:var(--cinza-texto);">
+      {% if canal.pct < 100 %}Faltam: {{ canal.faltam|brl }}{% else %}<span style="color:#22c55e;font-weight:600;">&#10003; Atingida</span>{% endif %}
+    </div>
+    <div style="height:6px;background:#e8e8e6;border-radius:3px;overflow:hidden;margin:0.25rem 0;">
+      <div style="height:6px;width:{{ canal.pct|pct_css }}%;max-width:100%;background:{% if canal.pct >= 100 %}#22c55e{% else %}#c9a96e{% endif %};border-radius:3px;"></div>
+    </div>
+    <div class="meta-pct {% if canal.pct >= 100 %}atingida{% else %}pendente{% endif %}">{{ canal.pct|floatformat:1 }}%</div>
+    {% if canal.por_semana > 0 %}
+    <div style="font-size:0.72rem;color:var(--cinza-texto);border-top:1px solid #f0f0f0;margin-top:0.3rem;padding-top:0.3rem;">
+      ≈ {{ canal.por_semana|brl }}/semana
+    </div>
+    {% endif %}
+    {% else %}
+    <div><span class="tag-sem-meta">sem meta — só faturamento</span></div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Vendedoras por card -->
+{% if vendedoras %}
+<h2 class="metas-section-titulo">Vendedoras (Geral)</h2>
+<div class="metas-grid">
+  {% for v in vendedoras %}
+  <div class="meta-card {% if not v.tem_meta %}sem-meta{% endif %}">
+    <div class="meta-card-nome">{{ v.vendedora }}</div>
+    <div class="meta-card-realizado">{{ v.total|brl }}</div>
+    <div class="meta-card-pecas">{{ v.pecas }} peças</div>
+    {% if v.tem_meta %}
+    <div><span class="tag-com-meta">com meta individual</span></div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Faturamento por loja -->
+<h2 class="metas-section-titulo">Faturamento por Loja</h2>
+<div class="metas-tabela-wrapper">
+  <table class="metas-tabela">
+    <thead>
+      <tr>
+        <th>Loja / Canal</th>
+        <th class="num">Faturamento</th>
+        <th class="num">% Total</th>
+        <th class="num">Peças</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for loja in lojas %}
+      <tr>
+        <td><strong>{{ loja.label }}</strong></td>
+        <td class="num">{{ loja.total|brl }}</td>
+        <td class="num">{{ loja.pct_total|floatformat:1 }}%</td>
+        <td class="num">{{ loja.pecas }}</td>
+        <td>{% if loja.sem_meta %}<span class="tag-sem-meta">sem meta</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Por situação (apenas usuários com permissão ver_situacao) -->
+{% if por_situacao and user.pode_ver_situacao_metas %}
+<h2 class="metas-section-titulo">Por Situação (Bling)</h2>
+<div class="metas-tabela-wrapper">
+  <table class="metas-tabela">
+    <thead>
+      <tr>
+        <th>Situação</th>
+        <th class="num">Faturamento</th>
+        <th class="num">% Total</th>
+        <th class="num">Peças</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in por_situacao %}
+      <tr>
+        <td>{{ s.situacao }}</td>
+        <td class="num">{{ s.total|brl }}</td>
+        <td class="num">{{ s.pct_total|floatformat:1 }}%</td>
+        <td class="num">{{ s.pecas }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endif %}{# /sem_dados #}
+{% endblock %}
+
+{% block js_extra %}
+<script>
+function toggleCustom() {
+  const f = document.getElementById('form-custom');
+  f.style.display = f.style.display === 'none' ? 'flex' : 'none';
+}
+</script>
+{% endblock %}
