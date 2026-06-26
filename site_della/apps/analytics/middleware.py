@@ -44,23 +44,29 @@ class AnalyticsMiddleware:
 
     def _disparar_async(self, request):
         # Extrai apenas primitivos antes de sair do escopo da request
+        from apps.analytics.services import utms_da_url
+
         session_key  = request.session.session_key or ''
         pagina_url   = request.path[:500]
         ua           = request.META.get('HTTP_USER_AGENT', '')
         cookie_attr  = request.COOKIES.get('della_attr', '')
+        # UTM da query string: disponivel ja no clique de entrada do anuncio,
+        # antes do JS gravar o cookie della_attr (dict de strings, seguro p/ thread)
+        url_utms     = utms_da_url(request.GET)
 
         t = threading.Thread(
             target=_executar_pagina_vista,
-            args=(session_key, pagina_url, ua, cookie_attr),
+            args=(session_key, pagina_url, ua, cookie_attr, url_utms),
             daemon=True,
         )
         t.start()
 
 
-def _executar_pagina_vista(session_key: str, pagina_url: str, ua: str, cookie_attr: str):
+def _executar_pagina_vista(session_key: str, pagina_url: str, ua: str,
+                           cookie_attr: str, url_utms: dict | None = None):
     try:
         from apps.analytics.services import obter_ou_criar_sessao_por_valores, registrar_evento
-        sessao = obter_ou_criar_sessao_por_valores(session_key, ua, cookie_attr)
+        sessao = obter_ou_criar_sessao_por_valores(session_key, ua, cookie_attr, url_utms)
         if sessao:
             registrar_evento(sessao, 'pagina_vista', pagina_url=pagina_url)
     except Exception:
