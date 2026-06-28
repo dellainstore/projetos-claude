@@ -10,7 +10,7 @@ except Exception:
 
 DB_PATH: str = PRODUTOS_DB_PATH or os.getenv(
     "PRODUTOS_DB_PATH",
-    "/var/www/della-sistemas/app/produtos/data/inclusoes.db",
+    "/var/www/della-sistemas/projetos-claude/della_sistemas/data/produtos/inclusoes.db",
 )
 
 BLING_AUTH_DIR: str = os.getenv(

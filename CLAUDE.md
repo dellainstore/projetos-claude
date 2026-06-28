@@ -8,7 +8,10 @@ Cada projeto deve ter sua própria subpasta dentro de `projetos-claude/`:
 
 ```
 projetos-claude/
-├── Bot-Telegram/        # Bot do Telegram integrado com Claude AI
+├── della_sistemas/      # Painel web unificado (Django) — produção
+├── site_della/          # E-commerce (Django) — produção
+├── Liga-Scaff/          # Streamlit
+├── Relatorio_de_Metas/  # Relatório de metas (PDF)
 ├── Outro-Projeto/       # ...
 └── CLAUDE.md            # Este arquivo
 ```
@@ -35,7 +38,4 @@ projetos-claude/
 
 ## Projetos
 
-### Bot-Telegram
-Bot do Telegram que integra com a API do Claude (Anthropic) para responder mensagens.
-- Arquivo principal: `Bot-Telegram/bot.py`
-- Serviço systemd: `Bot-Telegram/telegram-claude-bot.service`
+> O projeto **Bot-Telegram** foi removido em 2026-06-28 (sem uso).

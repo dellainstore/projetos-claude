@@ -85,10 +85,10 @@ if _della_site_db_pw:
     }
     DATABASE_ROUTERS = ["apps.analytics.router.DellaSiteRouter"]
 
-# Banco separado somente-leitura do app produtos (SQLite existente)
+# Banco de dados do módulo produtos (SQLite — inclusoes.db)
 PRODUTOS_DB_PATH = os.getenv(
     "PRODUTOS_DB_PATH",
-    "/var/www/della-sistemas/app/produtos/data/inclusoes.db",
+    str(BASE_DIR / "data" / "produtos" / "inclusoes.db"),
 )
 
 AUTH_USER_MODEL = "core.User"

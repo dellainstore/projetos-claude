@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 *.pyo
 db.sqlite3
+# Banco do módulo produtos (inclusoes.db) — dados de negócio, nunca versionar
+data/produtos/
+inclusoes.db
 staticfiles/
 media/
 /var/log/

@@ -90,8 +90,12 @@ della_sistemas/
 
 **Banco principal do Django:** `db.sqlite3` — usuários, sessões, permissões e **metas**.
 
-**Banco do app produtos:** `/var/www/della-sistemas/app/produtos/data/inclusoes.db`
-— lido diretamente via `PRODUTOS_DB_PATH` no `.env`. **Nunca mover nem duplicar.**
+**Banco do módulo produtos:** `della_sistemas/data/produtos/inclusoes.db`
+— lido e escrito diretamente via `PRODUTOS_DB_PATH` no `.env`. Movido para dentro do
+projeto em 2026-06-28 (antes ficava em `app/produtos/data/`, junto do Streamlit já
+desativado). O caminho é resolvido por `BASE_DIR / "data" / "produtos"` no settings;
+ao trocar, atualizar `.env`, `config/settings.py`, `apps/produtos/services/config.py`
+e o cron de `sync_catalog`.
 
 **Tabela `price_history`** (em `inclusoes.db`, criada pelo `services/precos.py`):
 — registra todas as alterações de preço: quem mudou, quando, de quanto para quanto.
@@ -108,7 +112,7 @@ SECRET_KEY=...
 DEBUG=False                  # True apenas em dev local
 LANGUAGE_CODE=pt-br          # ⚠️ faz floatformat usar vírgula — usar pct_css para CSS widths
 ALLOWED_HOSTS=localhost,127.0.0.1,sistemas.dellainstore.com,159.203.101.232
-PRODUTOS_DB_PATH=/var/www/della-sistemas/app/produtos/data/inclusoes.db
+PRODUTOS_DB_PATH=/var/www/della-sistemas/projetos-claude/della_sistemas/data/produtos/inclusoes.db
 BLING_AUTH_DIR=/var/www/della-sistemas/shared/bling_auth
 DEPOSITO_ID=7521173180
 APPLY_STOCK_ON_PROCESS=1
@@ -596,9 +600,12 @@ Para adicionar: criar `apps/estoque/`, adicionar em `INSTALLED_APPS`, incluir UR
 
 ---
 
-## App Streamlit produtos (mantido em paralelo)
+## App Streamlit produtos (DESATIVADO — migrado para o Django)
 
-Continua em `/var/www/della-sistemas/app/produtos/`. Desligar só após validar Django 100%.
+Desativado em 2026-06-28. A UI foi migrada para este projeto Django e o sync de
+catálogo agora roda via `manage.py sync_catalog` (cron diário). O banco `inclusoes.db`
+foi movido para `della_sistemas/data/produtos/`. A pasta `app/produtos/` será removida
+após o período de validação (mantida temporariamente como fallback).
 
 ---
 
