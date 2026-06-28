@@ -9,6 +9,7 @@ TIPOS_EVENTO = [
     ('produto_removido',      'Produto Removido'),
     ('carrinho_visualizado',  'Carrinho Visualizado'),
     ('checkout_iniciado',     'Checkout Iniciado'),
+    ('popup_saida_exibido',   'Popup de Saida Exibido'),
     ('pagamento_selecionado', 'Pagamento Selecionado'),
     ('pedido_finalizado',     'Pedido Finalizado'),
     ('pagamento_confirmado',  'Pagamento Confirmado'),

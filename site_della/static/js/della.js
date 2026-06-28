@@ -1564,8 +1564,14 @@ document.addEventListener('DOMContentLoaded', () => {
   function abrir() {
     var el = document.getElementById('popup-carrinho-email');
     if (!el) return;
+    if (el.classList.contains('popup-ativo')) return;
     el.classList.add('popup-ativo');
     el.removeAttribute('aria-hidden');
+    // Registra no analytics interno que o pop-up de saida apareceu para esta sessao.
+    if (typeof window.dellaTrack === 'function') window.dellaTrack('popup_saida_exibido');
+    // Marca como exibido na hora em que abre: garante 1x por sessao e impede
+    // re-disparo do evento caso o gatilho de saida ocorra mais de uma vez.
+    marcarExibido();
     var input = el.querySelector('#popup-carrinho-email-input');
     if (input) setTimeout(function () { input.focus(); }, 320);
   }
@@ -1643,15 +1649,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     document.addEventListener('mouseleave', onMouseLeave);
 
-    // Mobile: visibilitychange (usuario troca de app / minimiza)
-    var mobileTriggered = false;
+    // Saida (mobile + desktop): aba fica oculta -- troca de app, bloqueio de
+    // tela, fechar ou trocar de aba. Dispara na SAIDA (hidden), nunca no retorno:
+    // o abandono tipico no mobile e sair e NAO voltar, entao esperar o 'visible'
+    // (versao anterior) perdia justamente esse caso e o popup nunca aparecia.
+    // Guarda navegacao interna: clique em link/submit do proprio site tambem
+    // dispara 'hidden', e nesse caso o popup nao deve abrir (nao e abandono).
+    var navegandoInterno = false;
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a[href]');
+      if (a && a.origin === window.location.origin) navegandoInterno = true;
+    }, true);
+    document.addEventListener('submit', function () { navegandoInterno = true; }, true);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'hidden' && !jaExibido() && !mobileTriggered) {
-        mobileTriggered = true;
+      if (document.visibilityState === 'visible') {
+        navegandoInterno = false;
+        return;
       }
-      if (document.visibilityState === 'visible' && mobileTriggered && !jaExibido()) {
-        mobileTriggered = false;
-        setTimeout(abrir, 600);
+      if (document.visibilityState === 'hidden' && !jaExibido() && !navegandoInterno) {
+        abrir();
       }
     });
   }

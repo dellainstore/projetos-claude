@@ -4,6 +4,35 @@ import json
 from django.db import models as _models
 
 
+# Fragmentos de User-Agent que identificam bots, crawlers, scrapers e monitores.
+# Sem este filtro, todo acesso de robo (que chega sem utm_source) era contado
+# como sessao "Direto / Outros", inflando o trafego organico e o contador "ao
+# vivo" de forma irreal -- especialmente acessos desktop, sinal classico de
+# trafego nao-humano num e-commerce de moda mobile-first.
+_BOT_UA_FRAGMENTS = (
+    'bot', 'crawl', 'spider', 'slurp', 'mediapartners', 'adsbot',
+    'facebookexternalhit', 'facebot', 'ia_archiver', 'archive.org',
+    'semrush', 'ahrefs', 'mj12', 'dotbot', 'petalbot', 'yandex',
+    'baidu', 'sogou', 'exabot', 'bingpreview', 'duckduck', 'applebot',
+    'pinterest', 'telegrambot', 'whatsapp', 'discord', 'twitterbot',
+    'linkedinbot', 'embedly', 'python-requests', 'python-httpx',
+    'aiohttp', 'curl/', 'wget', 'go-http-client', 'java/', 'okhttp',
+    'libwww', 'httpclient', 'headless', 'phantomjs', 'puppeteer',
+    'playwright', 'scrapy', 'lighthouse', 'gtmetrix', 'pingdom',
+    'uptimerobot', 'statuscake', 'datadog', 'newrelic', 'node-fetch',
+    'axios', 'guzzlehttp',
+)
+
+
+def eh_bot(ua: str) -> bool:
+    """True se o User-Agent for de bot/crawler/scraper. UA vazio = trata como bot
+    (navegador legitimo sempre envia User-Agent)."""
+    if not ua:
+        return True
+    ua_lower = ua.lower()
+    return any(frag in ua_lower for frag in _BOT_UA_FRAGMENTS)
+
+
 def _detectar_dispositivo(ua: str) -> str:
     ua_lower = ua.lower()
     if 'tablet' in ua_lower or 'ipad' in ua_lower:
@@ -88,6 +117,14 @@ def _get_or_create_por_valores(session_key: str, ua: str, cookie_attr: str,
     from apps.analytics.models import SessaoAnalytics
 
     if not session_key:
+        return None
+
+    # Filtro de bots no ponto unico de criacao de sessao: cobre TODOS os caminhos
+    # (middleware pagina_vista, produto_visualizado na PDP, eventos de carrinho e
+    # o endpoint AJAX). Sem isso, um bot bloqueado no middleware ainda criava
+    # sessao via produto_visualizado -- aparecendo no "ao vivo" sem pagina_vista
+    # (por isso o contador subia mas nenhuma pagina era listada).
+    if eh_bot(ua):
         return None
 
     sessao_hash = hashlib.sha256(session_key.encode()).hexdigest()

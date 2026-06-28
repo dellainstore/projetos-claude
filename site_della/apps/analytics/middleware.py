@@ -1,5 +1,7 @@
 import threading
 
+from apps.analytics.services import eh_bot
+
 
 class AnalyticsMiddleware:
     """Registra pagina_vista para toda requisicao HTML publica GET 200.
@@ -39,6 +41,8 @@ class AnalyticsMiddleware:
         if request.headers.get('HX-Request'):
             return False
         if any(request.path.startswith(p) for p in self._EXCLUIR_PREFIXOS):
+            return False
+        if eh_bot(request.META.get('HTTP_USER_AGENT', '')):
             return False
         return True
 
