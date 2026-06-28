@@ -40,11 +40,6 @@
 
   <div class="ds-form-grid">
     <div class="ds-form-group">
-      <label class="ds-label">Produto contém</label>
-      <input class="ds-input" type="text" name="produto" value="{{ filtros.produto }}">
-    </div>
-
-    <div class="ds-form-group">
       <label class="ds-label">Status</label>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;padding-top:0.3rem;">
         {% for val, label in status_opcoes %}
@@ -66,8 +61,18 @@
 
 <!-- Tabela -->
 {% if tabela %}
+<!-- Filtro instantâneo (produto, cor, fornecedor, SKU) — filtra ao digitar -->
+<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;">
+  <input
+    id="filtro-inclusoes"
+    type="text"
+    placeholder="Filtrar por produto, cor, fornecedor ou SKU..."
+    oninput="filtrarInclusoes()"
+    style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:320px;">
+  <span id="inclusoes-count" style="font-size:.85rem;color:#6b7280;">{{ tabela|length }} registro{{ tabela|length|pluralize:"s" }}</span>
+</div>
 <div class="ds-table-wrapper">
-  <table class="ds-table">
+  <table class="ds-table" id="tabela-inclusoes">
     <thead>
       <tr>
         <th>#</th>
@@ -85,7 +90,7 @@
     </thead>
     <tbody>
       {% for row in tabela %}
-      <tr>
+      <tr data-busca="{{ row.produto|lower }} {{ row.cor|lower }} {{ row.fornecedor|lower }} {{ row.sku|lower }}">
         <td class="text-muted">{{ row.move_id }}</td>
         <td>{{ row.data }}</td>
         <td>{{ row.produto }}</td>
@@ -177,5 +182,19 @@
       }
     });
   });
+
+  function filtrarInclusoes() {
+    const q = (document.getElementById('filtro-inclusoes').value || '').toLowerCase().trim();
+    const linhas = document.querySelectorAll('#tabela-inclusoes tbody tr');
+    let visiveis = 0;
+    linhas.forEach(tr => {
+      const busca = tr.dataset.busca || '';
+      const visivel = !q || busca.includes(q);
+      tr.style.display = visivel ? '' : 'none';
+      if (visivel) visiveis++;
+    });
+    const cnt = document.getElementById('inclusoes-count');
+    if (cnt) cnt.textContent = visiveis + ' registro' + (visiveis !== 1 ? 's' : '');
+  }
 </script>
 {% endblock %}

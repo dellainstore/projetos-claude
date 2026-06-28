@@ -57,13 +57,21 @@ def view_dashboard(request):
         ).order_by("-atualizado_em")
     )
 
+    # Situações distintas presentes nas 3 seções (para o dropdown de filtro)
+    situacoes_presentes = sorted({
+        p.situacao_nome
+        for grupo in (em_aberto, em_andamento_antigos)
+        for item in grupo
+        if (p := item["pedido"]).situacao_nome
+    } | {p.situacao_nome for p in revertidos if p.situacao_nome})
+
     return render(request, "pedidos/dashboard.html", {
         "em_aberto": em_aberto,
         "em_andamento_antigos": em_andamento_antigos,
         "revertidos": revertidos,
         "hoje": hoje,
         "dias_limite_andamento": 3,
-        "sync_state": sync_state.get(),
+        "situacoes_presentes": situacoes_presentes,
     })
 
 

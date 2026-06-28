@@ -17,9 +17,28 @@
   Mudanças detectadas automaticamente a cada sync.
 </div>
 {% else %}
+<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75rem;">
+  <div style="display:flex;flex-direction:column;gap:.2rem;">
+    <label style="font-size:.72rem;color:#6b7280;">Buscar (pedido, cliente, tipo)</label>
+    <input id="filtro-alt" type="text" placeholder="Nº, cliente ou tipo (situação/data)..."
+           oninput="aplicarFiltrosAlt()"
+           style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:280px;">
+  </div>
+  <div style="display:flex;flex-direction:column;gap:.2rem;">
+    <label style="font-size:.72rem;color:#6b7280;">Detectado em (período)</label>
+    <div style="display:flex;align-items:center;gap:.4rem;">
+      <input id="filtro-alt-de" type="date" onchange="aplicarFiltrosAlt()"
+             style="padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;">
+      <span style="color:#9ca3af;font-size:.8rem;">até</span>
+      <input id="filtro-alt-ate" type="date" onchange="aplicarFiltrosAlt()"
+             style="padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;">
+    </div>
+  </div>
+  <span id="alt-count" style="font-size:.85rem;color:#6b7280;padding-bottom:.45rem;"></span>
+</div>
 <div class="ds-card">
   <div class="ds-table-wrapper">
-    <table class="ds-table">
+    <table class="ds-table" id="tabela-alt">
       <thead>
         <tr>
           <th>Pedido</th>
@@ -33,7 +52,9 @@
       </thead>
       <tbody>
         {% for e in eventos %}
-        <tr id="hist-{{ e.tipo }}-{{ e.id }}">
+        <tr id="hist-{{ e.tipo }}-{{ e.id }}"
+            data-busca="{{ e.pedido.numero|lower }} {{ e.pedido.cliente_nome|lower }} {% if e.tipo == 'situacao' %}situação situacao{% else %}data{% endif %}"
+            data-data="{{ e.quando|date:'Y-m-d' }}">
           <td><strong>#{{ e.pedido.numero|default:e.pedido.bling_id }}</strong></td>
           <td>{{ e.pedido.cliente_nome|default:"—" }}</td>
           <td>
@@ -66,5 +87,28 @@
     </table>
   </div>
 </div>
+
+<script>
+function aplicarFiltrosAlt() {
+  const q = (document.getElementById('filtro-alt').value || '').toLowerCase().trim();
+  const de = document.getElementById('filtro-alt-de').value;
+  const ate = document.getElementById('filtro-alt-ate').value;
+  const linhas = document.querySelectorAll('#tabela-alt tbody tr');
+  let visiveis = 0;
+  linhas.forEach(tr => {
+    const busca = (tr.dataset.busca || '');
+    const data = tr.dataset.data || '';
+    let ok = true;
+    if (q && !busca.includes(q)) ok = false;
+    if (ok && de && data && data < de) ok = false;
+    if (ok && ate && data && data > ate) ok = false;
+    tr.style.display = ok ? '' : 'none';
+    if (ok) visiveis++;
+  });
+  const ativo = q || de || ate;
+  const cnt = document.getElementById('alt-count');
+  if (cnt) cnt.textContent = ativo ? visiveis + ' resultado' + (visiveis !== 1 ? 's' : '') : '';
+}
+</script>
 {% endif %}
 {% endblock %}

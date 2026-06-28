@@ -20,25 +20,42 @@
 </div>
 
 {% if pedidos %}
-<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;">
-  <input
-    id="filtro-forma-pend"
-    type="text"
-    placeholder="Filtrar por forma de pagamento..."
-    oninput="filtrarTabela()"
-    style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:240px;">
-  <div style="display:flex;flex-wrap:wrap;gap:.35rem;">
-    {% for chip in chips_forma %}
-    <button type="button" onclick="setFiltro('{{ chip }}')"
-      style="padding:.25rem .65rem;border:1px solid #d1d5db;border-radius:99px;font-size:.8rem;background:#f9fafb;cursor:pointer;white-space:nowrap;"
-      class="chip-filtro">
-      {{ chip }}
-    </button>
-    {% endfor %}
-    <button type="button" onclick="setFiltro('')"
-      style="padding:.25rem .65rem;border:1px solid #d1d5db;border-radius:99px;font-size:.8rem;background:#f9fafb;cursor:pointer;">
-      Todos
-    </button>
+<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75rem;">
+  <div style="display:flex;flex-direction:column;gap:.2rem;">
+    <label style="font-size:.72rem;color:#6b7280;">Buscar (nº, cliente, valor, forma)</label>
+    <input id="filtro-pend" type="text" placeholder="Nº, cliente, valor ou forma (pix, stone...)"
+           oninput="aplicarFiltrosPend()"
+           style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:280px;">
+  </div>
+  <div style="display:flex;flex-direction:column;gap:.2rem;">
+    <label style="font-size:.72rem;color:#6b7280;">Período (data do pedido)</label>
+    <div style="display:flex;align-items:center;gap:.4rem;">
+      <input id="filtro-pend-de" type="date" onchange="aplicarFiltrosPend()"
+             style="padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;">
+      <span style="color:#9ca3af;font-size:.8rem;">até</span>
+      <input id="filtro-pend-ate" type="date" onchange="aplicarFiltrosPend()"
+             style="padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;">
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:.2rem;">
+    <label style="font-size:.72rem;color:#6b7280;">Situação</label>
+    <details style="position:relative;">
+      <summary style="list-style:none;cursor:pointer;padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;background:#fff;min-width:180px;display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+        <span id="sit-label-pend">Todas as situações</span>
+        <span style="color:#9ca3af;font-size:.7rem;">&#9662;</span>
+      </summary>
+      <div style="position:absolute;z-index:50;margin-top:.25rem;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);padding:.5rem;min-width:220px;max-height:280px;overflow-y:auto;">
+        {% for s in situacoes_presentes %}
+        <label style="display:flex;align-items:center;gap:.45rem;font-size:.82rem;padding:.25rem .15rem;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" class="filtro-sit-pend" value="{{ s }}" onchange="aplicarFiltrosPend()">
+          {{ s }}
+        </label>
+        {% endfor %}
+        <div style="border-top:1px solid #eee;margin-top:.4rem;padding-top:.4rem;">
+          <button type="button" onclick="limparSituacoesPend()" class="ds-btn ds-btn--secondary" style="font-size:.75rem;padding:.2rem .6rem;width:100%;">Limpar situações</button>
+        </div>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -61,7 +78,10 @@
     {% for p in pedidos %}
     {% with parcelas=p.parcelas.all %}
     {% with qtd_parcelas=parcelas|length %}
-    <tbody id="grupo-pedido-{{ p.pk }}" data-forma="{{ p.forma_pagamento|lower }}">
+    <tbody id="grupo-pedido-{{ p.pk }}"
+           data-busca="{{ p.numero|lower }} {{ p.cliente_nome|lower }} {{ p.valor_total }} {{ p.forma_pagamento|lower }}{% for parc in parcelas %} {{ parc.forma_pagamento|lower }}{% endfor %}"
+           data-situacao="{{ p.situacao_nome }}"
+           data-data="{{ p.data_pedido|date:'Y-m-d' }}">
 
       {# ── Linha principal do pedido ── #}
       <tr id="row-pedido-{{ p.pk }}">
@@ -253,29 +273,34 @@
 {% endif %}
 
 <script>
-function filtrarTabela() {
-  const q = document.getElementById('filtro-forma-pend').value.toLowerCase();
+function aplicarFiltrosPend() {
+  const q = (document.getElementById('filtro-pend').value || '').toLowerCase().trim();
+  const de = document.getElementById('filtro-pend-de').value;
+  const ate = document.getElementById('filtro-pend-ate').value;
+  const sits = Array.from(document.querySelectorAll('.filtro-sit-pend:checked')).map(c => c.value);
   const grupos = document.querySelectorAll('#tabela-pend tbody');
   let visiveis = 0;
   grupos.forEach(tbody => {
-    const forma = (tbody.dataset.forma || '').toLowerCase();
-    const visivel = !q || forma.includes(q);
-    tbody.style.display = visivel ? '' : 'none';
-    if (visivel) visiveis++;
+    const busca = (tbody.dataset.busca || '');
+    const data = tbody.dataset.data || '';
+    const sit = tbody.dataset.situacao || '';
+    let ok = true;
+    if (q && !busca.includes(q)) ok = false;
+    if (ok && de && data && data < de) ok = false;
+    if (ok && ate && data && data > ate) ok = false;
+    if (ok && sits.length && !sits.includes(sit)) ok = false;
+    tbody.style.display = ok ? '' : 'none';
+    if (ok) visiveis++;
   });
   const cnt = document.getElementById('pend-count');
   if (cnt) cnt.textContent = visiveis;
-
-  document.querySelectorAll('.chip-filtro').forEach(btn => {
-    const match = btn.textContent.trim().toLowerCase() === q;
-    btn.style.background = match ? '#e0e7ff' : '#f9fafb';
-    btn.style.borderColor = match ? '#6366f1' : '#d1d5db';
-  });
+  const lbl = document.getElementById('sit-label-pend');
+  if (lbl) lbl.textContent = sits.length ? (sits.length + ' situação' + (sits.length !== 1 ? 'ões selecionadas' : ' selecionada')) : 'Todas as situações';
 }
 
-function setFiltro(valor) {
-  document.getElementById('filtro-forma-pend').value = valor;
-  filtrarTabela();
+function limparSituacoesPend() {
+  document.querySelectorAll('.filtro-sit-pend:checked').forEach(c => { c.checked = false; });
+  aplicarFiltrosPend();
 }
 
 function toggleParcelas(pedidoId, qtd) {

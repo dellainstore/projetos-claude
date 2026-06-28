@@ -53,6 +53,12 @@ def _resolver_periodo(request):
         inicio = agora - timedelta(days=7)
         fim = agora
 
+    # Oculta dados anteriores ao corte (28/06/2026 — remoção de bots/scans).
+    from apps.analytics.constants import inicio_corte_aware
+    corte = inicio_corte_aware()
+    if inicio < corte:
+        inicio = corte
+
     return filtro, inicio, fim, de_val, ate_val
 
 

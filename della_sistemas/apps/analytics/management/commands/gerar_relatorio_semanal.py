@@ -72,6 +72,12 @@ class Command(BaseCommand):
         fim    = timezone.make_aware(
             datetime.combine(semana_fim, datetime.max.time().replace(microsecond=0)), tz
         )
+
+        # Oculta dados anteriores ao corte (28/06/2026 — remoção de bots/scans).
+        from apps.analytics.constants import inicio_corte_aware
+        corte = inicio_corte_aware()
+        if inicio < corte:
+            inicio = corte
         periodo   = Q(ocorrido_em__range=(inicio, fim))
         sess_qs   = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim))
         comprou   = EventoSite.objects.filter(

@@ -9,18 +9,57 @@
     <h1 class="ds-page-title">Pedidos Em Andamento</h1>
     <p class="ds-page-subtitle">Pedidos em andamento — {{ total }} pedido{{ total|pluralize:"" }}</p>
   </div>
-  <a href="{% url 'pedidos:dashboard' %}" class="ds-btn ds-btn--secondary">&#8592; Pedidos Pendentes</a>
+  {% include "pedidos/_sync_widget.html" %}
 </div>
 
 {% if linhas %}
-<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;">
-  <input
-    id="filtro-andamento"
-    type="text"
-    placeholder="Filtrar por número, cliente ou situação..."
-    oninput="filtrarAndamento()"
-    style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:280px;">
-  <span id="andamento-count" style="font-size:.85rem;color:#6b7280;">{{ total }} pedido{{ total|pluralize:"" }}</span>
+<div style="margin-bottom:1rem;display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75rem;">
+  <!-- 1) Busca por texto (Nº pedido, cliente, valor) — filtra ao digitar -->
+  <div style="display:flex;flex-direction:column;gap:.2rem;">
+    <label style="font-size:.72rem;color:#6b7280;">Buscar (nº, cliente, valor)</label>
+    <input
+      id="filtro-andamento"
+      type="text"
+      placeholder="Nº do pedido, cliente ou valor..."
+      oninput="aplicarFiltros()"
+      style="padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem;min-width:260px;">
+  </div>
+
+  <!-- 2) Filtro por data (personalizada) -->
+  <div style="display:flex;flex-direction:column;gap:.2rem;">
+    <label style="font-size:.72rem;color:#6b7280;">Período (data do pedido)</label>
+    <div style="display:flex;align-items:center;gap:.4rem;">
+      <input id="filtro-data-de" type="date" onchange="aplicarFiltros()"
+             style="padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;">
+      <span style="color:#9ca3af;font-size:.8rem;">até</span>
+      <input id="filtro-data-ate" type="date" onchange="aplicarFiltros()"
+             style="padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;">
+    </div>
+  </div>
+
+  <!-- 3) Filtro por situação (lista de escolha exata) -->
+  <div style="display:flex;flex-direction:column;gap:.2rem;">
+    <label style="font-size:.72rem;color:#6b7280;">Situação</label>
+    <details id="sit-dropdown" style="position:relative;">
+      <summary style="list-style:none;cursor:pointer;padding:.4rem .75rem;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;background:#fff;min-width:180px;display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+        <span id="sit-label">Todas as situações</span>
+        <span style="color:#9ca3af;font-size:.7rem;">&#9662;</span>
+      </summary>
+      <div style="position:absolute;z-index:50;margin-top:.25rem;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);padding:.5rem;min-width:220px;max-height:280px;overflow-y:auto;">
+        {% for s in situacoes_presentes %}
+        <label style="display:flex;align-items:center;gap:.45rem;font-size:.82rem;padding:.25rem .15rem;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" class="filtro-sit" value="{{ s }}" onchange="aplicarFiltros()">
+          {{ s }}
+        </label>
+        {% endfor %}
+        <div style="border-top:1px solid #eee;margin-top:.4rem;padding-top:.4rem;">
+          <button type="button" onclick="limparSituacoes()" class="ds-btn ds-btn--secondary" style="font-size:.75rem;padding:.2rem .6rem;width:100%;">Limpar situações</button>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <span id="andamento-count" style="font-size:.85rem;color:#6b7280;padding-bottom:.45rem;">{{ total }} pedido{{ total|pluralize:"" }}</span>
 </div>
 
 <div class="ds-card">
@@ -38,7 +77,9 @@
       </thead>
       <tbody>
         {% for linha in linhas %}
-        <tr data-busca="{{ linha.pedido.numero|lower }} {{ linha.pedido.cliente_nome|lower }} {{ linha.pedido.situacao_nome|lower }}"
+        <tr data-busca="{{ linha.pedido.numero|lower }} {{ linha.pedido.cliente_nome|lower }} {{ linha.pedido.valor_total }}"
+            data-situacao="{{ linha.pedido.situacao_nome }}"
+            data-data="{{ linha.pedido.data_pedido|date:'Y-m-d' }}"
             {% if linha.alerta %}style="background:#fef9c3;"{% endif %}>
           <td><strong>{{ linha.pedido.numero|default:linha.pedido.bling_id }}</strong></td>
           <td>{{ linha.pedido.data_pedido|date:"d/m/Y" }}</td>
@@ -61,24 +102,47 @@
 </div>
 
 <script>
-function filtrarAndamento() {
-  const q = document.getElementById('filtro-andamento').value.toLowerCase();
+function aplicarFiltros() {
+  const q = (document.getElementById('filtro-andamento').value || '').toLowerCase().trim();
+  const de = document.getElementById('filtro-data-de').value;
+  const ate = document.getElementById('filtro-data-ate').value;
+  const sits = Array.from(document.querySelectorAll('.filtro-sit:checked')).map(c => c.value);
   const linhas = document.querySelectorAll('#tabela-andamento tbody tr');
   let visiveis = 0;
   linhas.forEach(tr => {
-    const busca = (tr.dataset.busca || '').toLowerCase();
-    const visivel = !q || busca.includes(q);
-    tr.style.display = visivel ? '' : 'none';
-    if (visivel) visiveis++;
+    const busca = (tr.dataset.busca || '');
+    const data = tr.dataset.data || '';
+    const sit = tr.dataset.situacao || '';
+    let ok = true;
+    if (q && !busca.includes(q)) ok = false;
+    if (ok && de && data && data < de) ok = false;
+    if (ok && ate && data && data > ate) ok = false;
+    if (ok && sits.length && !sits.includes(sit)) ok = false;
+    tr.style.display = ok ? '' : 'none';
+    if (ok) visiveis++;
   });
   const cnt = document.getElementById('andamento-count');
   if (cnt) cnt.textContent = visiveis + ' pedido' + (visiveis !== 1 ? 's' : '');
+  const lbl = document.getElementById('sit-label');
+  if (lbl) lbl.textContent = sits.length ? (sits.length + ' situação' + (sits.length !== 1 ? 'ões selecionadas' : ' selecionada')) : 'Todas as situações';
+}
+function limparSituacoes() {
+  document.querySelectorAll('.filtro-sit:checked').forEach(c => { c.checked = false; });
+  aplicarFiltros();
 }
 </script>
+
+<!-- Links rápidos -->
+<div style="display:flex;gap:1rem;margin-top:2rem;flex-wrap:wrap;">
+  <a href="{% url 'pedidos:dashboard' %}" class="ds-btn ds-btn--secondary">&#8592; Pedidos Pendentes</a>
+</div>
 {% else %}
 <div class="ds-alert ds-alert--success">
   <strong>&#10003; Sem pedidos em andamento!</strong>
   Nenhum pedido em andamento encontrado. Se acabou de sincronizar, os dados estão atualizados.
+</div>
+<div style="display:flex;gap:1rem;margin-top:2rem;flex-wrap:wrap;">
+  <a href="{% url 'pedidos:dashboard' %}" class="ds-btn ds-btn--secondary">&#8592; Pedidos Pendentes</a>
 </div>
 {% endif %}
 {% endblock %}

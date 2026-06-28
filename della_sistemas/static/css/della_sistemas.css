@@ -16,7 +16,7 @@
   --cinza-medio:    #e8e8e6;
   --cinza-texto:    #6b6b6b;
 
-  --sidebar-w:      240px;
+  --sidebar-w:      265px;
   --header-h:       60px;
   --transicao:      all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 
@@ -279,6 +279,7 @@ h1, h2, h3, h4 {
   font-size: 0.8rem; color: var(--cinza-texto);
   text-decoration: none; border-radius: 6px;
   transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
 }
 .ds-nav-sublink:hover { color: var(--preto); background: var(--cinza-claro); }
 .ds-nav-sublink.ativo { color: var(--dourado); font-weight: 600; }

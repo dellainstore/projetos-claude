@@ -143,20 +143,32 @@ def sync_pedidos(
             cliente_nome = contato.get("nome") or ""
             numero = str(p.get("numero") or "")
 
-            # Busca detalhes para pedidos atendidos (forma, data e parcelas)
-            forma_pagamento = ""
-            data_pagamento: date | None = None
-            parcelas_raw: list = []
-            if situacao_id in ATENDIDO_IDS:
-                detalhe = obter_detalhe_pedido(bling_id)
-                forma_pagamento = _extrair_forma_pagamento(detalhe)
-                data_pagamento = _extrair_data_pagamento(detalhe)
-                parcelas_raw = detalhe.get("parcelas") or []
-
             # Auto-marca permuta pelo nome real retornado pelo Bling
             is_permuta = "permuta" in situacao_nome.lower()
 
             existing = PedidoBling.objects.filter(bling_id=bling_id).first()
+
+            # O detalhe do pedido custa 1 chamada EXTRA à API por pedido. Para
+            # acelerar o sync, só buscamos quando realmente há o que atualizar:
+            # pedido atendido que é novo, mudou de situação, teve valor/data
+            # alterados ou ainda não tem parcelas salvas. Atendido inalterado é
+            # pulado — sem chamada à API.
+            forma_pagamento = ""
+            data_pagamento: date | None = None
+            parcelas_raw: list = []
+            if situacao_id in ATENDIDO_IDS:
+                precisa_detalhe = (
+                    existing is None
+                    or existing.situacao_id != situacao_id
+                    or existing.valor_total != valor_total
+                    or existing.data_pedido != data_pedido
+                    or not existing.parcelas.exists()
+                )
+                if precisa_detalhe:
+                    detalhe = obter_detalhe_pedido(bling_id)
+                    forma_pagamento = _extrair_forma_pagamento(detalhe)
+                    data_pagamento = _extrair_data_pagamento(detalhe)
+                    parcelas_raw = detalhe.get("parcelas") or []
 
             if existing:
                 changed = existing.situacao_id != situacao_id

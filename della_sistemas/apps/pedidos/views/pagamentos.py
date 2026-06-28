@@ -42,12 +42,16 @@ def view_pagamentos_pendentes(request):
 
     hoje = date.today()
 
+    situacoes_presentes = sorted(
+        s for s in pedidos.values_list("situacao_nome", flat=True).distinct() if s
+    )
+
     return render(request, "pedidos/pagamentos_pendentes.html", {
         "pedidos": pedidos,
         "total": pedidos.count(),
         "formas_disponiveis": formas,
-        "chips_forma": _CHIPS_FORMA,
         "formas_lista": _FORMAS_LISTA,
+        "situacoes_presentes": situacoes_presentes,
         "hoje": hoje,
     })
 
@@ -62,10 +66,14 @@ def view_pagamentos_confirmados(request):
         pedido__data_pedido__gte=INICIO_2026,
     ).order_by("-confirmado_em")
 
+    situacoes_presentes = sorted(
+        s for s in baixas.values_list("pedido__situacao_nome", flat=True).distinct() if s
+    )
+
     return render(request, "pedidos/pagamentos_confirmados.html", {
         "baixas": baixas,
         "total": baixas.count(),
-        "chips_forma": _CHIPS_FORMA,
+        "situacoes_presentes": situacoes_presentes,
     })
 
 
