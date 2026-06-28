@@ -25,6 +25,10 @@ class SessaoSite(models.Model):
     utm_source = models.CharField(max_length=200, blank=True)
     utm_medium = models.CharField(max_length=200, blank=True)
     utm_campaign = models.CharField(max_length=200, blank=True)
+    # Click ids: usados como fallback de atribuicao quando nao ha utm_source
+    # (clique de anuncio sem UTM ainda carrega fbclid/gclid).
+    fbclid = models.CharField(max_length=300, blank=True)
+    gclid = models.CharField(max_length=300, blank=True)
     dispositivo = models.CharField(max_length=10, blank=True)
     iniciada_em = models.DateTimeField()
     ultima_acao_em = models.DateTimeField()

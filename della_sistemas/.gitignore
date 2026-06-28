@@ -7,6 +7,7 @@ db.sqlite3
 # Banco do módulo produtos (inclusoes.db) — dados de negócio, nunca versionar
 data/produtos/
 inclusoes.db
+apps/produtos/data/
 staticfiles/
 media/
 /var/log/

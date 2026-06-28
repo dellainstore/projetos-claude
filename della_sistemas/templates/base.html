@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#c9a96e">
+  <meta name="theme-color" content="#faf8f4">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="D'ELLA">
   <title>{% block titulo %}D'ELLA Sistemas{% endblock %}</title>
 
@@ -230,12 +231,12 @@
         <div class="ds-nav-subitens" id="sub-site">
           <a href="{% url 'analytics:dashboard' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'analytics' %}ativo{% endif %}">
-            <span class="ds-nav-icon">&#128202;</span>
+            <span class="ds-nav-icon">&#9636;</span>
             Analytics do Site
           </a>
           <a href="{% url 'analytics:relatorio_list' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'relatorio_list' or request.resolver_match.url_name == 'relatorio_download' %}ativo{% endif %}">
-            <span class="ds-nav-icon">&#128196;</span>
+            <span class="ds-nav-icon">&#9783;</span>
             Resumo Semanal
           </a>
         </div>

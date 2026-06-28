@@ -58,12 +58,13 @@ h1, h2, h3, h4 {
   top: 0;
   left: 0;
   right: 0;
-  height: var(--header-h);
+  /* Reserva o espaco do notch / Dynamic Island (env() = 0 no desktop) */
+  height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   background: var(--branco);
   color: var(--preto);
   display: flex;
   align-items: center;
-  padding: 0 1.25rem;
+  padding: env(safe-area-inset-top, 0px) max(1.25rem, env(safe-area-inset-right, 0px)) 0 max(1.25rem, env(safe-area-inset-left, 0px));
   z-index: 200;
   gap: 1rem;
   border-bottom: 1px solid var(--cinza-medio);
@@ -174,10 +175,10 @@ h1, h2, h3, h4 {
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
 .ds-sidebar {
   position: fixed;
-  top: var(--header-h);
+  top: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   left: 0;
   width: var(--sidebar-w);
-  height: calc(100vh - var(--header-h));
+  height: calc(100vh - var(--header-h) - env(safe-area-inset-top, 0px));
   background: var(--branco);
   overflow-y: auto;
   overflow-x: hidden;
@@ -273,7 +274,7 @@ h1, h2, h3, h4 {
 .ds-nav-subitens { display: none; }
 .ds-nav-subitens.aberto { display: block; }
 .ds-nav-sublink {
-  display: flex; align-items: center;
+  display: flex; align-items: center; gap: 0.7rem;
   padding: 0.42rem 1.25rem 0.42rem 3rem;
   font-size: 0.8rem; color: var(--cinza-texto);
   text-decoration: none; border-radius: 6px;
@@ -308,8 +309,9 @@ h1, h2, h3, h4 {
 /* ── Conteúdo principal ───────────────────────────────────────────────────── */
 .ds-main {
   margin-left: var(--sidebar-w);
-  margin-top: var(--header-h);
+  margin-top: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   flex: 1;
+  min-width: 0;
   min-height: calc(100vh - var(--header-h));
   padding: 2rem;
   transition: margin-left 0.3s ease;
@@ -656,6 +658,9 @@ body.sidebar-colapsada .ds-sidebar-tab {
 
 /* ── Responsivo (mobile) ──────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Impede rolagem horizontal da pagina inteira (mantem scroll interno de tabelas) */
+  body { overflow-x: hidden; }
+
   .ds-menu-toggle { display: block; }
   .ds-sidebar-tab { display: none; }
 
@@ -674,6 +679,7 @@ body.sidebar-colapsada .ds-sidebar-tab {
   .ds-main {
     margin-left: 0;
     padding: 1.25rem;
+    max-width: 100%;
   }
 
   .ds-cards-grid {
@@ -684,7 +690,13 @@ body.sidebar-colapsada .ds-sidebar-tab {
     grid-template-columns: 1fr;
   }
 
+  /* Header enxuto no mobile: logo menor, sem sufixos longos */
+  .ds-header { gap: 0.5rem; }
+  .ds-header-logo { gap: 0.5rem; }
+  .ds-header-logo-img { height: 28px; }
+  .ds-header-logo-sistemas { display: none; }
   .ds-header-user-papel { display: none; }
+  .ds-header-user-nome { display: none; }
 
   .ds-table-wrapper { overflow-x: auto; }
 }

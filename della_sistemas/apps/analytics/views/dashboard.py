@@ -18,7 +18,11 @@ def _resolver_periodo(request):
     from datetime import datetime as dt
     filtro = request.GET.get('periodo', '7d')
     agora = timezone.now()
-    hoje_inicio = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+    # "Hoje" deve comecar a 00:00 no horario de Sao Paulo, nao em UTC. Sem a
+    # conversao com localtime() o inicio cai as 21:00 do dia anterior (BRT),
+    # fazendo o filtro "hoje" englobar o fim da noite de ontem e ficar quase
+    # identico ao "7 dias" quando o trafego se concentra na virada do dia.
+    hoje_inicio = timezone.localtime(agora).replace(hour=0, minute=0, second=0, microsecond=0)
 
     de_val = request.GET.get('de', '')
     ate_val = request.GET.get('ate', '')
@@ -58,14 +62,33 @@ def _calcular_ao_vivo():
     agora = timezone.now()
     corte = agora - timedelta(minutes=5)
 
-    visitantes = SessaoSite.objects.filter(ultima_acao_em__gte=corte).count()
-    paginas = list(
+    vivos = SessaoSite.objects.filter(ultima_acao_em__gte=corte)
+    visitantes = vivos.count()
+
+    # Pagina atual de cada sessao ativa = pagina_url do evento de navegacao mais
+    # recente (pagina_vista, produto_visualizado ou lista_visualizada). Usar so
+    # 'pagina_vista' deixava a lista VAZIA quando o evento mais recente da sessao
+    # era um produto_visualizado (PDP) -- por isso o contador subia mas nenhuma
+    # pagina aparecia. Conta visitantes distintos por URL (nao numero de eventos).
+    TIPOS_NAV = ('pagina_vista', 'produto_visualizado', 'lista_visualizada')
+    eventos = (
         EventoSite.objects
-        .filter(tipo='pagina_vista', ocorrido_em__gte=corte)
-        .values('pagina_url')
-        .annotate(total=Count('id'))
-        .order_by('-total')[:5]
+        .filter(sessao__in=vivos, tipo__in=TIPOS_NAV,
+                ocorrido_em__gte=corte, pagina_url__gt='')
+        .order_by('sessao_id', '-ocorrido_em')
+        .values('sessao_id', 'pagina_url')
     )
+    atual_por_sessao = {}
+    for ev in eventos:
+        atual_por_sessao.setdefault(ev['sessao_id'], ev['pagina_url'])  # 1o = mais recente
+
+    contagem = {}
+    for url in atual_por_sessao.values():
+        contagem[url] = contagem.get(url, 0) + 1
+    paginas = [
+        {'pagina_url': url, 'total': total}
+        for url, total in sorted(contagem.items(), key=lambda x: -x[1])[:5]
+    ]
     return {'visitantes': visitantes, 'paginas': paginas}
 
 
@@ -217,13 +240,23 @@ def _calcular_carrinhos_recentes(inicio, fim):
     comprou_qs = EventoSite.objects.filter(
         sessao=OuterRef('pk'), tipo='pedido_finalizado', pedido_numero__gt=''
     )
+    checkout_qs = EventoSite.objects.filter(
+        sessao=OuterRef('pk'), tipo='checkout_iniciado'
+    )
+    popup_qs = EventoSite.objects.filter(
+        sessao=OuterRef('pk'), tipo='popup_saida_exibido'
+    )
     sessoes = list(
         SessaoSite.objects
         .filter(iniciada_em__range=(inicio, fim))
         .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
-        .annotate(comprou=Exists(comprou_qs))
+        .annotate(
+            comprou=Exists(comprou_qs),
+            foi_checkout=Exists(checkout_qs),
+            viu_popup=Exists(popup_qs),
+        )
         .order_by('-ultima_acao_em')
-        .values('id', 'comprou', 'ultima_acao_em')[:20]
+        .values('id', 'comprou', 'foi_checkout', 'viu_popup', 'ultima_acao_em')[:20]
     )
 
     if not sessoes:
@@ -234,7 +267,7 @@ def _calcular_carrinhos_recentes(inicio, fim):
     for evt in (
         EventoSite.objects
         .filter(sessao_id__in=session_ids, tipo='produto_adicionado')
-        .values('sessao_id', 'produto_nome', 'quantidade')
+        .values('sessao_id', 'produto_nome', 'quantidade', 'valor_total')
         .order_by('ocorrido_em')
     ):
         sid = evt['sessao_id']
@@ -243,17 +276,22 @@ def _calcular_carrinhos_recentes(inicio, fim):
         items_map[sid].append({
             'nome': (evt['produto_nome'] or 'Produto')[:45],
             'qtd': evt['quantidade'] or 1,
+            'valor': evt['valor_total'] or 0,
         })
 
     result = []
     for s in sessoes:
         itens = items_map.get(s['id'], [])
         total_itens = sum(i['qtd'] for i in itens)
+        valor_total = sum(i['valor'] for i in itens)
         result.append({
             'ultima_acao': s['ultima_acao_em'],
             'comprou': s['comprou'],
+            'foi_checkout': s['foi_checkout'],
+            'viu_popup': s['viu_popup'],
             'itens': itens,
             'total_itens': total_itens,
+            'valor_total': valor_total,
         })
     return result
 
@@ -319,16 +357,26 @@ def _calcular_trafico_semanal(inicio, fim):
 
 def _calcular_origens(inicio, fim):
     from apps.analytics.models import SessaoSite
+    from django.db.models import BooleanField, Case, Value, When
 
+    # Agrupa por utm_source + presenca de click id (fbclid/gclid). Os click ids
+    # entram apenas como BOOLEAN (tem/nao tem) para nao explodir o agrupamento --
+    # o valor de cada fbclid e unico por clique.
     sessoes = list(
         SessaoSite.objects
         .filter(iniciada_em__range=(inicio, fim))
-        .values('utm_source')
+        .annotate(
+            tem_fbclid=Case(When(fbclid='', then=Value(False)),
+                            default=Value(True), output_field=BooleanField()),
+            tem_gclid=Case(When(gclid='', then=Value(False)),
+                           default=Value(True), output_field=BooleanField()),
+        )
+        .values('utm_source', 'tem_fbclid', 'tem_gclid')
         .annotate(total=Count('id'))
-        .order_by('-total')[:20]
+        .order_by('-total')[:40]
     )
 
-    def _label(source):
+    def _label(source, tem_fbclid=False, tem_gclid=False):
         s = (source or '').lower().strip()
         if 'google' in s:
             return 'Google'
@@ -342,11 +390,16 @@ def _calcular_origens(inicio, fim):
             return 'WhatsApp'
         if s:
             return s.capitalize()
+        # Sem utm_source: o click id revela a origem paga do clique.
+        if tem_fbclid:
+            return 'Meta'
+        if tem_gclid:
+            return 'Google'
         return 'Direto / Outros'
 
     agg = {}
     for row in sessoes:
-        label = _label(row['utm_source'])
+        label = _label(row['utm_source'], row['tem_fbclid'], row['tem_gclid'])
         agg[label] = agg.get(label, 0) + row['total']
 
     total = sum(agg.values()) or 1

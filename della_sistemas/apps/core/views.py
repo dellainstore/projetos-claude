@@ -2,12 +2,38 @@ from datetime import date
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
+from django.core import signing
 from django.http import HttpRequest, HttpResponse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
+from django.urls import reverse
 
 from .decorators import login_obrigatorio, papel_required
 from .models import User
+
+_LOGIN_SALT = "della-systems-login-v1"
+
+
+def _safe_redirect_url(url: str, request: HttpRequest) -> str:
+    if url and url_has_allowed_host_and_scheme(
+        url=url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return url
+    return reverse("core:home")
+
+
+def _html_redirect(target: str) -> HttpResponse:
+    """Retorna 200 com JS/meta redirect para garantir que o browser
+    processe Set-Cookie antes de navegar (necessário no iOS WebKit)."""
+    t = target.replace('"', "%22").replace("'", "%27")
+    html = (
+        "<!DOCTYPE html><html><head>"
+        f'<meta http-equiv="refresh" content="0;url={t}">'
+        f"</head><body><script>window.location.replace('{t}');</script></body></html>"
+    )
+    return HttpResponse(html)
 
 
 def view_login(request: HttpRequest) -> HttpResponse:
@@ -19,18 +45,47 @@ def view_login(request: HttpRequest) -> HttpResponse:
         password = request.POST.get("password", "")
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            login(request, user)
-            next_url = request.GET.get("next", "")
-            if next_url and url_has_allowed_host_and_scheme(
-                url=next_url,
-                allowed_hosts={request.get_host()},
-                require_https=request.is_secure(),
-            ):
-                return redirect(next_url)
-            return redirect("core:home")
+            # iOS Safari não salva cookies definidos em respostas a POST.
+            # Solução: gerar token assinado e finalizar o login num GET separado,
+            # onde o cookie de sessão é definido numa resposta a GET (funciona).
+            dest = _safe_redirect_url(request.GET.get("next", ""), request)
+            backend = getattr(user, "backend", "apps.core.backends.CaseInsensitiveBackend")
+            token = signing.dumps(
+                {"uid": str(user.pk), "backend": backend, "dest": dest},
+                salt=_LOGIN_SALT,
+            )
+            finalizar_url = reverse("core:login_finalizar") + f"?t={token}"
+            return _html_redirect(finalizar_url)
         messages.error(request, "Usuário ou senha incorretos.")
 
     return render(request, "login.html")
+
+
+def view_login_finalizar(request: HttpRequest) -> HttpResponse:
+    """Recebe GET após autenticação bem-sucedida. O cookie de sessão
+    é definido AQUI (resposta a GET), o que o iOS Safari aceita corretamente."""
+    token = request.GET.get("t", "")
+    try:
+        data = signing.loads(token, salt=_LOGIN_SALT, max_age=120)
+    except signing.BadSignature:
+        messages.error(request, "Link expirado. Faça login novamente.")
+        return redirect("core:login")
+
+    try:
+        user = User.objects.get(pk=data["uid"])
+    except User.DoesNotExist:
+        return redirect("core:login")
+
+    if not user.is_active:
+        return redirect("core:login")
+
+    login(request, user, backend=data["backend"])
+    # O cookie de sessão é definido AQUI, numa resposta a GET. Usamos um
+    # redirect HTTP 302 (e não um redirect via HTML/JS): a camada de rede do
+    # WebKit grava o Set-Cookie ANTES de emitir o GET para o destino, evitando
+    # a corrida em que o iOS Safari navega antes de persistir o cookie (que
+    # fazia o login "voltar" para a tela de login num loop).
+    return redirect(data.get("dest") or reverse("core:home"))
 
 
 @require_POST
