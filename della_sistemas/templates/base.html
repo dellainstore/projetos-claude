@@ -403,6 +403,33 @@
       </div>
       {% endif %}
 
+      <script>
+        // Roda aqui (logo apos o conteudo do menu, antes do resto da pagina ser
+        // parseado/pintado) e nao no DOMContentLoaded la embaixo, por dois motivos:
+        // 1) evita o "pulo" visivel do menu indo pro topo e so depois saltando
+        //    pra posicao salva;
+        // 2) os grupos (submenus) comecam fechados via CSS (display:none) — se a
+        //    gente restaurasse o scroll ANTES de abrir o grupo ativo, o scrollTop
+        //    salvo ficava maior que a altura ainda-fechada do menu e o browser
+        //    grudava em 0, sem ninguem corrigir depois.
+        (function () {
+          var sidebarEl = document.getElementById('ds-sidebar');
+          document.querySelectorAll('.ds-nav-sublink.ativo').forEach(function (ativo) {
+            var sub = ativo.closest('.ds-nav-subitens');
+            while (sub) {
+              sub.classList.add('aberto');
+              var chv = document.getElementById('chv-nav-' + sub.id.replace('sub-', ''));
+              if (chv) chv.classList.add('aberto');
+              sub = sub.parentElement ? sub.parentElement.closest('.ds-nav-subitens') : null;
+            }
+          });
+          var saved = sessionStorage.getItem('ds_sidebar_scroll');
+          if (saved !== null) {
+            sidebarEl.scrollTop = parseInt(saved, 10);
+          }
+        })();
+      </script>
+
     </aside>
 
     <!-- ── Tab colapsar sidebar (desktop) ───────────────────────────────────── -->
@@ -461,18 +488,8 @@
       if (chv) chv.classList.toggle('aberto', open);
     }
 
-    // Auto-abrir grupo ativo ao carregar
-    document.addEventListener('DOMContentLoaded', () => {
-      if (document.querySelector('.ds-nav-sublink.ativo')) {
-        document.querySelectorAll('.ds-nav-subitens').forEach(sub => {
-          if (sub.querySelector('.ativo')) {
-            sub.classList.add('aberto');
-            const chv = document.getElementById('chv-nav-' + sub.id.replace('sub-', ''));
-            if (chv) chv.classList.add('aberto');
-          }
-        });
-      }
-    });
+    // Abrir o grupo ativo e restaurar o scroll do menu já rodou logo após o
+    // </aside> (mais cedo possível, pra não dar o "pulo" visível — ver acima).
 
     // PWA install prompt
     let deferredPrompt;
@@ -497,23 +514,16 @@
       }
     })();
 
-    // Preservar a posicao de scroll do MENU LATERAL entre navegacoes — cada clique
-    // recarrega a pagina inteira (nao eh SPA), entao sem isso o menu voltava pro
-    // topo a cada clique quando estava rolado pra baixo.
-    (function () {
-      var key = 'ds_sidebar_scroll';
-      var saved = sessionStorage.getItem(key);
-      if (sidebar && saved !== null) {
-        sidebar.scrollTop = parseInt(saved, 10);
-      }
-      if (sidebar) {
-        sidebar.addEventListener('click', function (e) {
-          if (e.target.closest('a[href]')) {
-            sessionStorage.setItem(key, sidebar.scrollTop);
-          }
-        });
-      }
-    })();
+    // Salva a posicao de scroll do MENU LATERAL antes de navegar — a restauracao
+    // roda logo apos o </aside> (ver acima), o mais cedo possivel na pagina, pra
+    // nao dar aquele "pulo" visivel do menu indo pro topo e voltando.
+    if (sidebar) {
+      sidebar.addEventListener('click', function (e) {
+        if (e.target.closest('a[href]')) {
+          sessionStorage.setItem('ds_sidebar_scroll', sidebar.scrollTop);
+        }
+      });
+    }
 
     // Preservar posicao de scroll ao navegar com filtros/abas na mesma pagina.
     // Salva ao clicar em <a> que muda so a query (mesmo pathname).
