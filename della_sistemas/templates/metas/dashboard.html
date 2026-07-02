@@ -141,14 +141,20 @@
   </form>
 </div>
 
-{% if sem_dados %}
+{% if not periodo_liberado %}
 <div class="sem-dados">
-  <div class="icone">&#128202;</div>
-  <p><strong>Sem dados para {{ mes_nome }}/{{ ano }}</strong></p>
-  <p style="margin-top:0.5rem;font-size:0.85rem;">O CSV de vendas ainda não tem registros para este mês.</p>
+  <div class="icone">&#128274;</div>
+  <p><strong>Metas de {{ mes_nome }}/{{ ano }} ainda não liberadas</strong></p>
+  <p style="margin-top:0.5rem;font-size:0.85rem;">Ficam disponíveis automaticamente a partir do 1º dia do mês.</p>
 </div>
 
 {% else %}
+
+{% if sem_dados %}
+<div class="sem-dados" style="padding:0.9rem 1.1rem;margin-bottom:1.25rem;text-align:left;">
+  <p style="font-size:0.85rem;margin:0;">Ainda não há vendas lançadas para <strong>{{ mes_nome }}/{{ ano }}</strong>. As metas aparecem abaixo zeradas (0% atingido) e atualizam conforme as vendas forem geradas.</p>
+</div>
+{% endif %}
 
 <!-- Totais gerais -->
 <div class="totais-bar">
@@ -326,7 +332,7 @@
 </div>
 {% endif %}
 
-{% endif %}{# /sem_dados #}
+{% endif %}{# /periodo_liberado #}
 {% endblock %}
 
 {% block js_extra %}

@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from apps.pedidos.models import BaixaPedido, HistoricoDataPedido, HistoricoSituacaoPedido, ParcelaPedido, PedidoBling
-from apps.pedidos.services.bling_client import listar_todos_pedidos, obter_detalhe_pedido
+from apps.pedidos.services.bling_client import listar_todos_pedidos, listar_vendedores, obter_detalhe_pedido
 from apps.pedidos.services.formas_pagamento import FORMAS_PAGAMENTO
 from apps.pedidos.services.situacoes import ALL_IDS, ATENDIDO_IDS
 
@@ -116,6 +116,9 @@ def sync_pedidos(
     todos_pedidos = listar_todos_pedidos(data_ini, data_fim, on_page=_on_page)
     logger.info("Sync: %d pedidos encontrados no período", len(todos_pedidos))
 
+    # Lookup de vendedores {id → nome}, buscado uma única vez por execução.
+    vendedor_map = listar_vendedores()
+
     if on_progress:
         on_progress(88, f"{len(todos_pedidos)} pedidos encontrados. Processando…")
 
@@ -156,6 +159,9 @@ def sync_pedidos(
             forma_pagamento = ""
             data_pagamento: date | None = None
             parcelas_raw: list = []
+            vendedor_id: int | None = None
+            vendedor_nome = ""
+            comissao_total_bling = None
             if situacao_id in ATENDIDO_IDS:
                 precisa_detalhe = (
                     existing is None
@@ -163,12 +169,26 @@ def sync_pedidos(
                     or existing.valor_total != valor_total
                     or existing.data_pedido != data_pedido
                     or not existing.parcelas.exists()
+                    or existing.vendedor_id is None
                 )
                 if precisa_detalhe:
                     detalhe = obter_detalhe_pedido(bling_id)
                     forma_pagamento = _extrair_forma_pagamento(detalhe)
                     data_pagamento = _extrair_data_pagamento(detalhe)
                     parcelas_raw = detalhe.get("parcelas") or []
+                    vend = detalhe.get("vendedor") or {}
+                    vendedor_id = vend.get("id")
+                    if vendedor_id:
+                        vendedor_id = int(vendedor_id)
+                        vendedor_nome = vendedor_map.get(vendedor_id, "")
+                    # Soma das comissões por item — já inclui desconto da taxa do cartão
+                    try:
+                        comissao_total_bling = Decimal(str(sum(
+                            float(item.get("comissao", {}).get("valor", 0) or 0)
+                            for item in (detalhe.get("itens") or [])
+                        ))).quantize(Decimal("0.01"))
+                    except Exception:
+                        comissao_total_bling = None
 
             if existing:
                 changed = existing.situacao_id != situacao_id
@@ -200,8 +220,13 @@ def sync_pedidos(
                     existing.forma_pagamento = forma_pagamento
                 if data_pagamento:
                     existing.data_pagamento = data_pagamento
+                if vendedor_id:
+                    existing.vendedor_id = vendedor_id
+                    existing.vendedor_nome = vendedor_nome
                 if is_permuta:
                     existing.is_permuta = True
+                if comissao_total_bling is not None:
+                    existing.comissao_total_bling = comissao_total_bling
                 existing.save()
                 if parcelas_raw:
                     _sync_parcelas(existing, parcelas_raw)
@@ -215,9 +240,12 @@ def sync_pedidos(
                     valor_total=valor_total,
                     situacao_id=situacao_id,
                     situacao_nome=situacao_nome,
+                    vendedor_id=vendedor_id,
+                    vendedor_nome=vendedor_nome,
                     forma_pagamento=forma_pagamento,
                     data_pagamento=data_pagamento,
                     is_permuta=is_permuta,
+                    comissao_total_bling=comissao_total_bling,
                 )
                 HistoricoSituacaoPedido.objects.create(
                     pedido=obj,

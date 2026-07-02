@@ -32,6 +32,16 @@ class User(AbstractUser):
         from apps.core.permissions import DEFAULT_PERMS_BY_PAPEL
         return bool(DEFAULT_PERMS_BY_PAPEL.get(self.papel, {}).get(modulo, {}).get(chave, False))
 
+    def resumo_acessos(self) -> list[str]:
+        """Módulos a que o usuário tem algum acesso, derivado das permissões
+        efetivas (não do papel). Usado na lista de usuários."""
+        from apps.core.permissions import PERMISSION_TREE
+        labels = []
+        for grupo in PERMISSION_TREE:
+            if any(self.tem_perm(f"{grupo['id']}.{p['id']}") for p in grupo["perms"]):
+                labels.append(grupo["label"])
+        return labels
+
     # ── helpers legados (usados nos templates existentes) ──────────────────
     @property
     def is_superadmin(self) -> bool:
@@ -80,6 +90,22 @@ class User(AbstractUser):
     @property
     def pode_ver_analytics(self) -> bool:
         return self.tem_perm("analytics.ver")
+
+    @property
+    def pode_ver_rh(self) -> bool:
+        return self.tem_perm("rh.ver")
+
+    @property
+    def pode_gerir_rh(self) -> bool:
+        return self.tem_perm("rh.gerir")
+
+    @property
+    def pode_bater_ponto(self) -> bool:
+        return self.tem_perm("rh.ponto_bater")
+
+    @property
+    def pode_gerir_ponto(self) -> bool:
+        return self.tem_perm("rh.ponto_gerir")
 
     @property
     def pode_visualizar(self) -> bool:

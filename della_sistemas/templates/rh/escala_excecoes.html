@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block titulo %}Trocas de sábado | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Trocas de sábado</h1>
+  <p class="ds-page-subtitulo">Force a variante de uma semana quando as colaboradoras trocam o sábado entre si</p>
+</div>
+
+<div class="ds-form-section" style="max-width:640px;">
+  <h2 style="font-size:1rem;margin-bottom:1rem;">Nova exceção</h2>
+  {% if not colaboradores %}
+  <p style="color:var(--cinza-texto);">Nenhuma colaboradora com escala que alterna sábado.</p>
+  {% else %}
+  <form method="post">
+    {% csrf_token %}
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label">Colaboradora</label>
+        <select name="colaborador" class="ds-input" required>
+          {% for c in colaboradores %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="ds-form-group" style="min-width:160px;">
+        <label class="ds-label">Semana (qualquer dia)</label>
+        <input type="date" name="semana" class="ds-input" required>
+      </div>
+      <div class="ds-form-group" style="min-width:200px;">
+        <label class="ds-label">Variante forçada</label>
+        <select name="variante" class="ds-input">
+          {% for val, label in variantes %}<option value="{{ val }}">{{ val }} — {{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="ds-btn ds-btn--primario">Adicionar</button>
+    </div>
+    <div class="ds-form-group" style="margin-top:0.75rem;">
+      <label class="ds-label">Observação (opcional)</label>
+      <input type="text" name="observacao" class="ds-input" placeholder="Ex: trocou com a Fulana">
+    </div>
+  </form>
+  {% endif %}
+</div>
+
+{% if excecoes %}
+<div class="ds-table-wrapper" style="margin-top:1.5rem;">
+  <table class="ds-table">
+    <thead>
+      <tr><th>Colaboradora</th><th>Semana</th><th>Variante</th><th>Observação</th><th>Ações</th></tr>
+    </thead>
+    <tbody>
+      {% for e in excecoes %}
+      <tr>
+        <td><strong>{{ e.colaborador.nome }}</strong></td>
+        <td>{{ e.semana_segunda|date:"d/m/Y" }}</td>
+        <td>{{ e.variante }} — {{ e.get_variante_display }}</td>
+        <td style="font-size:0.85rem;">{{ e.observacao|default:"—" }}</td>
+        <td>
+          <form method="post" action="{% url 'rh:escala_excecao_excluir' e.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.78rem;padding:0.25rem 0.6rem;"
+                    onclick="return confirm('Remover exceção?')">Remover</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

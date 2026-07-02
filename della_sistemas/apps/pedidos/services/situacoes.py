@@ -14,6 +14,15 @@ ATENDIDO_IDS: dict[int, str] = {
     446834: "Atacado - Vinhedo",
 }
 
+LONDRINA_IDS: dict[int, str] = {
+    150640: "Atendido - Londrina",
+}
+
+# Situações que geram comissão — Londrina é paga separado via folha
+ATENDIDO_COMISSAO_IDS: dict[int, str] = {
+    k: v for k, v in ATENDIDO_IDS.items() if k not in LONDRINA_IDS
+}
+
 CANCELADO_IDS: dict[int, str] = {
     12: "Cancelado",
 }

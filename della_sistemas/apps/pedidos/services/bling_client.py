@@ -40,6 +40,40 @@ def listar_pedidos_por_situacao(
     return todos
 
 
+# Mapa estático de fallback (mesmos IDs usados em Metas / jobs/vendas_atendidas).
+_VENDEDORES_FALLBACK: dict[int, str] = {
+    7613793453:  "TINA DIAS",
+    7616577942:  "CRISLAINY SILVERIO GIACOMELLI",
+    15205612892: "MICHELLE ALVES FERNANDES",
+    15596882226: "SARA OLIVEIRA",
+}
+
+
+def listar_vendedores() -> dict[int, str]:
+    """Retorna lookup {id_vendedor: nome} do Bling.
+
+    O nome fica em ``vendedor.contato.nome``. Em caso de erro, cai no mapa estático.
+    """
+    lookup: dict[int, str] = dict(_VENDEDORES_FALLBACK)
+    pagina = 1
+    while True:
+        try:
+            data = bling_get("/vendedores", params={"pagina": pagina, "limite": _LIMITE})
+        except Exception as exc:
+            logger.error("Erro ao listar vendedores (pág %s): %s", pagina, exc)
+            break
+        items: list[dict] = data.get("data") or []
+        for v in items:
+            vid = v.get("id")
+            nome = (v.get("contato") or {}).get("nome", "")
+            if vid and nome:
+                lookup[int(vid)] = nome
+        if len(items) < _LIMITE:
+            break
+        pagina += 1
+    return lookup
+
+
 def obter_detalhe_pedido(bling_id: int) -> dict:
     """Busca detalhe completo de um pedido (itens, parcelas, pagamento)."""
     try:

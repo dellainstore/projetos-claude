@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% load l10n %}
+{% block titulo %}{% if obj %}Editar{% else %}Novo{% endif %} Colaborador | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">{% if obj %}Editar Colaborador{% else %}Novo Colaborador{% endif %}</h1>
+  <p class="ds-page-subtitulo">Dados de cadastro, remuneração e benefícios</p>
+</div>
+
+<div class="ds-form-section" style="max-width:560px;">
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_nome">Nome</label>
+      <input class="ds-input" type="text" id="id_nome" name="nome" value="{{ obj.nome|default:'' }}" required>
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_cargo">Cargo</label>
+      <input class="ds-input" type="text" id="id_cargo" name="cargo" value="{{ obj.cargo|default:'' }}" placeholder="Ex: Vendedora, ADM, CEO">
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_tipo">Tipo de contrato</label>
+      <select class="ds-input" id="id_tipo" name="tipo_contrato">
+        {% for val, label in tipos %}
+        <option value="{{ val }}" {% if obj.tipo_contrato == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_bling">ID do vendedor no Bling</label>
+      <input class="ds-input" type="text" id="id_bling" name="bling_vendedor_id"
+             value="{{ obj.bling_vendedor_id|default:'' }}" placeholder="Apenas para vendedoras" style="font-family:monospace;">
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_usuario">Usuário (login para bater ponto)</label>
+      <select class="ds-input" id="id_usuario" name="usuario">
+        <option value="">Sem login vinculado</option>
+        {% for u in usuarios %}
+        <option value="{{ u.id }}" {% if obj.usuario_id == u.id %}selected{% endif %}>
+          {{ u.get_full_name|default:u.username }} ({{ u.username }})
+        </option>
+        {% endfor %}
+      </select>
+      <span style="font-size:0.78rem;color:var(--cinza-texto);">Vincule o login para o colaborador conseguir registrar o próprio ponto.</span>
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_admissao">Data de admissão</label>
+      <input class="ds-input" type="date" id="id_admissao" name="data_admissao" value="{{ obj.data_admissao|date:'Y-m-d'|default:'' }}">
+    </div>
+
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label" for="id_salario">Salário base (R$)</label>
+        <input class="ds-input" type="number" step="0.01" min="0" id="id_salario" name="salario_base" value="{{ obj.salario_base|default:'0'|unlocalize }}">
+      </div>
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label" for="id_pct">Comissão padrão (%)</label>
+        <input class="ds-input" type="number" step="0.01" min="0" id="id_pct" name="comissao_percentual_padrao" value="{{ obj.comissao_percentual_padrao|default:'4.5'|unlocalize }}">
+        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;margin-top:0.4rem;cursor:pointer;">
+          <input type="checkbox" name="recebe_comissao" {% if not obj or obj.recebe_comissao %}checked{% endif %}>
+          Recebe comissão
+        </label>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label" for="id_vt">VT — valor do dia (R$)</label>
+        <input class="ds-input" type="number" step="0.01" min="0" id="id_vt" name="vt_valor_dia" value="{{ obj.vt_valor_dia|default:'0'|unlocalize }}">
+        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;margin-top:0.4rem;cursor:pointer;">
+          <input type="checkbox" name="recebe_vt" {% if not obj or obj.recebe_vt %}checked{% endif %}>
+          Recebe vale-transporte
+        </label>
+      </div>
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label" for="id_carga">Carga horária diária</label>
+        <input class="ds-input" type="number" step="0.5" min="0" id="id_carga" name="carga_horaria_diaria" value="{{ obj.carga_horaria_diaria|default:''|unlocalize }}" placeholder="ex.: 8">
+      </div>
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label" for="id_escala">Escala de trabalho</label>
+      <select class="ds-input" id="id_escala" name="escala">
+        <option value="">Sem escala</option>
+        {% for e in escalas %}
+        <option value="{{ e.id }}" {% if obj.escala_id == e.id %}selected{% endif %}>{{ e.nome }}{% if e.alterna_sabado %} (alterna sábado){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label" for="id_ancora">Âncora de sábado (semana B)</label>
+        <input class="ds-input" type="date" id="id_ancora" name="escala_ancora_b" value="{{ obj.escala_ancora_b|date:'Y-m-d'|default:'' }}">
+      </div>
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label" for="id_vt_adiant">VT adiantado (meses)</label>
+        <input class="ds-input" type="number" step="1" min="0" id="id_vt_adiant" name="vt_meses_adiantado" value="{{ obj.vt_meses_adiantado|default:'1'|unlocalize }}">
+      </div>
+    </div>
+
+    <div class="ds-form-group" style="margin-top:1.5rem;padding-top:0.75rem;border-top:1px solid var(--cinza-medio);">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+        <input type="checkbox" name="na_folha" {% if not obj or obj.na_folha %}checked{% endif %}>
+        <span class="ds-label" style="margin-bottom:0;">Entra na folha de pagamento</span>
+      </label>
+    </div>
+
+    <div class="ds-form-group" style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--cinza-medio);">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+        <input type="checkbox" name="registra_ponto" {% if not obj or obj.registra_ponto %}checked{% endif %}>
+        <span class="ds-label" style="margin-bottom:0;">Registra ponto</span>
+      </label>
+      <span style="font-size:0.78rem;color:var(--cinza-texto);">Desmarque para quem não bate ponto (ex.: sócios, CEO).</span>
+    </div>
+
+    <div class="ds-form-group">
+      <label class="ds-label">Lojas onde bate ponto</label>
+      {% if lojas %}
+      <div style="display:flex;flex-direction:column;gap:0.4rem;">
+        {% for l in lojas %}
+        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.88rem;">
+          <input type="checkbox" name="lojas_ponto" value="{{ l.id }}" {% if l.id in lojas_vinculadas %}checked{% endif %}>
+          {{ l.nome }}
+        </label>
+        {% endfor %}
+      </div>
+      <span style="font-size:0.78rem;color:var(--cinza-texto);">Pode marcar uma ou as duas. Sem marcar nenhuma, vale qualquer loja ativa.</span>
+      {% else %}
+      <p style="font-size:0.82rem;color:var(--cinza-texto);">Nenhuma loja cadastrada. Cadastre em <a href="{% url 'rh:parametros' %}">Ponto › Parâmetros</a>.</p>
+      {% endif %}
+    </div>
+
+    <div class="ds-form-group" style="display:flex;align-items:center;gap:0.5rem;">
+      <input type="checkbox" id="id_ativo" name="ativo" {% if not obj or obj.ativo %}checked{% endif %}>
+      <label for="id_ativo" class="ds-label" style="margin-bottom:0;">Colaborador ativo</label>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;margin-top:1.5rem;">
+      <button type="submit" class="ds-btn ds-btn--primario">{% if obj %}Salvar alterações{% else %}Cadastrar{% endif %}</button>
+      <a href="{% url 'rh:colaboradores' %}" class="ds-btn">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Resumo da Folha | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Resumo da Folha</h1>
+  <p class="ds-page-subtitulo">Fixo + Comissão + VT + Lançamentos — {{ periodo.label }}</p>
+</div>
+
+{% include "rh/_filtros.html" %}
+
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>Colaboradora</th>
+        <th>Fixo</th>
+        <th>Comissão</th>
+        <th>VT</th>
+        <th>Lançamentos</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in linhas %}
+      <tr>
+        <td><strong>{{ l.colaborador.nome }}</strong></td>
+        <td>{{ l.fixo|brl }}</td>
+        <td>{{ l.comissao|brl }}</td>
+        <td>{{ l.vt|brl }}</td>
+        <td>{{ l.extras|brl }}</td>
+        <td><strong>{{ l.total|brl }}</strong></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" style="text-align:center;color:var(--cinza-texto);">Nenhuma colaboradora no filtro.</td></tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="font-weight:600;border-top:2px solid var(--cinza-medio);">
+        <td>Totais</td>
+        <td>{{ totais.fixo|brl }}</td>
+        <td>{{ totais.comissao|brl }}</td>
+        <td>{{ totais.vt|brl }}</td>
+        <td>{{ totais.extras|brl }}</td>
+        <td>{{ totais.total|brl }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% endblock %}

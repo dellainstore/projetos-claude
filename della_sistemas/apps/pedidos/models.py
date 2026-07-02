@@ -10,11 +10,18 @@ class PedidoBling(models.Model):
     valor_total      = models.DecimalField(max_digits=12, decimal_places=2)
     situacao_id      = models.IntegerField()
     situacao_nome    = models.CharField(max_length=100, blank=True)
+    vendedor_id      = models.BigIntegerField(null=True, blank=True, db_index=True)
+    vendedor_nome    = models.CharField(max_length=200, blank=True)
     forma_pagamento  = models.CharField(max_length=200, blank=True)
     data_pagamento   = models.DateField(null=True, blank=True)
     is_permuta       = models.BooleanField(default=False)
     forma_corrigida  = models.CharField(max_length=200, blank=True)
     data_corrigida   = models.DateField(null=True, blank=True)
+    # Soma dos campos itens[].comissao.valor do Bling — já descontada a taxa do cartão.
+    # Usado como base de comissão no módulo RH. None = detalhe ainda não sincronizado.
+    comissao_total_bling = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True
+    )
     atualizado_em    = models.DateTimeField(auto_now=True)
     criado_em        = models.DateTimeField(auto_now_add=True)
 

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% load l10n %}
+{% block titulo %}Lançamentos | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Lançamentos</h1>
+  <p class="ds-page-subtitulo">Proventos e descontos avulsos e recorrentes — {{ mes_nome }}/{{ ano }}</p>
+</div>
+
+<form method="get" style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem;">
+  <select name="competencia" class="ds-input" style="width:auto;" onchange="this.form.submit()">
+    {% for val, label in meses_opcoes %}<option value="{{ val }}" {% if val == competencia %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <noscript><button type="submit" class="ds-btn ds-btn--primario">Ver mês</button></noscript>
+</form>
+
+<div class="ds-form-section" style="background:#f9f7f4;padding:0.85rem 1rem;border-radius:6px;margin-bottom:1.5rem;">
+  <p style="font-size:0.88rem;margin:0;">
+    <strong>Salário, vale-transporte e comissão</strong> são pagos no <strong>5º dia útil</strong>
+    {% if quinto_dia_util %}({{ quinto_dia_util|slice:"8:10" }}/{{ quinto_dia_util|slice:"5:7" }}/{{ quinto_dia_util|slice:"0:4" }}){% endif %}
+    e são calculados automaticamente. O restante entra aqui por lançamento manual com a data que você informar.
+  </p>
+</div>
+
+<!-- Novo lançamento -->
+<div class="ds-form-section" style="max-width:880px;">
+  <h2 style="font-size:1rem;margin-bottom:1rem;">Novo lançamento ({{ mes_nome }}/{{ ano }})</h2>
+  <form method="post" action="{% url 'rh:evento_novo' %}">
+    {% csrf_token %}
+    <input type="hidden" name="ano" value="{{ ano }}">
+    <input type="hidden" name="mes" value="{{ mes }}">
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+      <div class="ds-form-group" style="flex:1;min-width:150px;">
+        <label class="ds-label">Colaboradora</label>
+        <select name="colaborador" class="ds-input" required>
+          {% for c in colaboradores %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="ds-form-group" style="min-width:140px;">
+        <label class="ds-label">Provento ou desconto</label>
+        <select name="natureza" class="ds-input">
+          {% for val, label in naturezas %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="ds-form-group" style="min-width:140px;">
+        <label class="ds-label">Tipo</label>
+        <select name="tipo" class="ds-input">
+          {% for val, label in tipos_evento %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="ds-form-group" style="min-width:110px;">
+        <label class="ds-label">Valor (R$)</label>
+        <input type="number" step="0.01" min="0" name="valor" class="ds-input" required>
+      </div>
+      <div class="ds-form-group" style="flex:1;min-width:140px;">
+        <label class="ds-label">Descrição</label>
+        <input type="text" name="descricao" class="ds-input">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-top:0.75rem;">
+      <div class="ds-form-group" id="grp-data-pag" style="min-width:170px;">
+        <label class="ds-label">Data do pagamento</label>
+        <input type="date" name="data_pagamento" class="ds-input">
+      </div>
+      <div class="ds-form-group" style="display:flex;align-items:center;gap:0.5rem;min-width:160px;">
+        <input type="checkbox" id="id_recorrente" name="recorrente"
+               onchange="document.getElementById('rec-opts').style.display=this.checked?'flex':'none';document.getElementById('grp-data-pag').style.display=this.checked?'none':'block';">
+        <label for="id_recorrente" class="ds-label" style="margin-bottom:0;">Recorrente</label>
+      </div>
+    </div>
+
+    <div id="rec-opts" style="display:none;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-top:0.5rem;padding:0.75rem;background:#f9f7f4;border-radius:6px;">
+      <div class="ds-form-group" style="min-width:120px;">
+        <label class="ds-label">Dia do pagamento</label>
+        <input type="number" min="1" max="31" name="dia_pagamento" value="20" class="ds-input">
+      </div>
+      <div class="ds-form-group" style="display:flex;align-items:center;gap:0.5rem;min-width:200px;">
+        <input type="checkbox" id="id_indefinido" name="indefinido" checked
+               onchange="document.getElementById('rec-fim').style.display=this.checked?'none':'flex';">
+        <label for="id_indefinido" class="ds-label" style="margin-bottom:0;">Todos os meses (sem fim)</label>
+      </div>
+      <div id="rec-fim" style="display:none;gap:0.5rem;align-items:flex-end;">
+        <div class="ds-form-group" style="min-width:110px;">
+          <label class="ds-label">Até o mês</label>
+          <select name="mes_fim" class="ds-input">
+            {% for num, nome in meses %}<option value="{{ num }}" {% if num == mes %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="ds-form-group" style="min-width:100px;">
+          <label class="ds-label">Ano</label>
+          <select name="ano_fim" class="ds-input">
+            {% for a in anos %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:1rem;">
+      <button type="submit" class="ds-btn ds-btn--primario">Adicionar</button>
+    </div>
+  </form>
+</div>
+
+<!-- Lançamentos avulsos do mês -->
+<div class="ds-table-wrapper" style="margin-top:1.5rem;">
+  <h2 style="font-size:1rem;margin-bottom:0.5rem;">Lançamentos avulsos do mês</h2>
+  <table class="ds-table">
+    <thead>
+      <tr><th>Colaboradora</th><th>Natureza</th><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Pago em</th><th>Ações</th></tr>
+    </thead>
+    <tbody>
+      {% for e in eventos %}
+      <tr>
+        <td><strong>{{ e.colaborador.nome }}</strong></td>
+        <td style="font-size:0.85rem;">
+          {% if e.natureza == 'desconto' %}<span style="color:#dc2626;">Desconto</span>{% else %}<span style="color:#059669;">Provento</span>{% endif %}
+        </td>
+        <td style="font-size:0.85rem;">{{ e.get_tipo_display }}</td>
+        <td style="font-size:0.85rem;">{{ e.descricao }}</td>
+        <td>{{ e.valor|brl }}</td>
+        <td style="font-size:0.85rem;">{% if e.data_pagamento %}{{ e.data_pagamento|date:"d/m/Y" }}{% endif %}</td>
+        <td>
+          <form method="post" action="{% url 'rh:evento_excluir' e.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.78rem;padding:0.25rem 0.6rem;"
+                    onclick="return confirm('Remover lançamento?')">Remover</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" style="text-align:center;color:var(--cinza-texto);">Nenhum lançamento avulso neste mês.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Recorrências ativas -->
+<div class="ds-table-wrapper" style="margin-top:1.5rem;">
+  <h2 style="font-size:1rem;margin-bottom:0.5rem;">Lançamentos recorrentes ativos</h2>
+  <table class="ds-table">
+    <thead>
+      <tr><th>Colaboradora</th><th>Natureza</th><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Dia</th><th>Período</th><th>Ações</th></tr>
+    </thead>
+    <tbody>
+      {% for r in recorrencias %}
+      <tr>
+        <td><strong>{{ r.colaborador.nome }}</strong></td>
+        <td style="font-size:0.85rem;">
+          {% if r.natureza == 'desconto' %}<span style="color:#dc2626;">Desconto</span>{% else %}<span style="color:#059669;">Provento</span>{% endif %}
+        </td>
+        <td style="font-size:0.85rem;">{{ r.get_tipo_display }}</td>
+        <td style="font-size:0.85rem;">{{ r.descricao }}</td>
+        <td>{{ r.valor|brl }}</td>
+        <td>dia {{ r.dia_pagamento }}</td>
+        <td style="font-size:0.82rem;">
+          a partir de {{ r.mes_inicio }}/{{ r.ano_inicio }}{% if r.indefinido %} · sem fim{% else %} até {{ r.mes_fim }}/{{ r.ano_fim }}{% endif %}
+        </td>
+        <td>
+          <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+            {% if r.indefinido %}
+            <button type="button" class="ds-btn" style="font-size:0.78rem;padding:0.25rem 0.6rem;"
+                    onclick="document.getElementById('enc-{{ r.pk }}').style.display=document.getElementById('enc-{{ r.pk }}').style.display=='flex'?'none':'flex';">Encerrar</button>
+            {% endif %}
+            <form method="post" action="{% url 'rh:recorrencia_excluir' r.pk %}" style="display:inline;">
+              {% csrf_token %}
+              <input type="hidden" name="ano" value="{{ ano }}"><input type="hidden" name="mes" value="{{ mes }}">
+              <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.78rem;padding:0.25rem 0.6rem;"
+                      onclick="return confirm('Remover recorrência? Isso apaga a recorrência por completo.')">Remover</button>
+            </form>
+          </div>
+          {% if r.indefinido %}
+          <form method="post" action="{% url 'rh:recorrencia_encerrar' r.pk %}" id="enc-{{ r.pk }}"
+                style="display:none;gap:0.4rem;align-items:flex-end;margin-top:0.5rem;">
+            {% csrf_token %}
+            <input type="hidden" name="ano" value="{{ ano }}"><input type="hidden" name="mes" value="{{ mes }}">
+            <div class="ds-form-group" style="margin:0;">
+              <label class="ds-label" style="font-size:0.72rem;">Encerrar no mês</label>
+              <select name="mes_fim" class="ds-input" style="width:auto;">
+                {% for num, nome in meses %}<option value="{{ num }}" {% if num == mes %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="ds-form-group" style="margin:0;">
+              <label class="ds-label" style="font-size:0.72rem;">Ano</label>
+              <select name="ano_fim" class="ds-input" style="width:auto;">
+                {% for a in anos %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}
+              </select>
+            </div>
+            <button type="submit" class="ds-btn ds-btn--primario" style="font-size:0.78rem;padding:0.25rem 0.6rem;">Confirmar</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" style="text-align:center;color:var(--cinza-texto);">Nenhuma recorrência cadastrada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% load metas_extras %}
+<div id="ponto-app">
+  {% if sucesso %}
+  <div class="ds-status ds-status--ok" style="margin-bottom:1rem;">{{ sucesso }}</div>
+  {% endif %}
+  {% if erro %}
+  <div class="ds-status ds-status--pendente" style="margin-bottom:1rem;">{{ erro }}</div>
+  {% endif %}
+
+  {% if dia_completo %}
+  <div class="ds-status ds-status--ok" style="margin-bottom:1rem;">As 4 batidas de hoje já foram registradas. Bom descanso!</div>
+  {% else %}
+  <p style="font-size:0.9rem;margin-bottom:0.75rem;">Próxima batida: <strong>{{ proximo_label }}</strong></p>
+  <button type="button" class="ds-btn ds-btn--primario btn-bater-unico"
+          style="width:100%;padding:0.95rem;font-size:0.85rem;white-space:normal;justify-content:center;text-align:center;">
+    Registrar ponto
+  </button>
+  {% endif %}
+
+  <div style="margin-top:1.5rem;">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Batidas de hoje</h2>
+    {% if batidas_hoje %}
+    <div class="ds-table-wrapper">
+      <table class="ds-table">
+        <thead><tr><th>Hora</th><th>Tipo</th><th>Loja</th></tr></thead>
+        <tbody>
+          {% for b in batidas_hoje %}
+          <tr>
+            <td>{{ b.momento|date:"H:i" }}</td>
+            <td>{{ b.get_tipo_display }}</td>
+            <td style="font-size:0.82rem;color:var(--cinza-texto);">{{ b.loja.nome|default:"" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="font-size:0.85rem;color:var(--cinza-texto);">Nenhuma batida registrada hoje.</p>
+    {% endif %}
+  </div>
+</div>

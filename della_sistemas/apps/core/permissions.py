@@ -69,6 +69,16 @@ PERMISSION_TREE = [
         ],
     },
     {
+        "id": "rh",
+        "label": "Recursos Humanos",
+        "perms": [
+            {"id": "ver",         "label": "Ver painel de RH"},
+            {"id": "gerir",       "label": "Gerir colaboradores, salários, comissão, férias e benefícios"},
+            {"id": "ponto_bater", "label": "Registrar o próprio ponto"},
+            {"id": "ponto_gerir", "label": "Ver e editar pontos de todos"},
+        ],
+    },
+    {
         "id": "admin",
         "label": "Administração",
         "perms": [
@@ -88,6 +98,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "pedidos":    {"ver": True, "baixar": True, "sync": True},
         "em_breve":   {"ver": True},
         "analytics":  {"ver": True},
+        "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_gerir": True},
         "admin":      {"usuarios": True},
     },
     "gestor": {
@@ -99,6 +110,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "pedidos":    {"ver": True, "baixar": True, "sync": False},
         "em_breve":   {"ver": False},
         "analytics":  {"ver": True},
+        "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_gerir": True},
         "admin":      {"usuarios": False},
     },
     "operador": {
@@ -110,6 +122,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "pedidos":    {"ver": True, "baixar": False, "sync": False},
         "em_breve":   {"ver": False},
         "analytics":  {"ver": False},
+        "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_gerir": False},
         "admin":      {"usuarios": False},
     },
     "viewer": {
@@ -121,6 +134,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "pedidos":    {"ver": True, "baixar": False, "sync": False},
         "em_breve":   {"ver": False},
         "analytics":  {"ver": False},
+        "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_gerir": False},
         "admin":      {"usuarios": False},
     },
 }

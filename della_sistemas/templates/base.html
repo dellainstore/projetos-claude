@@ -34,10 +34,16 @@
     <div class="ds-header-spacer"></div>
 
     {% if user.is_authenticated %}
+    {% if sino_pendencias_count %}
+    <a href="{% url 'rh:correcoes' %}" class="ds-header-sino" title="Pendências de ponto"
+       style="position:relative;display:inline-flex;align-items:center;text-decoration:none;font-size:1.3rem;margin-right:1rem;color:inherit;">
+      &#128276;
+      <span style="position:absolute;top:-6px;right:-8px;background:#dc2626;color:#fff;font-size:0.65rem;font-weight:700;min-width:16px;height:16px;line-height:16px;text-align:center;border-radius:8px;padding:0 3px;">{{ sino_pendencias_count }}</span>
+    </a>
+    {% endif %}
     <div class="ds-header-user">
       <div>
         <div class="ds-header-user-nome">{{ user.get_full_name|default:user.username }}</div>
-        <div class="ds-header-user-papel">{{ user.get_papel_display }}</div>
       </div>
       <form method="post" action="{% url 'core:logout' %}" style="margin:0">
         {% csrf_token %}
@@ -147,8 +153,8 @@
         </div>
         <div class="ds-nav-subitens" id="sub-metas">
           {% if user.pode_cadastrar_metas %}
-          <a href="{% url 'metas:cadastro_funcionarios' %}"
-             class="ds-nav-sublink {% if 'cadastro' in request.resolver_match.url_name|default:'' %}ativo{% endif %}">
+          <a href="{% url 'metas:metas_individual' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'metas_individual' or request.resolver_match.url_name == 'metas_canal' %}ativo{% endif %}">
             <span class="ds-nav-icon">+</span>
             Cadastro de Metas
           </a>
@@ -215,6 +221,125 @@
             <span class="ds-nav-icon">&#8635;</span>
             Pedidos Alterados
           </a>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Recursos Humanos (expansível) -->
+      {% if user.pode_ver_rh or user.pode_gerir_rh or user.pode_bater_ponto %}
+      <div class="ds-nav-group">
+        <div class="ds-nav-link ds-nav-group-toggle {% if 'rh' in request.resolver_match.app_names %}ativo{% endif %}"
+             onclick="toggleNav('rh')">
+          <span class="ds-nav-icon">&#128101;</span>
+          Recursos Humanos
+          <span class="ds-nav-chevron" id="chv-nav-rh">&#9658;</span>
+        </div>
+        <div class="ds-nav-subitens" id="sub-rh">
+          {% if user.pode_gerir_rh %}
+          <a href="{% url 'rh:colaboradores' %}"
+             class="ds-nav-sublink {% if 'colaborador' in request.resolver_match.url_name|default:'' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9679;</span>
+            Colaboradores
+          </a>
+          <a href="{% url 'rh:escalas' %}"
+             class="ds-nav-sublink {% if 'escala' in request.resolver_match.url_name|default:'' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9707;</span>
+            Escalas
+          </a>
+          <!-- Salários (nested) -->
+          <div class="ds-nav-group">
+            <div class="ds-nav-sublink ds-nav-group-toggle {% if request.resolver_match.url_name == 'salarios' or 'folha' in request.resolver_match.url_name|default:'' %}ativo{% endif %}"
+                 onclick="toggleNav('salarios')">
+              <span class="ds-nav-icon">&#36;</span>
+              Salários
+              <span class="ds-nav-chevron" id="chv-nav-salarios">&#9658;</span>
+            </div>
+            <div class="ds-nav-subitens" id="sub-salarios">
+              <a href="{% url 'rh:folha_resumo' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'folha_resumo' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9636;</span>
+                Resumo da Folha
+              </a>
+              <a href="{% url 'rh:folha_detalhada' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'folha_detalhada' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9776;</span>
+                Folha Detalhada
+              </a>
+              <a href="{% url 'rh:salarios' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'salarios' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#43;</span>
+                Lançamento
+              </a>
+            </div>
+          </div>
+          {% endif %}
+          {% if user.pode_ver_rh or user.pode_gerir_rh %}
+          <a href="{% url 'rh:comissao' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'comissao' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#37;</span>
+            Comissão
+          </a>
+          {% endif %}
+          {% if user.pode_gerir_rh %}
+          <a href="{% url 'rh:ferias' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'ferias' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9670;</span>
+            Férias
+          </a>
+          <a href="{% url 'rh:afastamentos' %}"
+             class="ds-nav-sublink {% if 'afastamento' in request.resolver_match.url_name|default:'' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9888;</span>
+            Afastamentos
+          </a>
+          <a href="{% url 'rh:beneficios' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'beneficios' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9636;</span>
+            Benefícios
+          </a>
+          {% endif %}
+          <!-- Controle de Ponto (nested) -->
+          <div class="ds-nav-group">
+            <div class="ds-nav-sublink ds-nav-group-toggle {% if request.resolver_match.url_name in 'ponto,ponto_relatorio,jornada,parametros,loja_novo,loja_editar' %}ativo{% endif %}"
+                 onclick="toggleNav('ponto')">
+              <span class="ds-nav-icon">&#9719;</span>
+              Controle de Ponto
+              <span class="ds-nav-chevron" id="chv-nav-ponto">&#9658;</span>
+            </div>
+            <div class="ds-nav-subitens" id="sub-ponto">
+              <a href="{% url 'rh:ponto' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'ponto' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9679;</span>
+                Bater Ponto
+              </a>
+              <a href="{% url 'rh:correcoes' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'correcoes' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9998;</span>
+                Minhas Correções
+              </a>
+              {% if user.pode_gerir_ponto %}
+              <a href="{% url 'rh:jornada' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'jornada' or request.resolver_match.url_name == 'ponto_relatorio' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9776;</span>
+                Jornada de Ponto
+              </a>
+              <a href="{% url 'rh:aprovacoes' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'aprovacoes' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#10004;</span>
+                Aprovações
+              </a>
+              <a href="{% url 'rh:registros' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'registros' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9783;</span>
+                Registros
+              </a>
+              <a href="{% url 'rh:parametros' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'parametros' or 'loja' in request.resolver_match.url_name|default:'' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9881;</span>
+                Parâmetros
+              </a>
+              {% endif %}
+            </div>
+          </div>
         </div>
       </div>
       {% endif %}
@@ -370,6 +495,52 @@
         const icon = document.getElementById('sidebar-tab-icon');
         if (icon) icon.innerHTML = '&#9654;';
       }
+    })();
+
+    // Preservar a posicao de scroll do MENU LATERAL entre navegacoes — cada clique
+    // recarrega a pagina inteira (nao eh SPA), entao sem isso o menu voltava pro
+    // topo a cada clique quando estava rolado pra baixo.
+    (function () {
+      var key = 'ds_sidebar_scroll';
+      var saved = sessionStorage.getItem(key);
+      if (sidebar && saved !== null) {
+        sidebar.scrollTop = parseInt(saved, 10);
+      }
+      if (sidebar) {
+        sidebar.addEventListener('click', function (e) {
+          if (e.target.closest('a[href]')) {
+            sessionStorage.setItem(key, sidebar.scrollTop);
+          }
+        });
+      }
+    })();
+
+    // Preservar posicao de scroll ao navegar com filtros/abas na mesma pagina.
+    // Salva ao clicar em <a> que muda so a query (mesmo pathname).
+    // Restaura ao carregar se veio de um desses links.
+    // Nao afeta navegacao entre paginas diferentes nem forms POST.
+    (function () {
+      var key = 'ds_scroll_' + location.pathname + location.search;
+      var saved = sessionStorage.getItem(key);
+      if (saved !== null) {
+        sessionStorage.removeItem(key);
+        document.addEventListener('DOMContentLoaded', function () {
+          window.scrollTo(0, parseInt(saved, 10));
+        });
+      }
+      document.addEventListener('click', function (e) {
+        var a = e.target.closest('a[href]');
+        if (!a) return;
+        if (a.hasAttribute('hx-get') || a.hasAttribute('hx-post')) return;
+        var href = a.getAttribute('href');
+        if (!href || href.charAt(0) === '#' || a.target === '_blank') return;
+        try {
+          var dest = new URL(href, location.href);
+          if (dest.pathname === location.pathname && dest.href !== location.href) {
+            sessionStorage.setItem('ds_scroll_' + dest.pathname + dest.search, window.scrollY);
+          }
+        } catch (ex) {}
+      });
     })();
   </script>
   <script src="{{ STATIC_URL }}js/htmx.min.js"></script>

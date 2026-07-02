@@ -1,0 +1,9 @@
+{% if erro %}
+<div class="ds-status ds-status--pendente" style="display:block;padding:0.6rem 0.85rem;">{{ erro }}</div>
+{% elif batida %}
+<div class="ds-status ds-status--ok" style="display:block;padding:0.6rem 0.85rem;">
+  &#10003; {{ batida.get_tipo_display }} registrada às {{ batida.momento|date:"H:i" }}
+  ({{ batida.distancia_m|floatformat:0 }} m da loja).
+</div>
+<script>setTimeout(function(){ location.reload(); }, 1200);</script>
+{% endif %}

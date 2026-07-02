@@ -33,6 +33,10 @@ class SessaoSite(models.Model):
     iniciada_em = models.DateTimeField()
     ultima_acao_em = models.DateTimeField()
     total_paginas = models.PositiveIntegerField(default=0)
+    # Marcado na coleta (site_della) por comportamento de bot. O painel filtra
+    # is_bot=False em todas as metricas para mostrar apenas pessoas reais.
+    is_bot = models.BooleanField(default=False)
+    ip_hash = models.CharField(max_length=64, blank=True)
 
     class Meta:
         app_label = 'analytics_site'

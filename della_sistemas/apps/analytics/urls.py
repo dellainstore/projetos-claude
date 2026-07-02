@@ -8,6 +8,7 @@ app_name = 'analytics'
 
 urlpatterns = [
     path('', dash_views.dashboard, name='dashboard'),
+    path('htmx/trafico/', dash_views.htmx_trafico, name='htmx_trafico'),
     path('ao-vivo/', live_views.ao_vivo, name='ao_vivo'),
     path('relatorio/', rel_views.relatorio_list, name='relatorio_list'),
     path('relatorio/<int:pk>/download/', rel_views.relatorio_download, name='relatorio_download'),

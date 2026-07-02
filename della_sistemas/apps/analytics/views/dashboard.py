@@ -68,7 +68,7 @@ def _calcular_ao_vivo():
     agora = timezone.now()
     corte = agora - timedelta(minutes=5)
 
-    vivos = SessaoSite.objects.filter(ultima_acao_em__gte=corte)
+    vivos = SessaoSite.objects.filter(ultima_acao_em__gte=corte, is_bot=False)
     visitantes = vivos.count()
 
     # Pagina atual de cada sessao ativa = pagina_url do evento de navegacao mais
@@ -102,8 +102,9 @@ def _calcular_resumo(inicio, fim):
     from apps.analytics.models import SessaoSite, EventoSite
     from django.db.models import Exists, OuterRef
 
-    periodo = Q(ocorrido_em__range=(inicio, fim))
-    sessoes_periodo = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim))
+    # is_bot=False em todas as metricas: o painel mostra apenas pessoas reais.
+    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
+    sessoes_periodo = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False)
 
     visitas    = EventoSite.objects.filter(periodo, tipo='pagina_vista').count()
     visitantes = sessoes_periodo.count()
@@ -161,9 +162,9 @@ def _calcular_resumo(inicio, fim):
 def _calcular_funil(inicio, fim):
     from apps.analytics.models import SessaoSite, EventoSite
 
-    periodo = Q(ocorrido_em__range=(inicio, fim))
+    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
 
-    visitantes = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim)).count()
+    visitantes = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False).count()
     viram = (
         EventoSite.objects
         .filter(periodo, tipo='produto_visualizado')
@@ -208,7 +209,7 @@ def _calcular_funil(inicio, fim):
 def _calcular_produtos(inicio, fim):
     from apps.analytics.models import EventoSite
 
-    periodo = Q(ocorrido_em__range=(inicio, fim))
+    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
 
     mais_vistos = list(
         EventoSite.objects
@@ -254,7 +255,7 @@ def _calcular_carrinhos_recentes(inicio, fim):
     )
     sessoes = list(
         SessaoSite.objects
-        .filter(iniciada_em__range=(inicio, fim))
+        .filter(iniciada_em__range=(inicio, fim), is_bot=False)
         .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
         .annotate(
             comprou=Exists(comprou_qs),
@@ -302,62 +303,122 @@ def _calcular_carrinhos_recentes(inicio, fim):
     return result
 
 
-def _calcular_trafico_semanal(inicio, fim):
+def _segunda_da_semana(request):
+    """Segunda-feira (date) da semana selecionada no grafico.
+
+    `?semana=YYYY-MM-DD` (qualquer dia da semana, encaixado na segunda). Sem o
+    parametro: semana atual. Nunca deixa avancar para uma semana futura."""
+    from datetime import datetime as _dt
+    hoje = timezone.localdate()
+    seg_atual = hoje - timedelta(days=hoje.weekday())
+    val = request.GET.get('semana', '')
+    if val:
+        try:
+            d = _dt.strptime(val, '%Y-%m-%d').date()
+            seg = d - timedelta(days=d.weekday())
+            return min(seg, seg_atual)  # bloqueia semana futura
+        except (ValueError, TypeError):
+            pass
+    return seg_atual
+
+
+def _calcular_trafico_semanal(seg_semana):
+    """Trafego da semana ancorada (Seg a Dom), por data real, comparando com a
+    semana anterior. Dias que ainda nao aconteceram ficam vazios (None)."""
+    from datetime import datetime as _dt
     from apps.analytics.models import EventoSite
+    from apps.analytics.constants import inicio_corte_aware
     from django.db.models import Count
-    from django.db.models.functions import ExtractHour, ExtractIsoWeekDay
+    from django.db.models.functions import ExtractHour, TruncDate
 
     NOMES = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom']
     NOMES_FULL = ['Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado', 'Domingo']
     HORAS = [f'{h:02d}h' for h in range(24)]
+    hoje = timezone.localdate()
+    corte = inicio_corte_aware()
 
-    por_dia_raw = dict(
-        EventoSite.objects
-        .filter(ocorrido_em__range=(inicio, fim), tipo='pagina_vista')
-        .annotate(dia=ExtractIsoWeekDay('ocorrido_em'))
-        .values('dia')
-        .annotate(total=Count('id'))
-        .values_list('dia', 'total')
-    )
-
-    por_hora_raw = list(
-        EventoSite.objects
-        .filter(ocorrido_em__range=(inicio, fim), tipo='pagina_vista')
-        .annotate(
-            dia=ExtractIsoWeekDay('ocorrido_em'),
-            hora=ExtractHour('ocorrido_em'),
+    def _serie(seg):
+        ini = timezone.make_aware(_dt.combine(seg, _dt.min.time()))
+        fim = timezone.make_aware(
+            _dt.combine(seg + timedelta(days=6), _dt.max.time().replace(microsecond=0))
         )
-        .values('dia', 'hora')
-        .annotate(total=Count('id'))
-        .values_list('dia', 'hora', 'total')
-    )
+        if ini < corte:
+            ini = corte
+        raw = dict(
+            EventoSite.objects
+            .filter(ocorrido_em__range=(ini, fim), tipo='pagina_vista', sessao__is_bot=False)
+            .annotate(d=TruncDate('ocorrido_em')).values('d')
+            .annotate(t=Count('id')).values_list('d', 't')
+        )
+        dias = [0] * 7
+        for d, t in raw.items():
+            dias[d.weekday()] += t  # weekday(): Seg=0 .. Dom=6
+        return dias, ini, fim
 
-    por_dia = [por_dia_raw.get(i + 1, 0) for i in range(7)]
+    por_dia, ini, fim = _serie(seg_semana)
+    por_dia_anterior, _, _ = _serie(seg_semana - timedelta(days=7))
 
+    # Detalhe por hora (para o clique no dia) -- so da semana selecionada
     por_dia_hora = [[0] * 24 for _ in range(7)]
-    for (dia, hora, total) in por_hora_raw:
-        por_dia_hora[dia - 1][hora] += total
+    for (d, h, t) in (
+        EventoSite.objects
+        .filter(ocorrido_em__range=(ini, fim), tipo='pagina_vista', sessao__is_bot=False)
+        .annotate(d=TruncDate('ocorrido_em'), h=ExtractHour('ocorrido_em'))
+        .values('d', 'h').annotate(t=Count('id')).values_list('d', 'h', 't')
+    ):
+        por_dia_hora[d.weekday()][h] += t
 
+    # Dias que ainda nao aconteceram nesta semana -> vazios no grafico
+    datas = [seg_semana + timedelta(days=i) for i in range(7)]
+    futuros = {i for i, dd in enumerate(datas) if dd > hoje}
+    por_dia_exib = [None if i in futuros else por_dia[i] for i in range(7)]
+
+    realizados = [(i, por_dia[i]) for i in range(7) if i not in futuros and por_dia[i] > 0]
+    pico_dia_idx = max(realizados, key=lambda x: x[1])[0] if realizados else None
+    menor_dia_idx = min(realizados, key=lambda x: x[1])[0] if realizados else None
     hora_agg = [sum(por_dia_hora[d][h] for d in range(7)) for h in range(24)]
-
-    pico_dia_idx = por_dia.index(max(por_dia)) if any(por_dia) else None
-    menor_dia_idx = min(
-        (i for i, v in enumerate(por_dia) if v > 0),
-        key=lambda i: por_dia[i], default=None,
-    ) if any(por_dia) else None
     pico_hora = hora_agg.index(max(hora_agg)) if any(hora_agg) else None
+
+    # Comparacao com a semana anterior. Se a semana ainda esta em curso, compara
+    # so o trecho ja decorrido (Seg ate hoje) contra os mesmos dias da anterior.
+    em_curso = seg_semana <= hoje <= seg_semana + timedelta(days=6)
+    if em_curso:
+        n = (hoje - seg_semana).days + 1
+        total_atual = sum(por_dia[:n])
+        total_anterior = sum(por_dia_anterior[:n])
+    else:
+        total_atual = sum(por_dia)
+        total_anterior = sum(por_dia_anterior)
+
+    if total_anterior:
+        delta_pct = round((total_atual - total_anterior) / total_anterior * 100)
+    else:
+        delta_pct = 100 if total_atual else 0
 
     return {
         'labels': NOMES,
         'labels_full': NOMES_FULL,
         'horas': HORAS,
-        'por_dia': por_dia,
+        'datas': [d.strftime('%d/%m') for d in datas],
+        'por_dia': por_dia_exib,
+        'por_dia_anterior': por_dia_anterior,
         'por_dia_hora': por_dia_hora,
         'pico_dia': NOMES_FULL[pico_dia_idx] if pico_dia_idx is not None else '',
         'pico_dia_total': por_dia[pico_dia_idx] if pico_dia_idx is not None else 0,
         'menor_dia': NOMES_FULL[menor_dia_idx] if menor_dia_idx is not None else '',
         'menor_dia_total': por_dia[menor_dia_idx] if menor_dia_idx is not None else 0,
         'pico_hora': pico_hora,
+        # Navegacao e comparacao
+        'semana_label': f"{datas[0].strftime('%d/%m')} a {datas[6].strftime('%d/%m/%Y')}",
+        'semana_atual': seg_semana.strftime('%Y-%m-%d'),
+        'semana_anterior': (seg_semana - timedelta(days=7)).strftime('%Y-%m-%d'),
+        'semana_proxima': (seg_semana + timedelta(days=7)).strftime('%Y-%m-%d'),
+        'tem_proxima': seg_semana < (hoje - timedelta(days=hoje.weekday())),
+        'eh_semana_atual': em_curso,
+        'total_atual': total_atual,
+        'total_anterior': total_anterior,
+        'delta_pct': delta_pct,
+        'delta_subiu': total_atual >= total_anterior,
     }
 
 
@@ -370,7 +431,7 @@ def _calcular_origens(inicio, fim):
     # o valor de cada fbclid e unico por clique.
     sessoes = list(
         SessaoSite.objects
-        .filter(iniciada_em__range=(inicio, fim))
+        .filter(iniciada_em__range=(inicio, fim), is_bot=False)
         .annotate(
             tem_fbclid=Case(When(fbclid='', then=Value(False)),
                             default=Value(True), output_field=BooleanField()),
@@ -417,6 +478,29 @@ def _calcular_origens(inicio, fim):
 
 
 @perm_required("analytics.ver")
+def htmx_trafico(request: HttpRequest) -> HttpResponse:
+    if not _db_disponivel():
+        return HttpResponse('')
+    try:
+        trafico = _calcular_trafico_semanal(_segunda_da_semana(request))
+    except Exception:
+        trafico = None
+    trafico_json = json.dumps({
+        'labels': trafico['labels'] if trafico else [],
+        'labels_full': trafico['labels_full'] if trafico else [],
+        'datas': trafico['datas'] if trafico else [],
+        'horas': trafico['horas'] if trafico else [],
+        'por_dia': trafico['por_dia'] if trafico else [],
+        'por_dia_anterior': trafico['por_dia_anterior'] if trafico else [],
+        'por_dia_hora': trafico['por_dia_hora'] if trafico else [],
+    }) if trafico else 'null'
+    return render(request, 'analytics/_trafico_card.html', {
+        'trafico': trafico,
+        'trafico_json': trafico_json,
+    })
+
+
+@perm_required("analytics.ver")
 def dashboard(request: HttpRequest) -> HttpResponse:
     if not _db_disponivel():
         return render(request, 'analytics/dashboard.html', {
@@ -433,7 +517,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         produtos  = _calcular_produtos(inicio, fim)
         origens   = _calcular_origens(inicio, fim)
         carrinhos = _calcular_carrinhos_recentes(inicio, fim)
-        trafico   = _calcular_trafico_semanal(inicio, fim)
+        trafico   = _calcular_trafico_semanal(_segunda_da_semana(request))
         db_ok = True
     except Exception:
         ao_vivo   = {'visitantes': 0, 'paginas': []}
@@ -450,8 +534,10 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     trafico_json = json.dumps({
         'labels': trafico['labels'] if trafico else [],
         'labels_full': trafico['labels_full'] if trafico else [],
+        'datas': trafico['datas'] if trafico else [],
         'horas': trafico['horas'] if trafico else [],
         'por_dia': trafico['por_dia'] if trafico else [],
+        'por_dia_anterior': trafico['por_dia_anterior'] if trafico else [],
         'por_dia_hora': trafico['por_dia_hora'] if trafico else [],
     }) if trafico else 'null'
 

@@ -4,34 +4,28 @@
 {% block conteudo %}
 <div class="ds-page-header">
   <h1 class="ds-page-titulo">Metas Individuais</h1>
-  <p class="ds-page-subtitulo">Meta mensal por funcionária — {{ mes_nome }}/{{ ano }}</p>
+  <p class="ds-page-subtitulo">Meta mensal por colaborador — {{ mes_nome }}/{{ ano }}</p>
 </div>
 
 <!-- Submenu cadastro -->
 <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;">
-  <a href="{% url 'metas:cadastro_funcionarios' %}" class="ds-btn" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Funcionárias</a>
   <a href="{% url 'metas:metas_individual' %}" class="ds-btn ds-btn--primario" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Metas Individuais</a>
   <a href="{% url 'metas:metas_canal' %}" class="ds-btn" style="font-size:0.82rem;padding:0.35rem 0.8rem;">Metas de Canal</a>
 </div>
 
 <!-- Seletor de mês -->
 <form method="get" style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem;">
-  <select name="ano" style="padding:0.4rem 0.75rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.88rem;">
-    {% for a in anos %}
-    <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
+  <select name="competencia" onchange="this.form.submit()" style="padding:0.4rem 0.75rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.88rem;">
+    {% for val, label in meses_opcoes %}
+    <option value="{{ val }}" {% if val == competencia %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
-  <select name="mes" style="padding:0.4rem 0.75rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.88rem;">
-    {% for num, nome in meses %}
-    <option value="{{ num }}" {% if num == mes %}selected{% endif %}>{{ nome }}</option>
-    {% endfor %}
-  </select>
-  <button type="submit" class="ds-btn ds-btn--primario">Filtrar</button>
+  <noscript><button type="submit" class="ds-btn ds-btn--primario">Filtrar</button></noscript>
 </form>
 
 {% if not linhas %}
 <div class="ds-form-section" style="text-align:center;padding:2rem;">
-  <p>Nenhuma funcionária ativa. <a href="{% url 'metas:funcionario_novo' %}">Cadastrar funcionária</a>.</p>
+  <p>Nenhum vendedor cadastrado. Cadastre o colaborador (com o ID do Bling) no módulo RH.</p>
 </div>
 {% else %}
 <form method="post">
@@ -41,16 +35,16 @@
 
   <div class="ds-form-section">
     <p style="font-size:0.82rem;color:var(--cinza-texto);margin-bottom:1rem;">
-      Defina a meta individual de cada funcionária para <strong>{{ mes_nome }}/{{ ano }}</strong>.
-      Deixe em branco para não definir meta.
+      Defina a meta individual de cada colaborador para <strong>{{ mes_nome }}/{{ ano }}</strong>.
+      Deixe em branco para não definir meta. Os nomes vêm do cadastro do RH.
     </p>
 
     <div class="ds-table-wrapper">
       <table class="ds-table">
         <thead>
           <tr>
-            <th>Funcionária</th>
-            <th>Nome no Bling</th>
+            <th>Colaborador</th>
+            <th>Cargo</th>
             <th>Meta (R$)</th>
           </tr>
         </thead>
@@ -58,11 +52,11 @@
           {% for linha in linhas %}
           <tr>
             <td><strong>{{ linha.func.nome }}</strong></td>
-            <td style="font-size:0.8rem;color:var(--cinza-texto);font-family:monospace;">{{ linha.func.nome_bling }}</td>
+            <td style="font-size:0.8rem;color:var(--cinza-texto);">{{ linha.func.cargo }}</td>
             <td>
-              <input type="number" name="meta_{{ linha.func.id }}"
+              <input type="text" inputmode="decimal" name="meta_{{ linha.func.id }}"
                      value="{{ linha.valor_atual }}"
-                     step="0.01" min="0" placeholder="0,00"
+                     placeholder="0,00"
                      style="width:160px;padding:0.35rem 0.6rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.88rem;">
             </td>
           </tr>

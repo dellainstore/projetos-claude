@@ -55,7 +55,9 @@ def view_sync_catalogo(request: HttpRequest) -> HttpResponse:
     from apps.produtos.services.business.catalog import rebuild_variants_from_products
     try:
         limit = int(request.POST.get("limit", 50))
-        sync_result = sync_products(limit_per_page=limit)
+        # start_page=1: botão manual sempre faz sync completo (e prune), em vez de
+        # retomar de um checkpoint deixado por um cron que falhou no meio.
+        sync_result = sync_products(limit_per_page=limit, start_page=1)
         rebuild_result = rebuild_variants_from_products()
         messages.success(
             request,

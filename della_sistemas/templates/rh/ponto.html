@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block titulo %}Bater Ponto | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <h1 class="ds-page-titulo">Bater Ponto</h1>
+    <p class="ds-page-subtitulo">Registre sua jornada — a batida só é aceita dentro da loja</p>
+  </div>
+  {% if user.pode_gerir_ponto %}
+  <a href="{% url 'rh:jornada' %}" class="ds-btn">Jornada (gestor)</a>
+  {% endif %}
+</div>
+
+{% if not colaborador %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <p>Seu usuário não está vinculado a um colaborador.</p>
+  <p class="text-muted" style="font-size:0.82rem;margin-top:0.25rem;">Peça ao gestor para vincular seu login em Colaboradores.</p>
+</div>
+{% elif not colaborador.registra_ponto %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <p>Seu cadastro está marcado como <strong>não registra ponto</strong>.</p>
+  <p class="text-muted" style="font-size:0.82rem;margin-top:0.25rem;">Se isso estiver errado, avise o gestor.</p>
+</div>
+{% else %}
+
+{% if qtd_pendencias %}
+<div class="ds-form-section" style="max-width:520px;margin-bottom:1.25rem;background:#fef3c7;border:1px solid #f59e0b;display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+  <span style="font-size:0.85rem;">Você tem <strong>{{ qtd_pendencias }}</strong> dia(s) com ponto faltando.</span>
+  <a href="{% url 'rh:correcoes' %}" class="ds-btn ds-btn--primario" style="font-size:0.8rem;flex-shrink:0;">Corrigir agora</a>
+</div>
+{% endif %}
+
+{% if not local_ok %}
+<div class="ds-form-section" style="background:#fef3c7;border:1px solid #f59e0b;margin-bottom:1.25rem;max-width:520px;">
+  <p style="font-size:0.85rem;">As lojas ainda não foram configuradas. As batidas serão recusadas até o gestor cadastrar uma loja em Ponto › Parâmetros.</p>
+</div>
+{% endif %}
+
+<div class="ds-form-section" style="max-width:520px;">
+  <p style="font-size:0.85rem;margin-bottom:1rem;">Olá, <strong>{{ colaborador.nome }}</strong>.</p>
+  {% include "rh/_ponto_app.html" %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block js_extra %}
+<script>
+(function () {
+  var url = "{% url 'rh:ponto_bater' %}";
+  var csrf = "{{ csrf_token }}";
+
+  function bater(btn) {
+    if (!navigator.geolocation) {
+      alert('Seu dispositivo não suporta geolocalização.');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Obtendo localização…';
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      htmx.ajax('POST', url, {
+        target: '#ponto-app',
+        swap: 'outerHTML',
+        values: {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        },
+        headers: { 'X-CSRFToken': csrf }
+      });
+    }, function (err) {
+      btn.disabled = false;
+      alert('Não foi possível obter sua localização. Ative o GPS e permita o acesso.');
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  }
+
+  // Delegação: o botão é recriado a cada batida (swap do #ponto-app).
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.btn-bater-unico');
+    if (btn) bater(btn);
+  });
+})();
+</script>
+{% endblock %}

@@ -8,4 +8,5 @@ urlpatterns = [
     path("metas/", include("apps.metas.urls", namespace="metas")),
     path("pedidos/", include("apps.pedidos.urls", namespace="pedidos")),
     path("analytics/", include("apps.analytics.urls", namespace="analytics")),
+    path("rh/", include("apps.rh.urls", namespace="rh")),
 ]

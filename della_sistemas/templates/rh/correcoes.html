@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block titulo %}Minhas Correções | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Minhas Correções</h1>
+  <p class="ds-page-subtitulo">Preencha só os horários que faltaram e envie para o gestor aprovar</p>
+</div>
+
+{% if not colaborador %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <p>Seu usuário não está vinculado a um colaborador.</p>
+</div>
+{% elif not pendencias %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <div style="font-size:1.8rem;margin-bottom:0.5rem;">&#9989;</div>
+  <p style="font-weight:500;">Nenhum ponto faltando. Tudo certo!</p>
+</div>
+{% else %}
+{% for p in pendencias %}
+<div class="ds-form-section" style="max-width:440px;margin-bottom:1.1rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.4rem;">
+    <strong style="font-size:0.98rem;">{{ p.data|date:"l, d/m/Y" }}</strong>
+    {% if p.enviada %}<span class="ds-status ds-status--ok">Aguardando aprovação</span>
+    {% elif p.rejeitada %}<span class="ds-status ds-status--pendente">Reprovada — reenvie</span>{% endif %}
+  </div>
+  <p style="font-size:0.82rem;color:var(--cinza-texto);margin-bottom:0.9rem;">{{ p.mensagem }}</p>
+
+  <form method="post" action="{% url 'rh:propor_correcao' %}">
+    {% csrf_token %}
+    <input type="hidden" name="data" value="{{ p.iso }}">
+
+    <div class="corr-horarios">
+      {% for slot in p.slots %}
+      <div class="ds-form-group corr-slot {% if slot.pref == 'sa' or slot.pref == 'va' %}corr-almoco{% endif %}" style="margin:0;">
+        <label class="ds-label" style="font-size:0.74rem;">{{ slot.label }}{% if not slot.travado %} <span style="color:#f59e0b;">(faltou)</span>{% endif %}</label>
+        {% if slot.travado or p.enviada %}
+        <input class="ds-input corr-lock" type="time" value="{{ slot.hora }}" disabled>
+        {% if not p.enviada %}<input type="hidden" name="{{ slot.pref }}" value="{{ slot.hora }}">{% endif %}
+        {% else %}
+        <input class="ds-input corr-edit" type="time" name="{{ slot.pref }}" value="{{ slot.hora }}">
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.85rem;margin:0.9rem 0;">
+      <input type="checkbox" name="sem_almoco" class="corr-chk-almoco" {% if p.sem_almoco %}checked{% endif %} {% if p.enviada %}disabled{% endif %}>
+      Sem horário de almoço
+    </label>
+
+    {% if p.enviada %}
+    <div class="ds-status ds-status--ok" style="text-align:center;padding:0.6rem;">Enviado — aguardando o gestor aprovar</div>
+    {% else %}
+    <div class="ds-form-group" style="margin-bottom:1.25rem;">
+      <label class="ds-label" style="font-size:0.78rem;">Motivo</label>
+      <input class="ds-input" type="text" name="observacao" required placeholder="ex.: esqueci de bater a saída">
+    </div>
+    <button type="submit" class="ds-btn ds-btn--primario" style="width:100%;">Enviar para aprovação</button>
+    {% endif %}
+  </form>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}
+
+{% block js_extra %}
+<script>
+document.querySelectorAll('form').forEach(function (form) {
+  var chk = form.querySelector('.corr-chk-almoco');
+  var submit = form.querySelector('button[type=submit]');
+  if (!chk || !submit) return;  // dia já enviado: nada a fazer
+  var lunchDivs = form.querySelectorAll('.corr-almoco');
+  var lunchTimes = form.querySelectorAll('.corr-almoco input[type=time]');
+
+  function lunchFilled() {
+    return lunchTimes.length > 0 &&
+      Array.prototype.every.call(lunchTimes, function (i) { return i.value; });
+  }
+  function apply() {
+    // "Sem almoço" marcado → esconde os campos de almoço (ficam em branco).
+    lunchDivs.forEach(function (el) { el.style.display = chk.checked ? 'none' : ''; });
+  }
+  function refresh() {
+    // Se há horário de almoço preenchido, "sem almoço" não se aplica → desativa.
+    var filled = lunchFilled();
+    chk.disabled = filled;
+    if (filled) chk.checked = false;
+    apply();
+  }
+  chk.addEventListener('change', apply);
+  form.querySelectorAll('.corr-edit').forEach(function (i) { i.addEventListener('input', refresh); });
+  refresh();
+});
+</script>
+{% endblock %}

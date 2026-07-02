@@ -5,7 +5,8 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
 from apps.core.decorators import perm_required
-from apps.metas.models import Funcionario, MetaFuncionario, MetaCanal
+from apps.metas.models import MetaFuncionario, MetaCanal
+from apps.rh.models import Colaborador
 from apps.metas.services.relatorio import (
     carregar_vendas_periodo,
     calcular_individual,
@@ -76,9 +77,22 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
     # Coleta todos os meses do período
     meses_periodo = list(_iter_months(ano_ini, mes_ini, ano_fim, mes_fim))
 
+    # Liberação por competência: as metas de um mês só ficam visíveis para todos a
+    # partir das 00h do dia 1º daquele mês. O super admin pode pré-visualizar meses
+    # futuros (ex.: conferir as metas de Julho cadastradas em Junho).
+    is_superadmin = request.user.is_superadmin
+    periodo_liberado = is_superadmin or all(
+        date(a, m, 1) <= hoje for a, m in meses_periodo
+    )
+
     # Vendas e metas do período completo
     vendas = carregar_vendas_periodo(ano_ini, mes_ini, ano_fim, mes_fim)
-    funcionarios = list(Funcionario.objects.filter(ativo=True).order_by("nome"))
+    # Todos com ID Bling (para vendedoras geral e tem_meta).
+    todos_funcionarios = list(
+        Colaborador.objects.filter(ativo=True, bling_vendedor_id__isnull=False).order_by("nome")
+    )
+    # Apenas quem tem canal de meta individual fixo (exclui Cris e similares).
+    funcionarios_com_meta = [f for f in todos_funcionarios if f.canal_meta_individual]
 
     metas_ind = []
     metas_canal_qs = []
@@ -91,15 +105,15 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
 
     individual = []
     if modo_individual:
-        individual = calcular_individual(vendas, funcionarios, metas_ind)
+        individual = calcular_individual(vendas, funcionarios_com_meta, metas_ind)
 
     canais = calcular_canais(
         vendas, metas_canal_qs, ano_ini, mes_ini,
-        funcionarios_com_meta=funcionarios if modo_individual else None,
+        funcionarios_com_meta=funcionarios_com_meta if modo_individual else None,
         metas_ind=metas_ind if modo_individual else None,
     )
     lojas = calcular_lojas(vendas)
-    vendedoras = calcular_geral_vendedoras(vendas, funcionarios)
+    vendedoras = calcular_geral_vendedoras(vendas, todos_funcionarios)
     por_situacao = calcular_por_situacao(vendas)
     totais = total_geral_mes(vendas)
 
@@ -121,9 +135,10 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
     for canal in canais:
         canal["por_semana"] = calcular_por_semana(canal["faltam"], dias)
 
-    # Meta geral (soma de todos os canais exceto Londrina)
+    # Meta geral: soma dos canais calculados (exclui Londrina que não tem meta).
+    # Inclui Show Room e Anacã automáticos + Atacado e Site/Instagram manuais.
     meta_total = sum(
-        (m.valor for m in metas_canal_qs if m.canal != "londrina"),
+        (Decimal(str(c["meta"])) for c in canais if c.get("tem_meta")),
         Decimal("0"),
     )
     pct_meta_total = float(totais["total"] / meta_total * 100) if meta_total > 0 else 0.0
@@ -149,6 +164,8 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
         "totais": totais,
         "total_pedidos": len(vendas),
         "sem_dados": len(vendas) == 0,
+        "periodo_liberado": periodo_liberado,
+        "is_superadmin": is_superadmin,
         # meta geral
         "meta_total": meta_total,
         "pct_meta_total": pct_meta_total,

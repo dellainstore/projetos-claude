@@ -1,33 +1,15 @@
 from django.db import models
 
 
-class Funcionario(models.Model):
-    nome = models.CharField(max_length=100, verbose_name="Nome")
-    nome_bling = models.CharField(
-        max_length=200,
-        unique=True,
-        verbose_name="Nome no Bling",
-        help_text="Nome exato como aparece como vendedora nos pedidos Bling (ex: TINA DIAS)",
-    )
-    ativo = models.BooleanField(default=True, verbose_name="Ativo")
-
-    class Meta:
-        verbose_name = "Funcionario"
-        verbose_name_plural = "Funcionarios"
-        ordering = ["nome"]
-
-    def __str__(self) -> str:
-        return self.nome
-
-
 class MetaFuncionario(models.Model):
-    """Meta individual mensal por funcionaria (a partir de jul/2026)."""
+    """Meta individual mensal por colaborador (vendedor). O cadastro do colaborador
+    é único, no módulo RH; aqui só vinculamos a meta a ele."""
 
-    funcionario = models.ForeignKey(
-        Funcionario,
+    colaborador = models.ForeignKey(
+        "rh.Colaborador",
         on_delete=models.CASCADE,
         related_name="metas",
-        verbose_name="Funcionaria",
+        verbose_name="Colaborador",
     )
     ano = models.IntegerField(verbose_name="Ano")
     mes = models.IntegerField(
@@ -39,11 +21,11 @@ class MetaFuncionario(models.Model):
     class Meta:
         verbose_name = "Meta Individual"
         verbose_name_plural = "Metas Individuais"
-        unique_together = [("funcionario", "ano", "mes")]
-        ordering = ["-ano", "-mes", "funcionario__nome"]
+        unique_together = [("colaborador", "ano", "mes")]
+        ordering = ["-ano", "-mes", "colaborador__nome"]
 
     def __str__(self) -> str:
-        return f"{self.funcionario.nome} — {self.mes:02d}/{self.ano} — R$ {self.valor:,.2f}"
+        return f"{self.colaborador.nome} — {self.mes:02d}/{self.ano} — R$ {self.valor:,.2f}"
 
 
 class MetaCanal(models.Model):

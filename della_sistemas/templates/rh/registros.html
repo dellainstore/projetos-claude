@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block titulo %}Registros de Ponto | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Registros de Ponto</h1>
+  <p class="ds-page-subtitulo">Auditoria: o que foi batido no app e o que foi ajustado manualmente</p>
+</div>
+
+<div class="ds-form-section" style="margin-bottom:1.25rem;">
+  <form method="get" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+    <div class="ds-form-group" style="margin:0;min-width:180px;">
+      <label class="ds-label">Colaborador</label>
+      <select class="ds-input" name="colaborador" onchange="this.form.submit()">
+        <option value="0">Todos</option>
+        {% for c in colaboradores %}<option value="{{ c.id }}" {% if c.id == f_colab %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="ds-form-group" style="margin:0;min-width:150px;">
+      <label class="ds-label">Origem</label>
+      <select class="ds-input" name="origem" onchange="this.form.submit()">
+        <option value="todos" {% if origem == 'todos' %}selected{% endif %}>Todas</option>
+        <option value="app" {% if origem == 'app' %}selected{% endif %}>Aplicativo</option>
+        <option value="manual" {% if origem == 'manual' %}selected{% endif %}>Manual (gestor)</option>
+      </select>
+    </div>
+    <div class="ds-form-group" style="margin:0;min-width:150px;">
+      <label class="ds-label">Período</label>
+      <select class="ds-input" name="periodo" onchange="this.form.submit()">
+        <option value="7" {% if periodo == '7' %}selected{% endif %}>Últimos 7 dias</option>
+        <option value="30" {% if periodo == '30' %}selected{% endif %}>Últimos 30 dias</option>
+        <option value="custom" {% if periodo == 'custom' %}selected{% endif %}>Personalizado</option>
+      </select>
+    </div>
+    {% if periodo == 'custom' %}
+    <div class="ds-form-group" style="margin:0;"><label class="ds-label">De</label>
+      <input class="ds-input" type="date" name="inicio" value="{{ inicio }}"></div>
+    <div class="ds-form-group" style="margin:0;"><label class="ds-label">Até</label>
+      <input class="ds-input" type="date" name="fim" value="{{ fim }}"></div>
+    <button type="submit" class="ds-btn ds-btn--primario">Filtrar</button>
+    {% endif %}
+  </form>
+  <p style="font-size:0.8rem;color:var(--cinza-texto);margin-top:0.6rem;">
+    No filtro: <strong>{{ total_app }}</strong> pelo app · <strong>{{ total_manual }}</strong> manuais.
+  </p>
+</div>
+
+{% if batidas %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Data</th><th>Hora</th><th>Colaborador</th><th>Tipo</th><th>Origem</th><th>Ajustado por</th><th>Loja</th>{% if pode_excluir %}<th style="text-align:right;">Ações</th>{% endif %}</tr></thead>
+    <tbody>
+      {% for b in batidas %}
+      <tr>
+        <td style="white-space:nowrap;">{{ b.momento|date:"d/m/Y" }}</td>
+        <td>{{ b.momento|date:"H:i" }}</td>
+        <td style="white-space:nowrap;">{{ b.colaborador.nome }}</td>
+        <td>{{ b.get_tipo_display }}</td>
+        <td>
+          {% if b.origem == 'manual' %}<span class="ds-status ds-status--pendente">Manual</span>
+          {% else %}<span class="ds-status ds-status--ok">App</span>{% endif %}
+        </td>
+        <td style="font-size:0.8rem;color:var(--cinza-texto);">{% if b.ajustado_por %}{{ b.ajustado_por.get_full_name|default:b.ajustado_por.username }}{% endif %}</td>
+        <td style="font-size:0.8rem;color:var(--cinza-texto);">{{ b.loja.nome|default:"" }}</td>
+        {% if pode_excluir %}
+        <td style="text-align:right;">
+          <form method="post" action="{% url 'rh:registro_excluir' b.pk %}" style="display:inline;margin:0;">
+            {% csrf_token %}
+            <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.7rem;padding:0.2rem 0.45rem;"
+                    onclick="return confirm('Excluir este registro?')">Excluir</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <p style="color:var(--cinza-texto);">Nenhuma batida no filtro.</p>
+</div>
+{% endif %}
+{% endblock %}

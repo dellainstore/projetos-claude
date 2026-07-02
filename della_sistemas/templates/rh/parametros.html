@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block titulo %}Parâmetros do Ponto | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <h1 class="ds-page-titulo">Parâmetros do Ponto</h1>
+    <p class="ds-page-subtitulo">Lojas, tolerância de atraso e vínculo de cada colaborador</p>
+  </div>
+  <a href="{% url 'rh:jornada' %}" class="ds-btn">Jornada</a>
+</div>
+
+<!-- Tolerância e intervalo -->
+<div class="ds-form-section" style="margin-bottom:1.25rem;">
+  <h2 style="font-size:1rem;margin-bottom:0.75rem;">Regras do ponto</h2>
+  <form method="post" action="{% url 'rh:tolerancia_salvar' %}" style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
+    {% csrf_token %}
+    <div class="ds-form-group" style="margin:0;">
+      <label class="ds-label">Tolerância (min)</label>
+      <input class="ds-input" type="number" min="0" step="1" name="tolerancia_minutos"
+             value="{{ parametros.tolerancia_minutos }}" style="width:120px;">
+    </div>
+    <div class="ds-form-group" style="margin:0;">
+      <label class="ds-label">Intervalo entre batidas (min)</label>
+      <input class="ds-input" type="number" min="0" step="1" name="intervalo_minimo_minutos"
+             value="{{ parametros.intervalo_minimo_minutos }}" style="width:120px;">
+    </div>
+    <button type="submit" class="ds-btn ds-btn--primario">Salvar</button>
+  </form>
+  <p style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.5rem;">
+    <strong>Tolerância:</strong> atraso/extra dentro desse limite não vira saldo (ex.: 10).<br>
+    <strong>Intervalo:</strong> bloqueia bater 2x seguidas por engano (ex.: 2 min).
+  </p>
+</div>
+
+<!-- Lojas -->
+<div class="ds-form-section" style="margin-bottom:1.25rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+    <h2 style="font-size:1rem;margin:0;">Lojas</h2>
+    <a href="{% url 'rh:loja_novo' %}" class="ds-btn ds-btn--primario" style="font-size:0.8rem;">+ Nova loja</a>
+  </div>
+  {% if lojas %}
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead><tr><th>Nome</th><th>Coordenadas</th><th>Raio</th><th>Status</th><th style="text-align:right;">Ações</th></tr></thead>
+      <tbody>
+        {% for l in lojas %}
+        <tr {% if not l.ativo %}style="opacity:0.5;"{% endif %}>
+          <td><strong>{{ l.nome }}</strong></td>
+          <td style="font-size:0.8rem;font-family:monospace;color:var(--cinza-texto);white-space:nowrap;">{{ l.latitude }}, {{ l.longitude }}</td>
+          <td>{{ l.raio_metros }} m</td>
+          <td>{% if l.ativo %}<span class="ds-status ds-status--ok">Ativa</span>{% else %}<span class="ds-status ds-status--pendente">Inativa</span>{% endif %}</td>
+          <td style="text-align:right;white-space:nowrap;">
+            <a href="{% url 'rh:loja_editar' l.pk %}" class="ds-btn" style="font-size:0.72rem;padding:0.2rem 0.45rem;">Editar</a>
+            <form method="post" action="{% url 'rh:loja_delete' l.pk %}" style="display:inline;margin:0;">
+              {% csrf_token %}
+              <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.72rem;padding:0.2rem 0.45rem;"
+                      onclick="return confirm('Excluir a loja {{ l.nome }}?')">Excluir</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="font-size:0.85rem;color:var(--cinza-texto);">Nenhuma loja cadastrada. As batidas serão recusadas até cadastrar ao menos uma.</p>
+  {% endif %}
+</div>
+
+<!-- Vínculos colaborador × loja -->
+{% if lojas and colaboradores %}
+<div class="ds-form-section">
+  <h2 style="font-size:1rem;margin-bottom:0.75rem;">Quem bate em qual loja</h2>
+  <form method="post" action="{% url 'rh:vinculos_salvar' %}">
+    {% csrf_token %}
+    <div class="ds-table-wrapper">
+      <table class="ds-table">
+        <thead>
+          <tr>
+            <th>Colaborador</th>
+            {% for l in lojas %}<th style="text-align:center;white-space:nowrap;">{{ l.nome }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in colaboradores %}
+          <tr>
+            <td style="white-space:nowrap;">{{ c.nome }}{% if not c.registra_ponto %} <span style="font-size:0.72rem;color:var(--cinza-texto);">(não bate ponto)</span>{% endif %}</td>
+            {% for l in lojas %}
+            <td style="text-align:center;">
+              <input type="checkbox" name="vinc_{{ c.id }}_{{ l.id }}" {% if l.id in c.lojas_ids %}checked{% endif %}>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:0.78rem;color:var(--cinza-texto);margin:0.6rem 0;">
+      Sem nenhuma loja marcada, o colaborador pode bater em qualquer loja ativa.
+    </p>
+    <button type="submit" class="ds-btn ds-btn--primario">Salvar vínculos</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

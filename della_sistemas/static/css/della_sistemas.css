@@ -563,24 +563,31 @@ body.sidebar-colapsada .ds-sidebar-tab {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   text-decoration: none;
-  border: none;
+  /* Botão neutro padrão (bare): claro, contorno discreto, texto escuro.
+     Sem isso, um <a class="ds-btn"> herdava a cor de link (azul). */
+  background: var(--branco);
+  color: var(--preto);
+  border: 1px solid var(--cinza-medio);
   border-radius: 5px;
   cursor: pointer;
   transition: var(--transicao);
   white-space: nowrap;
 }
+.ds-btn:hover { border-color: var(--preto); color: var(--preto); }
 
 .ds-btn--primario {
   background: var(--preto);
   color: var(--branco);
+  border-color: var(--preto);
 }
-.ds-btn--primario:hover { background: var(--dourado); color: var(--branco); }
+.ds-btn--primario:hover { background: var(--dourado); color: var(--branco); border-color: var(--dourado); }
 
 .ds-btn--dourado {
   background: var(--dourado);
   color: var(--branco);
+  border-color: var(--dourado);
 }
-.ds-btn--dourado:hover { background: #b8924a; }
+.ds-btn--dourado:hover { background: #b8924a; border-color: #b8924a; }
 
 .ds-btn--outline {
   background: transparent;
@@ -705,4 +712,30 @@ body.sidebar-colapsada .ds-sidebar-tab {
 @media (max-width: 480px) {
   .ds-cards-grid { grid-template-columns: 1fr; }
   .ds-main { padding: 1rem; }
+}
+
+/* ── Correções de ponto: grid de horários (2 colunas, sem cortar) ──────────── */
+.corr-horarios {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 0.7rem;
+  align-items: end;            /* rótulos com 1 ou 2 linhas → inputs alinhados pela base */
+}
+.corr-horarios .ds-form-group { min-width: 0; }   /* permite o input encolher dentro do grid */
+/* Inputs de hora: padding horizontal menor para o HH:MM + setinhas caberem sem cortar */
+.corr-horarios .ds-input {
+  width: 100%;
+  min-width: 0;
+  padding-left: 0.5rem;
+  padding-right: 0.4rem;
+  text-align: center;
+}
+.corr-horarios .ds-label { min-height: 2.4em; }
+.corr-lock {
+  background: #f3f0eb;
+  color: #9b9b9b;
+  cursor: not-allowed;
+}
+@media (max-width: 380px) {
+  .corr-horarios { grid-template-columns: 1fr; }
 }

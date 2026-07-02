@@ -1,0 +1,41 @@
+{# Matriz de dias de uma variante. Espera: linhas (lista de {dia,label,ed}) e variante #}
+<div class="ds-table-wrapper" style="overflow-x:auto;">
+  <table class="ds-table" style="font-size:0.85rem;min-width:720px;">
+    <thead>
+      <tr>
+        <th>Dia</th>
+        <th style="text-align:center;">Trabalha</th>
+        <th>Entrada</th>
+        <th>Saída almoço</th>
+        <th>Volta almoço</th>
+        <th>Saída</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in linhas %}
+      <tr>
+        <td><strong>{{ l.label }}</strong></td>
+        <td style="text-align:center;">
+          <input type="checkbox" name="trab_{{ variante }}_{{ l.dia }}" {% if l.ed.trabalha %}checked{% endif %}>
+        </td>
+        <td>
+          <input type="time" class="ds-input" style="width:115px;" name="ent_{{ variante }}_{{ l.dia }}"
+                 value="{{ l.ed.hora_entrada|time:'H:i'|default:'' }}">
+        </td>
+        <td>
+          <input type="time" class="ds-input" style="width:115px;" name="almi_{{ variante }}_{{ l.dia }}"
+                 value="{{ l.ed.hora_saida_almoco|time:'H:i'|default:'' }}">
+        </td>
+        <td>
+          <input type="time" class="ds-input" style="width:115px;" name="almf_{{ variante }}_{{ l.dia }}"
+                 value="{{ l.ed.hora_volta_almoco|time:'H:i'|default:'' }}">
+        </td>
+        <td>
+          <input type="time" class="ds-input" style="width:115px;" name="sai_{{ variante }}_{{ l.dia }}"
+                 value="{{ l.ed.hora_saida|time:'H:i'|default:'' }}">
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

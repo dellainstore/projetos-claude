@@ -137,6 +137,53 @@ def _build_suppliers_patch(
     return patch
 
 
+def _cache_created_variant(
+    cur,
+    *,
+    bling_product_id: int,
+    sku: str | None,
+    base: str,
+    color: str,
+    size: str,
+    product_name: str,
+    situation: str = "A",
+) -> None:
+    """
+    Grava o produto recém-criado nos caches locais (products_cache + variants_cache)
+    para que ele fique disponível imediatamente como template/cor no autocomplete,
+    sem precisar esperar o próximo sync_catalog.
+
+    Faz upsert por bling_product_id (1 linha por produto). Cada produto Bling é uma
+    variação única base+cor+tamanho, então não há dedup por SKU a fazer aqui.
+    """
+    now = int(time.time())
+    bid = int(bling_product_id)
+    sku_norm = (sku or "").strip().upper()
+    sit = (situation or "A").strip().upper() or "A"
+    active = 1 if sit == "A" else 0
+
+    cur.execute("DELETE FROM products_cache WHERE bling_product_id=?", (bid,))
+    cur.execute(
+        """
+        INSERT INTO products_cache
+        (bling_product_id, name, code, situation, type, format, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (bid, product_name, sku_norm, sit, "P", "S", now),
+    )
+
+    cur.execute("DELETE FROM variants_cache WHERE bling_product_id=?", (bid,))
+    if sku_norm:
+        cur.execute(
+            """
+            INSERT INTO variants_cache
+            (sku, bling_product_id, product_name, base_name, color_key, size_key, active, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (sku_norm, bid, product_name, base, color, size, active, now),
+        )
+
+
 def _find_variant(cur, base: str, color: str, size: str) -> tuple[str | None, int | None]:
     row = cur.execute(
         """
@@ -374,6 +421,18 @@ def processar_requests_aprovados(limit: int = 10) -> dict[str, Any]:
                     bling_product_id = int(new_id)
                     created_product_data = get_produto(int(new_id)).get("data", {}) or {}
                     sku = _extract_sku_from_product(created_product_data)
+                    # Disponibiliza o produto novo no cache local na hora, para que uma
+                    # nova cor do mesmo modelo possa ser incluída em seguida sem sync.
+                    _cache_created_variant(
+                        cur,
+                        bling_product_id=bling_product_id,
+                        sku=sku,
+                        base=base,
+                        color=color,
+                        size=size,
+                        product_name=created_product_data.get("nome") or nome,
+                        situation=created_product_data.get("situacao") or "A",
+                    )
                     created.append(
                         {
                             "base": base,

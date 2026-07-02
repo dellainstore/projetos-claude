@@ -219,6 +219,33 @@
     text-align: center; font-size: 0.72rem; color: var(--cinza-texto);
     margin-top: 0.4rem;
   }
+  /* Navegador de semana do grafico */
+  .an-chart-week-nav {
+    display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+    margin-bottom: 0.9rem; padding-bottom: 0.8rem;
+    border-bottom: 1px solid var(--cinza-medio, #eee);
+  }
+  .an-week-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px; text-decoration: none;
+    border: 1px solid var(--cinza-medio, #e3ddd2); color: var(--preto);
+    font-size: 0.95rem; background: var(--branco); transition: background 0.15s;
+  }
+  .an-week-btn:hover { background: #f4efe6; }
+  .an-week-btn--off { opacity: 0.3; pointer-events: none; }
+  .an-week-atual { display: flex; flex-direction: column; line-height: 1.15; }
+  .an-week-label { font-size: 0.9rem; font-weight: 600; color: var(--preto); }
+  .an-week-tag { font-size: 0.68rem; color: #c9a96e; font-weight: 600; }
+  .an-week-compara {
+    margin-left: auto; display: inline-flex; align-items: baseline; gap: 0.3rem;
+    font-size: 0.95rem; font-weight: 700;
+  }
+  .an-week-compara span { font-size: 0.68rem; font-weight: 400; color: var(--cinza-texto); }
+  .an-week-compara.an-up { color: #059669; }
+  .an-week-compara.an-down { color: #dc2626; }
+  @media (max-width: 560px) {
+    .an-week-compara { margin-left: 0; width: 100%; }
+  }
 
   /* Aviso sem config */
   .an-sem-config {
@@ -482,41 +509,7 @@ function toggleCustomPeriodo(btn) {
 {% endif %}
 
 {% if trafico %}
-<!-- GRAFICO TRAFEGO SEMANAL -->
-<div class="an-secao-titulo">Trafego ao longo do periodo</div>
-<div class="an-chart-card">
-  <div class="an-chart-header">
-    <div class="an-chart-header-left">
-      <div class="an-chart-titulo-label" id="an-chart-titulo-label">Visitas por dia da semana</div>
-      <button class="an-chart-back-btn" id="an-chart-back-btn" onclick="anVoltarSemana()">&#8592; Ver semana completa</button>
-    </div>
-    <div class="an-chart-pills">
-      {% if trafico.pico_dia %}
-      <div class="an-chart-pill">
-        <div class="an-chart-pill-label">Dia com mais visitas</div>
-        <div class="an-chart-pill-valor">{{ trafico.pico_dia }} <span>({{ trafico.pico_dia_total }})</span></div>
-      </div>
-      {% endif %}
-      {% if trafico.pico_hora is not None %}
-      <div class="an-chart-pill">
-        <div class="an-chart-pill-label">Horario de pico</div>
-        <div class="an-chart-pill-valor">{{ trafico.pico_hora }}h&nbsp;&ndash;&nbsp;{{ trafico.pico_hora }}h59</div>
-      </div>
-      {% endif %}
-      {% if trafico.menor_dia %}
-      <div class="an-chart-pill an-chart-pill--quiet">
-        <div class="an-chart-pill-label">Dia mais tranquilo</div>
-        <div class="an-chart-pill-valor">{{ trafico.menor_dia }} <span>({{ trafico.menor_dia_total }})</span></div>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-  <div class="an-chart-canvas-wrap">
-    <canvas id="an-chart-semanal"></canvas>
-    <canvas id="an-chart-horario" style="display:none;"></canvas>
-  </div>
-  <div class="an-chart-hint" id="an-chart-hint">Clique em um dia para ver por horario</div>
-</div>
+{% include 'analytics/_trafico_card.html' %}
 {% endif %}
 
 {% endif %}
@@ -527,124 +520,140 @@ function toggleCustomPeriodo(btn) {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 (function () {
-  var dados = {{ trafico_json|safe }};
-  if (!dados || !dados.por_dia) return;
+  var DOURADO     = '#c9a96e';
+  var DOURADO_HVR = '#b8924a';
+  var GRID_CLR    = '#f0ece4';
+  var TEXT_CLR    = '#666666';
+  var PRETO       = '#1a1a1a';
+  var RADIUS      = 5;
 
-  var DOURADO      = '#c9a96e';
-  var DOURADO_HVR  = '#b8924a';
-  var GRID_CLR     = '#f0ece4';
-  var TEXT_CLR     = '#666666';
-  var PRETO        = '#1a1a1a';
-  var RADIUS       = 5;
-
-  var chartSemanal = null;
-  var chartHorario = null;
-
-  var ctxS = document.getElementById('an-chart-semanal');
-  var ctxH = document.getElementById('an-chart-horario');
-
-  function tooltipOpts(msgSuffix) {
+  function tooltipOpts() {
     return {
-      backgroundColor: PRETO,
-      titleColor: '#ffffff',
-      bodyColor: '#ffffff',
-      padding: 10,
-      cornerRadius: 6,
-      displayColors: false,
-      callbacks: {
-        label: function (c) { return c.parsed.y + ' visita' + (c.parsed.y !== 1 ? 's' : '') + (msgSuffix || ''); }
-      }
+      backgroundColor: PRETO, titleColor: '#fff', bodyColor: '#fff',
+      padding: 10, cornerRadius: 6, displayColors: false,
+      callbacks: { label: function (c) { return c.parsed.y + ' visita' + (c.parsed.y !== 1 ? 's' : ''); } }
     };
   }
 
   function scaleOpts() {
     return {
-      y: {
-        beginAtZero: true,
-        grid: { color: GRID_CLR },
-        ticks: { precision: 0, color: TEXT_CLR, font: { size: 11 } },
-        border: { color: '#eeede8' }
-      },
-      x: {
-        grid: { display: false },
-        ticks: { color: TEXT_CLR, font: { size: 11 } },
-        border: { color: '#eeede8' }
+      y: { beginAtZero: true, grid: { color: GRID_CLR },
+           ticks: { precision: 0, color: TEXT_CLR, font: { size: 11 } }, border: { color: '#eeede8' } },
+      x: { grid: { display: false },
+           ticks: { color: TEXT_CLR, font: { size: 11 } }, border: { color: '#eeede8' } }
+    };
+  }
+
+  function tooltipSemanal(dados) {
+    return {
+      backgroundColor: PRETO, titleColor: '#fff', bodyColor: '#fff',
+      padding: 10, cornerRadius: 6, displayColors: true,
+      callbacks: {
+        title: function (items) {
+          var i = items[0].dataIndex;
+          var d = (dados.datas && dados.datas[i]) ? ' (' + dados.datas[i] + ')' : '';
+          return (dados.labels_full[i] || '') + d;
+        },
+        label: function (c) {
+          var v = c.parsed.y;
+          if (v === null) return 'ainda nao aconteceu';
+          return (c.dataset.label || '') + ': ' + v + ' visita' + (v !== 1 ? 's' : '');
+        }
       }
     };
   }
 
-  function criarChartSemanal() {
-    if (chartSemanal) chartSemanal.destroy();
-    chartSemanal = new Chart(ctxS, {
+  // Inicializa (ou reinicializa) o grafico com novos dados.
+  // Chamada na carga inicial e pelo listener htmx:afterSettle apos troca de semana.
+  window._initAnChart = function (dados) {
+    if (!dados || !dados.por_dia) return;
+
+    if (window._anChartSemanal) { window._anChartSemanal.destroy(); window._anChartSemanal = null; }
+    if (window._anChartHorario) { window._anChartHorario.destroy(); window._anChartHorario = null; }
+
+    var ctxS = document.getElementById('an-chart-semanal');
+    var ctxH = document.getElementById('an-chart-horario');
+    if (!ctxS) return;
+
+    window._anChartSemanal = new Chart(ctxS, {
       type: 'bar',
       data: {
         labels: dados.labels,
-        datasets: [{
-          data: dados.por_dia,
-          backgroundColor: DOURADO,
-          hoverBackgroundColor: DOURADO_HVR,
-          borderRadius: RADIUS,
-          borderSkipped: false
-        }]
+        datasets: [
+          { label: 'Esta semana', data: dados.por_dia,
+            backgroundColor: DOURADO, hoverBackgroundColor: DOURADO_HVR,
+            borderRadius: RADIUS, borderSkipped: false, order: 2 },
+          { label: 'Semana anterior', type: 'line', data: dados.por_dia_anterior,
+            borderColor: '#9b9b9b', backgroundColor: '#9b9b9b',
+            borderWidth: 2, borderDash: [5, 4], pointRadius: 3,
+            pointBackgroundColor: '#9b9b9b', tension: 0.3, order: 1 }
+        ]
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { display: false },
-          tooltip: tooltipOpts(' (clique para detalhar)')
+          legend: { display: true, position: 'bottom',
+            labels: { boxWidth: 12, font: { size: 11 }, color: TEXT_CLR, usePointStyle: true } },
+          tooltip: tooltipSemanal(dados)
         },
         scales: scaleOpts(),
         onClick: function (e, els) {
-          if (els && els.length > 0) mostrarHorario(els[0].index);
+          var bar = (els || []).find(function (x) { return x.datasetIndex === 0; });
+          if (bar) _mostrarHorario(dados, ctxS, ctxH, bar.index);
         },
         onHover: function (e, els) {
-          ctxS.style.cursor = (els && els.length > 0) ? 'pointer' : 'default';
+          ctxS.style.cursor = (els || []).some(function (x) { return x.datasetIndex === 0; }) ? 'pointer' : 'default';
         }
       }
     });
-  }
+  };
 
-  function mostrarHorario(idx) {
+  function _mostrarHorario(dados, ctxS, ctxH) {
+    var idx = arguments[3];
     ctxS.style.display = 'none';
     ctxH.style.display = 'block';
-    document.getElementById('an-chart-titulo-label').textContent =
-      'Visitas por horario - ' + dados.labels_full[idx];
-    document.getElementById('an-chart-back-btn').style.display = 'inline-block';
-    document.getElementById('an-chart-hint').style.display = 'none';
+    var lbl = document.getElementById('an-chart-titulo-label');
+    var btn = document.getElementById('an-chart-back-btn');
+    var hnt = document.getElementById('an-chart-hint');
+    if (lbl) lbl.textContent = 'Visitas por horario - ' + dados.labels_full[idx];
+    if (btn) btn.style.display = 'inline-block';
+    if (hnt) hnt.style.display = 'none';
 
-    if (chartHorario) chartHorario.destroy();
-    chartHorario = new Chart(ctxH, {
+    if (window._anChartHorario) { window._anChartHorario.destroy(); window._anChartHorario = null; }
+    window._anChartHorario = new Chart(ctxH, {
       type: 'bar',
-      data: {
-        labels: dados.horas,
-        datasets: [{
-          data: dados.por_dia_hora[idx],
-          backgroundColor: DOURADO,
-          hoverBackgroundColor: DOURADO_HVR,
-          borderRadius: 4,
-          borderSkipped: false
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: tooltipOpts('') },
-        scales: scaleOpts()
-      }
+      data: { labels: dados.horas, datasets: [{ data: dados.por_dia_hora[idx],
+        backgroundColor: DOURADO, hoverBackgroundColor: DOURADO_HVR,
+        borderRadius: 4, borderSkipped: false }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: tooltipOpts() },
+        scales: scaleOpts() }
     });
   }
 
   window.anVoltarSemana = function () {
-    ctxH.style.display = 'none';
-    ctxS.style.display = 'block';
-    document.getElementById('an-chart-titulo-label').textContent = 'Visitas por dia da semana';
-    document.getElementById('an-chart-back-btn').style.display = 'none';
-    document.getElementById('an-chart-hint').style.display = '';
-    if (chartHorario) { chartHorario.destroy(); chartHorario = null; }
+    var ctxS = document.getElementById('an-chart-semanal');
+    var ctxH = document.getElementById('an-chart-horario');
+    if (ctxH) ctxH.style.display = 'none';
+    if (ctxS) ctxS.style.display = 'block';
+    var lbl = document.getElementById('an-chart-titulo-label');
+    var btn = document.getElementById('an-chart-back-btn');
+    var hnt = document.getElementById('an-chart-hint');
+    if (lbl) lbl.textContent = 'Visitas por dia da semana';
+    if (btn) btn.style.display = 'none';
+    if (hnt) hnt.style.display = '';
+    if (window._anChartHorario) { window._anChartHorario.destroy(); window._anChartHorario = null; }
   };
 
-  criarChartSemanal();
+  // Carga inicial
+  window._initAnChart({{ trafico_json|safe }});
+
+  // Reinicializa apos troca de semana via HTMX (sem reload de pagina)
+  document.addEventListener('htmx:afterSettle', function () {
+    var el = document.getElementById('an-trafico-dados');
+    if (!el) return;
+    try { window._initAnChart(JSON.parse(el.textContent)); } catch (ex) {}
+  });
 })();
 </script>
 {% endif %}

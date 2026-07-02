@@ -1,0 +1,76 @@
+{% load metas_extras %}
+<div id="an-trafico-wrap">
+
+<script type="application/json" id="an-trafico-dados">{{ trafico_json|safe }}</script>
+
+<div class="an-secao-titulo">Trafego ao longo do periodo</div>
+<div class="an-chart-card">
+
+  <div class="an-chart-week-nav">
+    <a class="an-week-btn"
+       href="?semana={{ trafico.semana_anterior }}"
+       hx-get="{% url 'analytics:htmx_trafico' %}?semana={{ trafico.semana_anterior }}"
+       hx-target="#an-trafico-wrap"
+       hx-swap="outerHTML"
+       hx-push-url="?semana={{ trafico.semana_anterior }}"
+       title="Semana anterior">&#8592;</a>
+
+    <div class="an-week-atual">
+      <span class="an-week-label">{{ trafico.semana_label }}</span>
+      {% if trafico.eh_semana_atual %}<span class="an-week-tag">semana atual</span>{% endif %}
+    </div>
+
+    {% if trafico.tem_proxima %}
+      <a class="an-week-btn"
+         href="?semana={{ trafico.semana_proxima }}"
+         hx-get="{% url 'analytics:htmx_trafico' %}?semana={{ trafico.semana_proxima }}"
+         hx-target="#an-trafico-wrap"
+         hx-swap="outerHTML"
+         hx-push-url="?semana={{ trafico.semana_proxima }}"
+         title="Proxima semana">&#8594;</a>
+    {% else %}
+      <span class="an-week-btn an-week-btn--off">&#8594;</span>
+    {% endif %}
+
+    <div class="an-week-compara {% if trafico.delta_subiu %}an-up{% else %}an-down{% endif %}">
+      {% if trafico.delta_subiu %}&#9650;{% else %}&#9660;{% endif %}
+      {{ trafico.delta_pct }}%
+      <span>vs semana anterior{% if trafico.eh_semana_atual %} (mesmo periodo){% endif %}</span>
+    </div>
+  </div>
+
+  <div class="an-chart-header">
+    <div class="an-chart-header-left">
+      <div class="an-chart-titulo-label" id="an-chart-titulo-label">Visitas por dia da semana</div>
+      <button class="an-chart-back-btn" id="an-chart-back-btn" onclick="anVoltarSemana()">&#8592; Ver semana completa</button>
+    </div>
+    <div class="an-chart-pills">
+      {% if trafico.pico_dia %}
+      <div class="an-chart-pill">
+        <div class="an-chart-pill-label">Dia com mais visitas</div>
+        <div class="an-chart-pill-valor">{{ trafico.pico_dia }} <span>({{ trafico.pico_dia_total }})</span></div>
+      </div>
+      {% endif %}
+      {% if trafico.pico_hora is not None %}
+      <div class="an-chart-pill">
+        <div class="an-chart-pill-label">Horario de pico</div>
+        <div class="an-chart-pill-valor">{{ trafico.pico_hora }}h&nbsp;&ndash;&nbsp;{{ trafico.pico_hora }}h59</div>
+      </div>
+      {% endif %}
+      {% if trafico.menor_dia %}
+      <div class="an-chart-pill an-chart-pill--quiet">
+        <div class="an-chart-pill-label">Dia mais tranquilo</div>
+        <div class="an-chart-pill-valor">{{ trafico.menor_dia }} <span>({{ trafico.menor_dia_total }})</span></div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="an-chart-canvas-wrap">
+    <canvas id="an-chart-semanal"></canvas>
+    <canvas id="an-chart-horario" style="display:none;"></canvas>
+  </div>
+  <div class="an-chart-hint" id="an-chart-hint">Clique em um dia para ver por horario</div>
+
+</div>
+</div>{# /#an-trafico-wrap #}

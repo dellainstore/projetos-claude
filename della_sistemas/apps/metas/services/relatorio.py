@@ -146,6 +146,7 @@ def carregar_vendas(ano: int, mes: int) -> list[dict[str, Any]]:
                 "situacao": str(row.get("situacao") or "").strip(),
                 "qtd_itens": _parse_int(row.get("qtd_itens")),
                 "vendedor": str(row.get("vendedor") or "").strip(),
+                "vendedor_id": _parse_int(row.get("vendedor_id")),
                 "cliente": str(row.get("cliente") or "").strip(),
             })
 
@@ -156,36 +157,41 @@ def carregar_vendas(ano: int, mes: int) -> list[dict[str, Any]]:
 
 def calcular_individual(
     vendas: list[dict],
-    funcionarios: list,
+    colaboradores: list,
     metas_ind: list,
 ) -> list[dict]:
     """
-    Para cada funcionária com meta no mês: soma vendas onde
-    situacao in SITUACOES_META_INDIVIDUAL E vendedor == funcionario.nome_bling.
+    Para cada colaborador (vendedor) com meta no mês: soma vendas onde
+    situacao in SITUACOES_META_INDIVIDUAL E vendedor_id == colaborador.bling_vendedor_id.
+    O vínculo é pelo ID do Bling (robusto), não pelo nome.
     """
     meta_map: dict[int, Decimal] = {}
     for m in metas_ind:
-        meta_map[m.funcionario_id] = meta_map.get(m.funcionario_id, Decimal("0")) + m.valor
+        meta_map[m.colaborador_id] = meta_map.get(m.colaborador_id, Decimal("0")) + m.valor
 
     resultado = []
-    for func in funcionarios:
-        if not func.ativo:
+    for colab in colaboradores:
+        if not colab.ativo:
             continue
-        meta_val = meta_map.get(func.id, Decimal("0"))
+        # Só exibe quem tem canal de meta individual definido
+        if not getattr(colab, "canal_meta_individual", ""):
+            continue
+        meta_val = meta_map.get(colab.id, Decimal("0"))
         total = Decimal("0")
         pecas = 0
         for v in vendas:
             if (
                 v["situacao"] in SITUACOES_META_INDIVIDUAL
-                and v["vendedor"].upper() == func.nome_bling.upper()
+                and colab.bling_vendedor_id
+                and v["vendedor_id"] == colab.bling_vendedor_id
             ):
                 total += v["total"]
                 pecas += v["qtd_itens"]
 
         faltam = max(meta_val - total, Decimal("0")) if meta_val > 0 else Decimal("0")
         resultado.append({
-            "nome": func.nome,
-            "nome_bling": func.nome_bling,
+            "nome": colab.nome,
+            "nome_bling": colab.nome,
             "meta": meta_val,
             "realizado": total,
             "faltam": faltam,
@@ -198,6 +204,30 @@ def calcular_individual(
     return resultado
 
 
+# Canais cuja meta é PUXADA da soma das metas individuais (não se cadastra à mão).
+# São os canais cobertos pelas situações de meta individual (Show Room + Anacã).
+CANAIS_PUXAM_INDIVIDUAL: tuple[str, ...] = ("show_room_sp", "anaca")
+
+
+def meta_individual_somada_por_canal(
+    funcionarios_com_meta: list | None, metas_ind: list | None
+) -> dict[str, Decimal]:
+    """Soma as metas individuais agrupadas pelo canal fixo de cada vendedor
+    (campo canal_meta_individual no Colaborador do RH).
+    Michelle → Anacã | Sara/Tina → Show Room."""
+    soma: dict[str, Decimal] = {"show_room_sp": Decimal("0"), "anaca": Decimal("0")}
+    if not (funcionarios_com_meta and metas_ind):
+        return soma
+    meta_map_ind: dict[int, Decimal] = {}
+    for m in metas_ind:
+        meta_map_ind[m.colaborador_id] = meta_map_ind.get(m.colaborador_id, Decimal("0")) + m.valor
+    for func in funcionarios_com_meta:
+        canal = getattr(func, "canal_meta_individual", "") or ""
+        if canal and func.id in meta_map_ind:
+            soma[canal] = soma.get(canal, Decimal("0")) + meta_map_ind[func.id]
+    return soma
+
+
 def calcular_canais(
     vendas: list[dict],
     metas_canal: list,
@@ -208,26 +238,19 @@ def calcular_canais(
 ) -> list[dict]:
     """
     Retorna desempenho por canal.
-    - Jan-Jun: meta vem de MetaCanal para todos os 4 canais.
-    - Jul+: Show Room SP e Anacã têm meta = sum(MetaFuncionario) do canal;
-            Atacado e Site/Instagram mantêm MetaCanal.
+    - Show Room SP e Anacã: meta = soma das metas individuais dos vendedores
+      daquela loja (puxada automaticamente).
+    - Atacado e Site/Instagram: meta cadastrada à mão (MetaCanal).
     """
     canal_meta_map: dict[str, Decimal] = {}
     for m in metas_canal:
         canal_meta_map[m.canal] = canal_meta_map.get(m.canal, Decimal("0")) + m.valor
 
-    # Meta de Show Room e Anacã no modo individual = sum das metas individuais
-    # de funcionárias que venderam naquele canal (aproximado como total das metas individuais)
-    meta_individual_por_canal: dict[str, Decimal] = {"show_room_sp": Decimal("0"), "anaca": Decimal("0")}
-    if usa_metas_individuais(ano, mes) and funcionarios_com_meta and metas_ind:
-        meta_map_ind: dict[int, Decimal] = {m.funcionario_id: m.valor for m in metas_ind}
-        for func in funcionarios_com_meta:
-            if func.id in meta_map_ind:
-                meta_individual_por_canal["show_room_sp"] += meta_map_ind[func.id]
-                meta_individual_por_canal["anaca"] += meta_map_ind[func.id]
-        # Dividir de forma que cada canal derive meta de suas próprias vendas
-        # Simplificação: Show Room SP e Anacã herdam toda a meta individual (usuário
-        # pode refinar com MetaCanal explícita se quiser)
+    individual_mode = usa_metas_individuais(ano, mes)
+    meta_individual_por_canal = (
+        meta_individual_somada_por_canal(funcionarios_com_meta, metas_ind)
+        if individual_mode else {"show_room_sp": Decimal("0"), "anaca": Decimal("0")}
+    )
 
     resultado = []
     for canal_key, situacoes in CANAL_SITUACOES.items():
@@ -251,11 +274,9 @@ def calcular_canais(
             })
             continue
 
-        # Determina meta
-        if usa_metas_individuais(ano, mes) and canal_key in ("show_room_sp", "anaca"):
-            meta_val = canal_meta_map.get(canal_key, Decimal("0"))
-            if meta_val == 0:
-                meta_val = meta_individual_por_canal.get(canal_key, Decimal("0"))
+        # Show Room e Anacã puxam da soma individual; os demais usam MetaCanal.
+        if individual_mode and canal_key in CANAIS_PUXAM_INDIVIDUAL:
+            meta_val = meta_individual_por_canal.get(canal_key, Decimal("0"))
         else:
             meta_val = canal_meta_map.get(canal_key, Decimal("0"))
 
@@ -300,28 +321,30 @@ def calcular_lojas(vendas: list[dict]) -> list[dict]:
     return resultado
 
 
-def calcular_geral_vendedoras(vendas: list[dict], funcionarios: list) -> list[dict]:
+def calcular_geral_vendedoras(vendas: list[dict], colaboradores: list) -> list[dict]:
     """
     Agrupa faturamento por vendedor (todos, incluindo sem meta e sem nome).
+    "tem_meta" é decidido pelo ID do Bling do colaborador, não pelo nome.
     """
-    agg: dict[str, dict] = {}
+    ids_com_cadastro = {c.bling_vendedor_id for c in colaboradores if c.bling_vendedor_id}
 
+    agg: dict[str, dict] = {}
     for v in vendas:
         nome = v["vendedor"] or "(sem vendedora)"
         if nome not in agg:
-            agg[nome] = {"total": Decimal("0"), "pecas": 0, "situacoes": {}}
+            agg[nome] = {"total": Decimal("0"), "pecas": 0, "situacoes": {}, "vendedor_id": None}
         agg[nome]["total"] += v["total"]
         agg[nome]["pecas"] += v["qtd_itens"]
+        if v.get("vendedor_id"):
+            agg[nome]["vendedor_id"] = v["vendedor_id"]
         sit = v["situacao"]
         agg[nome]["situacoes"][sit] = agg[nome]["situacoes"].get(sit, 0) + int(v["total"])
-
-    nome_bling_set = {f.nome_bling.upper() for f in funcionarios}
 
     resultado = []
     for nome, dados in sorted(agg.items(), key=lambda x: -float(x[1]["total"])):
         resultado.append({
             "vendedora": nome,
-            "tem_meta": nome.upper() in nome_bling_set,
+            "tem_meta": dados["vendedor_id"] in ids_com_cadastro,
             "total": dados["total"],
             "pecas": dados["pecas"],
         })

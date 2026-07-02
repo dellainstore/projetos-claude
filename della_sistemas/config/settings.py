@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "apps.metas",
     "apps.pedidos",
     "apps.analytics",
+    "apps.rh",
 ]
 
 MIDDLEWARE = [
@@ -56,6 +57,7 @@ TEMPLATES = [
                 "django.template.context_processors.static",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.core.context_processors.ponto_pendencias",
             ],
         },
     },
@@ -115,8 +117,12 @@ LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/login/"
 
-SESSION_COOKIE_AGE = 60 * 60 * 8  # 8 horas
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 dias
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+# Sessão deslizante: cada acesso renova os 30 dias. Quem usa com frequência
+# (ex.: app no celular para bater ponto) fica praticamente sempre logado;
+# no desktop só pede senha de novo após 30 dias sem usar.
+SESSION_SAVE_EVERY_REQUEST = True
 
 LANGUAGE_CODE = "pt-br"
 TIME_ZONE = "America/Sao_Paulo"

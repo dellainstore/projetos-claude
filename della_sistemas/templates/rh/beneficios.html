@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% load l10n %}
+{% block titulo %}Benefícios | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Benefícios</h1>
+  <p class="ds-page-subtitulo">Vale-transporte, vale-alimentação, vale-refeição, plano de saúde e outros</p>
+</div>
+
+<!-- Filtro: tipo de benefício + competência (mês/ano unificados) -->
+<form method="get" style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem;">
+  <select name="tipo" class="ds-input" style="width:auto;" onchange="this.form.submit()">
+    {% for t in tipos %}<option value="{{ t.id }}" {% if t.id == tipo.id %}selected{% endif %}>{{ t.nome }}{% if t.sigla %} ({{ t.sigla }}){% endif %}</option>{% endfor %}
+  </select>
+  <select name="competencia" class="ds-input" style="width:auto;" onchange="this.form.submit()">
+    {% for val, label in meses_opcoes %}<option value="{{ val }}" {% if val == competencia %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <noscript><button type="submit" class="ds-btn ds-btn--primario">Filtrar</button></noscript>
+</form>
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="_acao" value="salvar">
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead>
+        {% if tipo.eh_vt %}
+        <tr><th>Colaborador</th><th>Dias</th><th>Valor do dia (R$)</th><th>Total</th></tr>
+        {% else %}
+        <tr><th>Colaborador</th><th>Valor mensal (R$)</th><th>Vinculado</th></tr>
+        {% endif %}
+      </thead>
+      <tbody>
+        {% for linha in linhas %}
+        <tr>
+          {% if tipo.eh_vt %}
+          <td><strong>{{ linha.colaborador.nome }}</strong>
+            {% if linha.sugerido %}<span class="ds-status ds-status--pendente" style="margin-left:0.4rem;">sugerido</span>{% endif %}
+          </td>
+          <td>
+            <input type="number" name="dias_{{ linha.colaborador.id }}" value="{{ linha.dias }}" min="0"
+                   style="width:80px;padding:0.3rem 0.5rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.85rem;">
+          </td>
+          <td>
+            <input type="number" step="0.01" name="valor_{{ linha.colaborador.id }}" value="{{ linha.valor_dia|unlocalize }}" min="0"
+                   style="width:110px;padding:0.3rem 0.5rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.85rem;">
+          </td>
+          <td><strong>{{ linha.total|brl }}</strong></td>
+          {% else %}
+          <td><strong>{{ linha.colaborador.nome }}</strong></td>
+          <td>
+            <input type="number" step="0.01" name="valor_{{ linha.colaborador.id }}" value="{{ linha.valor|unlocalize }}" min="0"
+                   placeholder="0,00"
+                   style="width:120px;padding:0.3rem 0.5rem;border:1px solid var(--cinza-medio);border-radius:6px;font-size:0.85rem;">
+          </td>
+          <td>{% if linha.vinculado %}<span class="ds-status ds-status--ok">recebe</span>{% else %}<span style="font-size:0.8rem;color:var(--cinza-texto);">não recebe</span>{% endif %}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight:600;border-top:2px solid var(--cinza-medio);">
+          <td {% if tipo.eh_vt %}colspan="3"{% else %}colspan="2"{% endif %} style="text-align:right;">Total do mês:</td>
+          <td>{{ total_geral|brl }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <div style="margin-top:1.25rem;">
+    <button type="submit" class="ds-btn ds-btn--primario">Salvar {{ tipo.nome }} de {{ mes_nome }}/{{ ano }}</button>
+  </div>
+
+  {% if tipo.eh_vt %}
+  <p style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.75rem;">
+    Os dias sugeridos vêm da <strong>escala</strong> de cada colaboradora (dias trabalhados no mês menos férias);
+    sem escala, usa Seg–Sáb. O valor do dia vem do cadastro. Ajuste manualmente se necessário.
+  </p>
+  <p style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.25rem;">
+    Lembrete: na folha, o VT entra adiantado conforme o campo "VT adiantado (meses)" do cadastro.
+  </p>
+  {% else %}
+  <p style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.75rem;">
+    Informe o valor mensal de quem recebe este benefício; deixe em branco (ou 0) para quem não recebe.
+    Estes benefícios ficam registrados aqui e não entram no cálculo da folha.
+  </p>
+  {% endif %}
+</form>
+
+<!-- Gerenciar tipos de benefício -->
+<div class="ds-form-section" style="margin-top:2rem;max-width:640px;">
+  <h2 style="font-size:1rem;margin-bottom:0.9rem;">Tipos de benefício</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.1rem;">
+    {% for t in tipos %}
+    <span class="ds-status ds-status--ok" style="display:inline-flex;align-items:center;gap:0.4rem;">
+      {{ t.nome }}{% if t.sigla %} ({{ t.sigla }}){% endif %}
+      {% if not t.eh_vt %}
+      <form method="post" action="{% url 'rh:beneficio_tipo_toggle' t.pk %}" style="display:inline;margin:0;">
+        {% csrf_token %}
+        <button type="submit" title="Desativar" style="background:none;border:none;cursor:pointer;color:inherit;font-weight:700;">×</button>
+      </form>
+      {% endif %}
+    </span>
+    {% endfor %}
+  </div>
+  <form method="post" action="{% url 'rh:beneficio_tipo_novo' %}" style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end;">
+    {% csrf_token %}
+    <div class="ds-form-group" style="margin:0;flex:1;min-width:200px;">
+      <label class="ds-label">Novo benefício</label>
+      <input type="text" name="nome" class="ds-input" placeholder="ex.: Vale-Alimentação" required>
+    </div>
+    <div class="ds-form-group" style="margin:0;min-width:110px;">
+      <label class="ds-label">Sigla</label>
+      <input type="text" name="sigla" class="ds-input" placeholder="ex.: VA">
+    </div>
+    <button type="submit" class="ds-btn ds-btn--primario">Adicionar</button>
+  </form>
+</div>
+{% endblock %}

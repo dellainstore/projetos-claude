@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Comissão | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Comissão</h1>
+  <p class="ds-page-subtitulo">Pedidos atendidos das vendedoras no Bling — {{ periodo.label }}</p>
+</div>
+
+{% include "rh/_filtros.html" %}
+
+{% if not vendedoras %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <p>Nenhuma vendedora com ID do Bling cadastrado. <a href="{% url 'rh:colaboradores' %}">Cadastrar / vincular</a>.</p>
+</div>
+{% endif %}
+
+{% for secao in secoes %}
+<div class="ds-form-section" style="margin-bottom:1.75rem;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:0.75rem;">
+    <h2 style="font-size:1.05rem;">
+      {{ secao.colaborador.nome }}
+      {% if secao.qtd_nao_pagos %}
+      <span style="font-size:0.78rem;color:#dc2626;font-weight:600;">&#9888; {{ secao.qtd_nao_pagos }} sem pagamento confirmado</span>
+      {% endif %}
+    </h2>
+    <div style="display:flex;gap:0.75rem;align-items:baseline;flex-wrap:wrap;">
+      <span style="font-weight:600;">Total: {{ secao.total|brl }}</span>
+      <a href="{% url 'rh:comissao_pdf' secao.colaborador.id %}?{{ periodo_qs }}" class="ds-btn" style="font-size:0.78rem;padding:0.25rem 0.7rem;">&#8681; PDF</a>
+    </div>
+  </div>
+
+  <!-- Incluir pedido manualmente -->
+  <form method="post" action="{% url 'rh:comissao_incluir' %}" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin:0.75rem 0;">
+    {% csrf_token %}
+    <input type="hidden" name="colaborador" value="{{ secao.colaborador.id }}">
+    <input type="hidden" name="querystring" value="{{ request.GET.urlencode }}">
+    <input type="text" name="numero" class="ds-input" style="width:160px;" placeholder="Incluir pedido nº…" required>
+    <button type="submit" class="ds-btn">+ Incluir pedido</button>
+    <span style="font-size:0.75rem;color:var(--cinza-texto);">Use quando o vendedor não foi lançado no pedido.</span>
+  </form>
+
+  {% if secao.linhas %}
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead>
+        <tr>
+          <th>Data</th><th>Nº pedido</th><th>Cliente</th>
+          <th>Valor total</th><th>%</th><th>Comissão</th><th>Válida</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linha in secao.linhas %}
+          {% include "rh/_comissao_linha.html" with colaborador=secao.colaborador %}
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="font-weight:600;border-top:2px solid var(--cinza-medio);">
+          <td colspan="5" style="text-align:right;">Total (linhas válidas):</td>
+          <td colspan="3" id="total-{{ secao.colaborador.id }}">{{ secao.total|brl }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <p style="color:var(--cinza-texto);font-size:0.85rem;">Nenhum pedido no período.</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+<p style="font-size:0.78rem;color:var(--cinza-texto);">
+  &#9888; vermelho = pagamento não confirmado &nbsp;|&nbsp;
+  &#9680; laranja = pagamento parcial (algumas parcelas pendentes) &nbsp;|&nbsp;
+  &#9998; = incluído/alterado manualmente &nbsp;|&nbsp;
+  <span style="color:#2563eb;font-weight:600;">P1/2</span> = comissão parcelada (pedido &gt; R$ 5.000 — atribuída pelo mês da baixa)
+</p>
+
+<script>
+(function () {
+  function formatBRL(value) {
+    var parts = value.toFixed(2).split(".");
+    var intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return "R$ " + intPart + "," + parts[1];
+  }
+  function recalcularTotais() {
+    document.querySelectorAll("[id^='total-']").forEach(function (cell) {
+      var colabId = cell.id.replace("total-", "");
+      var total = 0;
+      document.querySelectorAll("tr[data-colab='" + colabId + "']").forEach(function (row) {
+        if (row.dataset.valida === "1") {
+          total += parseFloat(row.dataset.valor || "0");
+        }
+      });
+      cell.textContent = formatBRL(total);
+    });
+  }
+  document.addEventListener("htmx:afterSettle", recalcularTotais);
+})();
+</script>
+{% endblock %}

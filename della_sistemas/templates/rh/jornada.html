@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block titulo %}Jornada de Ponto | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <h1 class="ds-page-titulo">Jornada de Ponto</h1>
+    <p class="ds-page-subtitulo">Ajuste os horários de cada dia e salve tudo de uma vez</p>
+  </div>
+  <a href="{% url 'rh:parametros' %}" class="ds-btn">Parâmetros</a>
+</div>
+
+<!-- Filtros -->
+<div class="ds-form-section" style="margin-bottom:1.25rem;">
+  <form method="get" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+    <div class="ds-form-group" style="margin:0;min-width:150px;">
+      <label class="ds-label">Situação</label>
+      <select class="ds-input" name="status" onchange="this.form.submit()">
+        <option value="ativos" {% if status == 'ativos' %}selected{% endif %}>Ativos</option>
+        <option value="inativos" {% if status == 'inativos' %}selected{% endif %}>Inativos (histórico)</option>
+      </select>
+    </div>
+    <div class="ds-form-group" style="margin:0;min-width:200px;">
+      <label class="ds-label">Colaborador</label>
+      <select class="ds-input" name="colaborador" onchange="this.form.submit()">
+        {% for c in colaboradores %}
+        <option value="{{ c.id }}" {% if colaborador and colaborador.id == c.id %}selected{% endif %}>{{ c.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="ds-form-group" style="margin:0;min-width:130px;">
+      <label class="ds-label">Período</label>
+      <select class="ds-input" name="modo" onchange="this.form.submit()">
+        <option value="mes" {% if modo == 'mes' %}selected{% endif %}>Mês</option>
+        <option value="custom" {% if modo == 'custom' %}selected{% endif %}>Personalizado</option>
+      </select>
+    </div>
+    {% if modo == 'custom' %}
+    <div class="ds-form-group" style="margin:0;"><label class="ds-label">De</label>
+      <input class="ds-input" type="date" name="inicio" value="{{ inicio|date:'Y-m-d' }}"></div>
+    <div class="ds-form-group" style="margin:0;"><label class="ds-label">Até</label>
+      <input class="ds-input" type="date" name="fim" value="{{ fim|date:'Y-m-d' }}"></div>
+    <button type="submit" class="ds-btn ds-btn--primario">Aplicar</button>
+    {% else %}
+    <div class="ds-form-group" style="margin:0;min-width:160px;"><label class="ds-label">Mês/Ano</label>
+      <select class="ds-input" name="competencia" onchange="this.form.submit()">
+        {% for val, label in meses_opcoes %}<option value="{{ val }}" {% if val == competencia %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    {% endif %}
+  </form>
+</div>
+
+{% if colaboradores %}
+<div class="ds-form-section" style="margin-bottom:1.25rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
+  {% if colaborador %}
+  <a class="ds-btn" href="{% url 'rh:jornada_pdf' %}?status={{ status }}&colaborador={{ colaborador.id }}&modo={{ modo }}{% if modo == 'custom' %}&inicio={{ inicio|date:'Y-m-d' }}&fim={{ fim|date:'Y-m-d' }}{% else %}&competencia={{ competencia }}{% endif %}" target="_blank">PDF deste colaborador</a>
+  {% endif %}
+  <a class="ds-btn" href="{% url 'rh:jornada_pdf' %}?status={{ status }}&todos=1&modo={{ modo }}{% if modo == 'custom' %}&inicio={{ inicio|date:'Y-m-d' }}&fim={{ fim|date:'Y-m-d' }}{% else %}&competencia={{ competencia }}{% endif %}" target="_blank">PDF de todos ({{ status }})</a>
+</div>
+{% endif %}
+
+{% if not colaborador %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  {% if status == 'inativos' %}
+  <p>Nenhum colaborador inativo com histórico de ponto.</p>
+  <p class="text-muted" style="font-size:0.82rem;margin-top:0.25rem;">Aparecem aqui quem perdeu o vínculo (loja, escala ou ponto desativado) mas já teve batidas registradas.</p>
+  {% else %}
+  <p>Nenhum colaborador com escala e loja vinculadas.</p>
+  <p class="text-muted" style="font-size:0.82rem;margin-top:0.25rem;">Só aparece aqui quem tem escala de trabalho e ao menos uma loja vinculada no cadastro.</p>
+  {% endif %}
+</div>
+{% else %}
+
+<div class="ds-form-section" style="margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+  <span style="font-weight:600;">Saldo do banco de horas no período</span>
+  <span class="ds-status {% if saldo_total < 0 %}ds-status--pendente{% else %}ds-status--ok{% endif %}" style="font-size:0.95rem;">{{ saldo_total }} h</span>
+</div>
+
+<form method="post" action="{% url 'rh:jornada_salvar' %}">
+  {% csrf_token %}
+  <input type="hidden" name="colaborador" value="{{ colaborador.id }}">
+  <input type="hidden" name="dias" value="{{ iso_dias }}">
+  <input type="hidden" name="modo" value="{{ modo }}">
+  <input type="hidden" name="ano" value="{{ ano }}">
+  <input type="hidden" name="mes" value="{{ mes }}">
+  <input type="hidden" name="inicio" value="{{ inicio|date:'Y-m-d' }}">
+  <input type="hidden" name="fim" value="{{ fim|date:'Y-m-d' }}">
+
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead>
+        <tr>
+          <th style="white-space:nowrap;">Dia</th>
+          <th>Entrada</th>
+          <th>Saída almoço</th>
+          <th>Volta almoço</th>
+          <th>Saída</th>
+          <th>Loja</th>
+          <th style="white-space:nowrap;">Trab. / Saldo</th>
+          <th style="text-align:right;">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linha in linhas %}
+        <tr style="{% if linha.fds %}background:#faf7f2;{% endif %}">
+          <td style="white-space:nowrap;font-weight:500;">{{ linha.data|date:"d/m D" }}</td>
+          {% for slot in linha.slots %}
+          <td><input class="ds-input" type="time" name="{{ slot.pref }}_{{ linha.iso }}" value="{{ slot.hora }}" style="width:96px;padding:0.25rem 0.4rem;"></td>
+          {% endfor %}
+          <td>
+            <select class="ds-input" name="loja_{{ linha.iso }}" style="width:120px;padding:0.25rem 0.4rem;">
+              <option value="">Selecione</option>
+              {% for l in lojas %}
+              <option value="{{ l.id }}" {% if linha.loja_id == l.id %}selected{% endif %}>{{ l.nome }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td style="white-space:nowrap;font-size:0.8rem;color:var(--cinza-texto);">
+            {% if linha.afastamento %}
+              <span class="ds-status ds-status--ok">{{ linha.afastamento.get_tipo_display }}</span>
+            {% elif linha.tem_batida %}
+              {{ linha.horas|default:0 }}h · {{ linha.saldo|default:0 }}h
+              {% if linha.folga %}<span class="ds-status ds-status--ok">HE</span>
+              {% elif not linha.pareado %}<span class="ds-status ds-status--pendente">falta batida</span>
+              {% elif linha.parcial %}<span class="ds-status ds-status--pendente">conferir</span>{% endif %}
+            {% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if linha.tem_batida %}
+            <button type="submit" formaction="{% url 'rh:dia_excluir' %}" formnovalidate
+                    name="data" value="{{ linha.iso }}" class="ds-btn ds-btn--perigo"
+                    style="font-size:0.7rem;padding:0.2rem 0.45rem;"
+                    onclick="return confirm('Excluir TODAS as batidas de {{ linha.data|date:'d/m' }}?')">Excluir</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:1rem;display:flex;justify-content:flex-end;">
+    <button type="submit" class="ds-btn ds-btn--primario" style="padding:0.7rem 2rem;">Salvar tudo</button>
+  </div>
+</form>
+<p style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.5rem;">
+  Edite os horários direto na tabela e clique em <strong>Salvar tudo</strong>. Deixar um campo vazio remove aquela batida.
+  Dias de fundo claro são fim de semana.
+</p>
+{% endif %}
+{% endblock %}

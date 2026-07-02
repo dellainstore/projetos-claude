@@ -48,10 +48,13 @@ class Command(BaseCommand):
         pdf_rel  = self._gerar_pdf(stats, analise, semana_inicio, semana_fim)
 
         from apps.analytics.models import RelatorioSemanal
-        RelatorioSemanal.objects.update_or_create(
+        rel, _ = RelatorioSemanal.objects.update_or_create(
             semana_inicio=semana_inicio,
             defaults={'semana_fim': semana_fim, 'arquivo': pdf_rel},
         )
+        # gerado_em e auto_now_add (so grava na criacao). Ao regerar a mesma
+        # semana, atualizamos a data manualmente para refletir a ultima geracao.
+        RelatorioSemanal.objects.filter(pk=rel.pk).update(gerado_em=timezone.now())
         self.stdout.write(self.style.SUCCESS(f'Relatorio salvo: {pdf_rel}'))
 
     def _db_disponivel(self):
@@ -78,8 +81,10 @@ class Command(BaseCommand):
         corte = inicio_corte_aware()
         if inicio < corte:
             inicio = corte
-        periodo   = Q(ocorrido_em__range=(inicio, fim))
-        sess_qs   = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim))
+        # is_bot=False: relatorio considera apenas pessoas reais (bots sao
+        # marcados na coleta do site_della por comportamento, nao so por UA).
+        periodo   = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
+        sess_qs   = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False)
         comprou   = EventoSite.objects.filter(
             sessao=OuterRef('pk'), tipo='pedido_finalizado', pedido_numero__gt=''
         )
@@ -139,7 +144,7 @@ class Command(BaseCommand):
         )
 
         sessoes_all = list(
-            SessaoSite.objects.filter(iniciada_em__range=(inicio, fim))
+            SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False)
             .values('utm_source').annotate(total=Count('id')).order_by('-total')[:20]
         )
         agg: dict = {}

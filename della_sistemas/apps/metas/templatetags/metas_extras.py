@@ -16,6 +16,19 @@ def brl(value):
 
 
 @register.filter
+def brl_valor(value):
+    """Formata número como BRL sem símbolo — para value de input: 50.000,00"""
+    try:
+        f = float(value)
+        if f == 0:
+            return ""
+        s = f"{f:,.2f}"
+        return s.replace(",", "X").replace(".", ",").replace("X", ".")
+    except (TypeError, ValueError):
+        return ""
+
+
+@register.filter
 def pct_css(value):
     """Percentual como string com ponto decimal — para uso em CSS width (nunca vírgula)."""
     try:

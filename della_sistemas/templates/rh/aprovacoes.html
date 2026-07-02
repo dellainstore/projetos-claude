@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block titulo %}Aprovações de Ponto | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <h1 class="ds-page-titulo">Aprovações de Ponto</h1>
+    <p class="ds-page-subtitulo">Correções propostas pelos funcionários — aprove, altere ou rejeite</p>
+  </div>
+  <a href="{% url 'rh:jornada' %}" class="ds-btn">Jornada</a>
+</div>
+
+{% if not pendentes %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <div style="font-size:1.8rem;margin-bottom:0.5rem;">&#9989;</div>
+  <p style="font-weight:500;">Nenhuma correção aguardando aprovação.</p>
+</div>
+{% else %}
+{% for c in pendentes %}
+<div class="ds-form-section" style="max-width:640px;margin-bottom:1.25rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;">
+    <strong style="font-size:1rem;">{{ c.colaborador.nome }} — {{ c.data|date:"d/m/Y (l)" }}</strong>
+    {% if c.sem_almoco %}<span class="ds-status ds-status--ok">Sem almoço · +1h</span>{% endif %}
+  </div>
+  {% if c.observacao %}<p style="font-size:0.82rem;color:var(--cinza-texto);margin-bottom:0.75rem;"><strong>Motivo:</strong> "{{ c.observacao }}"</p>{% endif %}
+
+  <form method="post" action="{% url 'rh:correcao_aprovar' c.pk %}">
+    {% csrf_token %}
+    <div class="corr-horarios">
+      {% for slot in c.slots %}
+      <div class="ds-form-group corr-slot {% if slot.almoco %}corr-almoco{% endif %}" style="margin:0;">
+        <label class="ds-label" style="font-size:0.74rem;">{{ slot.label }}{% if not slot.travado %} <span style="color:#f59e0b;">(faltou)</span>{% endif %}</label>
+        {% if slot.travado %}
+        <input class="ds-input corr-lock" type="time" value="{{ slot.hora }}" disabled>
+        <input type="hidden" name="{{ slot.pref }}" value="{{ slot.hora }}">
+        {% else %}
+        <input class="ds-input corr-edit" type="time" name="{{ slot.pref }}" value="{{ slot.hora }}">
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.83rem;margin:0.8rem 0;">
+      <input type="checkbox" name="sem_almoco" class="corr-chk-almoco" {% if c.sem_almoco %}checked{% endif %}>
+      Sem horário de almoço
+    </label>
+
+    <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+      <button type="submit" class="ds-btn ds-btn--primario">Aprovar</button>
+      <button type="submit" formaction="{% url 'rh:correcao_rejeitar' c.pk %}" formnovalidate class="ds-btn ds-btn--perigo"
+              onclick="return confirm('Rejeitar? Você vai ajustar manualmente na Jornada.')">Rejeitar</button>
+    </div>
+  </form>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if avaliadas %}
+<div class="ds-form-section">
+  <h2 style="font-size:1rem;margin-bottom:0.75rem;">Histórico recente</h2>
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead><tr><th>Colaborador</th><th>Dia</th><th>Resultado</th><th>Aprovado</th><th>Por</th>{% if pode_excluir %}<th style="text-align:right;">Ações</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for c in avaliadas %}
+        <tr>
+          <td style="white-space:nowrap;">{{ c.colaborador.nome }}</td>
+          <td>{{ c.data|date:"d/m/Y" }}</td>
+          <td>{% if c.status == 'aprovada' %}<span class="ds-status ds-status--ok">Aprovada</span>{% else %}<span class="ds-status ds-status--pendente">Rejeitada</span>{% endif %}</td>
+          <td style="font-size:0.8rem;color:var(--cinza-texto);white-space:nowrap;">
+            {% if c.aplicados_labels %}{{ c.aplicados_labels|join:", " }}{% endif %}
+          </td>
+          <td style="font-size:0.8rem;color:var(--cinza-texto);">{% if c.avaliado_por %}{{ c.avaliado_por.get_full_name|default:c.avaliado_por.username }}{% endif %}</td>
+          {% if pode_excluir %}
+          <td style="text-align:right;">
+            <form method="post" action="{% url 'rh:correcao_excluir' c.pk %}" style="display:inline;margin:0;">
+              {% csrf_token %}
+              <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.7rem;padding:0.2rem 0.45rem;"
+                      onclick="return confirm('Remover do histórico?')">Excluir</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block js_extra %}
+<script>
+document.querySelectorAll('.corr-chk-almoco').forEach(function (chk) {
+  var form = chk.closest('form');
+  var lunchDivs = form.querySelectorAll('.corr-almoco');
+  var lunchTimes = form.querySelectorAll('.corr-almoco input[type=time]');
+  function lunchFilled() {
+    return lunchTimes.length > 0 &&
+      Array.prototype.every.call(lunchTimes, function (i) { return i.value; });
+  }
+  function apply() {
+    lunchDivs.forEach(function (el) { el.style.display = chk.checked ? 'none' : ''; });
+  }
+  function refresh() {
+    var filled = lunchFilled();
+    chk.disabled = filled;
+    if (filled) chk.checked = false;
+    apply();
+  }
+  chk.addEventListener('change', apply);
+  form.querySelectorAll('.corr-edit').forEach(function (i) { i.addEventListener('input', refresh); });
+  refresh();
+});
+</script>
+{% endblock %}

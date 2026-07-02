@@ -1,0 +1,51 @@
+{% comment %}
+Filtro padronizado de RH: período + colaboradora.
+Espera no contexto: periodo, colaboradores_filtro, ids_selecionados,
+periodo_opcoes, periodo_ini_val, periodo_fim_val.
+{% endcomment %}
+<form method="get" class="ds-form-section" style="margin-bottom:1.25rem;">
+  <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
+
+    {# ── Período ── #}
+    <div>
+      <label class="ds-label" style="display:block;margin-bottom:0.4rem;">Período</label>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
+        <button type="submit" name="filtro" value="atual"
+                class="ds-btn {% if periodo.filtro == 'atual' %}ds-btn--primario{% endif %}">Mês Atual</button>
+        <button type="submit" name="filtro" value="passado"
+                class="ds-btn {% if periodo.filtro == 'passado' %}ds-btn--primario{% endif %}">Mês Anterior</button>
+        <button type="submit" name="filtro" value="custom"
+                class="ds-btn {% if periodo.filtro == 'custom' %}ds-btn--primario{% endif %}">Personalizado</button>
+      </div>
+      {% if periodo.filtro == 'custom' %}
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.6rem;">
+        <select name="periodo_ini" class="ds-input" style="width:auto;">
+          {% for val, nome in periodo_opcoes %}<option value="{{ val }}" {% if val == periodo_ini_val %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+        </select>
+        <span style="color:var(--cinza-texto);">até</span>
+        <select name="periodo_fim" class="ds-input" style="width:auto;">
+          {% for val, nome in periodo_opcoes %}<option value="{{ val }}" {% if val == periodo_fim_val %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ── Colaboradora ── #}
+    <div>
+      <label class="ds-label" style="display:block;margin-bottom:0.4rem;">Colaboradora</label>
+      <select name="colaborador" class="ds-input" style="min-width:240px;">
+        <option value="">Todas</option>
+        {% for c in colaboradores_filtro %}
+        <option value="{{ c.id }}" {% if c.id in ids_selecionados %}selected{% endif %}>{{ c.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="align-self:flex-end;">
+      <button type="submit" name="filtro" value="{{ periodo.filtro }}" class="ds-btn ds-btn--primario">Aplicar</button>
+    </div>
+  </div>
+</form>
+{% if periodo.filtro == 'custom' and periodo.meses|length > 1 %}
+<p style="font-size:0.85rem;color:var(--cinza-texto);margin:-0.5rem 0 1rem;">Mostrando: <strong>{{ periodo.label }}</strong></p>
+{% endif %}

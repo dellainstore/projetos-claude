@@ -44,9 +44,14 @@ def _retry_sleep_seconds(resp: requests.Response | None, attempt: int) -> float:
         retry_after = resp.headers.get("Retry-After")
         if retry_after:
             try:
-                return max(float(retry_after), MIN_SECONDS_BETWEEN_REQUESTS)
+                return max(float(retry_after), 1.0)
             except (TypeError, ValueError):
                 pass
+        # 429 do Bling é limite POR SEGUNDO: esperar > 1s já limpa a janela.
+        # Backoff progressivo (1.5s, 3s, 4.5s...) evita abortar o crawl inteiro
+        # quando outro processo (cron) está consumindo a cota ao mesmo tempo.
+        if resp.status_code == 429:
+            return min(1.5 * (attempt + 1), 8.0)
     return max(MIN_SECONDS_BETWEEN_REQUESTS, 0.8 * (attempt + 1))
 
 
@@ -80,7 +85,7 @@ def _request_with_retry(method: str, path: str, *, params=None, json=None, timeo
     raise RuntimeError(f"Falha inesperada na requisicao Bling: {method} {path}")
 
 
-def bling_get(path: str, params=None, timeout=30, retries: int = 3):
+def bling_get(path: str, params=None, timeout=30, retries: int = 6):
     return _request_with_retry("GET", path, params=params, timeout=timeout, retries=retries)
 
 

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Folha Detalhada | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Folha Detalhada</h1>
+  <p class="ds-page-subtitulo">Holerite mês a mês — {{ periodo.label }}</p>
+</div>
+
+{% include "rh/_filtros.html" %}
+
+{% for f in folhas %}
+<div style="margin-bottom:2rem;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem;">
+    <h2 style="font-size:1.1rem;">{{ f.colaborador.nome }}</h2>
+    <span style="font-weight:600;">Total no período: {{ f.total|brl }}</span>
+  </div>
+
+  {% for d in f.detalhes %}
+  <div class="ds-form-section" style="margin-bottom:1rem;padding:0;overflow:hidden;">
+    <div style="background:#1a1a1a;color:#fff;padding:0.6rem 1rem;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:0.5rem;">
+      <strong>{{ f.colaborador.nome }}</strong>
+      <span style="font-size:0.9rem;">Referência: {{ d.mes_nome }}/{{ d.ano }}</span>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;">
+      {# ── Proventos ── #}
+      <div style="flex:1;min-width:260px;border-right:1px solid var(--cinza-medio);">
+        <div style="padding:0.5rem 1rem;font-weight:600;background:#f1f7f3;color:#059669;border-bottom:1px solid var(--cinza-medio);">Proventos</div>
+        <table class="ds-table" style="font-size:0.86rem;box-shadow:none;">
+          <tbody>
+            {% for p in d.proventos %}
+            <tr>
+              <td>
+                {{ p.label }}
+                {% if p.data %}<span style="font-size:0.72rem;color:var(--cinza-texto);">(pago {{ p.data|date:"d/m" }})</span>{% endif %}
+              </td>
+              <td style="text-align:right;white-space:nowrap;">{{ p.valor|brl }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {# ── Descontos ── #}
+      <div style="flex:1;min-width:260px;">
+        <div style="padding:0.5rem 1rem;font-weight:600;background:#fbf1f1;color:#dc2626;border-bottom:1px solid var(--cinza-medio);">Descontos</div>
+        <table class="ds-table" style="font-size:0.86rem;box-shadow:none;">
+          <tbody>
+            {% for de in d.descontos %}
+            <tr>
+              <td>
+                {{ de.label }}
+                {% if de.data %}<span style="font-size:0.72rem;color:var(--cinza-texto);">(pago {{ de.data|date:"d/m" }})</span>{% endif %}
+              </td>
+              <td style="text-align:right;white-space:nowrap;">{{ de.valor|brl }}</td>
+            </tr>
+            {% empty %}
+            <tr><td style="color:var(--cinza-texto);">Sem descontos.</td><td style="text-align:right;">{{ d.total_descontos|brl }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;border-top:2px solid var(--cinza-medio);font-weight:600;">
+      <div style="flex:1;min-width:260px;display:flex;justify-content:space-between;padding:0.55rem 1rem;border-right:1px solid var(--cinza-medio);">
+        <span>Total proventos</span><span>{{ d.total_proventos|brl }}</span>
+      </div>
+      <div style="flex:1;min-width:260px;display:flex;justify-content:space-between;padding:0.55rem 1rem;">
+        <span>Total descontos</span><span>{{ d.total_descontos|brl }}</span>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:0.65rem 1rem;background:#c9a96e;color:#1a1a1a;font-weight:700;">
+      <span>Líquido a receber</span><span>{{ d.total|brl }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% empty %}
+<div class="ds-form-section" style="text-align:center;color:var(--cinza-texto);padding:2rem;">Nenhuma colaboradora no filtro.</div>
+{% endfor %}
+{% endblock %}

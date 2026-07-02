@@ -17,7 +17,7 @@
         <th>Usuário</th>
         <th>Nome</th>
         <th>E-mail</th>
-        <th>Papel</th>
+        <th>Acessos</th>
         <th>Status</th>
         <th>Ações</th>
       </tr>
@@ -26,9 +26,21 @@
       {% for u in usuarios %}
       <tr>
         <td><strong>{{ u.username }}</strong></td>
-        <td>{{ u.get_full_name|default:"—" }}</td>
-        <td>{{ u.email|default:"—" }}</td>
-        <td><span class="ds-status {% if u.papel == 'superadmin' %}ds-status--processado{% elif u.papel == 'gestor' %}ds-status--aprovado{% elif u.papel == 'viewer' %}ds-status--pendente{% else %}ds-status--pendente{% endif %}">{{ u.get_papel_display }}</span></td>
+        <td>{{ u.get_full_name|default:"" }}</td>
+        <td>{{ u.email|default:"" }}</td>
+        <td>
+          {% if u.is_superadmin %}
+          <span class="ds-status ds-status--processado">Acesso total</span>
+          {% else %}
+          <div style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+            {% for acesso in u.resumo_acessos %}
+            <span style="display:inline-block;padding:0.12rem 0.5rem;font-size:0.72rem;background:var(--cinza-claro,#f1f1ef);border:1px solid var(--cinza-medio,#e2e2df);border-radius:999px;color:var(--cinza-texto,#555);white-space:nowrap;">{{ acesso }}</span>
+            {% empty %}
+            <span class="text-muted" style="font-size:0.8rem;">Sem acessos</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </td>
         <td>
           {% if u.is_active %}
           <span class="ds-status ds-status--aprovado">Ativo</span>

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block titulo %}Afastamentos | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Afastamentos</h1>
+  <p class="ds-page-subtitulo">Faltas, atestados e folgas — com comprovante anexado</p>
+</div>
+
+<!-- Lançar / Editar -->
+<div class="ds-form-section" style="margin-bottom:1.5rem;max-width:640px;">
+  <h2 style="font-size:1rem;margin-bottom:1.1rem;">
+    {% if editando %}Editar afastamento{% else %}Lançar afastamento{% endif %}
+  </h2>
+  <form method="post"
+        action="{% if editando %}{% url 'rh:afastamento_salvar' editando.pk %}{% else %}{% url 'rh:afastamento_novo' %}{% endif %}"
+        enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <div style="display:flex;gap:1.1rem;flex-wrap:wrap;margin-bottom:1.1rem;">
+      <div class="ds-form-group" style="flex:1;min-width:220px;">
+        <label class="ds-label">Colaborador</label>
+        <select class="ds-input" name="colaborador" required>
+          {% for c in colaboradores %}
+          <option value="{{ c.id }}" {% if editando and editando.colaborador_id == c.id %}selected{% endif %}>{{ c.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ds-form-group" style="flex:1;min-width:180px;">
+        <label class="ds-label">Tipo</label>
+        <select class="ds-input" name="tipo" required>
+          {% for val, label in tipos %}
+          <option value="{{ val }}" {% if editando and editando.tipo == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:1.1rem;flex-wrap:wrap;margin-bottom:1.1rem;">
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label">Data início</label>
+        <input class="ds-input" type="date" name="data_inicio"
+               value="{{ editando.data_inicio|date:'Y-m-d' }}" required>
+      </div>
+      <div class="ds-form-group" style="flex:1;min-width:160px;">
+        <label class="ds-label">Data fim <span style="font-weight:400;color:var(--cinza-texto);">(vazio = 1 dia)</span></label>
+        <input class="ds-input" type="date" name="data_fim" value="{{ editando.data_fim|date:'Y-m-d' }}">
+      </div>
+    </div>
+
+    <div class="ds-form-group" style="margin-bottom:1.1rem;">
+      <label class="ds-label">Anexo (atestado / comprovante)</label>
+      <input class="ds-input" type="file" name="anexo" accept="image/*,application/pdf">
+      {% if editando and editando.anexo %}
+      <span style="font-size:0.76rem;color:var(--cinza-texto);">Já existe um anexo. Envie um novo só se quiser substituí-lo.</span>
+      {% endif %}
+    </div>
+
+    <div class="ds-form-group" style="margin-bottom:1.4rem;">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.88rem;">
+        <input type="checkbox" name="remunerado" {% if not editando or editando.remunerado %}checked{% endif %}>
+        Remunerado / abonado
+      </label>
+    </div>
+
+    <div class="ds-form-group" style="margin-bottom:1.6rem;">
+      <label class="ds-label">Observação</label>
+      <input class="ds-input" type="text" name="observacao" value="{{ editando.observacao }}"
+             placeholder="ex.: atestado médico 2 dias">
+    </div>
+
+    <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+      <button type="submit" class="ds-btn ds-btn--primario">{% if editando %}Salvar alterações{% else %}Lançar{% endif %}</button>
+      {% if editando %}<a href="{% url 'rh:afastamentos' %}" class="ds-btn">Cancelar</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- Histórico -->
+<div class="ds-form-section">
+  <h2 style="font-size:1rem;margin-bottom:0.75rem;">Histórico</h2>
+  <form method="get" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">
+    <div class="ds-form-group" style="margin:0;min-width:180px;">
+      <label class="ds-label">Colaborador</label>
+      <select class="ds-input" name="colaborador" onchange="this.form.submit()">
+        <option value="0">Todos</option>
+        {% for c in colaboradores %}<option value="{{ c.id }}" {% if c.id == f_colab %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="ds-form-group" style="margin:0;min-width:150px;">
+      <label class="ds-label">Período</label>
+      <select class="ds-input" name="periodo" onchange="this.form.submit()">
+        <option value="7" {% if periodo == '7' %}selected{% endif %}>Últimos 7 dias</option>
+        <option value="30" {% if periodo == '30' %}selected{% endif %}>Últimos 30 dias</option>
+        <option value="custom" {% if periodo == 'custom' %}selected{% endif %}>Personalizado</option>
+        <option value="tudo" {% if periodo == 'tudo' %}selected{% endif %}>Tudo</option>
+      </select>
+    </div>
+    {% if periodo == 'custom' %}
+    <div class="ds-form-group" style="margin:0;"><label class="ds-label">De</label>
+      <input class="ds-input" type="date" name="inicio" value="{{ inicio }}"></div>
+    <div class="ds-form-group" style="margin:0;"><label class="ds-label">Até</label>
+      <input class="ds-input" type="date" name="fim" value="{{ fim }}"></div>
+    <button type="submit" class="ds-btn ds-btn--primario">Filtrar</button>
+    {% endif %}
+  </form>
+
+  {% if afastamentos %}
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead><tr><th>Colaborador</th><th>Tipo</th><th>Período</th><th>Dias</th><th>Anexo</th><th>Obs.</th><th style="text-align:right;">Ações</th></tr></thead>
+      <tbody>
+        {% for a in afastamentos %}
+        <tr>
+          <td style="white-space:nowrap;"><strong>{{ a.colaborador.nome }}</strong></td>
+          <td>{{ a.get_tipo_display }}{% if not a.remunerado %} <span style="font-size:0.72rem;color:var(--cinza-texto);">(não abonado)</span>{% endif %}</td>
+          <td style="white-space:nowrap;">{{ a.data_inicio|date:"d/m/Y" }}{% if a.data_fim != a.data_inicio %} a {{ a.data_fim|date:"d/m/Y" }}{% endif %}</td>
+          <td>{{ a.dias }}</td>
+          <td>{% if a.anexo %}<a href="{% url 'rh:afastamento_anexo' a.pk %}" target="_blank" class="ds-btn" style="font-size:0.7rem;padding:0.15rem 0.4rem;">Ver</a>{% endif %}</td>
+          <td style="font-size:0.8rem;color:var(--cinza-texto);">{{ a.observacao }}</td>
+          <td style="text-align:right;white-space:nowrap;">
+            <a href="{% url 'rh:afastamento_editar' a.pk %}" class="ds-btn" style="font-size:0.7rem;padding:0.2rem 0.45rem;">Editar</a>
+            <form method="post" action="{% url 'rh:afastamento_excluir' a.pk %}" style="display:inline;margin:0;">
+              {% csrf_token %}
+              <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.7rem;padding:0.2rem 0.45rem;"
+                      onclick="return confirm('Excluir este afastamento?')">Excluir</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="font-size:0.85rem;color:var(--cinza-texto);">Nenhum afastamento no filtro.</p>
+  {% endif %}
+</div>
+{% endblock %}
