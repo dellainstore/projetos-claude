@@ -14,6 +14,7 @@ from apps.core_utils.admin_views import (
     dashboard_marketing_export as admin_dashboard_marketing_export,
 )
 from apps.core_utils.admin_verificacao import admin_verificar_view
+from apps.core_utils.health import readyz as _readyz
 from apps.produtos.views import feed_meta_xml
 from apps.produtos.views_sitemap import sitemap_xml, robots_txt
 
@@ -28,6 +29,7 @@ def _healthz(_request):
 
 urlpatterns = [
     path('healthz', _healthz, name='healthz'),
+    path('readyz', _readyz, name='readyz'),
     path('csp-report/', csp_report, name='csp_report'),
     path('painel/relatorio/', admin_relatorio, name='admin_relatorio'),
     path('painel/pedidos/dashboard/', admin_dashboard_pedidos, name='admin_dashboard_pedidos'),

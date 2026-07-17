@@ -17,6 +17,7 @@ class MetaCAPIPageViewMiddleware:
         '/admin/',
         '/painel/',
         '/healthz',
+        '/readyz',
     )
 
     def __init__(self, get_response):

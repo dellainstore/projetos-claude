@@ -9,7 +9,7 @@ _CACHE_TTL = 30  # segundos — tempo máximo para o toggle refletir no site
 def manutencao_middleware(get_response):
     def middleware(request):
         # Healthcheck para uptime monitors (UptimeRobot etc): sempre responder
-        if request.path == '/healthz':
+        if request.path in ('/healthz', '/readyz'):
             return get_response(request)
 
         # Feed de catalogo para rastreadores externos: sempre acessivel
