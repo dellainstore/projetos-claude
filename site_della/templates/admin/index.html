@@ -479,4 +479,39 @@
 </div>
 {% endif %}
 
+{# ── 7° Monitoramento ─────────────────────────────────────────────────────── #}
+{% if perms.core_utils.ver_monitoramento %}
+<div class="da-section-label">Monitoramento</div>
+<div class="da-grid">
+
+  <a href="/painel/monitoramento/" class="da-card">
+    <div class="da-card-icon ic-blue">📈</div>
+    <div class="da-card-body">
+      <strong>Visão geral</strong>
+      <small>Saúde do site, erros e integrações</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="/painel/monitoramento/erros/" class="da-card">
+    <div class="da-card-icon ic-red">🩺</div>
+    <div class="da-card-body">
+      <strong>Erros 5xx</strong>
+      <small>Erros do servidor agrupados, com filtros</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+  <a href="/painel/monitoramento/checkout/" class="da-card">
+    <div class="da-card-icon ic-orange">🛒</div>
+    <div class="da-card-body">
+      <strong>Checkout</strong>
+      <small>Falhas de pagamento, frete e telemetria</small>
+    </div>
+    <span class="da-card-arrow">›</span>
+  </a>
+
+</div>
+{% endif %}
+
 {% endblock %}

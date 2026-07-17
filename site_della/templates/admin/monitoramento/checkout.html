@@ -1,0 +1,39 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Checkout | Monitoramento{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block content %}
+<style>
+  .mon-h1 { font-size:1.45rem; margin:0 0 4px; }
+  .mon-sub { color:#666; font-size:13px; margin:0 0 18px; }
+  .mon-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e3e3e3; border-radius:10px; overflow:hidden; }
+  .mon-table th, .mon-table td { text-align:left; padding:9px 11px; border-bottom:1px solid #f0f0f0; font-size:12.5px; vertical-align:top; }
+  .mon-table th { background:#fafafa; font-size:11px; text-transform:uppercase; color:#777; }
+  .chip { display:inline-block; background:#eef; color:#334; border-radius:5px; padding:1px 7px; font-size:11px; }
+  .mon-muted { color:#999; }
+</style>
+
+<h1 class="mon-h1">Monitoramento do Checkout</h1>
+<p class="mon-sub"><a href="/painel/monitoramento/">← Visão geral</a> · Falhas registradas no checkout (servidor + telemetria client-side). Sem dados pessoais.</p>
+
+<p class="mon-sub"><strong>{{ total }}</strong> eventos nos últimos 7 dias.</p>
+
+<table class="mon-table">
+  <tr><th>Quando</th><th>Etapa</th><th>Código</th><th>Resumo</th><th>Dispositivo</th><th>Navegador</th><th>Correlation</th></tr>
+  {% for e in eventos %}
+  <tr>
+    <td class="mon-muted">{{ e.ts }}</td>
+    <td>{% if e.etapa %}<span class="chip">{{ e.etapa }}</span>{% else %}<span class="mon-muted">—</span>{% endif %}</td>
+    <td>{{ e.exc|default:e.status }}</td>
+    <td>{{ e.resumo|default:""|truncatechars:80 }}</td>
+    <td>{{ e.dispositivo|default:"" }}</td>
+    <td>{{ e.navegador|default:"" }}</td>
+    <td class="mon-muted">{{ e.cid|default:"" }}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="7" class="mon-muted" style="padding:24px;text-align:center;">Nenhuma falha de checkout registrada. 👍</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

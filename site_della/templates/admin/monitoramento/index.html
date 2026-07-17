@@ -1,0 +1,83 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Monitoramento | D'ELLA Instore{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block content %}
+<style>
+  .mon-h1 { font-size: 1.45rem; margin: 0 0 4px; }
+  .mon-sub { color:#666; font-size:13px; margin:0 0 20px; }
+  .mon-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; margin-bottom:26px; }
+  .mon-card { background:#fff; border:1px solid #e3e3e3; border-radius:10px; padding:16px; }
+  .mon-card .n { font-size:1.8rem; font-weight:700; line-height:1; }
+  .mon-card .l { color:#666; font-size:12px; margin-top:6px; text-transform:uppercase; letter-spacing:.03em; }
+  .mon-sec { font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; color:#888; margin:6px 0 12px; font-weight:600; }
+  .mon-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e3e3e3; border-radius:10px; overflow:hidden; }
+  .mon-table th, .mon-table td { text-align:left; padding:10px 12px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+  .mon-table th { background:#fafafa; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#777; }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .pill::before { content:''; width:8px; height:8px; border-radius:50%; }
+  .pill.ok { background:#e7f6ec; color:#1a7f37; } .pill.ok::before { background:#1a7f37; }
+  .pill.warn { background:#fff4e0; color:#a15c00; } .pill.warn::before { background:#d98a00; }
+  .pill.bad { background:#fde8e8; color:#b42318; } .pill.bad::before { background:#b42318; }
+  .pill.none { background:#eee; color:#666; } .pill.none::before { background:#999; }
+  .mon-links a { margin-right:14px; font-size:13px; }
+  .mon-muted { color:#999; }
+</style>
+
+<h1 class="mon-h1">Monitoramento</h1>
+<p class="mon-sub">Visão somente leitura da saúde do site, erros e integrações. Dados sanitizados (sem informação pessoal).</p>
+
+<div class="mon-links" style="margin-bottom:18px;">
+  <a href="/painel/monitoramento/erros/">→ Erros 5xx detalhados</a>
+  <a href="/painel/monitoramento/checkout/">→ Checkout</a>
+</div>
+
+<div class="mon-sec">Visão geral</div>
+<div class="mon-grid">
+  <div class="mon-card"><div class="n">{{ resumo.total_24h }}</div><div class="l">Erros 5xx (24h)</div></div>
+  <div class="mon-card"><div class="n">{{ resumo.total_7d }}</div><div class="l">Erros 5xx (7 dias)</div></div>
+  <div class="mon-card"><div class="n">{{ resumo.checkout_7d }}</div><div class="l">Falhas de checkout (7d)</div></div>
+  <div class="mon-card"><div class="n">{{ resumo.integracoes_7d }}</div><div class="l">Falhas de integração (7d)</div></div>
+</div>
+
+<div class="mon-sec">Saúde do sistema</div>
+<table class="mon-table" style="margin-bottom:26px;">
+  <tr>
+    <th>Banco</th><th>Cache</th><th>Disco</th><th>Memória</th><th>Load (1m)</th>
+  </tr>
+  <tr>
+    <td>{% if saude.db %}<span class="pill ok">respondendo</span>{% else %}<span class="pill bad">falha</span>{% endif %}</td>
+    <td>{% if saude.cache %}<span class="pill ok">respondendo</span>{% else %}<span class="pill bad">falha</span>{% endif %}</td>
+    <td>{% if saude.disco_pct is not None %}{{ saude.disco_pct }}% usado{% if saude.disco_livre_gb %} ({{ saude.disco_livre_gb }} GB livres){% endif %}{% else %}<span class="mon-muted">sem dado</span>{% endif %}</td>
+    <td>{% if saude.mem_pct is not None %}{{ saude.mem_pct }}% usada{% if saude.mem_disp_mb %} ({{ saude.mem_disp_mb }} MB livres){% endif %}{% else %}<span class="mon-muted">sem dado</span>{% endif %}</td>
+    <td>{% if saude.load1 is not None %}{{ saude.load1 }}{% else %}<span class="mon-muted">sem dado</span>{% endif %}</td>
+  </tr>
+</table>
+
+<div class="mon-sec">Integrações</div>
+<table class="mon-table">
+  <tr><th>Integração</th><th>Estado</th><th>Erros (24h)</th><th>Último erro</th><th>Último sucesso</th></tr>
+  {% for i in integracoes %}
+  <tr>
+    <td><strong>{{ i.nome }}</strong></td>
+    <td>
+      {% if i.estado == 'saudavel' %}<span class="pill ok">saudável</span>
+      {% elif i.estado == 'atencao' %}<span class="pill warn">atenção</span>
+      {% elif i.estado == 'incidente' %}<span class="pill bad">incidente</span>
+      {% else %}<span class="pill none">sem dado</span>{% endif %}
+    </td>
+    <td>{{ i.erros_24h }}</td>
+    <td>{% if i.ultimo_erro %}{{ i.ultimo_erro }}{% else %}<span class="mon-muted">nenhum</span>{% endif %}</td>
+    <td>{% if i.ultimo_sucesso %}{{ i.ultimo_sucesso }}{% else %}<span class="mon-muted">sem dado</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<p class="mon-sub" style="margin-top:18px;">
+  Observação: 502/503/504 ocorrem no Nginx/Cloudflare e não são vistos pelo Django.
+  Esta tela mostra 500 e exceções capturadas na aplicação + falhas de integração.
+  Ingestão de 502/504 depende de alimentar o log do Nginx ou o Cloudflare (pendente).
+</p>
+{% endblock %}

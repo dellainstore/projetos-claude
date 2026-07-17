@@ -15,6 +15,7 @@ from apps.core_utils.admin_views import (
 )
 from apps.core_utils.admin_verificacao import admin_verificar_view
 from apps.core_utils.health import readyz as _readyz
+from apps.core_utils import monitoramento_views
 from apps.produtos.views import feed_meta_xml
 from apps.produtos.views_sitemap import sitemap_xml, robots_txt
 
@@ -38,6 +39,10 @@ urlpatterns = [
     path('painel/instagram/refresh/', instagram_refresh, name='admin_instagram_refresh'),
     # Verificação de e-mail a cada 30 dias (deve vir antes de painel/)
     path('painel/verificar/', admin_verificar_view, name='admin_verificar'),
+    # Monitoramento (deve vir antes de painel/ para não cair no admin)
+    path('painel/monitoramento/', monitoramento_views.index, name='admin_monitoramento'),
+    path('painel/monitoramento/erros/', monitoramento_views.erros, name='admin_monitoramento_erros'),
+    path('painel/monitoramento/checkout/', monitoramento_views.checkout, name='admin_monitoramento_checkout'),
     # Admin Django
     path('painel/', admin.site.urls),
     path('feed-meta.xml', feed_meta_xml, name='feed_meta'),
