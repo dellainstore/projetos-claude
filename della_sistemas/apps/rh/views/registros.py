@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import perm_required
-from apps.rh.models import BatidaPonto, Colaborador
+from apps.rh.models import AbonoPonto, BatidaPonto, Colaborador
 from apps.rh.services.utils import parse_int
 
 
@@ -45,10 +45,21 @@ def view_registros(request: HttpRequest) -> HttpResponse:
         qs = qs.filter(momento__date__lte=fim)
 
     batidas = list(qs.order_by("-momento")[:300])
+
+    abonos_qs = AbonoPonto.objects.select_related("colaborador", "abonado_por").all()
+    if f_colab:
+        abonos_qs = abonos_qs.filter(colaborador_id=f_colab)
+    if inicio:
+        abonos_qs = abonos_qs.filter(data__gte=inicio)
+    if fim:
+        abonos_qs = abonos_qs.filter(data__lte=fim)
+    abonos = list(abonos_qs.order_by("-data")[:300])
+
     return render(request, "rh/registros.html", {
         "pode_excluir": request.user.is_superadmin,
         "colaboradores": colaboradores,
         "batidas": batidas,
+        "abonos": abonos,
         "f_colab": f_colab,
         "origem": origem,
         "periodo": periodo,
@@ -72,4 +83,17 @@ def view_registro_excluir(request: HttpRequest, pk: int) -> HttpResponse:
     from apps.rh.services.notificacoes import gerar_pendencias_do_dia
     gerar_pendencias_do_dia(dia)
     messages.success(request, "Registro excluído.")
+    return redirect(request.META.get("HTTP_REFERER") or "rh:registros")
+
+
+@perm_required("rh.ponto_gerir")
+@require_POST
+def view_abono_excluir(request: HttpRequest, pk: int) -> HttpResponse:
+    """Remove um abono — apenas super admin. O saldo do dia volta a contar."""
+    if not request.user.is_superadmin:
+        messages.error(request, "Apenas o super admin pode excluir abonos.")
+        return redirect("rh:registros")
+    a = get_object_or_404(AbonoPonto, pk=pk)
+    a.delete()
+    messages.success(request, "Abono excluído.")
     return redirect(request.META.get("HTTP_REFERER") or "rh:registros")

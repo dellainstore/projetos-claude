@@ -2,6 +2,7 @@
 
 import calendar
 from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 
 from django.contrib import messages
 from django.http import HttpRequest, HttpResponse
@@ -11,10 +12,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.decorators import perm_required
-from apps.rh.models import BatidaPonto, Colaborador, LocalEmpresa
+from apps.rh.models import AbonoPonto, BatidaPonto, Colaborador, LocalEmpresa
 from apps.rh.services.afastamentos import dias_afastados
+from apps.rh.services.calendario import feriados
 from apps.rh.services.notificacoes import gerar_pendencias_do_dia
-from apps.rh.services.ponto import banco_de_horas
+from apps.rh.services.ponto import banco_de_horas, formatar_horas_hm
 from apps.rh.services.utils import competencia_opcoes, parse_int
 
 # Colunas do grid: (tipo, prefixo do campo no form)
@@ -144,6 +146,8 @@ def view_jornada(request: HttpRequest) -> HttpResponse:
                 "data": d,
                 "iso": d.isoformat(),
                 "fds": d.weekday() >= 5,
+                "fds_nome": "Sábado" if d.weekday() == 5 else ("Domingo" if d.weekday() == 6 else None),
+                "feriado": d in feriados(d.year),
                 "slots": slots,
                 "loja_id": loja_do_dia.get(d, loja_padrao),
                 "afastamento": afast.get(d),
@@ -152,6 +156,8 @@ def view_jornada(request: HttpRequest) -> HttpResponse:
                 "folga": info.get("folga"),
                 "pareado": info.get("pareado", True),
                 "parcial": info.get("parcial"),
+                "sem_registro": info.get("sem_registro"),
+                "abono": info.get("abono"),
                 "tem_batida": d in {dd for (dd, _t) in por_dia_tipo},
             })
             d += timedelta(days=1)
@@ -159,6 +165,7 @@ def view_jornada(request: HttpRequest) -> HttpResponse:
     return render(request, "rh/jornada.html", {
         "colaboradores": colaboradores,
         "colaborador": colaborador,
+        "hoje": hoje,
         "linhas": linhas,
         "iso_dias": ",".join(iso_dias),
         "saldo_total": saldo_total,
@@ -183,11 +190,18 @@ def view_jornada_salvar(request: HttpRequest) -> HttpResponse:
     colaborador = get_object_or_404(Colaborador, pk=parse_int(request.POST.get("colaborador"), 0))
     iso_dias = [s for s in request.POST.get("dias", "").split(",") if s]
 
+    from apps.rh.services.afastamentos import afastamento_no_dia
+
     dias_tocados: set[date] = set()
     for iso in iso_dias:
         try:
             dia = date.fromisoformat(iso)
         except ValueError:
+            continue
+        # Dia com afastamento (folga, atestado, falta...) é bloqueado no
+        # front-end (campos disabled) — reforça aqui: nunca criar/alterar
+        # batida nesse dia, mesmo que o POST chegue preenchido.
+        if afastamento_no_dia(colaborador, dia) is not None:
             continue
         loja_raw = request.POST.get(f"loja_{iso}", "").strip()
         loja_id = int(loja_raw) if loja_raw.isdigit() else None
@@ -242,11 +256,60 @@ def view_dia_excluir(request: HttpRequest) -> HttpResponse:
         messages.error(request, "Data inválida.")
         return redirect(_voltar_qs(request, colaborador.id))
     n, _ = BatidaPonto.objects.filter(colaborador=colaborador, momento__date=dia).delete()
-    # Limpa a pendência e a proposta de correção do dia (saem das Aprovações).
+    # Limpa a pendência, a proposta de correção e um eventual abono do dia (saem
+    # das Aprovações/Registros — não fazem mais sentido sem as batidas originais).
     from apps.rh.models import CorrecaoPonto, NotificacaoPonto
     CorrecaoPonto.objects.filter(colaborador=colaborador, data=dia, status="pendente").delete()
     NotificacaoPonto.objects.filter(colaborador=colaborador, data=dia).delete()
+    AbonoPonto.objects.filter(colaborador=colaborador, data=dia).delete()
     messages.success(request, f"{n} batida(s) de {dia:%d/%m} excluída(s).")
+    return redirect(_voltar_qs(request, colaborador.id))
+
+
+@perm_required("rh.ponto_gerir")
+@require_POST
+def view_dia_abonar(request: HttpRequest) -> HttpResponse:
+    """Abona o saldo (positivo ou negativo) de um dia: zera no banco de horas,
+    registrando motivo e quem abonou. Não mexe nas batidas do dia."""
+    colaborador = get_object_or_404(Colaborador, pk=parse_int(request.POST.get("colaborador"), 0))
+    motivo = request.POST.get("motivo", "").strip()
+    try:
+        dia = date.fromisoformat(request.POST.get("data", ""))
+    except ValueError:
+        messages.error(request, "Data inválida.")
+        return redirect(_voltar_qs(request, colaborador.id))
+    if not motivo:
+        messages.error(request, "Informe o motivo do abono.")
+        return redirect(_voltar_qs(request, colaborador.id))
+
+    bh = banco_de_horas(colaborador, dia, dia)
+    info = bh["dias"][0] if bh["dias"] else None
+    saldo_atual = info["saldo"] if info else Decimal("0")
+    if not saldo_atual:
+        messages.error(request, f"O dia {dia:%d/%m} não tem saldo a abonar.")
+        return redirect(_voltar_qs(request, colaborador.id))
+
+    AbonoPonto.objects.update_or_create(
+        colaborador=colaborador, data=dia,
+        defaults={"saldo_abonado": saldo_atual, "motivo": motivo, "abonado_por": request.user},
+    )
+    messages.success(request, f"Saldo de {dia:%d/%m} abonado.")
+    return redirect(_voltar_qs(request, colaborador.id))
+
+
+@perm_required("rh.ponto_gerir")
+@require_POST
+def view_dia_abono_excluir(request: HttpRequest) -> HttpResponse:
+    """Remove o abono de um dia — o saldo volta a contar no banco de horas."""
+    colaborador = get_object_or_404(Colaborador, pk=parse_int(request.POST.get("colaborador"), 0))
+    try:
+        dia = date.fromisoformat(request.POST.get("data", ""))
+    except ValueError:
+        messages.error(request, "Data inválida.")
+        return redirect(_voltar_qs(request, colaborador.id))
+    n, _ = AbonoPonto.objects.filter(colaborador=colaborador, data=dia).delete()
+    if n:
+        messages.success(request, f"Abono de {dia:%d/%m} removido.")
     return redirect(_voltar_qs(request, colaborador.id))
 
 
@@ -256,10 +319,13 @@ def view_jornada_pdf(request: HttpRequest) -> HttpResponse:
     import io
 
     from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
     from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    from apps.rh.services.utils import nome_exibicao
 
     hoje = timezone.localdate()
     status = request.GET.get("status", "ativos")
@@ -278,6 +344,20 @@ def view_jornada_pdf(request: HttpRequest) -> HttpResponse:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), title="Espelho de Ponto")
     styles = getSampleStyleSheet()
+    titulo_style = ParagraphStyle(
+        "TituloEspelho", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER,
+    )
+    nome_style = ParagraphStyle(
+        "NomeEspelho", parent=styles["Normal"], fontSize=12, leading=15,
+        alignment=TA_CENTER, fontName="Helvetica-Bold",
+    )
+    periodo_style = ParagraphStyle(
+        "PeriodoEspelho", parent=styles["Normal"], fontSize=9, leading=12,
+        alignment=TA_CENTER, textColor=colors.HexColor("#666666"),
+    )
+    saldo_style = ParagraphStyle(
+        "SaldoEspelho", parent=styles["Heading3"], alignment=TA_CENTER,
+    )
     cabecalho = ["Dia", "Entrada", "Saída almoço", "Volta almoço", "Saída", "Horas", "Saldo"]
     elementos = []
 
@@ -288,9 +368,10 @@ def view_jornada_pdf(request: HttpRequest) -> HttpResponse:
         if i > 0:
             elementos.append(PageBreak())
         bh = banco_de_horas(c, inicio, fim)
-        elementos.append(Paragraph(f"Espelho de Ponto — {c.nome}", styles["Title"]))
+        elementos.append(Paragraph("Espelho de Ponto", titulo_style))
+        elementos.append(Paragraph(nome_exibicao(c.nome), nome_style))
         elementos.append(Paragraph(
-            f"Período: {inicio:%d/%m/%Y} a {fim:%d/%m/%Y} — emitido em {hoje:%d/%m/%Y}", styles["Normal"],
+            f"Período: {inicio:%d/%m/%Y} a {fim:%d/%m/%Y} (emitido em {hoje:%d/%m/%Y})", periodo_style,
         ))
         elementos.append(Spacer(1, 0.4 * cm))
         linhas = [cabecalho]
@@ -302,8 +383,8 @@ def view_jornada_pdf(request: HttpRequest) -> HttpResponse:
                 por_tipo.get("saida_almoco", ""),
                 por_tipo.get("volta_almoco", ""),
                 por_tipo.get("saida", ""),
-                str(d["horas"]),
-                str(d["saldo"]),
+                formatar_horas_hm(d["horas"]),
+                formatar_horas_hm(d["saldo"]),
             ])
         if len(linhas) == 1:
             elementos.append(Paragraph("Nenhuma batida no período.", styles["Normal"]))
@@ -320,12 +401,12 @@ def view_jornada_pdf(request: HttpRequest) -> HttpResponse:
             ]))
             elementos.append(tabela)
         elementos.append(Spacer(1, 0.3 * cm))
-        elementos.append(Paragraph(f"Saldo do período: {bh['saldo_total']} h", styles["Heading3"]))
+        elementos.append(Paragraph(f"Saldo do período: {formatar_horas_hm(bh['saldo_total'])} h", saldo_style))
 
     doc.build(elementos)
     pdf = buffer.getvalue()
     buffer.close()
     resp = HttpResponse(pdf, content_type="application/pdf")
-    nome_arquivo = "Todos" if todos else (alvo[0].nome if alvo else "Ponto")
-    resp["Content-Disposition"] = f'attachment; filename="Espelho de Ponto - {nome_arquivo} - {hoje:%d-%m-%Y}.pdf"'
+    nome_arquivo = "Todos" if todos else nome_exibicao(alvo[0].nome if alvo else "Ponto")
+    resp["Content-Disposition"] = f'attachment; filename="Espelho de Ponto {nome_arquivo} ({hoje:%d-%m-%Y}).pdf"'
     return resp

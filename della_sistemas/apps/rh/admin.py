@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from apps.rh.models import (
     Afastamento,
+    AfastamentoAnexo,
+    AbonoPonto,
     BatidaPonto,
     BeneficioVT,
     Colaborador,
@@ -56,12 +58,24 @@ class CorrecaoPontoAdmin(admin.ModelAdmin):
     date_hierarchy = "data"
 
 
+@admin.register(AbonoPonto)
+class AbonoPontoAdmin(admin.ModelAdmin):
+    list_display = ("colaborador", "data", "saldo_abonado", "abonado_por", "criado_em")
+    date_hierarchy = "data"
+
+
+class AfastamentoAnexoInline(admin.TabularInline):
+    model = AfastamentoAnexo
+    extra = 0
+
+
 @admin.register(Afastamento)
 class AfastamentoAdmin(admin.ModelAdmin):
-    list_display = ("colaborador", "tipo", "data_inicio", "data_fim", "remunerado", "criado_em")
+    list_display = ("colaborador", "tipo", "data_inicio", "data_fim", "remunerado", "qtd_anexos", "criado_em")
     list_filter = ("tipo", "remunerado")
     date_hierarchy = "data_inicio"
     search_fields = ("colaborador__nome", "observacao")
+    inlines = [AfastamentoAnexoInline]
 
 
 @admin.register(TipoBeneficio)

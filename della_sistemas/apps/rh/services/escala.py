@@ -96,3 +96,20 @@ def horas_esperadas_no_dia(colaborador, d: date) -> Decimal | None:
     if ed and ed.trabalha:
         return ed.horas()
     return Decimal("0")
+
+
+def batidas_esperadas_no_dia(colaborador, d: date) -> int | None:
+    """Nº de batidas esperadas no dia pela escala: 2 (dia configurado sem horário
+    de almoço, ex.: sábado só entrada/saída) ou 4 (com almoço). None se não há
+    escala vinculada ou o dia não é de trabalho pela escala (chamador usa o
+    padrão de 4 batidas)."""
+    escala = colaborador.escala
+    if escala is None:
+        return None
+    variante = variante_da_semana(colaborador, _segunda_da_semana(d))
+    ed = EscalaDia.objects.filter(
+        escala=escala, variante=variante, dia_semana=d.weekday()
+    ).first()
+    if not ed or not ed.trabalha:
+        return None
+    return 4 if (ed.hora_saida_almoco and ed.hora_volta_almoco) else 2

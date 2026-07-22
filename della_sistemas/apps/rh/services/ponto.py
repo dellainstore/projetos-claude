@@ -1,12 +1,12 @@
 """Controle de ponto: geofence (haversine), ordenação das batidas e banco de horas."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from math import asin, cos, radians, sin, sqrt
 
 from django.utils import timezone
 
-from apps.rh.models import BatidaPonto, LocalEmpresa, ParametrosPonto
+from apps.rh.models import AbonoPonto, BatidaPonto, LocalEmpresa, ParametrosPonto
 
 # Ordem cronológica esperada das batidas no dia. O índice define o tipo:
 # 1ª batida = entrada, 2ª = saída p/ almoço, 3ª = volta, 4ª = saída.
@@ -81,6 +81,21 @@ def reordenar_tipos_do_dia(colaborador, dia: date) -> None:
             b.save(update_fields=["tipo"])
 
 
+def formatar_horas_hm(valor) -> str:
+    """Converte horas decimais (ex.: 8.5) para 'H:MM' (ex.: '8:30'). Preserva o
+    sinal em saldos negativos, com espaço entre o sinal e o horário. Usa o
+    sinal de menos tipográfico (−, U+2212) em vez do hífen ASCII: o hífen fica
+    fino demais perto de números e é facilmente confundido com um ponto
+    (ex.: -1.5 → '− 1:30')."""
+    if valor is None:
+        valor = 0
+    total_minutos = round(float(valor) * 60)
+    sinal = "− " if total_minutos < 0 else ""
+    total_minutos = abs(total_minutos)
+    horas, minutos = divmod(total_minutos, 60)
+    return f"{sinal}{horas:02d}:{minutos:02d}"
+
+
 def tolerancia_minutos() -> Decimal:
     """Tolerância (em minutos) configurada nos parâmetros do ponto."""
     return Decimal(ParametrosPonto.get().tolerancia_minutos)
@@ -93,6 +108,12 @@ def dia_incompleto(colaborador, dia: date) -> bool:
         return False
     # Sem loja vinculada → sem onde bater ponto, não cobra nem gera pendência.
     if not colaborador.lojas_ponto.filter(ativo=True).exists():
+        return False
+    # Sábado, domingo e feriado não têm horário de almoço fixo (normalmente só
+    # entrada/saída) e não são cobrados pelo fluxo automático de correção — o
+    # gestor confere manualmente pela Jornada, se precisar.
+    from apps.rh.services.calendario import eh_dia_util
+    if not eh_dia_util(dia):
         return False
     # Dia justificado (férias, folga, atestado…) → não cobra ponto.
     from apps.rh.services.afastamentos import afastamento_no_dia
@@ -152,10 +173,18 @@ def banco_de_horas(colaborador, inicio: date, fim: date) -> dict:
     for b in batidas:
         por_dia.setdefault(timezone.localtime(b.momento).date(), []).append(b)
 
-    from apps.rh.services.escala import horas_esperadas_no_dia
+    from apps.rh.services.calendario import feriados
+    from apps.rh.services.escala import batidas_esperadas_no_dia, horas_esperadas_no_dia
 
+    hoje = timezone.localdate()
     carga_fixa = colaborador.carga_horaria_diaria
     tolerancia = tolerancia_minutos()
+    abonos = {
+        a.data: a
+        for a in AbonoPonto.objects.filter(
+            colaborador=colaborador, data__gte=inicio, data__lte=fim,
+        )
+    }
     dias = []
     saldo_total = Decimal("0")
     def _aplica_tolerancia(saldo: Decimal) -> Decimal:
@@ -165,14 +194,23 @@ def banco_de_horas(colaborador, inicio: date, fim: date) -> dict:
             return Decimal("0")
         return saldo
 
-    for dia in sorted(por_dia.keys()):
-        do_dia = por_dia[dia]
+    from apps.rh.services.afastamentos import afastamento_no_dia
+
+    dia = inicio
+    while dia <= fim:
+        do_dia = por_dia.get(dia, [])
         n = len(do_dia)
         horas = _horas_trabalhadas(do_dia)
         # Par fechado = nº par de batidas (entrada→saída). Ímpar = falta uma batida.
         pareado = n >= 2 and n % 2 == 0
-        # "Normal" tem as 4 batidas (entrada, almoço ida/volta, saída).
-        parcial = n < BATIDAS_POR_DIA
+        # Quantas batidas a escala espera nesse dia: 4 (com almoço) ou 2 (dia
+        # configurado sem almoço, ex.: sábado só entrada/saída). Sem escala ou
+        # dia não previsto → cai no padrão de 4 (comportamento anterior).
+        esperado_batidas = batidas_esperadas_no_dia(colaborador, dia) or BATIDAS_POR_DIA
+        # "conferir" só faz sentido se o par fechado não bate com o que a escala
+        # previu pra esse dia (ex.: 4 batidas num sábado de só 2, ou vice-versa)
+        # — batida ímpar (falta uma) já é sinalizada separadamente por `pareado`.
+        parcial = pareado and n != esperado_batidas
 
         # Horas esperadas pela escala: None = sem escala; 0 = folga (não trabalha
         # nesse dia); >0 = jornada do dia (8h na semana, 4h no sábado, etc.).
@@ -180,9 +218,32 @@ def banco_de_horas(colaborador, inicio: date, fim: date) -> dict:
         tem_escala = esperado_escala is not None
         esperado = esperado_escala if tem_escala else carga_fixa
 
-        folga = tem_escala and esperado_escala <= 0
+        # Feriado nunca é dia de trabalho esperado, mesmo que a escala normalmente
+        # preveja jornada nesse dia da semana (ex.: quinta-feira que caiu feriado)
+        # — trata como folga: sem batida não gera dívida, e se trabalhou, tudo
+        # vira hora extra (mesma regra de domingo/folga da escala).
+        folga = (tem_escala and esperado_escala <= 0) or dia in feriados(dia.year)
+        afastamento = afastamento_no_dia(colaborador, dia)
+        # Dia útil sem NENHUMA batida (e sem afastamento cobrindo o dia): não é
+        # "falta uma batida" (esqueceu de bater a saída), é ausência total — vira
+        # dívida integral no banco de horas (igual a um atraso do dia inteiro) até
+        # o gestor lançar atestado/afastamento (zera abaixo) ou preencher os
+        # horários reais na Jornada (recalcula normal). Só se aplica a dias
+        # PASSADOS — hoje e o futuro ainda podem ser batidos, não são dívida.
+        sem_registro = (
+            dia < hoje and n == 0 and not folga and afastamento is None
+            and bool(esperado and esperado > 0)
+        )
 
-        if esperado is None and not folga:
+        if n == 0 and not sem_registro:
+            # Fim de semana, folga da escala, sem escala definida ou já coberto
+            # por um afastamento — nada a apurar, nem aparece no banco/espelho.
+            dia += timedelta(days=1)
+            continue
+
+        if sem_registro:
+            saldo = Decimal("0") - esperado
+        elif esperado is None and not folga:
             # Sem jornada definida (sócio, sem escala e sem carga) → sem banco.
             saldo = Decimal("0")
         elif not pareado:
@@ -195,6 +256,20 @@ def banco_de_horas(colaborador, inicio: date, fim: date) -> dict:
             # Dia normal: saldo = horas trabalhadas − jornada esperada.
             # Positivo = horas extras; negativo = horas devidas.
             saldo = _aplica_tolerancia((horas - esperado).quantize(Decimal("0.01")))
+
+        # Dia abonado (atestado, folga, falta remunerada...) nunca gera saldo,
+        # positivo ou negativo — mesmo com batida parcial (ex.: bateu entrada e
+        # foi ao médico). O período é pago; não deve virar hora extra nem devida.
+        if afastamento is not None and afastamento.remunerado:
+            saldo = Decimal("0")
+
+        # Abono manual do gestor (saída antecipada autorizada, hora extra que não
+        # deve contar, falta sem batida justificada de outra forma...) zera o
+        # saldo do dia — decisão pontual, não muda o cálculo, só o resultado.
+        abono = abonos.get(dia)
+        if abono is not None:
+            saldo = Decimal("0")
+
         saldo_total += saldo
         dias.append({
             "data": dia,
@@ -206,6 +281,9 @@ def banco_de_horas(colaborador, inicio: date, fim: date) -> dict:
             "pareado": pareado,
             "parcial": parcial,
             "completo": pareado and not parcial,
+            "sem_registro": sem_registro,
+            "abono": abono,
         })
+        dia += timedelta(days=1)
 
     return {"dias": dias, "saldo_total": saldo_total.quantize(Decimal("0.01"))}

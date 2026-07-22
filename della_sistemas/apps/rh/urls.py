@@ -64,6 +64,7 @@ urlpatterns = [
     path("afastamentos/<int:pk>/editar/", v_afast.view_afastamento_editar, name="afastamento_editar"),
     path("afastamentos/<int:pk>/salvar/", v_afast.view_afastamento_salvar, name="afastamento_salvar"),
     path("afastamentos/<int:pk>/anexo/", v_afast.view_afastamento_anexo, name="afastamento_anexo"),
+    path("afastamentos/anexo/<int:pk>/", v_afast.view_afastamento_anexo_item, name="afastamento_anexo_item"),
     path("afastamentos/<int:pk>/excluir/", v_afast.view_afastamento_excluir, name="afastamento_excluir"),
 
     # Benefícios (VT, VA, VR, plano de saúde…)
@@ -90,11 +91,14 @@ urlpatterns = [
     path("ponto/jornada/", v_jornada.view_jornada, name="jornada"),
     path("ponto/jornada/salvar/", v_jornada.view_jornada_salvar, name="jornada_salvar"),
     path("ponto/jornada/dia/excluir/", v_jornada.view_dia_excluir, name="dia_excluir"),
+    path("ponto/jornada/dia/abonar/", v_jornada.view_dia_abonar, name="dia_abonar"),
+    path("ponto/jornada/dia/abono/excluir/", v_jornada.view_dia_abono_excluir, name="dia_abono_excluir"),
     path("ponto/jornada/pdf/", v_jornada.view_jornada_pdf, name="jornada_pdf"),
 
     # Controle de Ponto — Registros (auditoria de origem)
     path("ponto/registros/", v_registros.view_registros, name="registros"),
     path("ponto/registros/<int:pk>/excluir/", v_registros.view_registro_excluir, name="registro_excluir"),
+    path("ponto/registros/abono/<int:pk>/excluir/", v_registros.view_abono_excluir, name="abono_excluir"),
 
     # Controle de Ponto — Parâmetros (gestor)
     path("ponto/parametros/", v_param.view_parametros, name="parametros"),

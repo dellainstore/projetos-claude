@@ -490,8 +490,34 @@ class Afastamento(models.Model):
     def dias(self) -> int:
         return (self.data_fim - self.data_inicio).days + 1
 
+    @property
+    def qtd_anexos(self) -> int:
+        return (1 if self.anexo else 0) + self.anexos.count()
+
     def cobre(self, dia) -> bool:
         return self.data_inicio <= dia <= self.data_fim
+
+
+def _anexo_afastamento_extra_path(instance, filename):
+    return f"afastamentos/{instance.afastamento.colaborador_id}/{filename}"
+
+
+class AfastamentoAnexo(models.Model):
+    """Anexo adicional de um afastamento (ex.: atestado de 2 dias com 2 fotos,
+    lançados juntos num único afastamento). O campo `Afastamento.anexo` legado
+    continua existindo para lançamentos antigos (1 anexo só)."""
+
+    afastamento = models.ForeignKey(Afastamento, on_delete=models.CASCADE, related_name="anexos")
+    arquivo     = models.FileField(upload_to=_anexo_afastamento_extra_path)
+    criado_em   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Anexo de afastamento"
+        verbose_name_plural = "Anexos de afastamento"
+        ordering = ["criado_em"]
+
+    def __str__(self) -> str:
+        return f"Anexo de {self.afastamento}"
 
 
 # ── Benefícios ───────────────────────────────────────────────────────────────
@@ -739,3 +765,32 @@ class CorrecaoPonto(models.Model):
 
     def __str__(self) -> str:
         return f"{self.colaborador} — correção {self.data:%d/%m/%Y} ({self.get_status_display()})"
+
+
+class AbonoPonto(models.Model):
+    """Abono do saldo (positivo ou negativo) de um dia específico do banco de
+    horas, decidido pelo gestor — ex.: saída antecipada autorizada sem atestado,
+    ou hora extra que não deve ser computada. Zera o saldo do dia no banco de
+    horas, com motivo e autoria registrados para auditoria."""
+
+    colaborador   = models.ForeignKey(Colaborador, on_delete=models.CASCADE, related_name="abonos_ponto")
+    data          = models.DateField()
+    saldo_abonado = models.DecimalField(
+        max_digits=6, decimal_places=2,
+        help_text="Saldo do dia no momento do abono (positivo ou negativo).",
+    )
+    motivo        = models.CharField(max_length=240)
+    abonado_por   = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="abonos_ponto",
+    )
+    criado_em     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Abono de Ponto"
+        verbose_name_plural = "Abonos de Ponto"
+        ordering = ["-data", "colaborador"]
+        unique_together = [("colaborador", "data")]
+
+    def __str__(self) -> str:
+        return f"{self.colaborador} — abono {self.data:%d/%m/%Y} ({self.saldo_abonado})"

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load rh_extras %}
 {% block titulo %}Registros de Ponto | D'ELLA Sistemas{% endblock %}
 
 {% block conteudo %}
@@ -79,6 +80,40 @@
 {% else %}
 <div class="ds-form-section" style="text-align:center;padding:2rem;">
   <p style="color:var(--cinza-texto);">Nenhuma batida no filtro.</p>
+</div>
+{% endif %}
+
+<h2 style="font-size:1.05rem;margin:1.75rem 0 0.75rem;">Abonos de Horas</h2>
+<p class="ds-page-subtitulo" style="margin-bottom:0.75rem;">Saldos (positivos ou negativos) abonados manualmente pelo gestor na Jornada, com motivo registrado.</p>
+{% if abonos %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Data</th><th>Colaborador</th><th>Saldo abonado</th><th>Motivo</th><th>Abonado por</th>{% if pode_excluir %}<th style="text-align:right;">Ações</th>{% endif %}</tr></thead>
+    <tbody>
+      {% for a in abonos %}
+      <tr>
+        <td style="white-space:nowrap;">{{ a.data|date:"d/m/Y" }}</td>
+        <td style="white-space:nowrap;">{{ a.colaborador.nome }}</td>
+        <td style="font-weight:600;color:{% if a.saldo_abonado < 0 %}#dc2626{% elif a.saldo_abonado > 0 %}#2563eb{% else %}var(--preto){% endif %};">{{ a.saldo_abonado|horas_hm }}</td>
+        <td style="font-size:0.85rem;">{{ a.motivo }}</td>
+        <td style="font-size:0.8rem;color:var(--cinza-texto);">{% if a.abonado_por %}{{ a.abonado_por.get_full_name|default:a.abonado_por.username }}{% endif %}</td>
+        {% if pode_excluir %}
+        <td style="text-align:right;">
+          <form method="post" action="{% url 'rh:abono_excluir' a.pk %}" style="display:inline;margin:0;">
+            {% csrf_token %}
+            <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.7rem;padding:0.2rem 0.45rem;"
+                    onclick="return confirm('Excluir este abono? O saldo volta a contar no banco de horas.')">Excluir</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <p style="color:var(--cinza-texto);">Nenhum abono no filtro.</p>
 </div>
 {% endif %}
 {% endblock %}
