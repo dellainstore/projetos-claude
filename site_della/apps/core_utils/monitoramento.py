@@ -125,12 +125,17 @@ def resumo_geral() -> dict:
     ev24 = [e for e in ev7 if _dentro(e, 24)]
     checkout = [e for e in ev7 if e.get('fonte') == 'checkout']
     integr = [e for e in ev7 if e.get('fonte') == 'integracao']
+    # Gateway (502/503/504): o Django nao chegou a responder, entao esses
+    # eventos so existem porque coletar_erros_nginx os le do log do nginx.
+    gateway = [e for e in ev7 if e.get('fonte') == 'nginx']
     return {
         'total_24h': len(ev24),
         'total_7d': len(ev7),
         'por_status_24h': resumo_por_status(ev24),
         'checkout_7d': len(checkout),
         'integracoes_7d': len(integr),
+        'gateway_7d': len(gateway),
+        'gateway_24h': len([e for e in gateway if _dentro(e, 24)]),
         'ultimo': ev7[0] if ev7 else None,
     }
 

@@ -1,4 +1,8 @@
+from datetime import datetime
+from datetime import timezone as dt_timezone
+
 from django import template
+from django.utils import timezone as dj_timezone
 
 register = template.Library()
 
@@ -18,3 +22,17 @@ def brl_price(value):
         return s
     except (ValueError, TypeError):
         return value
+
+
+@register.filter(name='datahora_br')
+def datahora_br(value):
+    """Formata timestamp ISO (UTC) como dd/mm/aaaa HH:MM:SS no horário de Brasília."""
+    if not value:
+        return value
+    try:
+        quando = datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return value
+    if quando.tzinfo is None:
+        quando = quando.replace(tzinfo=dt_timezone.utc)
+    return dj_timezone.localtime(quando).strftime('%d/%m/%Y %H:%M:%S')

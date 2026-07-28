@@ -129,8 +129,14 @@ def registrar_evento_erro(
     session_key: str = '',
     integracao: str = '',
     extra: dict | None = None,
+    ts: datetime | None = None,
 ) -> None:
-    """Grava um evento de erro sanitizado no log estruturado. Nunca levanta."""
+    """Grava um evento de erro sanitizado no log estruturado. Nunca levanta.
+
+    `ts` permite carimbar o momento real do evento em vez de "agora". Serve
+    para coletores que leem uma fonte externa em lote (ex: o log do nginx, que
+    e varrido a cada N minutos e traz erros ja ocorridos). Sem `ts`, usa agora.
+    """
     try:
         # caminho: descarta querystring inteira (pode conter PII/UTM).
         caminho = (caminho or '').split('?', 1)[0][:300]
@@ -140,8 +146,11 @@ def registrar_evento_erro(
             return  # excesso na janela: nao inunda (contador ja registrou o pico)
 
         info_ua = classificar_ua(ua)
+        quando = ts or datetime.now(timezone.utc)
+        if quando.tzinfo is None:
+            quando = quando.replace(tzinfo=timezone.utc)
         registro = {
-            'ts': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+            'ts': quando.astimezone(timezone.utc).isoformat(timespec='seconds'),
             'status': status,
             'fonte': fonte,            # django | integracao | checkout | webhook
             'app': app,

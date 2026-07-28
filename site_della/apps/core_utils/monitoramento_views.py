@@ -82,7 +82,7 @@ def erros(request):
             'dispositivo': request.GET.get('dispositivo', ''),
             'rota': request.GET.get('rota', ''),
         },
-        'fontes': ('django', 'integracao', 'checkout', 'webhook'),
+        'fontes': ('django', 'integracao', 'checkout', 'webhook', 'nginx'),
         'integracoes': monit.INTEGRACOES,
     })
     return render(request, 'admin/monitoramento/erros.html', contexto)

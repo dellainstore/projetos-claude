@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n della_filters %}
 
 {% block title %}Monitoramento | D'ELLA Instore{% endblock %}
 {% block content_title %}{% endblock %}
@@ -40,7 +40,15 @@
   <div class="mon-card"><div class="n">{{ resumo.total_7d }}</div><div class="l">Erros 5xx (7 dias)</div></div>
   <div class="mon-card"><div class="n">{{ resumo.checkout_7d }}</div><div class="l">Falhas de checkout (7d)</div></div>
   <div class="mon-card"><div class="n">{{ resumo.integracoes_7d }}</div><div class="l">Falhas de integração (7d)</div></div>
+  <div class="mon-card">
+    <div class="n">{{ resumo.gateway_7d }}</div>
+    <div class="l">Gateway 502/503/504 (7d)</div>
+  </div>
 </div>
+<p class="mon-sub" style="margin-top:-8px;">
+  Gateway são os erros em que o Django nem chegou a responder (Gunicorn fora do ar
+  ou reiniciando). Vêm do log do nginx, coletados a cada 5 minutos.
+</p>
 
 <div class="mon-sec">Saúde do sistema</div>
 <table class="mon-table" style="margin-bottom:26px;">
@@ -69,8 +77,8 @@
       {% else %}<span class="pill none">sem dado</span>{% endif %}
     </td>
     <td>{{ i.erros_24h }}</td>
-    <td>{% if i.ultimo_erro %}{{ i.ultimo_erro }}{% else %}<span class="mon-muted">nenhum</span>{% endif %}</td>
-    <td>{% if i.ultimo_sucesso %}{{ i.ultimo_sucesso }}{% else %}<span class="mon-muted">sem dado</span>{% endif %}</td>
+    <td>{% if i.ultimo_erro %}{{ i.ultimo_erro|datahora_br }}{% else %}<span class="mon-muted">nenhum</span>{% endif %}</td>
+    <td>{% if i.ultimo_sucesso %}{{ i.ultimo_sucesso|datahora_br }}{% else %}<span class="mon-muted">sem dado</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
