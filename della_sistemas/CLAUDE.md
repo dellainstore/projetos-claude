@@ -488,6 +488,33 @@ projetos-claude/della_sistemas/.venv/bin/python jobs/vendas_atendidas.py 2026
 # Nota: argumento posicional "2026", não "--ano 2026"
 ```
 
+**Janelas de atualização (por que um pedido pode "sumir" do mês passado por um tempo):**
+
+O dashboard de Metas (`apps/metas/services/relatorio.py`) lê o CSV direto, sem
+cache — mas o CSV só é regravado pelos crons abaixo. Pedidos podem mudar de
+situação no Bling (troca, cancelamento, mudança de loja/canal) **depois** que
+o mês já fechou, e cada janela só é capturada pelo cron correspondente:
+
+| Cron | Horário (BRT) | Janela coberta |
+|---|---|---|
+| `vendas_custo_cmv_metas_*` (4x/dia) | 06h, 13h, 17h, 19h | Só o mês corrente |
+| `atualizar_mes_anterior.sh` | 07h30, diário | Só o mês anterior (fechado) |
+| `backfill_vendas_situacao.sh` | 03h do dia 1 | Mês corrente + 2 anteriores (3 meses) |
+
+Antes de 2026-08-04 não existia o cron diário do mês anterior — uma mudança de
+situação feita em julho (já fechado) só seria recapturada no dia 1 de agosto
+(backfill mensal) ou ficaria esquecida até o próximo backfill de 3 meses.
+Causou uma reclamação real: total de julho travado em R$ 72k mesmo após o
+usuário confirmar mudanças no Bling. `atualizar_mes_anterior.sh` fecha essa
+lacuna rodando o mês anterior isoladamente todo dia (não precisa reprocessar
+2 meses inteiros a mais só pra pegar o mês fechado mais recente).
+
+Retry: `jobs/vendas_atendidas.py::listar_pedidos()` agora usa `get_json()`
+(retry exponencial em 429/5xx) na chamada de listagem — antes só as chamadas
+de detalhe por pedido retentavam, e a listagem sem retry causou falha
+silenciosa do backfill de 3 meses (junho falhou em 2026-08-01, HTTP 429 sem
+novas tentativas). Corrigido em conjunto com o cron acima.
+
 ---
 
 ## API Bling v3 — endpoints confirmados e limitações
