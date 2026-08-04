@@ -85,6 +85,25 @@
     font-weight: 600; color: var(--preto); background: var(--cinza-claro);
     border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.75rem;
   }
+  .av-secao-titulo {
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--cinza-texto); margin: 0 0 0.35rem;
+  }
+  .av-cidades-bloco {
+    margin-top: 0.9rem; padding-top: 0.75rem; border-top: 1px dashed var(--cinza-medio);
+  }
+  .av-cidades-titulo { color: var(--dourado); font-weight: 600; }
+  .av-cidades { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+  .av-cidades li {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.78rem; padding: 0.15rem 0; border-bottom: 1px solid var(--cinza-claro);
+  }
+  .av-cidades li:last-child { border-bottom: none; }
+  .av-cidade-nome { color: var(--cinza-texto); }
+  .av-cidade-total {
+    font-weight: 600; color: var(--dourado); background: rgba(0,0,0,0.04);
+    border-radius: 4px; padding: 0.1rem 0.4rem; font-size: 0.75rem;
+  }
 
   /* Cards de resumo */
   .an-cards-grid {
@@ -180,6 +199,7 @@
   .an-cart-status { text-align: center; }
   .an-badge-comprou { background: #dcfce7; color: #166534; border-radius: 12px; padding: 0.15rem 0.5rem; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
   .an-badge-abandonou { background: #fee2e2; color: #991b1b; border-radius: 12px; padding: 0.15rem 0.5rem; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+  .an-badge-aguardando { background: #fef3c7; color: #92400e; border-radius: 12px; padding: 0.15rem 0.5rem; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
   .an-badge-sim { background: #dbeafe; color: #1e40af; border-radius: 12px; padding: 0.15rem 0.5rem; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
   .an-badge-nao { background: #f1f5f9; color: #64748b; border-radius: 12px; padding: 0.15rem 0.5rem; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
 
@@ -295,7 +315,8 @@ DELLA_SITE_DB_PASSWORD=Della@RO2026!</code>
 <!-- Filtro de periodo -->
 <div class="an-filtro">
   <span class="an-filtro-label">Periodo:</span>
-  <a href="?periodo=hoje" class="an-filtro-tab {% if filtro == 'hoje' %}ativo{% endif %}">Hoje</a>
+  <a href="?periodo=hoje"  class="an-filtro-tab {% if filtro == 'hoje' %}ativo{% endif %}">Hoje</a>
+  <a href="?periodo=ontem" class="an-filtro-tab {% if filtro == 'ontem' %}ativo{% endif %}">Ontem</a>
   <a href="?periodo=7d"   class="an-filtro-tab {% if filtro == '7d' %}ativo{% endif %}">Ultimos 7 dias</a>
   <a href="?periodo=30d"  class="an-filtro-tab {% if filtro == '30d' %}ativo{% endif %}">Ultimos 30 dias</a>
   <button type="button" onclick="toggleCustomPeriodo(this)" class="an-filtro-tab {% if filtro == 'custom' %}ativo{% endif %}">Personalizado</button>
@@ -337,7 +358,7 @@ function toggleCustomPeriodo(btn) {
     <div class="an-card-valor">{{ resumo.visitantes }}</div>
   </div>
   <div class="an-card">
-    <div class="an-card-label">Pedidos feitos</div>
+    <div class="an-card-label">Vendas pagas</div>
     <div class="an-card-valor">{{ resumo.pedidos }}</div>
   </div>
   <div class="an-card">
@@ -348,12 +369,24 @@ function toggleCustomPeriodo(btn) {
     <div class="an-card-label">Receita</div>
     <div class="an-card-valor" style="font-size:1.1rem;">{{ resumo.receita|brl }}</div>
   </div>
+  <div class="an-card">
+    <div class="an-card-label">Aguardando pagamento</div>
+    <div class="an-card-valor">{{ resumo.aguardando }}</div>
+    {% if resumo.aguardando > 0 %}
+    <div style="font-size:0.75rem;color:var(--cinza-texto);">{{ resumo.aguardando_valor|brl }} em pedidos ainda nao pagos</div>
+    {% endif %}
+  </div>
 </div>
+<p style="font-size:0.78rem;color:var(--cinza-texto);margin:-0.25rem 0 0.5rem;">
+  Venda so entra depois do pagamento confirmado. Pedido gerado e ainda nao pago
+  (PIX aberto, cartao em analise) fica em "aguardando pagamento"; pedido cancelado
+  sai das vendas.
+</p>
 {% if resumo.visitantes > 0 %}
 <div class="an-taxa-frase">
   Media de <strong>{{ resumo.media_paginas }} paginas</strong> por visitante.
   &nbsp;|&nbsp;
-  A cada 100 visitantes, <strong>{{ resumo.taxa }}</strong> {% if resumo.taxa == 1 %}virou compra{% else %}viraram compra{% endif %}.
+  A cada 100 visitantes, <strong>{{ resumo.taxa }}</strong> {% if resumo.taxa == 1 %}virou compra paga{% else %}viraram compra paga{% endif %}.
   {% if resumo.carrinhos_abandonados > 0 %}
   &nbsp;|&nbsp;
   <strong>{{ resumo.carrinhos_abandonados }}</strong> {% if resumo.carrinhos_abandonados == 1 %}carrinho abandonado{% else %}carrinhos abandonados{% endif %}.
@@ -411,6 +444,8 @@ function toggleCustomPeriodo(btn) {
     <div class="an-cart-status">
       {% if c.comprou %}
       <span class="an-badge-comprou">Comprou</span>
+      {% elif c.aguardando %}
+      <span class="an-badge-aguardando">Aguardando pagamento</span>
       {% else %}
       <span class="an-badge-abandonou">Abandonou</span>
       {% endif %}

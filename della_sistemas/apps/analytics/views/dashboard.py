@@ -30,6 +30,9 @@ def _resolver_periodo(request):
     if filtro == 'hoje':
         inicio = hoje_inicio
         fim = agora
+    elif filtro == 'ontem':
+        inicio = hoje_inicio - timedelta(days=1)
+        fim = hoje_inicio - timedelta(microseconds=1)
     elif filtro == '30d':
         inicio = agora - timedelta(days=30)
         fim = agora
@@ -95,11 +98,27 @@ def _calcular_ao_vivo():
         {'pagina_url': url, 'total': total}
         for url, total in sorted(contagem.items(), key=lambda x: -x[1])[:5]
     ]
-    return {'visitantes': visitantes, 'paginas': paginas}
+
+    # Cidades dos visitantes ao vivo (aproximado via IP, resolvido no site_della
+    # no momento da visita -- aqui so lemos cidade/estado ja gravados).
+    contagem_cidade = {}
+    for cidade, estado in vivos.exclude(cidade='').values_list('cidade', 'estado'):
+        label = f'{cidade}/{estado}' if estado else cidade
+        contagem_cidade[label] = contagem_cidade.get(label, 0) + 1
+    cidades = [
+        {'cidade': label, 'total': total}
+        for label, total in sorted(contagem_cidade.items(), key=lambda x: -x[1])[:5]
+    ]
+
+    return {'visitantes': visitantes, 'paginas': paginas, 'cidades': cidades}
 
 
 def _calcular_resumo(inicio, fim):
     from apps.analytics.models import SessaoSite, EventoSite
+    from apps.analytics.vendas import (
+        STATUS_AGUARDANDO, eventos_itens, eventos_pedidos, sessoes_com_venda_paga,
+        ids_com_carrinho_liquido_positivo,
+    )
     from django.db.models import Exists, OuterRef
 
     # is_bot=False em todas as metricas: o painel mostra apenas pessoas reais.
@@ -109,33 +128,30 @@ def _calcular_resumo(inicio, fim):
     visitas    = EventoSite.objects.filter(periodo, tipo='pagina_vista').count()
     visitantes = sessoes_periodo.count()
 
-    pedidos = (
-        EventoSite.objects
-        .filter(periodo, tipo='pedido_finalizado', pedido_numero__gt='')
-        .values('pedido_numero')
-        .distinct()
-        .count()
-    )
-    receita = (
-        EventoSite.objects
-        .filter(periodo, tipo='pedido_finalizado', pedido_numero__gt='')
-        .aggregate(total=Sum('valor_total'))['total'] or 0
-    )
-    itens_vendidos = (
-        EventoSite.objects
-        .filter(periodo, tipo='pedido_finalizado', produto_slug__gt='')
-        .aggregate(total=Sum('quantidade'))['total'] or 0
-    )
+    # Venda = pedido PAGO. Pedido gerado e ainda sem pagamento entra em
+    # "aguardando pagamento"; cancelado/estornado nao entra em nada.
+    pagos_qs = eventos_pedidos(periodo)
+    pedidos = pagos_qs.values('pedido_numero').distinct().count()
+    receita = pagos_qs.aggregate(total=Sum('valor_total'))['total'] or 0
+    itens_vendidos = eventos_itens(periodo).aggregate(total=Sum('quantidade'))['total'] or 0
 
-    comprou_qs = EventoSite.objects.filter(
-        sessao=OuterRef('pk'), tipo='pedido_finalizado', pedido_numero__gt=''
-    )
-    carrinhos_abandonados = (
+    aguardando_qs = eventos_pedidos(periodo, status=STATUS_AGUARDANDO)
+    aguardando = aguardando_qs.values('pedido_numero').distinct().count()
+    aguardando_valor = aguardando_qs.aggregate(total=Sum('valor_total'))['total'] or 0
+
+    # Abandonado = nao gerou venda PAGA. Sessao com pedido aguardando pagamento
+    # continua contando como abandonada ate o pagamento entrar (mesma regra do
+    # carrinho abandonado no site_della, que so vira "recuperado" quando pago).
+    comprou_qs = sessoes_com_venda_paga()
+    candidatos_carrinho = (
         sessoes_periodo
         .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
         .exclude(Exists(comprou_qs))
-        .count()
+        .values_list('id', flat=True)
     )
+    # So conta quem ainda tem algo no carrinho -- quem adicionou e removeu
+    # tudo antes de sair nao e um carrinho abandonado (ver vendas.py).
+    carrinhos_abandonados = len(ids_com_carrinho_liquido_positivo(candidatos_carrinho))
     checkouts_abandonados = (
         sessoes_periodo
         .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='checkout_iniciado')))
@@ -150,6 +166,8 @@ def _calcular_resumo(inicio, fim):
         'visitas': visitas,
         'visitantes': visitantes,
         'pedidos': pedidos,
+        'aguardando': aguardando,
+        'aguardando_valor': aguardando_valor,
         'receita': receita,
         'itens_vendidos': itens_vendidos,
         'carrinhos_abandonados': carrinhos_abandonados,
@@ -161,6 +179,7 @@ def _calcular_resumo(inicio, fim):
 
 def _calcular_funil(inicio, fim):
     from apps.analytics.models import SessaoSite, EventoSite
+    from apps.analytics.vendas import eventos_pedidos
 
     periodo = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
 
@@ -180,11 +199,14 @@ def _calcular_funil(inicio, fim):
         .filter(periodo, tipo='checkout_iniciado')
         .values('sessao_id').distinct().count()
     )
-    compraram = (
+    # Duas etapas finais: gerar o pedido nao e o mesmo que pagar. A diferenca
+    # entre elas e exatamente o PIX gerado e nao pago / cartao recusado.
+    fecharam = (
         EventoSite.objects
-        .filter(periodo, tipo='pedido_finalizado', pedido_numero__gt='')
+        .filter(periodo, tipo='pedido_finalizado', produto_slug='', pedido_numero__gt='')
         .values('sessao_id').distinct().count()
     )
+    compraram = eventos_pedidos(periodo).values('sessao_id').distinct().count()
 
     base = visitantes or 1
 
@@ -196,7 +218,8 @@ def _calcular_funil(inicio, fim):
         {'label': 'Viram um produto',           'total': viram,      'pct': pct(viram)},
         {'label': 'Adicionaram ao carrinho',    'total': adicionaram,'pct': pct(adicionaram)},
         {'label': 'Foram ao checkout',          'total': checkout,   'pct': pct(checkout)},
-        {'label': 'Finalizaram a compra',       'total': compraram,  'pct': pct(compraram)},
+        {'label': 'Fecharam o pedido',          'total': fecharam,   'pct': pct(fecharam)},
+        {'label': 'Pagaram (venda)',            'total': compraram,  'pct': pct(compraram)},
     ]
     for i, e in enumerate(etapas):
         if i + 1 < len(etapas):
@@ -208,6 +231,7 @@ def _calcular_funil(inicio, fim):
 
 def _calcular_produtos(inicio, fim):
     from apps.analytics.models import EventoSite
+    from apps.analytics.vendas import eventos_itens
 
     periodo = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
 
@@ -225,9 +249,9 @@ def _calcular_produtos(inicio, fim):
         .annotate(total=Count('id'))
         .order_by('-total')[:10]
     )
+    # So itens de pedidos pagos (ver apps/analytics/vendas.py).
     mais_vendidos = list(
-        EventoSite.objects
-        .filter(periodo, tipo='pedido_finalizado', produto_slug__gt='')
+        eventos_itens(periodo)
         .values('produto_slug', 'produto_nome')
         .annotate(total=Count('id'), receita=Sum('valor_total'))
         .order_by('-total')[:10]
@@ -242,11 +266,15 @@ def _calcular_produtos(inicio, fim):
 
 def _calcular_carrinhos_recentes(inicio, fim):
     from apps.analytics.models import SessaoSite, EventoSite
+    from apps.analytics.vendas import (
+        sessoes_com_pedido_pendente, sessoes_com_venda_paga,
+    )
     from django.db.models import Exists, OuterRef
 
-    comprou_qs = EventoSite.objects.filter(
-        sessao=OuterRef('pk'), tipo='pedido_finalizado', pedido_numero__gt=''
-    )
+    # "Comprou" so quando o pedido foi pago; pedido gerado e nao pago aparece
+    # como "Aguardando pagamento".
+    comprou_qs = sessoes_com_venda_paga()
+    aguardando_qs = sessoes_com_pedido_pendente()
     checkout_qs = EventoSite.objects.filter(
         sessao=OuterRef('pk'), tipo='checkout_iniciado'
     )
@@ -259,41 +287,60 @@ def _calcular_carrinhos_recentes(inicio, fim):
         .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
         .annotate(
             comprou=Exists(comprou_qs),
+            aguardando=Exists(aguardando_qs),
             foi_checkout=Exists(checkout_qs),
             viu_popup=Exists(popup_qs),
         )
         .order_by('-ultima_acao_em')
-        .values('id', 'comprou', 'foi_checkout', 'viu_popup', 'ultima_acao_em')[:20]
+        .values('id', 'comprou', 'aguardando', 'foi_checkout', 'viu_popup',
+                'ultima_acao_em')[:20]
     )
 
     if not sessoes:
         return []
 
     session_ids = [s['id'] for s in sessoes]
+    # Carrinho liquido: soma adicoes e desconta remocoes (produto_removido nao
+    # carrega quantidade/valor, so casa pela linha via produto_nome -- o
+    # produto_removido do site nao grava produto_slug, ver bug corrigido em
+    # apps/pedidos/carrinho.py:Carrinho.adicionar do site_della). Sem isso, uma
+    # sessao que adicionou e removeu itens antes de finalizar aparecia com o
+    # carrinho bruto (tudo que ja passou pelo carrinho), inflando itens/valor
+    # mesmo com "Comprou" certo (ex: pedido 2026-0010 -- 4 adicoes/2 remocoes
+    # na sessao, comprou so 2).
     items_map: dict = {}
     for evt in (
         EventoSite.objects
-        .filter(sessao_id__in=session_ids, tipo='produto_adicionado')
-        .values('sessao_id', 'produto_nome', 'quantidade', 'valor_total')
+        .filter(sessao_id__in=session_ids, tipo__in=['produto_adicionado', 'produto_removido'])
+        .values('sessao_id', 'tipo', 'produto_nome', 'quantidade', 'valor_total')
         .order_by('ocorrido_em')
     ):
         sid = evt['sessao_id']
-        if sid not in items_map:
-            items_map[sid] = []
-        items_map[sid].append({
-            'nome': (evt['produto_nome'] or 'Produto')[:45],
-            'qtd': evt['quantidade'] or 1,
-            'valor': evt['valor_total'] or 0,
-        })
+        carrinho = items_map.setdefault(sid, {})
+        chave = evt['produto_nome'] or ''
+        if evt['tipo'] == 'produto_adicionado':
+            item = carrinho.setdefault(chave, {
+                'nome': (evt['produto_nome'] or 'Produto')[:45], 'qtd': 0, 'valor': 0,
+            })
+            item['qtd'] += evt['quantidade'] or 1
+            item['valor'] += evt['valor_total'] or 0
+        else:
+            carrinho.pop(chave, None)
 
     result = []
     for s in sessoes:
-        itens = items_map.get(s['id'], [])
+        itens = list(items_map.get(s['id'], {}).values())
         total_itens = sum(i['qtd'] for i in itens)
+        if total_itens == 0:
+            # Adicionou e removeu tudo antes de sair: carrinho esvaziado, nao
+            # e um carrinho abandonado (ver ids_com_carrinho_liquido_positivo
+            # em apps/analytics/vendas.py, mesma regra aplicada no resumo).
+            continue
         valor_total = sum(i['valor'] for i in itens)
         result.append({
             'ultima_acao': s['ultima_acao_em'],
             'comprou': s['comprou'],
+            'aguardando': s['aguardando'] and not s['comprou'],
             'foi_checkout': s['foi_checkout'],
             'viu_popup': s['viu_popup'],
             'itens': itens,
@@ -423,6 +470,7 @@ def _calcular_trafico_semanal(seg_semana):
 
 
 def _calcular_origens(inicio, fim):
+    from apps.analytics.attribution import label_origem
     from apps.analytics.models import SessaoSite
     from django.db.models import BooleanField, Case, Value, When
 
@@ -443,30 +491,9 @@ def _calcular_origens(inicio, fim):
         .order_by('-total')[:40]
     )
 
-    def _label(source, tem_fbclid=False, tem_gclid=False):
-        s = (source or '').lower().strip()
-        if 'google' in s:
-            return 'Google'
-        if s in ('ig', 'instagram') or 'instagram' in s:
-            return 'Instagram'
-        if s in ('fb', 'facebook') or 'facebook' in s:
-            return 'Facebook'
-        if 'meta' in s:
-            return 'Meta'
-        if 'whatsapp' in s or 'wapp' in s:
-            return 'WhatsApp'
-        if s:
-            return s.capitalize()
-        # Sem utm_source: o click id revela a origem paga do clique.
-        if tem_fbclid:
-            return 'Meta'
-        if tem_gclid:
-            return 'Google'
-        return 'Direto / Outros'
-
     agg = {}
     for row in sessoes:
-        label = _label(row['utm_source'], row['tem_fbclid'], row['tem_gclid'])
+        label = label_origem(row['utm_source'], row['tem_fbclid'], row['tem_gclid'])
         agg[label] = agg.get(label, 0) + row['total']
 
     total = sum(agg.values()) or 1
@@ -522,6 +549,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     except Exception:
         ao_vivo   = {'visitantes': 0, 'paginas': []}
         resumo    = {'visitas': 0, 'visitantes': 0, 'pedidos': 0, 'receita': 0,
+                     'aguardando': 0, 'aguardando_valor': 0,
                      'itens_vendidos': 0, 'carrinhos_abandonados': 0,
                      'checkouts_abandonados': 0, 'taxa': 0, 'media_paginas': 0}
         funil     = []

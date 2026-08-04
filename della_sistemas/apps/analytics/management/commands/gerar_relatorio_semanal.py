@@ -85,34 +85,34 @@ class Command(BaseCommand):
         # marcados na coleta do site_della por comportamento, nao so por UA).
         periodo   = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
         sess_qs   = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False)
-        comprou   = EventoSite.objects.filter(
-            sessao=OuterRef('pk'), tipo='pedido_finalizado', pedido_numero__gt=''
+        # Venda = pedido PAGO (regra unica em apps/analytics/vendas.py). Pedido
+        # gerado e nao pago entra em "aguardando"; cancelado nao entra em nada.
+        from apps.analytics.vendas import (
+            STATUS_AGUARDANDO, eventos_itens, eventos_pedidos, sessoes_com_venda_paga,
+            ids_com_carrinho_liquido_positivo,
         )
+        comprou = sessoes_com_venda_paga()
 
         visitas    = EventoSite.objects.filter(periodo, tipo='pagina_vista').count()
         visitantes = sess_qs.count()
 
-        pedidos = (
-            EventoSite.objects
-            .filter(periodo, tipo='pedido_finalizado', pedido_numero__gt='')
-            .values('pedido_numero').distinct().count()
-        )
-        receita = (
-            EventoSite.objects
-            .filter(periodo, tipo='pedido_finalizado', pedido_numero__gt='')
-            .aggregate(t=Sum('valor_total'))['t'] or 0
-        )
-        itens_vendidos = (
-            EventoSite.objects
-            .filter(periodo, tipo='pedido_finalizado', produto_slug__gt='')
-            .aggregate(t=Sum('quantidade'))['t'] or 0
-        )
-        carrinhos_ab = (
+        pagos_qs = eventos_pedidos(periodo)
+        pedidos = pagos_qs.values('pedido_numero').distinct().count()
+        receita = pagos_qs.aggregate(t=Sum('valor_total'))['t'] or 0
+        itens_vendidos = eventos_itens(periodo).aggregate(t=Sum('quantidade'))['t'] or 0
+
+        aguardando_qs = eventos_pedidos(periodo, status=STATUS_AGUARDANDO)
+        aguardando = aguardando_qs.values('pedido_numero').distinct().count()
+        aguardando_valor = float(aguardando_qs.aggregate(t=Sum('valor_total'))['t'] or 0)
+        candidatos_carrinho = (
             sess_qs
             .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
             .exclude(Exists(comprou))
-            .count()
+            .values_list('id', flat=True)
         )
+        # So conta quem ainda tem algo no carrinho -- quem adicionou e
+        # removeu tudo antes de sair nao e um carrinho abandonado.
+        carrinhos_ab = len(ids_com_carrinho_liquido_positivo(candidatos_carrinho))
         checkouts_ab = (
             sess_qs
             .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='checkout_iniciado')))
@@ -136,20 +136,29 @@ class Command(BaseCommand):
         mais_vistos     = top10('produto_visualizado')
         mais_adicionados = top10('produto_adicionado')
         mais_vendidos   = list(
-            EventoSite.objects
-            .filter(periodo, tipo='pedido_finalizado', produto_slug__gt='')
+            eventos_itens(periodo)
             .values('produto_slug', 'produto_nome')
             .annotate(total=Count('id'), receita=Sum('valor_total'))
             .order_by('-total')[:10]
         )
 
+        from apps.analytics.attribution import label_origem
+        from django.db.models import BooleanField, Case, Value, When
+
         sessoes_all = list(
             SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False)
-            .values('utm_source').annotate(total=Count('id')).order_by('-total')[:20]
+            .annotate(
+                tem_fbclid=Case(When(fbclid='', then=Value(False)),
+                                default=Value(True), output_field=BooleanField()),
+                tem_gclid=Case(When(gclid='', then=Value(False)),
+                               default=Value(True), output_field=BooleanField()),
+            )
+            .values('utm_source', 'tem_fbclid', 'tem_gclid')
+            .annotate(total=Count('id')).order_by('-total')[:20]
         )
         agg: dict = {}
         for row in sessoes_all:
-            label = self._label_origem(row['utm_source'])
+            label = label_origem(row['utm_source'], row['tem_fbclid'], row['tem_gclid'])
             agg[label] = agg.get(label, 0) + row['total']
         total_orig = sum(agg.values()) or 1
         origens = [
@@ -192,6 +201,7 @@ class Command(BaseCommand):
         return {
             'visitas': visitas, 'visitantes': visitantes, 'pedidos': pedidos,
             'receita': receita_float, 'receita_fmt': receita_fmt,
+            'aguardando': aguardando, 'aguardando_valor': aguardando_valor,
             'itens_vendidos': itens_vendidos or 0,
             'carrinhos_abandonados': carrinhos_ab,
             'checkouts_abandonados': checkouts_ab,
@@ -208,11 +218,15 @@ class Command(BaseCommand):
 
     def _calcular_funil(self, sess_qs, periodo):
         from apps.analytics.models import EventoSite
+        from apps.analytics.vendas import eventos_pedidos
         visitantes = sess_qs.count()
         viram      = EventoSite.objects.filter(periodo, tipo='produto_visualizado').values('sessao_id').distinct().count()
         adicionaram = EventoSite.objects.filter(periodo, tipo='produto_adicionado').values('sessao_id').distinct().count()
         checkout   = EventoSite.objects.filter(periodo, tipo='checkout_iniciado').values('sessao_id').distinct().count()
-        compraram  = EventoSite.objects.filter(periodo, tipo='pedido_finalizado', pedido_numero__gt='').values('sessao_id').distinct().count()
+        # Fechar o pedido nao e pagar: a diferenca entre as duas ultimas etapas
+        # e o PIX gerado e nao pago / cartao recusado.
+        fecharam   = EventoSite.objects.filter(periodo, tipo='pedido_finalizado', produto_slug='', pedido_numero__gt='').values('sessao_id').distinct().count()
+        compraram  = eventos_pedidos(periodo).values('sessao_id').distinct().count()
         base = visitantes or 1
         def pct(n): return round(n / base * 100, 1)
         return [
@@ -220,18 +234,9 @@ class Command(BaseCommand):
             {'label': 'Viram um produto',           'total': viram,      'pct': pct(viram)},
             {'label': 'Adicionaram ao carrinho',    'total': adicionaram,'pct': pct(adicionaram)},
             {'label': 'Foram ao checkout',          'total': checkout,   'pct': pct(checkout)},
-            {'label': 'Finalizaram a compra',       'total': compraram,  'pct': pct(compraram)},
+            {'label': 'Fecharam o pedido',          'total': fecharam,   'pct': pct(fecharam)},
+            {'label': 'Pagaram (venda)',            'total': compraram,  'pct': pct(compraram)},
         ]
-
-    def _label_origem(self, source):
-        s = (source or '').lower().strip()
-        if 'google' in s: return 'Google'
-        if s in ('ig', 'instagram') or 'instagram' in s: return 'Instagram'
-        if s in ('fb', 'facebook') or 'facebook' in s: return 'Facebook'
-        if 'meta' in s: return 'Meta'
-        if 'whatsapp' in s or 'wapp' in s: return 'WhatsApp'
-        if s: return s.capitalize()
-        return 'Direto / Outros'
 
     def _gerar_grafico_dias(self, por_dia, nomes_dia, dourado):
         from reportlab.graphics.charts.barcharts import VerticalBarChart
@@ -302,10 +307,11 @@ DADOS DA SEMANA ({periodo_str}):
 - Visitantes unicos: {stats['visitantes']}
 - Paginas vistas: {stats['visitas']}
 - Media de paginas por visitante: {stats['media_paginas']}
-- Pedidos finalizados: {stats['pedidos']}
+- Vendas pagas (pedidos com pagamento confirmado): {stats['pedidos']}
+- Pedidos gerados e ainda nao pagos (PIX aberto, cartao em analise): {stats['aguardando']}
 - Itens vendidos: {stats['itens_vendidos']}
-- Receita total: {stats['receita_fmt']}
-- Taxa de conversao: {stats['taxa']}%
+- Receita total (so pedidos pagos): {stats['receita_fmt']}
+- Taxa de conversao (sobre vendas pagas): {stats['taxa']}%
 - Carrinhos abandonados (adicionou mas nao comprou): {stats['carrinhos_abandonados']}
 - Checkouts abandonados (iniciou checkout mas nao finalizou): {stats['checkouts_abandonados']}
 
@@ -430,7 +436,8 @@ Seja direto e pratico. Maximo 350 palavras. Nao use markdown com asteriscos - us
             ['Visitantes unicos',                   _n(stats['visitantes'])],
             ['Paginas vistas',                      _n(stats['visitas'])],
             ['Media de paginas por visitante',      _n(stats['media_paginas'])],
-            ['Pedidos finalizados',                 _n(stats['pedidos'])],
+            ['Vendas pagas',                        _n(stats['pedidos'])],
+            ['Pedidos aguardando pagamento',        _n(stats['aguardando'])],
             ['Itens vendidos',                      _n(stats['itens_vendidos'])],
             ['Receita total',                       stats['receita_fmt'] if stats['receita'] > 0 else 'R$ -'],
             ['Taxa de conversao',                   _pct(stats['taxa'])],

@@ -37,6 +37,8 @@ class SessaoSite(models.Model):
     # is_bot=False em todas as metricas para mostrar apenas pessoas reais.
     is_bot = models.BooleanField(default=False)
     ip_hash = models.CharField(max_length=64, blank=True)
+    cidade = models.CharField(max_length=100, blank=True)
+    estado = models.CharField(max_length=2, blank=True)
 
     class Meta:
         app_label = 'analytics_site'
@@ -47,6 +49,31 @@ class SessaoSite(models.Model):
 
     def __str__(self):
         return self.sessao_hash[:16]
+
+
+class PedidoSite(models.Model):
+    """Espelho somente-leitura de pedidos_pedido no banco della_site.
+
+    Existe para o painel saber se um pedido foi PAGO. O evento
+    `pedido_finalizado` do analytics e gravado na criacao do pedido, entao
+    sozinho ele contaria PIX gerado e nao pago (ou pedido cancelado) como venda.
+    """
+
+    numero = models.CharField(max_length=20)
+    status = models.CharField(max_length=30)
+    forma_pagamento = models.CharField(max_length=20, blank=True)
+    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    criado_em = models.DateTimeField()
+
+    class Meta:
+        app_label = 'analytics_site'
+        db_table = 'pedidos_pedido'
+        managed = False
+        verbose_name = 'Pedido do Site'
+        verbose_name_plural = 'Pedidos do Site'
+
+    def __str__(self):
+        return f'{self.numero} ({self.status})'
 
 
 class EventoSite(models.Model):
