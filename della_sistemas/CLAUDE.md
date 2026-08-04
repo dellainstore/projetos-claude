@@ -515,6 +515,34 @@ de detalhe por pedido retentavam, e a listagem sem retry causou falha
 silenciosa do backfill de 3 meses (junho falhou em 2026-08-01, HTTP 429 sem
 novas tentativas). Corrigido em conjunto com o cron acima.
 
+**`--forcar-substituicao` (mês fechado pode "prender" pedido como vendido):**
+Por padrão, `salvar_csv_com_merge()` em mês já fechado (anterior ao mês
+corrente) só faz *upsert* dos pedidos que **ainda estão** atendidos — nunca
+remove um pedido que saiu da lista de atendidos. Isso é de propósito, para
+não perder receita se um pedido for cancelado depois do fechamento. Só que
+isso também deixa preso pra sempre um pedido que **voltou** para "Em
+andamento" no Bling sem ter sido cancelado de fato: ele continua contando
+como venda porque nunca mais aparece na lista de "atendidos" para
+sobrescrever a linha antiga.
+
+Caso real (2026-08-04): 2 pedidos da Michelle (R$435 + R$1.717) voltaram de
+`Atendido-Anaca` para `Em andamento - Anaca` no Bling depois que julho
+fechou. O dashboard de Metas continuou contando os R$2.152,00 — Michelle
+aparecia em R$19.582,81 contra R$17.430,81 no relatório do Bling.
+
+A flag `--forcar-substituicao` em `vendas_atendidas.py` substitui o período
+inteiro mesmo em mês fechado (usa o `replace_date_range` que já existia,
+antes só ativo pro mês corrente). Usada por padrão em
+`atualizar_mes_anterior.sh` e `backfill_vendas_situacao.sh`. Para uma
+correção manual pontual em mês fechado:
+```bash
+run_jobs.py vendas_atendidas --inicio AAAA-MM-01 --fim AAAA-MM-DD --forcar-substituicao
+```
+Diagnóstico útil quando um pedido não bate: `apps.pedidos.models.PedidoBling`
+(sincroniza situação diariamente) tem `situacao_nome` legível por
+`bling_id` — mais rápido que decifrar o id numérico da situação via API
+(`/situacoes/modulos` exige scope que o token não tem).
+
 ---
 
 ## API Bling v3 — endpoints confirmados e limitações
