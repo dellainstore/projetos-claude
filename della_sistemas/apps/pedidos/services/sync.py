@@ -54,6 +54,13 @@ def _extrair_data_pagamento(detalhe: dict) -> date | None:
 
 INICIO_2026 = date(2026, 1, 1)
 
+# Pedidos com data_pedido dentro dessa janela sempre buscam o detalhe de novo
+# no Bling, mesmo sem mudança de situação/valor/data — é a única forma de
+# pegar troca de vendedor feita direto no Bling em um pedido já sincronizado
+# (o Bling não avisa, e os outros critérios de "precisa_detalhe" não cobrem
+# esse caso). 60 dias cobre com folga o ciclo diário do sync --completo.
+VENDEDOR_RECHECK_DIAS = 60
+
 
 def _sync_parcelas(pedido: PedidoBling, parcelas_raw: list) -> None:
     """Faz upsert das parcelas do Bling preservando status de baixada."""
@@ -154,8 +161,11 @@ def sync_pedidos(
             # O detalhe do pedido custa 1 chamada EXTRA à API por pedido. Para
             # acelerar o sync, só buscamos quando realmente há o que atualizar:
             # pedido atendido que é novo, mudou de situação, teve valor/data
-            # alterados ou ainda não tem parcelas salvas. Atendido inalterado é
-            # pulado — sem chamada à API.
+            # alterados, ainda não tem parcelas salvas, ou está dentro da janela
+            # de revalidação de vendedor (VENDEDOR_RECHECK_DIAS) — só assim
+            # pegamos uma troca de vendedor feita no Bling depois do sync
+            # original. Fora dessa janela, atendido inalterado é pulado — sem
+            # chamada à API.
             forma_pagamento = ""
             data_pagamento: date | None = None
             parcelas_raw: list = []
@@ -170,6 +180,7 @@ def sync_pedidos(
                     or existing.data_pedido != data_pedido
                     or not existing.parcelas.exists()
                     or existing.vendedor_id is None
+                    or data_pedido >= hoje - timedelta(days=VENDEDOR_RECHECK_DIAS)
                 )
                 if precisa_detalhe:
                     detalhe = obter_detalhe_pedido(bling_id)
