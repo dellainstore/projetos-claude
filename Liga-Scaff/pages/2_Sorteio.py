@@ -201,13 +201,14 @@ def _analisar_comparacao_rodada(
 
 
 if auth.is_admin():
-    tab_criar, tab_sorteio, tab_manual, tab_auditoria, tab_comparacao = st.tabs(
-        ["Criar / Gerenciar Rodadas", "Gerar Sorteio", "Entrada Manual", "Auditoria", "Comparação"]
+    tab_criar, tab_sorteio, tab_manual, tab_substituicao, tab_auditoria, tab_comparacao = st.tabs(
+        ["Criar / Gerenciar Rodadas", "Gerar Sorteio", "Entrada Manual", "Substituição", "Auditoria", "Comparação"]
     )
 else:
     tab_sorteio, tab_auditoria, tab_comparacao = st.tabs(["Gerar Sorteio", "Auditoria", "Comparação"])
     tab_criar = None
     tab_manual = None
+    tab_substituicao = None
 
 
 # ── ABA 1: Criar / Gerenciar Rodadas ─────────────────────────────────────────
@@ -421,7 +422,12 @@ with tab_sorteio:
                 "dupla1_j1": j["dupla1_j1"], "dupla1_j2": j["dupla1_j2"],
                 "dupla2_j1": j["dupla2_j1"], "dupla2_j2": j["dupla2_j2"],
             } for j in _jogos_pdf]
-            pdf_data = gerar_planilha_pdf(rodada_sel["numero"], fmt_data(rodada_sel["data"]), _tabela_pdf, _nomes_pdf)
+            _oficial_pdf = db.get_patrocinador_oficial(tid)
+            _apoiadores_pdf = db.list_patrocinadores(tid, tipo="apoiador")
+            pdf_data = gerar_planilha_pdf(
+                rodada_sel["numero"], fmt_data(rodada_sel["data"]), _tabela_pdf, _nomes_pdf,
+                patrocinador_oficial=_oficial_pdf, patrocinadores_apoiadores=_apoiadores_pdf,
+            )
 
         col_b1, col_b2 = st.columns(2)
         with col_b1:
@@ -744,7 +750,314 @@ if tab_manual is not None:
             st.rerun()
 
 
-# ── ABA 4: Auditoria ─────────────────────────────────────────────────────────
+# ── ABA 4: Substituição ──────────────────────────────────────────────────────
+if tab_substituicao is not None:
+    with tab_substituicao:
+        st.markdown("### 🔄 Substituição de Jogador")
+        st.caption(
+            "Troca um jogador em **todos os jogos** de uma rodada sem refazer o sorteio. "
+            "Se a rodada já estiver concluída, o ranking é recalculado automaticamente."
+        )
+
+        rodadas_sub = [r for r in db.list_rodadas(tid) if db.get_sorteio_ativo(r["id"])]
+        if not rodadas_sub:
+            st.info("Nenhuma rodada com sorteio oficial para substituir.")
+        else:
+            rodada_sub = st.selectbox(
+                "Rodada",
+                options=rodadas_sub,
+                format_func=lambda r: f"Rodada {r['numero']} — {fmt_data(r['data'])} ({r['status']})",
+                index=len(rodadas_sub) - 1,
+                key="sub_rodada",
+            )
+
+            sorteio_sub = db.get_sorteio_ativo(rodada_sub["id"])
+            if sorteio_sub:
+                jogadores_rodada = db.jogadores_no_sorteio(sorteio_sub["id"])
+
+                if not jogadores_rodada:
+                    st.warning("Nenhum jogador encontrado nos jogos desta rodada.")
+                else:
+                    # Radio acima das colunas para manter os dois selects na mesma altura
+                    sub_tipo = st.radio(
+                        "Tipo de substituto",
+                        ["Cadastrado", "Avulso / Convidado"],
+                        horizontal=True,
+                        key="sub_tipo",
+                        label_visibility="collapsed",
+                    )
+
+                    col_orig, col_novo = st.columns(2)
+
+                    with col_orig:
+                        st.markdown("**Quem não veio (a substituir)**")
+                        original = st.selectbox(
+                            "Jogador original",
+                            options=jogadores_rodada,
+                            format_func=lambda p: p["nome"] + (" 👤" if p["tipo"] == "visitante" else ""),
+                            index=None,
+                            placeholder="Selecionar Jogador",
+                            label_visibility="collapsed",
+                            key="sub_original",
+                        )
+
+                    with col_novo:
+                        st.markdown("**Substituto**")
+                        if sub_tipo == "Cadastrado":
+                            todos_ativos_sub = db.list_jogadores(apenas_ativos=True)
+                            substituto_j = st.selectbox(
+                                "Jogador substituto",
+                                options=todos_ativos_sub,
+                                format_func=lambda j: j["nome"],
+                                index=None,
+                                placeholder="Selecionar Jogador",
+                                label_visibility="collapsed",
+                                key="sub_jogador",
+                            )
+                            novo_id_sub = substituto_j["id"] if substituto_j else None
+                            novo_nome_sub = None
+                        else:
+                            substituto_j = None
+                            nome_input = st.text_input(
+                                "Nome do convidado",
+                                placeholder="Ex.: Carlos Amigo",
+                                label_visibility="collapsed",
+                                key="sub_nome_avulso",
+                            )
+                            novo_id_sub = None
+                            novo_nome_sub = nome_input.strip() if nome_input else None
+
+                    st.divider()
+
+                    orig_nome_display = original["nome"] if original else "—"
+                    if sub_tipo == "Cadastrado":
+                        novo_nome_display = substituto_j["nome"] if substituto_j else "—"
+                    else:
+                        novo_nome_display = novo_nome_sub or "—"
+
+                    if original or novo_nome_display != "—":
+                        st.info(
+                            f"**{orig_nome_display}** será substituído por **{novo_nome_display}** "
+                            f"em todos os jogos da Rodada {rodada_sub['numero']}."
+                        )
+
+                    btn_sub = st.button(
+                        "🔄 Confirmar Substituição",
+                        type="primary",
+                        use_container_width=True,
+                        key="btn_substituir",
+                    )
+
+                    if btn_sub:
+                        valido = True
+                        if not original:
+                            st.error("Selecione o jogador que não veio.")
+                            valido = False
+                        elif sub_tipo == "Cadastrado" and not novo_id_sub:
+                            st.error("Selecione o jogador substituto.")
+                            valido = False
+                        elif sub_tipo != "Cadastrado" and not novo_nome_sub:
+                            st.error("Informe o nome do convidado substituto.")
+                            valido = False
+
+                        if valido:
+                            orig_id = original["id"]
+                            orig_nome_key = original["nome"] if original["id"] is None else None
+                            n = db.substituir_jogador_rodada(
+                                sorteio_sub["id"],
+                                orig_id,
+                                orig_nome_key,
+                                novo_id_sub,
+                                novo_nome_sub,
+                            )
+                            if n == 0:
+                                st.warning(
+                                    "Nenhum jogo foi alterado. "
+                                    "Verifique se o jogador selecionado realmente aparece nos jogos."
+                                )
+                            else:
+                                db.registrar_substituicao(
+                                    rodada_sub["id"],
+                                    sorteio_sub["id"],
+                                    orig_id,
+                                    orig_nome_display,
+                                    novo_id_sub,
+                                    novo_nome_display,
+                                )
+                                if rodada_sub["status"] == "concluida":
+                                    db.delete_pontuacao_rodada(rodada_sub["id"])
+                                    calcular_pontuacao_rodada(rodada_sub["id"])
+                                    st.success(
+                                        f"✅ {orig_nome_display} → {novo_nome_display} "
+                                        f"em {n} jogo(s). Ranking recalculado!"
+                                    )
+                                else:
+                                    st.success(
+                                        f"✅ {orig_nome_display} → {novo_nome_display} "
+                                        f"em {n} jogo(s)."
+                                    )
+                                st.rerun()
+
+                    # ── Histórico de substituições desta rodada ───────────────
+                    st.divider()
+                    st.markdown("#### 📋 Histórico de Substituições")
+
+                    historico_subs = db.list_substituicoes(rodada_sub["id"])
+                    todos_ativos_hist = db.list_jogadores(apenas_ativos=True)
+
+                    if not historico_subs:
+                        st.caption("Nenhuma substituição registrada para esta rodada.")
+
+                    for hs in historico_subs:
+                        edit_key = f"edit_sub_{hs['id']}"
+                        em_edicao = st.session_state.get(edit_key, False)
+
+                        with st.container(border=True):
+                            if em_edicao:
+                                st.caption("✏️ Editando registro")
+                                with st.form(key=f"form_edit_sub_{hs['id']}"):
+                                    ec1, ec2 = st.columns(2)
+                                    with ec1:
+                                        st.markdown("**Quem não veio**")
+                                        orig_opts = db.jogadores_no_sorteio(hs["sorteio_id"])
+                                        orig_idx_edit = next(
+                                            (i for i, p in enumerate(orig_opts)
+                                             if (hs["original_id"] and p["id"] == hs["original_id"])
+                                             or (not hs["original_id"] and p["nome"] == hs["original_nome"])),
+                                            None,
+                                        )
+                                        novo_orig = st.selectbox(
+                                            "Original",
+                                            options=orig_opts,
+                                            format_func=lambda p: p["nome"] + (" 👤" if p["tipo"] == "visitante" else ""),
+                                            index=orig_idx_edit,
+                                            label_visibility="collapsed",
+                                            key=f"edit_orig_{hs['id']}",
+                                        )
+                                    with ec2:
+                                        st.markdown("**Substituto**")
+                                        sub_idx_edit = next(
+                                            (i for i, j in enumerate(todos_ativos_hist)
+                                             if hs["substituto_id"] and j["id"] == hs["substituto_id"]),
+                                            None,
+                                        )
+                                        novo_sub = st.selectbox(
+                                            "Substituto",
+                                            options=todos_ativos_hist,
+                                            format_func=lambda j: j["nome"],
+                                            index=sub_idx_edit,
+                                            placeholder="Selecionar Jogador",
+                                            label_visibility="collapsed",
+                                            key=f"edit_sub_j_{hs['id']}",
+                                        )
+
+                                    fb1, fb2 = st.columns(2)
+                                    with fb1:
+                                        salvar_edit_sub = st.form_submit_button(
+                                            "💾 Salvar", use_container_width=True, type="primary"
+                                        )
+                                    with fb2:
+                                        cancelar_edit_sub = st.form_submit_button(
+                                            "✕ Cancelar", use_container_width=True
+                                        )
+
+                                if cancelar_edit_sub:
+                                    st.session_state.pop(edit_key, None)
+                                    st.rerun()
+
+                                if salvar_edit_sub and novo_orig and novo_sub:
+                                    # Desfaz a substituição anterior nos jogos
+                                    db.substituir_jogador_rodada(
+                                        hs["sorteio_id"],
+                                        hs["substituto_id"],
+                                        hs["substituto_nome"] if not hs["substituto_id"] else None,
+                                        hs["original_id"],
+                                        hs["original_nome"] if not hs["original_id"] else None,
+                                    )
+                                    # Aplica a nova substituição nos jogos
+                                    novo_orig_nome_key = novo_orig["nome"] if novo_orig["id"] is None else None
+                                    db.substituir_jogador_rodada(
+                                        hs["sorteio_id"],
+                                        novo_orig["id"],
+                                        novo_orig_nome_key,
+                                        novo_sub["id"],
+                                        None,
+                                    )
+                                    # Atualiza registro histórico
+                                    db.update_substituicao(
+                                        hs["id"],
+                                        novo_orig["id"],
+                                        novo_orig["nome"],
+                                        novo_sub["id"],
+                                        novo_sub["nome"],
+                                    )
+                                    if rodada_sub["status"] == "concluida":
+                                        db.delete_pontuacao_rodada(rodada_sub["id"])
+                                        calcular_pontuacao_rodada(rodada_sub["id"])
+                                    st.session_state.pop(edit_key, None)
+                                    st.rerun()
+
+                            else:
+                                hc1, hc2, hc3 = st.columns([4, 3, 1])
+                                with hc1:
+                                    st.write(
+                                        f"**{hs['original_nome']}** → **{hs['substituto_nome']}**"
+                                    )
+                                with hc2:
+                                    ts = hs["criado_em"]
+                                    st.caption(fmt_datetime_brasilia(ts) if ts else "—")
+                                with hc3:
+                                    if st.button("✏️", key=f"btn_edit_sub_{hs['id']}", help="Editar"):
+                                        st.session_state[edit_key] = True
+                                        st.rerun()
+
+                    # Registrar substituição passada (sem alterar os jogos)
+                    with st.expander("➕ Registrar substituição passada manualmente"):
+                        st.caption(
+                            "Use para documentar substituições feitas antes desta feature existir. "
+                            "**Não altera os jogos** — apenas adiciona o registro no histórico."
+                        )
+                        with st.form(key=f"form_manual_sub_{rodada_sub['id']}"):
+                            fm1, fm2 = st.columns(2)
+                            with fm1:
+                                st.markdown("**Quem não veio**")
+                                todos_j_manual = db.list_jogadores(apenas_ativos=False)
+                                orig_manual = st.selectbox(
+                                    "Original manual",
+                                    options=todos_j_manual,
+                                    format_func=lambda j: j["nome"],
+                                    index=None,
+                                    placeholder="Selecionar Jogador",
+                                    label_visibility="collapsed",
+                                    key=f"man_orig_{rodada_sub['id']}",
+                                )
+                            with fm2:
+                                st.markdown("**Substituto**")
+                                sub_manual = st.selectbox(
+                                    "Substituto manual",
+                                    options=todos_ativos_hist,
+                                    format_func=lambda j: j["nome"],
+                                    index=None,
+                                    placeholder="Selecionar Jogador",
+                                    label_visibility="collapsed",
+                                    key=f"man_sub_{rodada_sub['id']}",
+                                )
+                            if st.form_submit_button("📝 Registrar no Histórico", use_container_width=True):
+                                if orig_manual and sub_manual:
+                                    db.registrar_substituicao(
+                                        rodada_sub["id"],
+                                        sorteio_sub["id"],
+                                        orig_manual["id"],
+                                        orig_manual["nome"],
+                                        sub_manual["id"],
+                                        sub_manual["nome"],
+                                    )
+                                    st.rerun()
+                                else:
+                                    st.error("Selecione os dois jogadores.")
+
+
+# ── ABA 5: Auditoria ─────────────────────────────────────────────────────────
 with tab_auditoria:
     import pandas as pd
 

@@ -54,33 +54,34 @@ def calcular_pontuacao_rodada(rodada_id: int) -> dict[int, dict]:
     """
     Calcula e persiste a pontuação de todos os jogadores de uma rodada.
 
+    Quando um jogador aparece em mais de um jogo da mesma rodada_interna
+    (ex.: coringa), conta apenas o melhor resultado (maior pontuação).
+
     Retorna dict: {jogador_id: {pontos, jogos_ganhos, jogos_perdidos, tem_beer}}
     """
     jogos = db.list_jogos_rodada(rodada_id)
     resultados = {r["jogo_id"]: r for r in db.list_resultados_rodada(rodada_id)}
 
-    # Acumula pontos por jogador
-    pontuacao: dict[int, dict] = {}
+    # contrib[player_id][rodada_interna] = lista de contribuições possíveis
+    contrib: dict[int, dict[int, list[dict]]] = {}
 
-    def get_ou_criar(jid: int) -> dict:
-        if jid not in pontuacao:
-            pontuacao[jid] = {
-                "pontos": 0,
-                "jogos_ganhos": 0,
-                "jogos_perdidos": 0,
-                "jogos_empatados": 0,
-                "levou_6x0": False,
-            }
-        return pontuacao[jid]
+    def _add(jid: int, ri: int, c: dict) -> None:
+        if jid not in contrib:
+            contrib[jid] = {}
+        if ri not in contrib[jid]:
+            contrib[jid][ri] = []
+        contrib[jid][ri].append(c)
 
     for jogo in jogos:
         res = resultados.get(jogo["id"])
         if res is None:
-            continue  # resultado não lançado
+            continue
 
+        ri = jogo["rodada_interna"]
         g1, g2 = res["games_dupla1"], res["games_dupla2"]
         empatou = g1 == g2 == 7
         d1_ganhou = g1 > g2
+
         if empatou:
             pts_d1, pts_d2 = calcular_pontos_jogo(g1, g2)
         else:
@@ -88,40 +89,50 @@ def calcular_pontuacao_rodada(rodada_id: int) -> dict[int, dict]:
                 calcular_pontos_jogo(g1, g2) if d1_ganhou else calcular_pontos_jogo(g2, g1)[::-1]
             )
 
-        dupla1 = [jogo["dupla1_j1"], jogo["dupla1_j2"]]
-        dupla2 = [jogo["dupla2_j1"], jogo["dupla2_j2"]]
-
-        for jid in dupla1:
+        for jid in [jogo["dupla1_j1"], jogo["dupla1_j2"]]:
             if jid is None:
                 continue
-            p = get_ou_criar(jid)
-            p["pontos"] += pts_d1
-            if empatou:
-                p["jogos_empatados"] += 1
-            elif d1_ganhou:
-                p["jogos_ganhos"] += 1
-                if g1 == 6 and g2 == 0:
-                    pass  # venceu 6x0, não precisa marcar para cerveja
-            else:
-                p["jogos_perdidos"] += 1
-                if g2 == 6 and g1 == 0:
-                    p["levou_6x0"] = True
+            _add(jid, ri, {
+                "pontos": pts_d1,
+                "ganhou": not empatou and d1_ganhou,
+                "empatou": empatou,
+                "perdeu": not empatou and not d1_ganhou,
+                "levou_6x0": not empatou and not d1_ganhou and g2 == 6 and g1 == 0,
+            })
 
-        for jid in dupla2:
+        for jid in [jogo["dupla2_j1"], jogo["dupla2_j2"]]:
             if jid is None:
                 continue
-            p = get_ou_criar(jid)
-            p["pontos"] += pts_d2
-            if empatou:
-                p["jogos_empatados"] += 1
-            elif not d1_ganhou:
-                p["jogos_ganhos"] += 1
-                if g2 == 6 and g1 == 0:
-                    pass
+            _add(jid, ri, {
+                "pontos": pts_d2,
+                "ganhou": not empatou and not d1_ganhou,
+                "empatou": empatou,
+                "perdeu": not empatou and d1_ganhou,
+                "levou_6x0": not empatou and d1_ganhou and g1 == 6 and g2 == 0,
+            })
+
+    # Para cada jogador e cada rodada_interna, usa apenas o melhor resultado
+    pontuacao: dict[int, dict] = {}
+    for jid, ri_map in contrib.items():
+        total = {
+            "pontos": 0,
+            "jogos_ganhos": 0,
+            "jogos_perdidos": 0,
+            "jogos_empatados": 0,
+            "levou_6x0": False,
+        }
+        for ri_contribs in ri_map.values():
+            best = max(ri_contribs, key=lambda c: c["pontos"])
+            total["pontos"] += best["pontos"]
+            if best["ganhou"]:
+                total["jogos_ganhos"] += 1
+            elif best["empatou"]:
+                total["jogos_empatados"] += 1
             else:
-                p["jogos_perdidos"] += 1
-                if g1 == 6 and g2 == 0:
-                    p["levou_6x0"] = True
+                total["jogos_perdidos"] += 1
+            if best["levou_6x0"]:
+                total["levou_6x0"] = True
+        pontuacao[jid] = total
 
     # Determina quem deve cerveja e persiste
     for jid, dados in pontuacao.items():
@@ -174,10 +185,25 @@ def calcular_detalhe_por_jogo(rodada_id: int) -> list[dict]:
         ri = jogo["rodada_interna"]
         for jid in [jogo["dupla1_j1"], jogo["dupla1_j2"]]:
             if jid is not None:
-                _get(jid)["jogos"][ri] = pts_d1
+                existing = _get(jid)["jogos"].get(ri)
+                if existing is None or pts_d1 > existing:
+                    _get(jid)["jogos"][ri] = pts_d1
         for jid in [jogo["dupla2_j1"], jogo["dupla2_j2"]]:
             if jid is not None:
-                _get(jid)["jogos"][ri] = pts_d2
+                existing = _get(jid)["jogos"].get(ri)
+                if existing is None or pts_d2 > existing:
+                    _get(jid)["jogos"][ri] = pts_d2
+
+    # Todos os números de rodada_interna presentes nesta rodada
+    all_ris = sorted({j["rodada_interna"] for j in jogos})
+
+    # Jogadores que aparecem em ALGUNS jogos da rodada mas não em todos
+    # (ex.: coringa substituiu um jogador em um jogo) recebem 0 nos slots ausentes
+    for dados in por_jogador.values():
+        if 0 < len(dados["jogos"]) < len(all_ris):
+            for ri in all_ris:
+                if ri not in dados["jogos"]:
+                    dados["jogos"][ri] = 0
 
     result = []
     for jid, dados in por_jogador.items():
@@ -189,7 +215,7 @@ def calcular_detalhe_por_jogo(rodada_id: int) -> list[dict]:
             "j2": dados["jogos"].get(2),
             "j3": dados["jogos"].get(3),
             "j4": dados["jogos"].get(4),
-            "total": pts_obj.get("pontos", sum(dados["jogos"].values())),
+            "total": pts_obj.get("pontos", sum(v for v in dados["jogos"].values() if v is not None)),
             "tem_beer": bool(pts_obj.get("tem_beer", 0)),
         })
     return sorted(result, key=lambda x: (-x["total"], x["nome"]))

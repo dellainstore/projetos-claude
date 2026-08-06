@@ -8,6 +8,10 @@ Regras de descarte (dinâmicas por número de rodadas concluídas):
 
 Ausências (rodadas não disputadas) valem 0 ponto e entram no cálculo de descarte.
 Todos os jogadores exibem suas rodadas descartadas na tabela.
+
+Critério de desempate (quando o total COM descarte empata):
+1º) maior soma total SEM descarte (todas as rodadas, sem descartar nada)
+2º) nome em ordem alfabética
 """
 
 import sys
@@ -36,6 +40,7 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
         pontos_por_rodada: {rodada_num: pontos},  # apenas rodadas disputadas
         rodadas_descartadas: set de numeros de rodadas descartadas,
         total: pontos somados (sem as descartadas),
+        total_sem_descarte: pontos somados de TODAS as rodadas (critério de desempate),
         posicao: int,
         variacao: int (positivo = subiu, negativo = caiu, 0 = igual, None = estreante)
     }
@@ -77,6 +82,7 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
             descartadas = set(ordenadas[:n_desc])
 
         total = sum(pts for r, pts in pts_completo.items() if r not in descartadas)
+        total_sem_descarte = sum(pts_completo.values())
 
         ranking.append({
             "jogador_id": jid,
@@ -84,12 +90,13 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
             "pontos_por_rodada": pts_disputadas,   # apenas rodadas disputadas (para exibir —)
             "rodadas_descartadas": descartadas,
             "total": total,
+            "total_sem_descarte": total_sem_descarte,
             "posicao": 0,
             "variacao": None,
         })
 
-    # Ordena por total desc, depois nome asc como desempate
-    ranking.sort(key=lambda x: (-x["total"], x["nome"]))
+    # Ordena por total (com descarte) desc; empate: total sem descarte desc; empate: nome asc
+    ranking.sort(key=lambda x: (-x["total"], -x["total_sem_descarte"], x["nome"]))
     for idx, entry in enumerate(ranking):
         entry["posicao"] = idx + 1
 
@@ -141,9 +148,15 @@ def _calcular_ranking_sem_ultima(
             descartadas = set(ordenadas[:n_desc])
 
         total = sum(v for r, v in pts_completo.items() if r not in descartadas)
-        resultado.append({"jogador_id": jid, "total": total, "posicao": 0})
+        total_sem_descarte = sum(pts_completo.values())
+        resultado.append({
+            "jogador_id": jid,
+            "total": total,
+            "total_sem_descarte": total_sem_descarte,
+            "posicao": 0,
+        })
 
-    resultado.sort(key=lambda x: -x["total"])
+    resultado.sort(key=lambda x: (-x["total"], -x["total_sem_descarte"]))
     for idx, r in enumerate(resultado):
         r["posicao"] = idx + 1
     return resultado

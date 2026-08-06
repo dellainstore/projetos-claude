@@ -9,13 +9,15 @@ Gera dois tipos de PDF:
 
 import io
 import html as _html
+from pathlib import Path
 from typing import Optional
+from PIL import Image as PILImage, ImageDraw
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.units import cm
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable, PageBreak,
-    KeepTogether,
+    KeepTogether, Image as RLImage,
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -274,24 +276,399 @@ def _celula_jogo(dupla1: str, dupla2: str, cell_w: float) -> Table:
     return t
 
 
+_LOGO_LIGA_PATH = Path(__file__).parent.parent / "Logo_Liga_Scaff.jpeg"
+#   (espaço não separável) entre "evento" e "possível" garante que as duas palavras nunca quebram em linhas diferentes
+_TITULO_APOIADORES = "Conheça quem torna esse evento possível"
+_TITULO_OFICIAL = "Patrocinador Oficial"
+_SOBRA_MINIMA_PATROCINIO = 3.0 * cm  # abaixo disso não vale a pena montar os painéis
+
+# Mesmo tamanho de fonte usado nos dois painéis, para os textos ficarem visualmente equivalentes
+_FS_TITULO_PAINEL = 12.5
+_FS_BADGE_PAINEL = 10.5
+
+# Proporção (largura:altura) da caixa de cada logo de apoiador — fixa para toda rodada/temporada.
+# Enviar os arquivos de logo já nessa proporção (ex: 1000x370px) é o que faz todas ficarem do
+# mesmo tamanho visual, sem cortar nem sobrar espaço em branco.
+_ASPECTO_LOGO_APOIADOR = 2.7
+
+
+def _preparar_logo(blob: bytes | None) -> bytes | None:
+    """
+    Remove o fundo branco (quando existir, detectado pelos cantos da imagem) e recorta o
+    espaço vazio ao redor do conteúdo — normaliza o tamanho visual entre logos diferentes e
+    evita o "recorte" retangular branco em volta de logos com fundo já transparente/branco.
+    Logos com fundo colorido (não branco) não são alterados. Devolve sempre PNG em bytes.
+    """
+    if not blob:
+        return None
+    try:
+        im = PILImage.open(io.BytesIO(blob)).convert("RGBA")
+    except Exception:
+        return blob
+
+    w, h = im.size
+    if w < 2 or h < 2:
+        buf = io.BytesIO()
+        im.save(buf, format="PNG")
+        return buf.getvalue()
+
+    px = im.load()
+
+    def _branco(p) -> bool:
+        r, g, b, a = p
+        return a > 0 and r >= 245 and g >= 245 and b >= 245
+
+    cantos = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+    if any(_branco(px[c]) for c in cantos):
+        for c in cantos:
+            try:
+                ImageDraw.floodfill(im, c, (255, 255, 255, 0), thresh=24)
+            except Exception:
+                pass
+        bbox = im.split()[-1].getbbox()
+        if bbox:
+            im = im.crop(bbox)
+
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _img_flowable(blob: bytes | None, max_w: float, max_h: float):
+    """Imagem (fundo branco removido/recortado) redimensionada mantendo proporção, para caber em max_w x max_h."""
+    processado = _preparar_logo(blob)
+    if not processado:
+        return None
+    try:
+        with PILImage.open(io.BytesIO(processado)) as im:
+            w, h = im.size
+    except Exception:
+        return None
+    if not w or not h:
+        return None
+    escala = min(max_w / w, max_h / h)
+    return RLImage(io.BytesIO(processado), width=w * escala, height=h * escala)
+
+
+def _img_centralizada(blob: bytes | None, box_w: float, box_h: float, inset: float = 0.15 * cm) -> Table:
+    """Encaixa uma imagem (ou espaço em branco, se não houver imagem) numa caixa de tamanho fixo,
+    preservando a proporção original (nunca corta nem distorce). Alinhada no TOPO da caixa: se a
+    proporção da imagem for diferente da caixa, a sobra vira espaço em branco embaixo (nunca em
+    cima) — assim a primeira logo de cada painel sempre começa exatamente na mesma altura."""
+    img = _img_flowable(blob, box_w - inset, box_h - inset)
+    t = Table([[img or ""]], colWidths=[box_w], rowHeights=[max(box_h, 0.1 * cm)])
+    t.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("VALIGN", (0, 0), (0, 0), "TOP"),
+        ("TOPPADDING", (0, 0), (0, 0), 0),
+        ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+        ("LEFTPADDING", (0, 0), (0, 0), 0),
+        ("RIGHTPADDING", (0, 0), (0, 0), 0),
+    ]))
+    return t
+
+
+def _badge_destaque(texto: str, largura: float, font_size: float = 11) -> Table:
+    """Selo com fundo colorido e cantos arredondados — efeito de destaque (marca-texto)."""
+    styles = getSampleStyleSheet()
+    s = ParagraphStyle(
+        "badge_destaque", parent=styles["Normal"], fontSize=font_size,
+        fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.white,
+        leading=font_size + 2,
+    )
+    t = Table([[Paragraph(_html.escape(texto), s)]], colWidths=[largura])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, 0), COR_ACENTO),
+        ("ROUNDEDCORNERS", [7, 7, 7, 7]),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (0, 0), 4),
+        ("BOTTOMPADDING", (0, 0), (0, 0), 4),
+        ("LEFTPADDING", (0, 0), (0, 0), 6),
+        ("RIGHTPADDING", (0, 0), (0, 0), 6),
+    ]))
+    t.hAlign = "CENTER"
+    return t
+
+
+def _cabecalho_com_logos(
+    patrocinador_oficial: dict | None,
+    col_jogo: float, col_q_fixo: float, largura_total: float,
+    rodada_num: int, data_rodada: str, quadras_str: str, sufixo: str,
+) -> Table:
+    """
+    Cabeçalho de cada folha: logo da liga centralizada sobre a coluna da "Quadra 01" (à
+    esquerda) e logo do patrocinador oficial centralizada sobre a coluna da última quadra da
+    página (à direita) — posição sempre fixa, igual em toda folha, mesmo quando a folha não
+    tem essas quadras específicas. As logos ficam na MESMA linha do título "Liga Quarta
+    Scaff" + subtítulo (não numa faixa extra acima), então a altura do cabeçalho não muda:
+    a altura das logos é exatamente a altura ocupada pelo título+subtítulo.
+    """
+    styles = getSampleStyleSheet()
+    titulo_style = ParagraphStyle(
+        "Titulo", parent=styles["Heading1"],
+        fontSize=14, textColor=COR_PRIMARIA, alignment=TA_CENTER, spaceAfter=1,
+    )
+    subtitulo_style = ParagraphStyle(
+        "Subtitulo", parent=styles["Normal"],
+        fontSize=10, textColor=colors.grey, alignment=TA_CENTER, spaceAfter=0,
+    )
+
+    meio_w = largura_total - col_jogo - 2 * col_q_fixo
+    titulo_p = Paragraph("Liga Quarta Scaff", titulo_style)
+    subtitulo_p = Paragraph(
+        f"Rodada {rodada_num}  ·  {data_rodada}  ·  {quadras_str}{sufixo}", subtitulo_style
+    )
+    _, h_titulo = titulo_p.wrap(meio_w, 2000)
+    _, h_subtitulo = subtitulo_p.wrap(meio_w, 2000)
+    H = h_titulo + h_subtitulo
+
+    inset = 0.2 * cm
+    liga_blob = _LOGO_LIGA_PATH.read_bytes() if _LOGO_LIGA_PATH.exists() else None
+    oficial_blob = patrocinador_oficial["logo_blob"] if patrocinador_oficial else None
+    liga_img = _img_flowable(liga_blob, col_q_fixo - inset, H - inset)
+    oficial_img = _img_flowable(oficial_blob, col_q_fixo - inset, H - inset)
+
+    t = Table(
+        [["", liga_img or "", [titulo_p, subtitulo_p], oficial_img or ""]],
+        colWidths=[col_jogo, col_q_fixo, meio_w, col_q_fixo],
+        rowHeights=[H],
+    )
+    t.setStyle(TableStyle([
+        ("ALIGN", (1, 0), (1, 0), "CENTER"),
+        ("ALIGN", (2, 0), (2, 0), "CENTER"),
+        ("ALIGN", (3, 0), (3, 0), "CENTER"),
+        ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, 0), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 0),
+        ("LEFTPADDING", (0, 0), (-1, 0), 0),
+        ("RIGHTPADDING", (0, 0), (-1, 0), 0),
+    ]))
+    return t
+
+
+_ESPACO_CABECALHO_OFICIAL = 2.0  # pontos entre o título e o selo do Instagram
+_GAP_TITULO_LOGO = 0.3 * cm  # respiro entre o título/selo e a primeira logo, nos dois painéis
+_GAP_MINIMO_ENTRE_LOGOS = 0.25 * cm  # respiro mínimo entre logos de apoiadores (nunca encostadas)
+
+
+def _altura_titulo_apoiadores(largura: float) -> float:
+    """Altura natural do título 'Conheça quem torna esse evento possível' (sem cadastro nenhum)."""
+    styles = getSampleStyleSheet()
+    titulo_s = ParagraphStyle(
+        "patro_titulo_apoio_medida", parent=styles["Normal"],
+        fontSize=_FS_TITULO_PAINEL, fontName="Helvetica-Bold", alignment=TA_CENTER,
+        textColor=COR_PRIMARIA, leading=_FS_TITULO_PAINEL + 2.5,
+    )
+    largura_util = max(largura - 0.3 * cm, 1.0 * cm)
+    _, h_titulo = Paragraph(_html.escape(_TITULO_APOIADORES), titulo_s).wrap(largura_util, 2000)
+    return h_titulo
+
+
+def _altura_cabecalho_oficial(largura: float, patrocinador_oficial: dict | None) -> float:
+    """Altura natural do título 'Patrocinador Oficial' + selo do Instagram (se houver).
+    Precisa bater exatamente com o que `_bloco_oficial` desenha, para as duas logos
+    (apoiador e oficial) começarem sempre na mesma altura."""
+    if not patrocinador_oficial:
+        return 0.0
+    styles = getSampleStyleSheet()
+    titulo_s = ParagraphStyle(
+        "patro_titulo_oficial_medida", parent=styles["Normal"],
+        fontSize=_FS_TITULO_PAINEL, fontName="Helvetica-Bold", alignment=TA_CENTER,
+        textColor=COR_PRIMARIA, leading=_FS_TITULO_PAINEL + 2.5,
+    )
+    largura_util = max(largura - 0.3 * cm, 1.0 * cm)
+    _, h_titulo = Paragraph(_html.escape(_TITULO_OFICIAL.upper()), titulo_s).wrap(largura_util, 2000)
+    altura = h_titulo
+
+    insta_txt = (patrocinador_oficial.get("instagram") or "").strip()
+    if insta_txt:
+        if not insta_txt.lower().startswith(("http", "@")):
+            insta_txt = f"@{insta_txt}"
+        badge = _badge_destaque(insta_txt, largura * 0.82, font_size=_FS_BADGE_PAINEL)
+        _, h_insta = badge.wrap(largura_util, 2000)
+        altura += _ESPACO_CABECALHO_OFICIAL + h_insta
+    return altura
+
+
+def _bloco_apoiadores(apoiadores: list[dict], largura: float, altura: float, cabecalho_h: float) -> Table:
+    """Painel esquerdo: título + logos empilhadas dos apoiadores (mesmo tamanho entre si, menores
+    que a logo do patrocinador oficial), com espaçamento igual entre elas preenchendo todo o
+    espaço disponível. `cabecalho_h` é sincronizado com o painel do oficial, para a primeira logo
+    começar exatamente na mesma altura da logo oficial. Vazio se não houver nenhum cadastrado."""
+    if not apoiadores:
+        return Table([[""]], colWidths=[largura], rowHeights=[altura])
+
+    styles = getSampleStyleSheet()
+    titulo_s = ParagraphStyle(
+        "patro_titulo_apoio", parent=styles["Normal"],
+        fontSize=_FS_TITULO_PAINEL, fontName="Helvetica-Bold", alignment=TA_CENTER,
+        textColor=COR_PRIMARIA, leading=_FS_TITULO_PAINEL + 2.5,
+    )
+    largura_util = max(largura - 0.3 * cm, 1.0 * cm)
+    titulo_p = Paragraph(_html.escape(_TITULO_APOIADORES), titulo_s)
+    _, h_titulo_real = titulo_p.wrap(largura_util, 2000)
+    # Linha de preenchimento ACIMA do texto (nunca entre o texto e a logo) — soma exata com
+    # cabecalho_h, garantindo que a primeira logo comece na mesma altura da logo oficial.
+    filler_h = max(0.0, cabecalho_h - h_titulo_real)
+    titulo_cel = Table([[""], [titulo_p]], colWidths=[largura], rowHeights=[filler_h, h_titulo_real])
+    titulo_cel.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("VALIGN", (0, 0), (0, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (0, -1), 0), ("BOTTOMPADDING", (0, 0), (0, -1), 0),
+        ("LEFTPADDING", (0, 0), (0, -1), 0), ("RIGHTPADDING", (0, 0), (0, -1), 0),
+    ]))
+
+    n = len(apoiadores)
+    # Espaço disponível para as logos, já descontando o respiro fixo abaixo do título
+    espaco_logos = altura - cabecalho_h - _GAP_TITULO_LOGO
+    # Logos pequenas e sempre menores que a do patrocinador oficial — nunca cortam o conteúdo
+    # (a caixa só limita o tamanho máximo; a proporção original da imagem é preservada).
+    # Caixa com proporção FIXA (~2.7:1, igual à referência que ficou boa) independente da
+    # largura sobrando na folha — assim o tamanho de arquivo recomendado vale para qualquer rodada.
+    if n > 1:
+        logo_h_max_espaco = (espaco_logos - (n - 1) * _GAP_MINIMO_ENTRE_LOGOS) / n
+    else:
+        logo_h_max_espaco = espaco_logos
+    logo_h = max(1.0 * cm, min(logo_h_max_espaco, 2.0 * cm))
+    logo_w = min(largura * 0.95, logo_h * _ASPECTO_LOGO_APOIADOR)
+
+    # Distribui o espaço sobrando em espaços IGUAIS entre as logos (nunca menor que o mínimo,
+    # preenchendo o resto da altura quando a logo já bateu no teto de tamanho)
+    gap = _GAP_MINIMO_ENTRE_LOGOS
+    if n > 1:
+        sobra = espaco_logos - n * logo_h
+        if sobra > 0:
+            gap = sobra / (n - 1)
+
+    linhas = [[titulo_cel], [""]]
+    row_heights = [cabecalho_h, _GAP_TITULO_LOGO]
+    for i, p in enumerate(apoiadores):
+        linhas.append([_img_centralizada(p["logo_blob"], logo_w, logo_h, inset=0.15 * cm)])
+        row_heights.append(logo_h)
+        if i < n - 1:
+            linhas.append([""])
+            row_heights.append(gap)
+
+    resto = altura - sum(row_heights)
+    if resto > 0.1:
+        linhas.append([""])
+        row_heights.append(resto)
+
+    t = Table(linhas, colWidths=[largura], rowHeights=row_heights)
+    t.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    return t
+
+
+def _bloco_oficial(patrocinador_oficial: dict | None, largura: float, altura: float, cabecalho_h: float) -> Table:
+    """Painel direito: título + Instagram em destaque (se houver) + logo + QR Code (se houver).
+    `cabecalho_h` é sincronizado com o painel dos apoiadores (mesma altura de título+Instagram),
+    para a logo oficial começar exatamente na mesma altura da primeira logo dos apoiadores."""
+    if not patrocinador_oficial:
+        return Table([[""]], colWidths=[largura], rowHeights=[altura])
+
+    styles = getSampleStyleSheet()
+    titulo_s = ParagraphStyle(
+        "patro_titulo_oficial", parent=styles["Normal"],
+        fontSize=_FS_TITULO_PAINEL, fontName="Helvetica-Bold", alignment=TA_CENTER,
+        textColor=COR_PRIMARIA, leading=_FS_TITULO_PAINEL + 2.5,
+    )
+
+    insta_txt = (patrocinador_oficial.get("instagram") or "").strip()
+    if insta_txt and not insta_txt.lower().startswith(("http", "@")):
+        insta_txt = f"@{insta_txt}"
+    tem_qr = bool(patrocinador_oficial.get("qrcode_blob"))
+
+    largura_util = max(largura - 0.3 * cm, 1.0 * cm)
+    titulo_p = Paragraph(_html.escape(_TITULO_OFICIAL.upper()), titulo_s)
+    _, h_titulo_real = titulo_p.wrap(largura_util, 2000)
+
+    conteudo_linhas = [[titulo_p]]
+    conteudo_alturas = [h_titulo_real]
+    if insta_txt:
+        insta_badge = _badge_destaque(insta_txt, largura * 0.82, font_size=_FS_BADGE_PAINEL)
+        _, h_insta_real = insta_badge.wrap(largura_util, 2000)
+        conteudo_linhas.append([Spacer(1, _ESPACO_CABECALHO_OFICIAL)])
+        conteudo_alturas.append(_ESPACO_CABECALHO_OFICIAL)
+        conteudo_linhas.append([insta_badge])
+        conteudo_alturas.append(h_insta_real)
+
+    # Linha de preenchimento ACIMA do conteúdo (nunca entre o conteúdo e a logo) — soma exata
+    # com cabecalho_h, garantindo que a logo oficial comece na mesma altura da 1ª logo de apoiador.
+    filler_h = max(0.0, cabecalho_h - sum(conteudo_alturas))
+    linhas_cab = [[""]] + conteudo_linhas
+    alturas_cab = [filler_h] + conteudo_alturas
+    cabecalho_cel = Table(linhas_cab, colWidths=[largura], rowHeights=alturas_cab)
+    cabecalho_cel.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("VALIGN", (0, 0), (0, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (0, -1), 0), ("BOTTOMPADDING", (0, 0), (0, -1), 0),
+        ("LEFTPADDING", (0, 0), (0, -1), 0), ("RIGHTPADDING", (0, 0), (0, -1), 0),
+    ]))
+
+    # Sem teto baixo: logo e QR do oficial crescem para ocupar o espaço sobrando (mais que
+    # as logos dos apoiadores, de propósito — é o patrocinador em destaque). Alinhadas no topo
+    # da própria caixa (ver _img_centralizada), então não afeta onde a próxima imagem começa.
+    espaco_resto = altura - cabecalho_h - _GAP_TITULO_LOGO
+    qr_h = min(espaco_resto * 0.30, 5.0 * cm) if tem_qr else 0.0
+    logo_h = min(espaco_resto - qr_h, 7.5 * cm)
+
+    linhas = [[cabecalho_cel], [""],
+              [_img_centralizada(patrocinador_oficial["logo_blob"], largura, logo_h, inset=0.5 * cm)]]
+    row_heights = [cabecalho_h, _GAP_TITULO_LOGO, logo_h]
+
+    if tem_qr:
+        linhas.append([_img_centralizada(patrocinador_oficial["qrcode_blob"], largura, qr_h, inset=0.35 * cm)])
+        row_heights.append(qr_h)
+
+    resto = altura - sum(row_heights)
+    if resto > 0.1:
+        linhas.append([""])
+        row_heights.append(resto)
+
+    t = Table(linhas, colWidths=[largura], rowHeights=row_heights)
+    t.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    return t
+
+
 def gerar_planilha_pdf(
     rodada_num: int,
     data_rodada: str,
     sorteio_tabela: list[dict],
     nomes: dict[int, str],
+    patrocinador_oficial: dict | None = None,
+    patrocinadores_apoiadores: list[dict] | None = None,
 ) -> bytes:
     """
     Gera PDF da planilha física para anotar resultados.
     Layout: landscape A4. Todos os 4 jogos SEMPRE na mesma folha.
     Grupos com menos quadras mantêm o mesmo tamanho das colunas (centrado na página).
+    Quando sobra espaço em branco ao lado da tabela (grupo com menos quadras que o
+    máximo por página), esse espaço vira os painéis de patrocinador (apoiadores à
+    esquerda, patrocinador oficial à direita) — se a temporada tiver algum cadastrado.
     """
+    patrocinadores_apoiadores = patrocinadores_apoiadores or []
     MARGEM = 0.8 * cm
     PAGE_W = landscape(A4)[0] - 2 * MARGEM   # largura útil
     PAGE_H = landscape(A4)[1] - 2 * MARGEM   # altura útil
     COL_JOGO = 1.3 * cm
     MIN_COL_Q = 5.0 * cm   # 5 quadras por página (mais espaço para os nomes)
     HEADER_H = 0.65 * cm
-    ESPACO_TITULO = 3.0 * cm  # reserva generosa para título + subtítulo + HR
+    ESPACO_TITULO = 3.0 * cm  # reserva para título + subtítulo + HR (logos ficam na mesma linha do título, sem espaço extra)
 
     # Quantas quadras cabem por página mantendo largura mínima
     max_q_pag = max(1, int((PAGE_W - COL_JOGO) / MIN_COL_Q))
@@ -305,14 +682,6 @@ def gerar_planilha_pdf(
     row_h_fixo = (PAGE_H - ESPACO_TITULO - HEADER_H) / len(rodadas_internas)
 
     styles = getSampleStyleSheet()
-    titulo_style = ParagraphStyle(
-        "Titulo", parent=styles["Heading1"],
-        fontSize=14, textColor=COR_PRIMARIA, alignment=TA_CENTER, spaceAfter=1,
-    )
-    subtitulo_style = ParagraphStyle(
-        "Subtitulo", parent=styles["Normal"],
-        fontSize=10, textColor=colors.grey, alignment=TA_CENTER, spaceAfter=4,
-    )
     jogo_style = ParagraphStyle(
         "Jogo", parent=styles["Normal"],
         fontSize=10, fontName="Helvetica-Bold", alignment=TA_CENTER,
@@ -384,6 +753,8 @@ def gerar_planilha_pdf(
         t.setStyle(TableStyle(rs))
         return t
 
+    tem_patrocinio = bool(patrocinador_oficial) or bool(patrocinadores_apoiadores)
+
     # Monta elementos: cada grupo fica dentro de KeepTogether para nunca dividir
     elements = []
     for idx, grupo in enumerate(grupos):
@@ -391,15 +762,48 @@ def gerar_planilha_pdf(
         quadras_str = (f"Quadras {grupo[0]:02d}–{grupo[-1]:02d}"
                        if len(grupo) > 1 else f"Quadra {grupo[0]:02d}")
 
-        # KeepTogether garante que título + tabela ficam juntos na mesma página
+        n_q = len(grupo)
+        tabela_quadras = _build_tabela_grupo(grupo)
+        largura_tabela = COL_JOGO + n_q * col_q_fixo
+        largura_sobra = PAGE_W - largura_tabela
+
+        if tem_patrocinio and largura_sobra >= _SOBRA_MINIMA_PATROCINIO:
+            altura_conteudo = HEADER_H + row_h_fixo * len(rodadas_internas)
+            gutter = 0.35 * cm
+            largura_esq = largura_sobra * 0.45 - gutter
+            largura_dir = largura_sobra * 0.55 - gutter
+            # Sincroniza a altura do "cabeçalho" dos dois painéis (título/Instagram), para a
+            # primeira logo de apoiador começar exatamente na mesma linha da logo oficial.
+            cabecalho_h = max(
+                _altura_titulo_apoiadores(largura_esq),
+                _altura_cabecalho_oficial(largura_dir, patrocinador_oficial),
+            )
+            bloco_esq = _bloco_apoiadores(patrocinadores_apoiadores, largura_esq, altura_conteudo, cabecalho_h)
+            bloco_dir = _bloco_oficial(patrocinador_oficial, largura_dir, altura_conteudo, cabecalho_h)
+            conteudo_tabela = Table(
+                [[bloco_esq, "", tabela_quadras, "", bloco_dir]],
+                colWidths=[largura_esq, gutter, largura_tabela, gutter, largura_dir],
+                rowHeights=[altura_conteudo],
+            )
+            conteudo_tabela.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]))
+        else:
+            tabela_quadras.hAlign = "CENTER"
+            conteudo_tabela = tabela_quadras
+
+        # KeepTogether garante que cabeçalho + título + tabela ficam juntos na mesma página
         bloco = KeepTogether([
-            Paragraph("Liga Quarta Scaff", titulo_style),
-            Paragraph(
-                f"Rodada {rodada_num}  ·  {data_rodada}  ·  {quadras_str}{sufixo}",
-                subtitulo_style,
+            _cabecalho_com_logos(
+                patrocinador_oficial, COL_JOGO, col_q_fixo, PAGE_W,
+                rodada_num, data_rodada, quadras_str, sufixo,
             ),
             HRFlowable(width="100%", thickness=2, color=COR_ACENTO, spaceAfter=4),
-            _build_tabela_grupo(grupo),
+            conteudo_tabela,
         ])
         elements.append(bloco)
 

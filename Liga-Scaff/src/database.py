@@ -161,6 +161,30 @@ def init_db() -> None:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS substituicoes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rodada_id INTEGER NOT NULL REFERENCES rodadas_liga(id),
+                sorteio_id INTEGER NOT NULL REFERENCES sorteios(id),
+                original_id INTEGER REFERENCES jogadores(id),
+                original_nome TEXT NOT NULL,
+                substituto_id INTEGER REFERENCES jogadores(id),
+                substituto_nome TEXT NOT NULL,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS patrocinadores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                temporada_id INTEGER NOT NULL REFERENCES temporadas(id),
+                tipo TEXT NOT NULL DEFAULT 'apoiador' CHECK(tipo IN ('oficial','apoiador')),
+                nome TEXT NOT NULL,
+                instagram TEXT,
+                logo_blob BLOB NOT NULL,
+                logo_mime TEXT NOT NULL,
+                qrcode_blob BLOB,
+                qrcode_mime TEXT,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         # Migração: adiciona colunas de nomes para visitantes se não existirem
         colunas = [r["name"] for r in conn.execute("PRAGMA table_info(jogos)").fetchall()]
@@ -392,6 +416,7 @@ def delete_temporada(temporada_id: int) -> None:
             conn.execute("DELETE FROM sorteio_jobs WHERE rodada_id = ?", (r["id"],))
         conn.execute("DELETE FROM rodadas_liga WHERE temporada_id = ?", (temporada_id,))
         conn.execute("DELETE FROM jogadores_temporada WHERE temporada_id = ?", (temporada_id,))
+        conn.execute("DELETE FROM patrocinadores WHERE temporada_id = ?", (temporada_id,))
         conn.execute("DELETE FROM temporadas WHERE id = ?", (temporada_id,))
 
 
@@ -812,6 +837,143 @@ def get_setting(key: str) -> str | None:
         return row["value"] if row else None
 
 
+def substituir_jogador_rodada(
+    sorteio_id: int,
+    original_id: int | None,
+    original_nome: str | None,
+    novo_id: int | None,
+    novo_nome: str | None,
+) -> int:
+    """
+    Substitui um jogador em todos os jogos do sorteio.
+    Identifica o original por ID (cadastrado) ou por nome (visitante).
+    Retorna o número de slots alterados.
+    """
+    _slots = [
+        ("dupla1_j1", "dupla1_j1_nome"),
+        ("dupla1_j2", "dupla1_j2_nome"),
+        ("dupla2_j1", "dupla2_j1_nome"),
+        ("dupla2_j2", "dupla2_j2_nome"),
+    ]
+    alterados = 0
+    with get_conn() as conn:
+        jogos = conn.execute(
+            "SELECT * FROM jogos WHERE sorteio_id = ?", (sorteio_id,)
+        ).fetchall()
+        for jogo in jogos:
+            for id_col, nome_col in _slots:
+                jid = jogo[id_col]
+                jnome = jogo[nome_col]
+                match = False
+                if original_id is not None and jid == original_id:
+                    match = True
+                elif (
+                    original_id is None
+                    and original_nome is not None
+                    and jid is None
+                    and jnome
+                    and jnome.lower() == original_nome.lower()
+                ):
+                    match = True
+                if match:
+                    conn.execute(
+                        f"UPDATE jogos SET {id_col}=?, {nome_col}=? WHERE id=?",
+                        (novo_id, novo_nome, jogo["id"]),
+                    )
+                    alterados += 1
+    return alterados
+
+
+def jogadores_no_sorteio(sorteio_id: int) -> list[dict]:
+    """
+    Retorna lista de jogadores distintos em um sorteio.
+    Cada dict: {id, nome, tipo} onde tipo é 'cadastrado' ou 'visitante'.
+    """
+    _slots = [
+        ("dupla1_j1", "dupla1_j1_nome"),
+        ("dupla1_j2", "dupla1_j2_nome"),
+        ("dupla2_j1", "dupla2_j1_nome"),
+        ("dupla2_j2", "dupla2_j2_nome"),
+    ]
+    with get_conn() as conn:
+        jogos = conn.execute(
+            "SELECT * FROM jogos WHERE sorteio_id = ?", (sorteio_id,)
+        ).fetchall()
+        todos_j = {j["id"]: j["nome"] for j in conn.execute(
+            "SELECT id, nome FROM jogadores"
+        ).fetchall()}
+
+    vistos: set = set()
+    resultado: list[dict] = []
+
+    def _add(jid, jnome):
+        if jid is not None:
+            key = ("id", jid)
+            if key not in vistos:
+                vistos.add(key)
+                resultado.append({"id": jid, "nome": todos_j.get(jid, str(jid)), "tipo": "cadastrado"})
+        elif jnome:
+            key = ("nome", jnome.lower())
+            if key not in vistos:
+                vistos.add(key)
+                resultado.append({"id": None, "nome": jnome, "tipo": "visitante"})
+
+    for jogo in jogos:
+        for id_col, nome_col in _slots:
+            _add(jogo[id_col], jogo[nome_col])
+
+    return sorted(resultado, key=lambda p: p["nome"])
+
+
+# ── HISTÓRICO DE SUBSTITUIÇÕES ────────────────────────────────────────────────
+
+def registrar_substituicao(
+    rodada_id: int,
+    sorteio_id: int,
+    original_id: int | None,
+    original_nome: str,
+    substituto_id: int | None,
+    substituto_nome: str,
+) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO substituicoes
+               (rodada_id, sorteio_id, original_id, original_nome, substituto_id, substituto_nome)
+               VALUES (?,?,?,?,?,?)""",
+            (rodada_id, sorteio_id, original_id, original_nome, substituto_id, substituto_nome),
+        )
+        return cur.lastrowid
+
+
+def list_substituicoes(rodada_id: int) -> list[dict]:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM substituicoes WHERE rodada_id = ? ORDER BY criado_em DESC",
+            (rodada_id,),
+        ).fetchall()
+
+
+def update_substituicao(
+    sub_id: int,
+    original_id: int | None,
+    original_nome: str,
+    substituto_id: int | None,
+    substituto_nome: str,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE substituicoes
+               SET original_id=?, original_nome=?, substituto_id=?, substituto_nome=?
+               WHERE id=?""",
+            (original_id, original_nome, substituto_id, substituto_nome, sub_id),
+        )
+
+
+def delete_substituicao(sub_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM substituicoes WHERE id = ?", (sub_id,))
+
+
 def set_setting(key: str, value: str) -> None:
     with get_conn() as conn:
         conn.execute(
@@ -830,3 +992,109 @@ def set_final_indisponiveis(temporada_id: int, jogador_ids: list[int]) -> None:
                 "INSERT INTO final_indisponiveis (temporada_id, jogador_id) VALUES (?, ?)",
                 (temporada_id, jid),
             )
+
+
+# ── PATROCINADORES ────────────────────────────────────────────────────────────
+
+def list_patrocinadores(temporada_id: int, tipo: str | None = None) -> list[dict]:
+    with get_conn() as conn:
+        if tipo:
+            return conn.execute(
+                "SELECT * FROM patrocinadores WHERE temporada_id = ? AND tipo = ? ORDER BY id",
+                (temporada_id, tipo),
+            ).fetchall()
+        return conn.execute(
+            "SELECT * FROM patrocinadores WHERE temporada_id = ? ORDER BY id",
+            (temporada_id,),
+        ).fetchall()
+
+
+def get_patrocinador(patrocinador_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM patrocinadores WHERE id = ?", (patrocinador_id,)
+        ).fetchone()
+
+
+def get_patrocinador_oficial(temporada_id: int) -> dict | None:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM patrocinadores WHERE temporada_id = ? AND tipo = 'oficial'",
+            (temporada_id,),
+        ).fetchone()
+
+
+def create_patrocinador(
+    temporada_id: int,
+    tipo: str,
+    nome: str,
+    logo_blob: bytes,
+    logo_mime: str,
+    instagram: str | None = None,
+    qrcode_blob: bytes | None = None,
+    qrcode_mime: str | None = None,
+) -> int:
+    """Retorna o id criado, ou -1 se tipo='oficial' e já existir um oficial na temporada."""
+    with get_conn() as conn:
+        if tipo == "oficial":
+            existente = conn.execute(
+                "SELECT id FROM patrocinadores WHERE temporada_id = ? AND tipo = 'oficial'",
+                (temporada_id,),
+            ).fetchone()
+            if existente:
+                return -1
+        cur = conn.execute(
+            """INSERT INTO patrocinadores
+               (temporada_id, tipo, nome, instagram, logo_blob, logo_mime, qrcode_blob, qrcode_mime)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (temporada_id, tipo, nome, instagram or None, logo_blob, logo_mime, qrcode_blob, qrcode_mime),
+        )
+        return cur.lastrowid
+
+
+def update_patrocinador(
+    patrocinador_id: int,
+    nome: str,
+    instagram: str | None,
+    tipo: str,
+    logo_blob: bytes | None = None,
+    logo_mime: str | None = None,
+    qrcode_blob: bytes | None = None,
+    qrcode_mime: str | None = None,
+    remover_qrcode: bool = False,
+) -> bool:
+    """Retorna False se tipo='oficial' e já existir OUTRO oficial na temporada (bloqueia)."""
+    with get_conn() as conn:
+        atual = conn.execute(
+            "SELECT temporada_id FROM patrocinadores WHERE id = ?", (patrocinador_id,)
+        ).fetchone()
+        if not atual:
+            return False
+        if tipo == "oficial":
+            outro = conn.execute(
+                "SELECT id FROM patrocinadores WHERE temporada_id = ? AND tipo = 'oficial' AND id != ?",
+                (atual["temporada_id"], patrocinador_id),
+            ).fetchone()
+            if outro:
+                return False
+
+        campos = ["nome = ?", "instagram = ?", "tipo = ?"]
+        valores: list = [nome, instagram or None, tipo]
+        if logo_blob is not None:
+            campos += ["logo_blob = ?", "logo_mime = ?"]
+            valores += [logo_blob, logo_mime]
+        if remover_qrcode:
+            campos += ["qrcode_blob = ?", "qrcode_mime = ?"]
+            valores += [None, None]
+        elif qrcode_blob is not None:
+            campos += ["qrcode_blob = ?", "qrcode_mime = ?"]
+            valores += [qrcode_blob, qrcode_mime]
+        valores.append(patrocinador_id)
+
+        conn.execute(f"UPDATE patrocinadores SET {', '.join(campos)} WHERE id = ?", valores)
+        return True
+
+
+def delete_patrocinador(patrocinador_id: int) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM patrocinadores WHERE id = ?", (patrocinador_id,))

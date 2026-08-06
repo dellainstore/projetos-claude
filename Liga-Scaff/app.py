@@ -194,6 +194,7 @@ def _dashboard():
             ("pages/3_Resultados.py", "📋 Resultados"),
             ("pages/4_Ranking.py", "🏆 Ranking"),
             ("pages/5_Historico.py", "📊 Histórico"),
+            ("pages/7_Patrocinadores.py", "🏷️ Patrocinadores"),
         ]
     elif role == "organizer":
         links = [
@@ -269,9 +270,10 @@ else:
     pg_ranking = st.Page("pages/4_Ranking.py", title="Ranking", icon="🏆")
     pg_historico = st.Page("pages/5_Historico.py", title="Histórico", icon="📊")
     pg_final = st.Page("pages/6_Final.py", title="Final", icon="🏆")
+    pg_patrocinadores = st.Page("pages/7_Patrocinadores.py", title="Patrocinadores", icon="🏷️")
 
     if role == "admin":
-        pages = [pg_inicial, pg_jogadores, pg_sorteio, pg_resultados, pg_ranking, pg_historico, pg_final]
+        pages = [pg_inicial, pg_jogadores, pg_sorteio, pg_resultados, pg_ranking, pg_historico, pg_final, pg_patrocinadores]
     elif role == "organizer":
         pages = [pg_inicial, pg_sorteio, pg_resultados, pg_ranking, pg_historico]
     else:  # viewer
