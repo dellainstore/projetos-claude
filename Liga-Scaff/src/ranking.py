@@ -11,7 +11,8 @@ Todos os jogadores exibem suas rodadas descartadas na tabela.
 
 Critério de desempate (quando o total COM descarte empata):
 1º) maior soma total SEM descarte (todas as rodadas, sem descartar nada)
-2º) nome em ordem alfabética
+2º) maior número de jogos ganhos durante a temporada (rodadas concluídas)
+3º) nome em ordem alfabética
 """
 
 import sys
@@ -41,6 +42,7 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
         rodadas_descartadas: set de numeros de rodadas descartadas,
         total: pontos somados (sem as descartadas),
         total_sem_descarte: pontos somados de TODAS as rodadas (critério de desempate),
+        jogos_ganhos_temporada: total de jogos ganhos na temporada (critério de desempate),
         posicao: int,
         variacao: int (positivo = subiu, negativo = caiu, 0 = igual, None = estreante)
     }
@@ -65,8 +67,10 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
             pontuacoes_por_jogador[jid] = {
                 "nome": p["nome"],
                 "pontos_por_rodada": {},
+                "jogos_ganhos_por_rodada": {},
             }
         pontuacoes_por_jogador[jid]["pontos_por_rodada"][p["rodada_numero"]] = p["pontos"]
+        pontuacoes_por_jogador[jid]["jogos_ganhos_por_rodada"][p["rodada_numero"]] = p["jogos_ganhos"]
 
     ranking: list[dict] = []
     for jid, dados in pontuacoes_por_jogador.items():
@@ -83,6 +87,9 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
 
         total = sum(pts for r, pts in pts_completo.items() if r not in descartadas)
         total_sem_descarte = sum(pts_completo.values())
+        jogos_ganhos_temporada = sum(
+            dados["jogos_ganhos_por_rodada"].get(rn, 0) for rn in nums_concluidas
+        )
 
         ranking.append({
             "jogador_id": jid,
@@ -91,12 +98,16 @@ def calcular_ranking(temporada_id: int) -> list[dict]:
             "rodadas_descartadas": descartadas,
             "total": total,
             "total_sem_descarte": total_sem_descarte,
+            "jogos_ganhos_temporada": jogos_ganhos_temporada,
             "posicao": 0,
             "variacao": None,
         })
 
-    # Ordena por total (com descarte) desc; empate: total sem descarte desc; empate: nome asc
-    ranking.sort(key=lambda x: (-x["total"], -x["total_sem_descarte"], x["nome"]))
+    # Ordena por total (com descarte) desc; empate: total sem descarte desc;
+    # empate: jogos ganhos na temporada desc; empate: nome asc
+    ranking.sort(key=lambda x: (
+        -x["total"], -x["total_sem_descarte"], -x["jogos_ganhos_temporada"], x["nome"],
+    ))
     for idx, entry in enumerate(ranking):
         entry["posicao"] = idx + 1
 
@@ -133,8 +144,9 @@ def _calcular_ranking_sem_ultima(
             continue
         jid = p["jogador_id"]
         if jid not in por_jogador:
-            por_jogador[jid] = {"nome": p["nome"], "pts": {}}
+            por_jogador[jid] = {"nome": p["nome"], "pts": {}, "jogos_ganhos": {}}
         por_jogador[jid]["pts"][p["rodada_numero"]] = p["pontos"]
+        por_jogador[jid]["jogos_ganhos"][p["rodada_numero"]] = p["jogos_ganhos"]
 
     resultado = []
     for jid, dados in por_jogador.items():
@@ -149,14 +161,20 @@ def _calcular_ranking_sem_ultima(
 
         total = sum(v for r, v in pts_completo.items() if r not in descartadas)
         total_sem_descarte = sum(pts_completo.values())
+        jogos_ganhos_temporada = sum(
+            dados["jogos_ganhos"].get(rn, 0) for rn in nums_anteriores
+        )
         resultado.append({
             "jogador_id": jid,
             "total": total,
             "total_sem_descarte": total_sem_descarte,
+            "jogos_ganhos_temporada": jogos_ganhos_temporada,
             "posicao": 0,
         })
 
-    resultado.sort(key=lambda x: (-x["total"], -x["total_sem_descarte"]))
+    resultado.sort(key=lambda x: (
+        -x["total"], -x["total_sem_descarte"], -x["jogos_ganhos_temporada"],
+    ))
     for idx, r in enumerate(resultado):
         r["posicao"] = idx + 1
     return resultado
