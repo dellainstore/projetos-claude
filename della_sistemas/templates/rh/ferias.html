@@ -20,26 +20,33 @@
 </div>
 
 {% if colaborador %}
-<!-- Novo período -->
-<div class="ds-form-section" style="margin-bottom:1.5rem;max-width:680px;">
-  <h2 style="font-size:1rem;margin-bottom:1rem;">Novo período aquisitivo</h2>
-  <form method="post" action="{% url 'rh:periodo_novo' %}">
+<!-- Novo período / editar período -->
+<div id="periodo-form" class="ds-form-section" style="margin-bottom:1.5rem;max-width:680px;">
+  <h2 style="font-size:1rem;margin-bottom:1rem;">
+    {% if editando_periodo %}Editar período aquisitivo{% else %}Novo período aquisitivo{% endif %}
+  </h2>
+  <form method="post" action="{% if editando_periodo %}{% url 'rh:periodo_salvar' editando_periodo.pk %}{% else %}{% url 'rh:periodo_novo' %}{% endif %}">
     {% csrf_token %}
     <input type="hidden" name="colaborador" value="{{ colaborador.id }}">
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
       <div class="ds-form-group" style="min-width:150px;">
         <label class="ds-label">Início</label>
-        <input type="date" name="inicio" class="ds-input" required>
+        <input type="date" name="inicio" class="ds-input" value="{{ editando_periodo.inicio|date:'Y-m-d' }}" required>
       </div>
       <div class="ds-form-group" style="min-width:150px;">
         <label class="ds-label">Fim</label>
-        <input type="date" name="fim" class="ds-input" required>
+        <input type="date" name="fim" class="ds-input" value="{{ editando_periodo.fim|date:'Y-m-d' }}" required>
       </div>
       <div class="ds-form-group" style="min-width:120px;">
         <label class="ds-label">Dias de direito</label>
-        <input type="number" name="dias_direito" value="30" min="0" class="ds-input">
+        <input type="number" name="dias_direito" value="{{ editando_periodo.dias_direito|default:30 }}" min="0" class="ds-input">
       </div>
-      <button type="submit" class="ds-btn ds-btn--primario">Adicionar período</button>
+      <button type="submit" class="ds-btn ds-btn--primario">
+        {% if editando_periodo %}Salvar edição{% else %}Adicionar período{% endif %}
+      </button>
+      {% if editando_periodo %}
+      <a href="{% url 'rh:ferias' %}?colaborador={{ colaborador.id }}" class="ds-btn">Cancelar</a>
+      {% endif %}
     </div>
     <p style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.6rem;">
       Os dias acumulados são calculados automaticamente (proporcional, 1/12 por mês trabalhado).
@@ -69,25 +76,33 @@
         </span>
       </div>
     </div>
-    <form method="post" action="{% url 'rh:periodo_excluir' r.periodo.pk %}">
-      {% csrf_token %}
-      <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.75rem;padding:0.25rem 0.6rem;"
-              onclick="return confirm('Remover este período e seus lançamentos?')">Remover período</button>
-    </form>
+    <div style="display:flex;gap:0.4rem;">
+      <a href="{% url 'rh:ferias' %}?colaborador={{ colaborador.id }}&editar_periodo={{ r.periodo.pk }}#periodo-form"
+         class="ds-btn" style="font-size:0.75rem;padding:0.25rem 0.6rem;">Editar</a>
+      <form method="post" action="{% url 'rh:periodo_excluir' r.periodo.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.75rem;padding:0.25rem 0.6rem;"
+                onclick="return confirm('Remover este período e seus lançamentos?')">Remover período</button>
+      </form>
+    </div>
   </div>
 
   {% if r.completo %}
   <!-- Férias lançadas -->
   {% if r.gozos %}
   <table class="ds-table" style="margin-top:1rem;">
-    <thead><tr><th>Início</th><th>Dias</th><th>Observação</th><th></th></tr></thead>
+    <thead><tr><th>Dias Férias</th><th>Início</th><th>Fim</th><th>Retorno</th><th>Observação</th><th></th></tr></thead>
     <tbody>
       {% for g in r.gozos %}
-      <tr>
-        <td>{{ g.data_inicio|date:"d/m/Y" }}</td>
+      <tr id="gozo-row-{{ g.pk }}">
         <td>{{ g.dias }}</td>
+        <td>{{ g.data_inicio|date:"d/m/Y" }}</td>
+        <td>{{ g.data_fim|date:"d/m/Y" }}</td>
+        <td>{{ g.data_retorno|date:"d/m/Y" }}</td>
         <td style="font-size:0.85rem;">{{ g.observacao }}</td>
-        <td>
+        <td style="white-space:nowrap;">
+          <a href="{% url 'rh:ferias' %}?colaborador={{ colaborador.id }}&editar_gozo={{ g.pk }}#gozo-form-{{ r.periodo.pk }}"
+             class="ds-btn" style="font-size:0.7rem;padding:0.1rem 0.4rem;">Editar</a>
           <form method="post" action="{% url 'rh:gozo_excluir' g.pk %}" style="display:inline;">
             {% csrf_token %}
             <button type="submit" class="ds-btn ds-btn--perigo" style="font-size:0.7rem;padding:0.1rem 0.4rem;"
@@ -100,17 +115,63 @@
   </table>
   {% endif %}
 
-  <!-- Lançar férias -->
-  <form method="post" action="{% url 'rh:gozo_novo' %}" style="margin-top:0.85rem;display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end;">
+  <!-- Lançar / editar férias -->
+  {% if editando_gozo and editando_gozo.periodo_id == r.periodo.id %}
+  <form id="gozo-form-{{ r.periodo.pk }}" method="post" action="{% url 'rh:gozo_salvar' editando_gozo.pk %}"
+        style="margin-top:0.85rem;display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end;">
     {% csrf_token %}
     <input type="hidden" name="periodo" value="{{ r.periodo.id }}">
-    <div class="ds-form-group" style="min-width:150px;margin:0;">
-      <label class="ds-label">Início das férias</label>
-      <input type="date" name="data_inicio" class="ds-input" required>
-    </div>
     <div class="ds-form-group" style="min-width:90px;margin:0;">
-      <label class="ds-label">Dias</label>
-      <input type="number" name="dias" value="1" min="1" class="ds-input" required>
+      <label class="ds-label">Dias Férias</label>
+      <input type="number" name="dias" value="{{ editando_gozo.dias }}" min="1" class="ds-input"
+             hx-get="{% url 'rh:ferias_preview_gozo' %}" hx-include="closest form"
+             hx-target="#fim-{{ r.periodo.id }}" hx-trigger="load, input changed delay:300ms" required>
+    </div>
+    <div class="ds-form-group" style="min-width:150px;margin:0;">
+      <label class="ds-label">Início</label>
+      <input type="date" name="data_inicio" class="ds-input" value="{{ editando_gozo.data_inicio|date:'Y-m-d' }}"
+             hx-get="{% url 'rh:ferias_preview_gozo' %}" hx-include="closest form"
+             hx-target="#fim-{{ r.periodo.id }}" hx-trigger="input changed delay:300ms" required>
+    </div>
+    <div class="ds-form-group" style="min-width:130px;margin:0;">
+      <label class="ds-label">Fim</label>
+      <div id="fim-{{ r.periodo.id }}" class="ds-input" style="background:#faf8f5;color:var(--cinza-texto);display:flex;align-items:center;min-height:2.2rem;">{{ editando_gozo.data_fim|date:"d/m/Y" }}</div>
+    </div>
+    <div class="ds-form-group" style="min-width:130px;margin:0;">
+      <label class="ds-label">Retorno</label>
+      <div id="retorno-{{ r.periodo.id }}" class="ds-input" style="background:#faf8f5;color:var(--cinza-texto);display:flex;align-items:center;min-height:2.2rem;">{{ editando_gozo.data_retorno|date:"d/m/Y" }}</div>
+    </div>
+    <div class="ds-form-group" style="flex:1;min-width:160px;margin:0;">
+      <label class="ds-label">Observação</label>
+      <input type="text" name="observacao" class="ds-input" value="{{ editando_gozo.observacao }}">
+    </div>
+    <button type="submit" class="ds-btn ds-btn--primario">Salvar edição</button>
+    <a href="{% url 'rh:ferias' %}?colaborador={{ colaborador.id }}" class="ds-btn">Cancelar</a>
+  </form>
+  {% elif r.saldo > 0 %}
+  <form id="gozo-form-{{ r.periodo.pk }}" method="post" action="{% url 'rh:gozo_novo' %}"
+        style="margin-top:0.85rem;display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end;">
+    {% csrf_token %}
+    <input type="hidden" name="periodo" value="{{ r.periodo.id }}">
+    <div class="ds-form-group" style="min-width:90px;margin:0;">
+      <label class="ds-label">Dias Férias</label>
+      <input type="number" name="dias" value="1" min="1" class="ds-input"
+             hx-get="{% url 'rh:ferias_preview_gozo' %}" hx-include="closest form"
+             hx-target="#fim-{{ r.periodo.id }}" hx-trigger="input changed delay:300ms" required>
+    </div>
+    <div class="ds-form-group" style="min-width:150px;margin:0;">
+      <label class="ds-label">Início</label>
+      <input type="date" name="data_inicio" class="ds-input"
+             hx-get="{% url 'rh:ferias_preview_gozo' %}" hx-include="closest form"
+             hx-target="#fim-{{ r.periodo.id }}" hx-trigger="input changed delay:300ms" required>
+    </div>
+    <div class="ds-form-group" style="min-width:130px;margin:0;">
+      <label class="ds-label">Fim</label>
+      <div id="fim-{{ r.periodo.id }}" class="ds-input" style="background:#faf8f5;color:var(--cinza-texto);display:flex;align-items:center;min-height:2.2rem;"></div>
+    </div>
+    <div class="ds-form-group" style="min-width:130px;margin:0;">
+      <label class="ds-label">Retorno</label>
+      <div id="retorno-{{ r.periodo.id }}" class="ds-input" style="background:#faf8f5;color:var(--cinza-texto);display:flex;align-items:center;min-height:2.2rem;"></div>
     </div>
     <div class="ds-form-group" style="flex:1;min-width:160px;margin:0;">
       <label class="ds-label">Observação</label>
@@ -118,18 +179,20 @@
     </div>
     <button type="submit" class="ds-btn ds-btn--primario">Lançar férias</button>
   </form>
+  {% endif %}
 
   <!-- Abono (venda de férias) -->
   <form method="post" action="{% url 'rh:abono_salvar' r.periodo.pk %}" style="margin-top:0.85rem;display:flex;gap:0.6rem;flex-wrap:wrap;align-items:flex-end;border-top:1px dashed var(--cinza-medio);padding-top:0.85rem;">
     {% csrf_token %}
-    <div class="ds-form-group" style="min-width:200px;margin:0;">
-      <label class="ds-label">Abono — venda de férias (dias)</label>
+    <div class="ds-form-group" style="min-width:170px;margin:0;">
+      <label class="ds-label">Abono Férias (dias)</label>
       <input type="number" name="abono_dias" value="{{ r.abono }}" min="0" class="ds-input">
     </div>
+    <div class="ds-form-group" style="min-width:150px;margin:0;">
+      <label class="ds-label">Data de pagamento</label>
+      <input type="date" name="abono_data_pagamento" class="ds-input" value="{{ r.periodo.abono_data_pagamento|date:'Y-m-d' }}">
+    </div>
     <button type="submit" class="ds-btn">Salvar abono</button>
-    <span style="font-size:0.78rem;color:var(--cinza-texto);align-self:center;">
-      A empresa compra esses dias; eles abatem do saldo.
-    </span>
   </form>
   {% else %}
   <p style="margin-top:0.9rem;font-size:0.85rem;color:var(--cinza-texto);background:#faf8f5;border-radius:6px;padding:0.7rem 0.9rem;">

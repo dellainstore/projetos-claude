@@ -39,3 +39,11 @@ projetos-claude/
 ## Projetos
 
 > O projeto **Bot-Telegram** foi removido em 2026-06-28 (sem uso).
+
+## Operações administrativas
+
+Para `della_sistemas` e `site_della`, restart/status/health/logs devem
+sempre usar a `della-ops` (`della restart admin|site`, `della health
+admin|site`, `della logs admin|site`) — nunca `systemctl`/`journalctl`
+diretos. Regra completa em [`/AGENTS.md`](/var/www/della-sistemas/AGENTS.md)
+na raiz do repositório. Não se aplica ao `Liga-Scaff`.

@@ -58,6 +58,7 @@
       {% else %}
         <form method="post" novalidate>
           {% csrf_token %}
+          {% if token %}<input type="hidden" name="token" value="{{ token }}">{% endif %}
 
           <div class="avaliacao-rating-bloco{% if form.nota_experiencia.errors %} conta-campo--erro{% endif %}">
             <span class="avaliacao-rating-titulo">Experiência da compra</span>
@@ -86,9 +87,15 @@
             <button type="submit" class="btn-conta-primario">
               <i class="fas fa-paper-plane"></i> Enviar avaliação
             </button>
-            <a href="{% url 'usuarios:detalhe_pedido' pedido.numero %}" class="btn-conta-secundario">
-              <i class="fas fa-arrow-left"></i> Voltar ao pedido
-            </a>
+            {% if user.is_authenticated %}
+              <a href="{% url 'usuarios:detalhe_pedido' pedido.numero %}" class="btn-conta-secundario">
+                <i class="fas fa-arrow-left"></i> Voltar ao pedido
+              </a>
+            {% else %}
+              <a href="{% url 'produtos:home' %}" class="btn-conta-secundario">
+                <i class="fas fa-arrow-left"></i> Voltar para a loja
+              </a>
+            {% endif %}
           </div>
         </form>
       {% endif %}

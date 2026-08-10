@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load rh_extras %}
+{% block titulo %}Minha Jornada | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Minha Jornada</h1>
+  <p class="ds-page-subtitulo">Consulta do seu ponto — só leitura. Para corrigir um dia, use <a href="{% url 'rh:correcoes' %}">Minhas Correções</a>.</p>
+</div>
+
+{% if not colaborador %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <p>Seu usuário não está vinculado a um colaborador.</p>
+  <p class="text-muted" style="font-size:0.82rem;margin-top:0.25rem;">Fale com o gestor pra vincular seu cadastro.</p>
+</div>
+{% elif sem_vinculo_ponto %}
+<div class="ds-form-section" style="text-align:center;padding:2rem;">
+  <p>Você não está vinculado ao controle de ponto.</p>
+  <p class="text-muted" style="font-size:0.82rem;margin-top:0.25rem;">Não há jornada/saldo a mostrar — seu cadastro não bate ponto (sem loja vinculada).</p>
+</div>
+{% else %}
+
+<div class="ds-form-section" style="margin-bottom:1.25rem;">
+  <form method="get" style="display:flex;align-items:center;gap:0.6rem;">
+    <button type="submit" name="competencia" value="{{ mes_anterior }}" class="ds-btn"
+            {% if not mes_anterior %}disabled title="Não há mês anterior a esse"{% else %}title="Mês anterior"{% endif %}
+            style="padding:0.5rem 0.85rem;">◀</button>
+    <strong style="min-width:120px;text-align:center;font-size:1.05rem;">{{ mes_nome }}/{{ ano }}</strong>
+    <button type="submit" name="competencia" value="{{ mes_seguinte }}" class="ds-btn"
+            {% if not mes_seguinte %}disabled title="Esse mês ainda não chegou"{% else %}title="Próximo mês"{% endif %}
+            style="padding:0.5rem 0.85rem;">▶</button>
+  </form>
+</div>
+
+<div class="ds-form-section" style="margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+  <div>
+    <span style="font-weight:600;">Saldo do banco de horas (acumulado até {{ mes_nome }}/{{ ano }})</span>
+    <div style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.15rem;">Não reseta por mês — soma com o saldo do mês seguinte. Só este mês: {{ saldo_periodo|horas_hm }} h</div>
+  </div>
+  <span class="ds-status" style="font-size:0.95rem;font-weight:700;background:var(--cinza-claro);color:{% if saldo_acumulado_total < 0 %}#dc2626{% elif saldo_acumulado_total > 0 %}#2563eb{% else %}var(--preto){% endif %};">{{ saldo_acumulado_total|horas_hm }} h</span>
+</div>
+
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th style="white-space:nowrap;">Dia</th>
+        <th>Dia sem.</th>
+        <th>Entrada</th>
+        <th>Saída almoço</th>
+        <th>Volta almoço</th>
+        <th>Saída</th>
+        <th>Horas</th>
+        <th>Situação</th>
+        <th style="white-space:nowrap;">Saldo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in dias %}
+      {% with d=item.info %}
+      <tr class="{% if d.afastamento.dia_inteiro %}ds-linha-indisponivel{% elif d.data.weekday >= 5 or d.feriado %}ds-linha-especial{% endif %}">
+        <td style="white-space:nowrap;font-weight:500;">{{ d.data|date:"d/m" }}</td>
+        <td>{{ item.dia_semana }}</td>
+        <td>{{ item.batidas.entrada|default:"" }}</td>
+        <td>{{ item.batidas.saida_almoco|default:"" }}</td>
+        <td>{{ item.batidas.volta_almoco|default:"" }}</td>
+        <td>{{ item.batidas.saida|default:"" }}</td>
+        <td>{{ d.horas|horas_hm }}</td>
+        <td style="font-size:0.8rem;color:var(--cinza-texto);">{{ item.obs }}</td>
+        <td style="font-weight:600;color:{% if d.saldo < 0 %}#dc2626{% elif d.saldo > 0 %}#2563eb{% else %}var(--preto){% endif %};white-space:nowrap;">{{ d.saldo|horas_hm }}</td>
+      </tr>
+      {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.75rem;">
+  Consulta apenas — pra corrigir um dia com batida faltando, use <strong>Minhas Correções</strong>.
+</p>
+{% endif %}
+{% endblock %}

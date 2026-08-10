@@ -29,6 +29,9 @@ INSTALLED_APPS = [
     "apps.pedidos",
     "apps.analytics",
     "apps.rh",
+    "apps.estoque",
+    "apps.financeiro",
+    "apps.tarefas",
 ]
 
 MIDDLEWARE = [
@@ -58,6 +61,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "apps.core.context_processors.ponto_pendencias",
+                "apps.tarefas.context_processors.tarefas_pendencias",
             ],
         },
     },
@@ -93,6 +97,28 @@ PRODUTOS_DB_PATH = os.getenv(
     str(BASE_DIR / "data" / "produtos" / "inclusoes.db"),
 )
 
+# Banco de dados do módulo Estoque - Análise (SQLite — preço/custo, saldo, vendas)
+ESTOQUE_DB_PATH = os.getenv(
+    "ESTOQUE_DB_PATH",
+    str(BASE_DIR / "data" / "estoque" / "estoque.db"),
+)
+ESTOQUE_HISTORICO_CONSOLIDADO_XLSX_PATH = os.getenv(
+    "ESTOQUE_HISTORICO_CONSOLIDADO_XLSX_PATH",
+    "/var/www/della-sistemas/data/cmv_consolidado.xlsx",
+)
+ESTOQUE_HISTORICO_CONSOLIDADO_SHEET = os.getenv("ESTOQUE_HISTORICO_CONSOLIDADO_SHEET", "Produtos_Mensal")
+ESTOQUE_HISTORICO_BASE_INICIO = os.getenv("ESTOQUE_HISTORICO_BASE_INICIO", "2025-01-01")
+ESTOQUE_REPOSICAO_COBERTURA_ALVO_DIAS = os.getenv("ESTOQUE_REPOSICAO_COBERTURA_ALVO_DIAS", "30")
+ESTOQUE_REPOSICAO_LOTE_MINIMO_MODELO_COR = os.getenv("ESTOQUE_REPOSICAO_LOTE_MINIMO_MODELO_COR", "12")
+ESTOQUE_REPOSICAO_LOTE_MINIMO_SKU = os.getenv("ESTOQUE_REPOSICAO_LOTE_MINIMO_SKU", "6")
+ESTOQUE_REPOSICAO_ARREDONDAR_MULTIPLO_LOTE = os.getenv("ESTOQUE_REPOSICAO_ARREDONDAR_MULTIPLO_LOTE", "true")
+ESTOQUE_REPOSICAO_PESO_HISTORICO_TAMANHO = os.getenv("ESTOQUE_REPOSICAO_PESO_HISTORICO_TAMANHO", "0.50")
+ESTOQUE_REPOSICAO_PESO_ESTOQUE_TAMANHO = os.getenv("ESTOQUE_REPOSICAO_PESO_ESTOQUE_TAMANHO", "0.30")
+ESTOQUE_REPOSICAO_PESO_MIX_BASE_TAMANHO = os.getenv("ESTOQUE_REPOSICAO_PESO_MIX_BASE_TAMANHO", "0.20")
+ESTOQUE_REPOSICAO_MIX_BASE_TAMANHO = os.getenv(
+    "ESTOQUE_REPOSICAO_MIX_BASE_TAMANHO", "PP:0.10,P:0.25,M:0.30,G:0.20,GG:0.15"
+)
+
 AUTH_USER_MODEL = "core.User"
 
 AUTHENTICATION_BACKENDS = [
@@ -118,6 +144,16 @@ LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/login/"
 
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 dias
+
+# Nomes próprios (não os padrões "sessionid"/"csrftoken" do Django): o site_della
+# usa SESSION_COOKIE_DOMAIN/CSRF_COOKIE_DOMAIN = ".dellainstore.com" (cobre todos
+# os subdomínios). Com o nome padrão, quem já visitou o site principal carrega
+# um cookie "sessionid" válido em *.dellainstore.com que colide com o nosso
+# (restrito a este subdomínio) — o navegador manda os dois com o mesmo nome e o
+# servidor pode ler o valor errado, deslogando o usuário mesmo após login válido
+# (bug real: usuária nova com sessionid "estranho" do site principal, 2026-07-23).
+SESSION_COOKIE_NAME = "della_sistemas_sessionid"
+CSRF_COOKIE_NAME = "della_sistemas_csrftoken"
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 # Sessão deslizante: cada acesso renova os 30 dias. Quem usa com frequência
 # (ex.: app no celular para bater ponto) fica praticamente sempre logado;

@@ -9,6 +9,7 @@
 {% endif %}
 
 {% if ao_vivo.paginas %}
+<div class="av-secao-titulo">Paginas visitadas</div>
 <ul class="av-paginas">
   {% for p in ao_vivo.paginas %}
   <li>
@@ -17,4 +18,18 @@
   </li>
   {% endfor %}
 </ul>
+{% endif %}
+
+{% if ao_vivo.cidades %}
+<div class="av-cidades-bloco">
+  <div class="av-secao-titulo av-cidades-titulo">Cidades dos visitantes</div>
+  <ul class="av-cidades">
+    {% for c in ao_vivo.cidades %}
+    <li>
+      <span class="av-cidade-nome">{{ c.cidade }}</span>
+      <span class="av-cidade-total">{{ c.total }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
 {% endif %}

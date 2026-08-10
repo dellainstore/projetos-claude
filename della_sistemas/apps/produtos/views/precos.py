@@ -11,29 +11,50 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_http_methods
 
-from apps.core.decorators import login_obrigatorio, papel_required, perm_required
+from apps.core.decorators import login_obrigatorio, perm_required
 from apps.produtos.services import precos as svc
 
 BR_TZ = ZoneInfo("America/Sao_Paulo")
 
 
+def _brl(value) -> str:
+    """Formata número como moeda brasileira: R$ 1.234,56"""
+    try:
+        s = f"{float(value):,.2f}"
+        s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {s}"
+    except (TypeError, ValueError):
+        return "R$ 0,00"
+
+
 @login_obrigatorio
 @perm_required("precos.ver")
 def view_precos(request):
+    from apps.produtos.services.business.suppliers import build_supplier_options
+    from apps.produtos.services.db import get_conn
+
     modelos = svc.listar_modelos()
     modelo_selecionado = request.GET.get("modelo", "").strip()
     job_id = request.GET.get("job", "").strip()
     job = svc.get_job(job_id) if job_id else None
+
+    conn = get_conn()
+    extra_sup = [r[0] for r in conn.execute(
+        "SELECT DISTINCT supplier_name FROM stock_moves WHERE supplier_name IS NOT NULL"
+    ).fetchall()]
+    conn.close()
+
     return render(request, "produtos/precos.html", {
         "modelos": modelos,
         "modelo_selecionado": modelo_selecionado,
         "pode_exportar": request.user.tem_perm("precos.exportar_atacado"),
         "job": job,
+        "fornecedores": build_supplier_options(extra_sup),
     })
 
 
 @login_obrigatorio
-@papel_required("superadmin", "gestor")
+@perm_required("precos.alterar")
 def htmx_cores_por_modelo(request):
     base_name = request.GET.get("modelo", "").strip()
     if not base_name:
@@ -46,7 +67,7 @@ def htmx_cores_por_modelo(request):
 
 
 @login_obrigatorio
-@papel_required("superadmin", "gestor")
+@perm_required("precos.alterar")
 @require_http_methods(["POST"])
 def view_aplicar_precos(request):
     base_name = request.POST.get("base_name", "").strip()
@@ -63,6 +84,7 @@ def view_aplicar_precos(request):
     varejo = _parse("varejo")
     custo = _parse("custo")
     atacado = _parse("atacado")
+    fornecedor_custo = request.POST.get("fornecedor_custo", "").strip().upper()
 
     if not base_name or not color_keys:
         messages.error(request, "Selecione um modelo e pelo menos uma cor.")
@@ -72,6 +94,22 @@ def view_aplicar_precos(request):
         messages.error(request, "Informe pelo menos um preço para atualizar.")
         return redirect(f"produtos:precos")
 
+    if custo is not None and not fornecedor_custo:
+        messages.error(request, "Selecione o fornecedor para atualizar o custo.")
+        return redirect(f"/produtos/precos/?modelo={base_name}")
+
+    erros_validacao = svc.validar_hierarquia_precos(
+        base_name=base_name,
+        color_keys=color_keys,
+        varejo=varejo,
+        custo=custo,
+        atacado=atacado,
+    )
+    if erros_validacao:
+        for erro in erros_validacao:
+            messages.error(request, erro)
+        return redirect(f"/produtos/precos/?modelo={base_name}")
+
     job_id = svc.iniciar_job_precos(
         base_name=base_name,
         color_keys=color_keys,
@@ -79,13 +117,14 @@ def view_aplicar_precos(request):
         custo=custo,
         atacado=atacado,
         usuario=request.user.username,
+        fornecedor_custo=fornecedor_custo or None,
     )
 
     return redirect(f"/produtos/precos/?modelo={base_name}&job={job_id}")
 
 
 @login_obrigatorio
-@papel_required("superadmin", "gestor")
+@perm_required("precos.alterar")
 def view_job_precos_status(request, job_id: str):
     """HTMX polling — retorna fragment com progresso do job."""
     job = svc.get_job(job_id)
@@ -95,7 +134,7 @@ def view_job_precos_status(request, job_id: str):
 
 
 @login_obrigatorio
-@papel_required("superadmin", "gestor")
+@perm_required("precos.alterar")
 def view_download_csv_job(request, job_id: str):
     """Download do CSV de atacado gerado pelo job de background."""
     job = svc.get_job(job_id)
@@ -108,7 +147,7 @@ def view_download_csv_job(request, job_id: str):
 
 
 @login_obrigatorio
-@papel_required("superadmin", "gestor")
+@perm_required("precos.alterar")
 def view_download_csv_atacado(request):
     csv_data = request.session.pop("csv_atacado_pendente", None)
     nome = request.session.pop("csv_atacado_nome", "atacado.csv")
@@ -121,7 +160,7 @@ def view_download_csv_atacado(request):
 
 
 @login_obrigatorio
-@papel_required("superadmin", "gestor")
+@perm_required("precos.alterar")
 def htmx_buscar_modelos_precos(request):
     from apps.produtos.services.business.lookup import search_base_names
     q = request.GET.get("q", "").strip()
@@ -130,7 +169,7 @@ def htmx_buscar_modelos_precos(request):
 
 
 @login_obrigatorio
-@papel_required("superadmin", "gestor")
+@perm_required("precos.alterar")
 @require_http_methods(["POST"])
 def view_upload_atacado(request):
     """Lê Excel com colunas SKU e Atacado; atualiza price_history e gera CSV para Bling."""
@@ -161,6 +200,7 @@ def view_upload_atacado(request):
 
         linhas = []
         skus_nao_encontrados = []
+        violacoes = []
         ok = 0
 
         for row in ws.iter_rows(min_row=2, values_only=True):
@@ -181,14 +221,26 @@ def view_upload_atacado(request):
             ).fetchone()
 
             if variant:
-                import time
-                conn.execute(
-                    """INSERT INTO price_history (base_name, color_key, sku, bling_id, tipo, valor_antes, valor_novo, usuario, alterado_em)
-                       VALUES (?, ?, ?, ?, 'atacado_local', NULL, ?, ?, ?)""",
-                    (variant["base_name"], variant["color_key"], sku, variant["bling_product_id"],
-                     valor, request.user.username, int(time.time()))
-                )
-                ok += 1
+                atuais = svc._fetch_precos_bling(int(variant["bling_product_id"]))
+                custo_atual = atuais.get("custo")
+                varejo_atual = atuais.get("varejo")
+                if custo_atual is not None and valor < custo_atual:
+                    violacoes.append(
+                        f"{sku}: atacado (R$ {valor:.2f}) menor que o custo (R$ {custo_atual:.2f})."
+                    )
+                elif varejo_atual is not None and valor > varejo_atual:
+                    violacoes.append(
+                        f"{sku}: atacado (R$ {valor:.2f}) maior que o varejo (R$ {varejo_atual:.2f})."
+                    )
+                else:
+                    import time
+                    conn.execute(
+                        """INSERT INTO price_history (base_name, color_key, sku, bling_id, tipo, valor_antes, valor_novo, usuario, alterado_em)
+                           VALUES (?, ?, ?, ?, 'atacado_local', NULL, ?, ?, ?)""",
+                        (variant["base_name"], variant["color_key"], sku, variant["bling_product_id"],
+                         valor, request.user.username, int(time.time()))
+                    )
+                    ok += 1
             else:
                 skus_nao_encontrados.append(sku)
 
@@ -215,6 +267,13 @@ def view_upload_atacado(request):
             )
         else:
             messages.success(request, f"{ok} preço(s) de atacado importados com sucesso.")
+
+        if violacoes:
+            messages.error(
+                request,
+                f"{len(violacoes)} preço(s) NÃO aplicados por violar a hierarquia custo ≤ atacado ≤ varejo: "
+                + " | ".join(violacoes)
+            )
 
     except Exception as exc:
         messages.error(request, f"Erro ao processar o arquivo: {exc}")
@@ -368,9 +427,8 @@ def view_excluir_preco(request, preco_id: int):
     return redirect(request.POST.get("next") or "produtos:historico_precos")
 
 
-@login_obrigatorio
-@perm_required("precos.ver")
-def view_historico_precos(request):
+def _periodo_historico_precos(request):
+    """Lê os filtros de período/modelo/cor/tipo da querystring. Retorna (start, end, filtros)."""
     hoje_br = datetime.now(tz=BR_TZ).date()
     periodo = request.GET.get("periodo", "hoje")
     data_inicio_str = request.GET.get("data_inicio", "")
@@ -402,7 +460,6 @@ def view_historico_precos(request):
         end = datetime(hoje_br.year, hoje_br.month, hoje_br.day, tzinfo=BR_TZ) + timedelta(days=1)
         start = end - timedelta(days=7)
 
-    pagina = max(1, int(request.GET.get("pagina", 1)))
     filtros = {
         "base_name": request.GET.get("modelo", ""),
         "color_key": request.GET.get("cor", ""),
@@ -411,6 +468,14 @@ def view_historico_precos(request):
         "data_inicio": data_inicio_str,
         "data_fim": data_fim_str,
     }
+    return start, end, filtros
+
+
+@login_obrigatorio
+@perm_required("precos.ver")
+def view_historico_precos(request):
+    start, end, filtros = _periodo_historico_precos(request)
+    pagina = max(1, int(request.GET.get("pagina", 1)))
 
     hist = svc.historico_precos(
         pagina=pagina,
@@ -443,3 +508,89 @@ def view_historico_precos(request):
         "pode_exportar": request.user.tem_perm("precos.exportar_atacado"),
         "pode_alterar_preco": request.user.tem_perm("precos.alterar"),
     })
+
+
+@login_obrigatorio
+@perm_required("precos.ver")
+def view_historico_precos_pdf(request):
+    """PDF do histórico de preços com os mesmos filtros da tela (sem paginação)."""
+    import io
+
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    start, end, filtros = _periodo_historico_precos(request)
+    hist = svc.historico_precos(
+        pagina=1,
+        por_pagina=100000,
+        base_name=filtros["base_name"],
+        color_key=filtros["color_key"],
+        tipo=filtros["tipo"],
+        start_ts=int(start.timestamp()),
+        end_ts=int(end.timestamp()),
+    )
+    registros = hist["registros"]
+    for r in registros:
+        ts = r.get("alterado_em")
+        r["alterado_em_dt"] = datetime.fromtimestamp(ts, tz=BR_TZ) if ts else None
+
+    agora = datetime.now(tz=BR_TZ)
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4), title="Histórico de Preços",
+        leftMargin=1.2 * cm, rightMargin=1.2 * cm, topMargin=1.2 * cm, bottomMargin=1.2 * cm,
+    )
+    styles = getSampleStyleSheet()
+    titulo_style = ParagraphStyle(
+        "TituloPrecos", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER,
+    )
+    periodo_style = ParagraphStyle(
+        "PeriodoPrecos", parent=styles["Normal"], fontSize=9, leading=12,
+        alignment=TA_CENTER, textColor=colors.HexColor("#666666"),
+    )
+
+    elementos = [
+        Paragraph("Histórico de Preços", titulo_style),
+        Paragraph(
+            f"Período: {filtros['periodo']} — {len(registros)} registro(s) (emitido em {agora:%d/%m/%Y %H:%M})",
+            periodo_style,
+        ),
+        Spacer(1, 0.4 * cm),
+    ]
+
+    cabecalho = ["Data/Hora", "SKU", "Modelo", "Cor", "Preço", "Alteração"]
+    linhas = [cabecalho]
+    for r in registros:
+        data_str = r["alterado_em_dt"].strftime("%d/%m/%Y %H:%M") if r["alterado_em_dt"] else "-"
+        tipo_label = (r["tipo"] or "").capitalize()
+        alteracao = f"{_brl(r['valor_antes'])} → {_brl(r['valor_novo'])}" if r.get("valor_antes") is not None else _brl(r["valor_novo"])
+        linhas.append([
+            data_str, r["sku"] or "-", r["base_name"] or "-", r["color_key"] or "-", tipo_label, alteracao,
+        ])
+
+    if len(linhas) == 1:
+        elementos.append(Paragraph("Nenhum registro para o período/filtro selecionado.", styles["Normal"]))
+    else:
+        tabela_pdf = Table(linhas, repeatRows=1)
+        tabela_pdf.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c9a96e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dddddd")),
+            ("ALIGN", (4, 0), (5, -1), "CENTER"),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#faf8f5")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elementos.append(tabela_pdf)
+
+    doc.build(elementos)
+    pdf = buffer.getvalue()
+    buffer.close()
+    resp = HttpResponse(pdf, content_type="application/pdf")
+    resp["Content-Disposition"] = f'attachment; filename="Historico de Precos ({agora:%d-%m-%Y %Hh%M}).pdf"'
+    return resp

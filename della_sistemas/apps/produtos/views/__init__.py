@@ -4,12 +4,13 @@ from .incluir import (
     view_cancelar_request, view_editar_request,
 )
 from .aprovacoes import view_aprovacoes, view_aprovar
-from .historico import view_historico, view_excluir_move
+from .historico import view_historico, view_historico_pdf, view_excluir_move
 from .manutencao import view_manutencao, view_sync_catalogo, view_rebuild_variacoes, view_limpeza, view_processar_pipeline
 from .resumo import view_resumo_produtos
+from .consulta_rapida import view_consulta_rapida, htmx_consulta_buscar
 from .precos import (
     view_precos, htmx_cores_por_modelo, view_aplicar_precos,
-    view_historico_precos, view_download_csv_atacado,
+    view_historico_precos, view_historico_precos_pdf, view_download_csv_atacado,
     htmx_buscar_modelos_precos, view_upload_atacado,
     view_exportar_atacado_csv, view_exportar_atacado_ultimas,
     view_excluir_preco,

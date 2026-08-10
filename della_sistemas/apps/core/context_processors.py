@@ -9,9 +9,11 @@ def ponto_pendencias(request):
     colaborador = getattr(user, "colaborador", None)
     if colaborador is None:
         return {}
+    from django.utils import timezone
+
     from apps.rh.models import NotificacaoPonto
     qs = (
-        NotificacaoPonto.objects.filter(colaborador=colaborador)
+        NotificacaoPonto.objects.filter(colaborador=colaborador, data__lt=timezone.localdate())
         .exclude(status="resolvido").order_by("-data")
     )
     return {

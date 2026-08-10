@@ -90,16 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('scroll', atualizarNavbar, { passive: true });
   }
 
-  // ─── Hero: swap vídeo mobile antes do autoplay ─────────────────────────────
-  if (window.innerWidth < 768) {
-    document.querySelectorAll('.hero-video[data-src-mobile]').forEach(function(v) {
-      const src = v.querySelector('source');
-      if (src) { src.src = v.dataset.srcMobile; v.load(); }
-    });
-  }
-
-  // Força play em todos os vídeos do hero (alguns navegadores bloqueiam autoplay
-  // após .load(); chamar .play() explicitamente com muted=true é permitido)
+  // Força play em todos os vídeos do hero (alguns navegadores bloqueiam o atributo
+  // autoplay nativo; chamar .play() explicitamente com muted=true é permitido)
   document.querySelectorAll('.hero-video').forEach(function(v) {
     v.muted = true;
     const tryPlay = () => v.play().catch(() => {});
@@ -255,11 +247,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   atualizarControleAudioHero();
 
-  // Click em slides com url_botao
+  // Click em slides com url_botao (ignora cliques que caem sobre o próprio
+  // vídeo, ex: botão nativo de play exibido pelo navegador quando o
+  // autoplay é bloqueado, para não redirecionar em vez de dar play)
   heroSlides.forEach(slide => {
     const href = slide.dataset.href;
     if (href) {
-      slide.addEventListener('click', () => { window.location.href = href; });
+      slide.addEventListener('click', (event) => {
+        if (event.target.closest('video')) return;
+        window.location.href = href;
+      });
     }
   });
 

@@ -591,9 +591,11 @@
 
 {% block js_extra %}{% endblock %}
 
-{# Eventos de tracking flash (login / sign_up / CompleteRegistration) consumidos
-   na primeira pagina carregada apos a acao. O context processor tracking_flash
-   le e apaga as flags de sessao, entao nao disparam novamente em revisitas. #}
+{% comment %}
+Eventos de tracking flash (login / sign_up / CompleteRegistration) consumidos
+na primeira pagina carregada apos a acao. O context processor tracking_flash
+le e apaga as flags de sessao, entao nao disparam novamente em revisitas.
+{% endcomment %}
 {% if track_login %}
 <script type="application/json" data-ga-event="login">{"method": "email"}</script>
 {% endif %}

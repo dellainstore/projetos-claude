@@ -11,6 +11,13 @@ PERMISSION_TREE = [
         ],
     },
     {
+        "id": "consulta_rapida",
+        "label": "Consulta Rápida",
+        "perms": [
+            {"id": "ver", "label": "Consultar produto por código de barras (SKU)"},
+        ],
+    },
+    {
         "id": "aprovacoes",
         "label": "Aprovações",
         "perms": [
@@ -62,10 +69,32 @@ PERMISSION_TREE = [
         ],
     },
     {
+        "id": "estoque_analise",
+        "label": "Estoque (Análise)",
+        "perms": [
+            {"id": "ver", "label": "Ver saúde, reposição, queima e previsão de estoque"},
+        ],
+    },
+    {
+        "id": "financeiro",
+        "label": "Financeiro",
+        "perms": [
+            {"id": "ver", "label": "Ver dashboard de faturamento"},
+        ],
+    },
+    {
         "id": "analytics",
         "label": "Analytics do Site",
         "perms": [
             {"id": "ver", "label": "Ver painel de analytics do site"},
+        ],
+    },
+    {
+        "id": "tarefas",
+        "label": "Tarefas",
+        "perms": [
+            {"id": "ver",   "label": "Ver o próprio painel de tarefas"},
+            {"id": "criar", "label": "Criar tarefas e atribuir para outros"},
         ],
     },
     {
@@ -75,6 +104,7 @@ PERMISSION_TREE = [
             {"id": "ver",         "label": "Ver painel de RH"},
             {"id": "gerir",       "label": "Gerir colaboradores, salários, comissão, férias e benefícios"},
             {"id": "ponto_bater", "label": "Registrar o próprio ponto"},
+            {"id": "ponto_jornada_ver", "label": "Ver a própria jornada de ponto (consulta, sem editar)"},
             {"id": "ponto_gerir", "label": "Ver e editar pontos de todos"},
         ],
     },
@@ -91,6 +121,9 @@ PERMISSION_TREE = [
 DEFAULT_PERMS_BY_PAPEL = {
     "superadmin": {
         "estoque":    {"incluir": True,  "historico": True,  "excluir": True},
+        "consulta_rapida": {"ver": True},
+        "estoque_analise": {"ver": True},
+        "financeiro":      {"ver": True},
         "aprovacoes": {"ver": True,       "aprovar": True},
         "precos":     {"ver": True,       "alterar": True,   "exportar_atacado": True},
         "manutencao": {"sync": True,      "rebuild": True,   "limpeza": True},
@@ -98,11 +131,15 @@ DEFAULT_PERMS_BY_PAPEL = {
         "pedidos":    {"ver": True, "baixar": True, "sync": True},
         "em_breve":   {"ver": True},
         "analytics":  {"ver": True},
-        "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_gerir": True},
+        "tarefas":    {"ver": True, "criar": True},
+        "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": True},
         "admin":      {"usuarios": True},
     },
     "gestor": {
         "estoque":    {"incluir": True,  "historico": True,  "excluir": False},
+        "consulta_rapida": {"ver": True},
+        "estoque_analise": {"ver": False},
+        "financeiro":      {"ver": False},
         "aprovacoes": {"ver": True,       "aprovar": True},
         "precos":     {"ver": True,       "alterar": True,   "exportar_atacado": True},
         "manutencao": {"sync": False,     "rebuild": False,  "limpeza": False},
@@ -110,11 +147,15 @@ DEFAULT_PERMS_BY_PAPEL = {
         "pedidos":    {"ver": True, "baixar": True, "sync": False},
         "em_breve":   {"ver": False},
         "analytics":  {"ver": True},
-        "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_gerir": True},
+        "tarefas":    {"ver": True, "criar": True},
+        "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": True},
         "admin":      {"usuarios": False},
     },
     "operador": {
         "estoque":    {"incluir": True,  "historico": True,  "excluir": False},
+        "consulta_rapida": {"ver": True},
+        "estoque_analise": {"ver": False},
+        "financeiro":      {"ver": False},
         "aprovacoes": {"ver": False,      "aprovar": False},
         "precos":     {"ver": False,      "alterar": False,  "exportar_atacado": False},
         "manutencao": {"sync": False,     "rebuild": False,  "limpeza": False},
@@ -122,11 +163,14 @@ DEFAULT_PERMS_BY_PAPEL = {
         "pedidos":    {"ver": True, "baixar": False, "sync": False},
         "em_breve":   {"ver": False},
         "analytics":  {"ver": False},
-        "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_gerir": False},
+        "tarefas":    {"ver": True, "criar": True},
+        "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": False},
         "admin":      {"usuarios": False},
     },
     "viewer": {
         "estoque":    {"incluir": False, "historico": True,  "excluir": False},
+        "estoque_analise": {"ver": False},
+        "financeiro":      {"ver": False},
         "aprovacoes": {"ver": True,       "aprovar": False},
         "precos":     {"ver": False,      "alterar": False,  "exportar_atacado": False},
         "manutencao": {"sync": False,     "rebuild": False,  "limpeza": False},
@@ -134,7 +178,8 @@ DEFAULT_PERMS_BY_PAPEL = {
         "pedidos":    {"ver": True, "baixar": False, "sync": False},
         "em_breve":   {"ver": False},
         "analytics":  {"ver": False},
-        "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_gerir": False},
+        "tarefas":    {"ver": True, "criar": True},
+        "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": False},
         "admin":      {"usuarios": False},
     },
 }

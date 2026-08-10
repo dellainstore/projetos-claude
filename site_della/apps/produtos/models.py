@@ -724,7 +724,7 @@ class Variacao(models.Model):
         if self.sob_demanda:
             dias = self.prazo_total_adicional_dias
             if dias:
-                return f'Sob demanda: +{dias} dia{"s" if dias != 1 else ""} útil{"eis" if dias != 1 else ""} para confecção'
+                return f'Sob demanda: +{dias} dia{"s" if dias != 1 else ""} {"úteis" if dias != 1 else "útil"} para confecção'
             return 'Sob demanda'
         return 'Disponibilidade imediata'
 

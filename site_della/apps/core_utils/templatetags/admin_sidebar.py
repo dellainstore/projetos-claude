@@ -59,6 +59,7 @@ def build_admin_sidebar(app_list):
         'usuarios': 3,
         'bling': 4,
         'axes': 5,
+        'monitoramento_painel': 6,
     }
 
     return sorted(

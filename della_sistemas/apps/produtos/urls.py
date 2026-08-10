@@ -4,6 +4,9 @@ from . import views
 app_name = "produtos"
 
 urlpatterns = [
+    # Consulta Rápida (scanner de código de barras / SKU)
+    path("consulta-rapida/", views.view_consulta_rapida, name="consulta_rapida"),
+    path("consulta-rapida/buscar/", views.htmx_consulta_buscar, name="consulta_rapida_buscar"),
     # Incluir Estoque
     path("incluir/", views.view_incluir, name="incluir"),
     path("incluir/submit/", views.view_incluir_submit, name="incluir_submit"),
@@ -19,6 +22,7 @@ urlpatterns = [
     path("aprovacoes/<int:request_id>/", views.view_aprovar, name="aprovar"),
     # Histórico
     path("historico/", views.view_historico, name="historico"),
+    path("historico/pdf/", views.view_historico_pdf, name="historico_pdf"),
     path("historico/<int:move_id>/excluir/", views.view_excluir_move, name="excluir_move"),
     # Manutenção
     path("manutencao/", views.view_manutencao, name="manutencao"),
@@ -30,6 +34,7 @@ urlpatterns = [
     path("precos/", views.view_precos, name="precos"),
     path("precos/aplicar/", views.view_aplicar_precos, name="aplicar_precos"),
     path("precos/historico/", views.view_historico_precos, name="historico_precos"),
+    path("precos/historico/pdf/", views.view_historico_precos_pdf, name="historico_precos_pdf"),
     path("precos/historico/<int:preco_id>/excluir/", views.view_excluir_preco, name="excluir_preco"),
     path("precos/csv-atacado/", views.view_download_csv_atacado, name="download_csv_atacado"),
     path("precos/job/<str:job_id>/status/", views.view_job_precos_status, name="job_precos_status"),

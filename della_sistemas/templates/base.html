@@ -73,7 +73,7 @@
       <div class="ds-nav-separador"></div>
 
       <!-- Produtos (expansível) -->
-      {% if user.pode_incluir or user.pode_aprovar or user.is_superadmin %}
+      {% if user.pode_incluir or user.pode_aprovar or user.pode_ver_precos or user.pode_ver_historico or user.is_superadmin or user.pode_consulta_rapida %}
       <div class="ds-nav-group">
         <div class="ds-nav-link ds-nav-group-toggle {% if request.resolver_match.app_names and 'produtos' in request.resolver_match.app_names %}ativo{% endif %}"
              onclick="toggleNav('produtos')">
@@ -82,6 +82,13 @@
           <span class="ds-nav-chevron" id="chv-nav-produtos">&#9658;</span>
         </div>
         <div class="ds-nav-subitens" id="sub-produtos">
+          {% if user.pode_consulta_rapida %}
+          <a href="{% url 'produtos:consulta_rapida' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'consulta_rapida' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9635;</span>
+            Consulta Rápida
+          </a>
+          {% endif %}
           {% if user.pode_incluir %}
           <a href="{% url 'produtos:incluir' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'incluir' %}ativo{% endif %}">
@@ -96,28 +103,31 @@
             Aprovações
           </a>
           {% endif %}
-          {% if user.pode_aprovar %}
+          {% if user.pode_ver_precos %}
           <a href="{% url 'produtos:precos' %}"
              class="ds-nav-sublink {% if 'precos' in request.resolver_match.url_name %}ativo{% endif %}">
             <span class="ds-nav-icon">&#36;</span>
             Preços
           </a>
           {% endif %}
+          {% if user.pode_ver_historico or user.pode_ver_precos %}
           <!-- Histórico (nested) -->
           <div class="ds-nav-group">
-            <div class="ds-nav-sublink ds-nav-group-toggle {% if 'historico' in request.resolver_match.url_name and request.resolver_match.namespace != 'pedidos' %}ativo{% endif %}"
+            <div class="ds-nav-sublink ds-nav-group-toggle {% if 'historico' in request.resolver_match.url_name and request.resolver_match.namespace == 'produtos' %}ativo{% endif %}"
                  onclick="toggleNav('historico')">
               <span class="ds-nav-icon">&#9776;</span>
               Histórico
               <span class="ds-nav-chevron" id="chv-nav-historico">&#9658;</span>
             </div>
             <div class="ds-nav-subitens" id="sub-historico">
+              {% if user.pode_ver_historico %}
               <a href="{% url 'produtos:historico' %}"
-                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'historico' and request.resolver_match.namespace != 'pedidos' %}ativo{% endif %}">
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'historico' and request.resolver_match.namespace == 'produtos' %}ativo{% endif %}">
                 <span class="ds-nav-icon">&#43;</span>
                 Inclusões
               </a>
-              {% if user.pode_aprovar %}
+              {% endif %}
+              {% if user.pode_ver_precos %}
               <a href="{% url 'produtos:historico_precos' %}"
                  class="ds-nav-sublink {% if request.resolver_match.url_name == 'historico_precos' %}ativo{% endif %}">
                 <span class="ds-nav-icon">&#36;</span>
@@ -126,6 +136,7 @@
               {% endif %}
             </div>
           </div>
+          {% endif %}
           {% if user.is_superadmin %}
           <a href="{% url 'produtos:manutencao' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'manutencao' %}ativo{% endif %}">
@@ -133,11 +144,103 @@
             Manutenção
           </a>
           {% endif %}
+          {% if user.pode_ver_resumo_produtos %}
           <a href="{% url 'produtos:resumo' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'resumo' and request.resolver_match.namespace == 'produtos' %}ativo{% endif %}">
             <span class="ds-nav-icon">&#9783;</span>
             Resumo
           </a>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Estoque (Análise) (expansível) -->
+      {% if user.pode_ver_estoque_analise %}
+      <div class="ds-nav-group">
+        <div class="ds-nav-link ds-nav-group-toggle {% if request.resolver_match.app_names and 'estoque' in request.resolver_match.app_names %}ativo{% endif %}"
+             onclick="toggleNav('estoque')">
+          <span class="ds-nav-icon">&#128202;</span>
+          Estoque
+          <span class="ds-nav-chevron" id="chv-nav-estoque">&#9658;</span>
+        </div>
+        <div class="ds-nav-subitens" id="sub-estoque">
+          <a href="{% url 'estoque:estoque_atual' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'estoque_atual' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9636;</span>
+            Estoque Atual
+          </a>
+          <a href="{% url 'estoque:saude' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'saude' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#10003;</span>
+            Saúde do Estoque
+          </a>
+          <a href="{% url 'estoque:reposicao' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'reposicao' %}ativo{% endif %}">
+            <span class="ds-nav-icon">+</span>
+            Reposição
+          </a>
+          <a href="{% url 'estoque:queima' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'queima' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9888;</span>
+            Queima
+          </a>
+          <a href="{% url 'estoque:previsao' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'previsao' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9650;</span>
+            Previsão
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Financeiro (expansível) -->
+      {% if user.pode_ver_financeiro %}
+      <div class="ds-nav-group">
+        <div class="ds-nav-link ds-nav-group-toggle {% if request.resolver_match.app_names and 'financeiro' in request.resolver_match.app_names %}ativo{% endif %}"
+             onclick="toggleNav('financeiro')">
+          <span class="ds-nav-icon">&#128176;</span>
+          Financeiro
+          <span class="ds-nav-chevron" id="chv-nav-financeiro">&#9658;</span>
+        </div>
+        <div class="ds-nav-subitens" id="sub-financeiro">
+          <a href="{% url 'financeiro:dashboard_faturamento' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'dashboard_faturamento' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9776;</span>
+            Dashboard Faturamento
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Tarefas (expansível) -->
+      {% if user.pode_ver_tarefas %}
+      <div class="ds-nav-group">
+        <div class="ds-nav-link ds-nav-group-toggle {% if 'tarefas' in request.resolver_match.app_names %}ativo{% endif %}"
+             onclick="toggleNav('tarefas')">
+          <span class="ds-nav-icon">&#128203;</span>
+          Tarefas
+          <span id="tarefas-badge-nav" hx-get="{% url 'tarefas:htmx_badge_pendencias' %}" hx-trigger="every 30s" hx-swap="innerHTML">{% if tarefas_pendentes_count %}<span style="background:#dc2626;color:#fff;font-size:.65rem;font-weight:700;min-width:16px;height:16px;line-height:16px;text-align:center;border-radius:8px;padding:0 3px;margin-left:.3rem;">{{ tarefas_pendentes_count }}</span>{% endif %}</span>
+          <span class="ds-nav-chevron" id="chv-nav-tarefas">&#9658;</span>
+        </div>
+        <div class="ds-nav-subitens" id="sub-tarefas">
+          <a href="{% url 'tarefas:painel' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'painel' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9776;</span>
+            Quadro de Tarefas
+          </a>
+          <a href="{% url 'tarefas:historico' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'historico' and request.resolver_match.namespace == 'tarefas' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#8635;</span>
+            Histórico
+          </a>
+          {% if user.is_superadmin %}
+          <a href="{% url 'tarefas:colunas' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'colunas' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9881;</span>
+            Configurar Colunas
+          </a>
+          {% endif %}
         </div>
       </div>
       {% endif %}
@@ -273,7 +376,7 @@
             </div>
           </div>
           {% endif %}
-          {% if user.pode_ver_rh or user.pode_gerir_rh %}
+          {% if user.pode_gerir_rh %}
           <a href="{% url 'rh:comissao' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'comissao' %}ativo{% endif %}">
             <span class="ds-nav-icon">&#37;</span>
@@ -316,6 +419,13 @@
                 <span class="ds-nav-icon">&#9998;</span>
                 Minhas Correções
               </a>
+              {% if user.pode_ver_jornada_propria %}
+              <a href="{% url 'rh:minha_jornada' %}"
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'minha_jornada' %}ativo{% endif %}">
+                <span class="ds-nav-icon">&#9776;</span>
+                Minha Jornada
+              </a>
+              {% endif %}
               {% if user.pode_gerir_ponto %}
               <a href="{% url 'rh:jornada' %}"
                  class="ds-nav-sublink {% if request.resolver_match.url_name == 'jornada' or request.resolver_match.url_name == 'ponto_relatorio' %}ativo{% endif %}">
@@ -365,27 +475,6 @@
             Resumo Semanal
           </a>
         </div>
-      </div>
-      {% endif %}
-
-      {% if user.pode_ver_em_breve %}
-      <div class="ds-nav-separador"></div>
-
-      <!-- Em breve -->
-      <div class="ds-nav-section">
-        <div class="ds-nav-section-titulo">Em breve</div>
-
-        <span class="ds-nav-link desabilitado">
-          <span class="ds-nav-icon">&#128202;</span>
-          Estoque
-          <span class="ds-badge-em-breve">breve</span>
-        </span>
-
-        <span class="ds-nav-link desabilitado">
-          <span class="ds-nav-icon">&#128176;</span>
-          Financeiro
-          <span class="ds-badge-em-breve">breve</span>
-        </span>
       </div>
       {% endif %}
 

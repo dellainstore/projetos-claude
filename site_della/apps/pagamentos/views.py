@@ -183,9 +183,12 @@ def pagseguro_notificacao(request):
                                reference_id, exc)
             try:
                 from apps.analytics.models import EventoAnalytics
+                # produto_slug='': evento de total do pedido (os eventos por item
+                # tambem carregam pedido_numero desde 2026-07-28).
                 evento_pedido = (
                     EventoAnalytics.objects
-                    .filter(tipo='pedido_finalizado', pedido_numero=pedido.numero)
+                    .filter(tipo='pedido_finalizado', pedido_numero=pedido.numero,
+                            produto_slug='')
                     .select_related('sessao')
                     .first()
                 )
@@ -197,6 +200,19 @@ def pagseguro_notificacao(request):
                         valor_total=pedido.total,
                         forma_pagamento=pedido.forma_pagamento,
                     )
+                    # Pagamento real confirmado via PagSeguro/PIX e prova definitiva
+                    # de que a sessao nao e bot (bot nao completa checkout pago).
+                    # Reverte falso positivo do detector de rajada de paginas
+                    # (_paginas_em_rajada em apps.analytics.services), que pode
+                    # marcar cliente real navegando rapido no mobile.
+                    if evento_pedido.sessao.is_bot:
+                        evento_pedido.sessao.__class__.objects.filter(
+                            pk=evento_pedido.sessao_id
+                        ).update(is_bot=False)
+                        logger.info(
+                            'Analytics: sessao %s desmarcada como bot apos pagamento confirmado do pedido %s',
+                            evento_pedido.sessao_id, pedido.numero,
+                        )
             except Exception:
                 pass
 

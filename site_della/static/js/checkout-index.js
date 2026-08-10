@@ -40,6 +40,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('id_servico_frete_nome').value = radio.dataset.nome || '';
     document.getElementById('id_valor_frete').value        = radio.dataset.preco || '0';
     document.getElementById('id_prazo_frete').value        = radio.dataset.prazo || '0';
+    const tokenInput = document.getElementById('id_frete_token');
+    if (tokenInput) tokenInput.value = radio.dataset.token || '';
     const frete = parseFloat(radio.dataset.preco || '0');
     const freteEl = document.getElementById('resumo-frete-valor');
     if (freteEl) freteEl.textContent = frete === 0 ? 'Grátis' : fmtBRL(frete);
@@ -143,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <label class="co-frete-item" for="frete_${op.id}">
             <input type="radio" id="frete_${op.id}" name="_frete_visual" value="${op.id}"
                    ${i === 0 ? 'checked' : ''} data-preco="0"
-                   data-nome="Retirada na Loja" data-prazo="0" data-frete-radio="1">
+                   data-nome="Retirada na Loja" data-prazo="0" data-token="${op.token || ''}" data-frete-radio="1">
             <div class="co-frete-info">
               <div class="co-frete-nome">Retirar na Loja</div>
               <div class="co-frete-prazo">Rua Visconde da Luz, 183 — disponível ~2h após pagamento</div>
@@ -160,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <input type="radio" id="frete_${op.id}" name="_frete_visual" value="${op.id}"
                    ${i === 0 ? 'checked' : ''} data-preco="${precoEfetivo}"
                    data-nome="${op.nome} ${op.empresa}" data-prazo="${op.prazo}"
-                   data-frete-radio="1">
+                   data-token="${op.token || ''}" data-frete-radio="1">
             <div class="co-frete-info">
               <div class="co-frete-nome">${op.nome} <small style="color:#888">${op.empresa}</small></div>
               <div class="co-frete-prazo">${op.descricao}</div>

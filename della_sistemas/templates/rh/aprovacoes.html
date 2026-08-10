@@ -29,13 +29,8 @@
     <div class="corr-horarios">
       {% for slot in c.slots %}
       <div class="ds-form-group corr-slot {% if slot.almoco %}corr-almoco{% endif %}" style="margin:0;">
-        <label class="ds-label" style="font-size:0.74rem;">{{ slot.label }}{% if not slot.travado %} <span style="color:#f59e0b;">(faltou)</span>{% endif %}</label>
-        {% if slot.travado %}
-        <input class="ds-input corr-lock" type="time" value="{{ slot.hora }}" disabled>
-        <input type="hidden" name="{{ slot.pref }}" value="{{ slot.hora }}">
-        {% else %}
-        <input class="ds-input corr-edit" type="time" name="{{ slot.pref }}" value="{{ slot.hora }}">
-        {% endif %}
+        <label class="ds-label" style="font-size:0.74rem;">{{ slot.label }}{% if slot.sugerido %} <span style="color:#2563eb;">(sugerido)</span>{% else %} <span style="color:#f59e0b;">(faltou)</span>{% endif %}</label>
+        <input class="ds-input corr-edit{% if slot.sugerido %} corr-sugerido{% endif %}" type="time" name="{{ slot.pref }}" value="{{ slot.hora }}">
       </div>
       {% endfor %}
     </div>

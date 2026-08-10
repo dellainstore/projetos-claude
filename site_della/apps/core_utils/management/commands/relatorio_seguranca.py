@@ -31,6 +31,48 @@ _SCANNER_PATHS = re.compile(
 
 _SCANNER_UA = re.compile(r'(?:curl/|zgrab|masscan|nikto|sqlmap|nuclei|nmap|dirbuster)', re.IGNORECASE)
 
+# path_info das linhas AXES: distingue login de cliente (loja) de login do
+# painel administrativo -- sao riscos muito diferentes. Ver incidente
+# 2026-08-09: cliente convidada (Camila Dantas, pedido 2026-0018) tentou
+# logar em /conta/entrar/ vinda do e-mail de avaliacao, errou a senha 6x
+# (nao tem conta -- comprou sem cadastro) e foi bloqueada pelo Axes. O
+# relatorio classificou como VERMELHO e mandou "reforce a senha do admin",
+# quando na verdade era uma cliente sem conta tentando entrar na loja.
+_PATH_INFO = re.compile(r'path_info:\s*"([^"]*)"')
+
+
+def _eh_path_painel(linha: str) -> bool:
+    """True se a linha AXES for de tentativa de login no /painel/ (admin)."""
+    m = _PATH_INFO.search(linha)
+    return bool(m and m.group(1).startswith('/painel/'))
+
+
+# Bloqueios de login mal sucedidos de clientes na loja sao normais (senha
+# esquecida, checkout como convidada sem conta). So vira sinal de risco
+# real (credential stuffing) em volume incomum -- diferente do painel
+# administrativo, onde qualquer bloqueio ja e sensivel.
+LIMIAR_FALHAS_LOJA_AMARELO   = 15
+LIMIAR_BLOQUEIOS_LOJA_AMARELO = 3
+
+
+def _dedup_episodios(itens: list[tuple], janela_seg: int = 600) -> list[str]:
+    """Colapsa linhas 'AXES: Locking out' repetidas da MESMA pessoa bloqueada
+    tentando de novo durante o cooloff. O Axes grava uma linha nova a cada
+    tentativa enquanto o IP/usuario continua bloqueado -- sem isso, 1 pessoa
+    bloqueada e tenta de novo 3x em 2 minutos virava "3 bloqueios" no
+    relatorio. Linhas dentro de janela_seg da anterior contam como o mesmo
+    episodio; só uma lacuna maior que isso indica um bloqueio novo de fato."""
+    if not itens:
+        return []
+    itens_ordenados = sorted(itens, key=lambda x: x[0])
+    episodios = [itens_ordenados[0][1]]
+    ultimo_ts = itens_ordenados[0][0]
+    for ts, linha in itens_ordenados[1:]:
+        if (ts - ultimo_ts).total_seconds() > janela_seg:
+            episodios.append(linha)
+        ultimo_ts = ts
+    return episodios
+
 
 # --------------------------------------------------------------------------- #
 # Helpers de parse                                                             #
@@ -97,8 +139,10 @@ def _ts_fail2ban(linha: str):
 # --------------------------------------------------------------------------- #
 
 def _analisar_security_log(desde):
-    falhas_login  = []
-    bloqueios     = []
+    falhas_login_loja   = []
+    falhas_login_painel = []
+    bloqueios_loja_raw   = []  # (ts, linha) -- dedup por episodio antes de contar
+    bloqueios_painel_raw = []
     disallowed    = []
     honeypot      = []
 
@@ -114,17 +158,30 @@ def _analisar_security_log(desde):
         elif 'TIMING contato' in linha:
             honeypot.append(linha.strip())
         elif 'AXES: Locking out' in linha:
-            bloqueios.append(linha.strip())
+            if _eh_path_painel(linha):
+                bloqueios_painel_raw.append((ts, linha.strip()))
+            else:
+                bloqueios_loja_raw.append((ts, linha.strip()))
         elif 'AXES: New login failure' in linha:
-            falhas_login.append(linha.strip())
+            if _eh_path_painel(linha):
+                falhas_login_painel.append(linha.strip())
+            else:
+                falhas_login_loja.append(linha.strip())
         elif 'DisallowedHost' in linha and 'Invalid HTTP_HOST' in linha:
             m = re.search(r"'([^']+)'", linha)
             host = m.group(1) if m else '?'
             disallowed.append(host)
 
+    bloqueios_loja   = _dedup_episodios(bloqueios_loja_raw)
+    bloqueios_painel = _dedup_episodios(bloqueios_painel_raw)
+
     return {
-        'falhas_login':  falhas_login,
-        'bloqueios':     bloqueios,
+        'falhas_login_loja':   falhas_login_loja,
+        'falhas_login_painel': falhas_login_painel,
+        'falhas_login':        falhas_login_loja + falhas_login_painel,
+        'bloqueios_loja':      bloqueios_loja,
+        'bloqueios_painel':    bloqueios_painel,
+        'bloqueios':           bloqueios_loja + bloqueios_painel,
         'disallowed':    list(dict.fromkeys(disallowed)),  # unicos, ordem preservada
         'honeypot':      honeypot,
     }
@@ -207,9 +264,33 @@ def _calcular_risco(seg, guni, f2b, forms) -> tuple[str, str, list[str]]:
     motivos = []
     nivel = 'VERDE'
 
-    if seg['bloqueios']:
+    # Painel administrativo: qualquer bloqueio ja e sensivel (e' o acesso
+    # de quem gerencia a loja, nao de cliente).
+    if seg['bloqueios_painel']:
         nivel = 'VERMELHO'
-        motivos.append(f"{len(seg['bloqueios'])} bloqueio(s) de login por excesso de tentativas")
+        motivos.append(f"{len(seg['bloqueios_painel'])} bloqueio(s) de login no PAINEL por excesso de tentativas")
+
+    if seg['falhas_login_painel']:
+        if nivel == 'VERDE':
+            nivel = 'AMARELO'
+        motivos.append(f"{len(seg['falhas_login_painel'])} tentativa(s) de login mal sucedida(s) no painel")
+
+    # Loja: cliente errando senha (ou tentando entrar sem ter conta, ex:
+    # checkout como convidada) e normal e nao eleva risco sozinho. So
+    # escala se o volume for incompativel com "1 pessoa confusa".
+    if len(seg['bloqueios_loja']) >= LIMIAR_BLOQUEIOS_LOJA_AMARELO:
+        if nivel == 'VERDE':
+            nivel = 'AMARELO'
+        motivos.append(f"{len(seg['bloqueios_loja'])} bloqueio(s) de login de clientes na loja por excesso de tentativas")
+    elif seg['bloqueios_loja']:
+        motivos.append(f"{len(seg['bloqueios_loja'])} bloqueio(s) de login de cliente(s) na loja (volume normal, provavel senha esquecida)")
+
+    if len(seg['falhas_login_loja']) >= LIMIAR_FALHAS_LOJA_AMARELO:
+        if nivel == 'VERDE':
+            nivel = 'AMARELO'
+        motivos.append(f"{len(seg['falhas_login_loja'])} tentativa(s) de login mal sucedida(s) de clientes na loja")
+    elif seg['falhas_login_loja']:
+        motivos.append(f"{len(seg['falhas_login_loja'])} tentativa(s) de login mal sucedida(s) de cliente(s) na loja (volume normal)")
 
     if len(f2b) >= 5:
         nivel = 'VERMELHO'
@@ -218,11 +299,6 @@ def _calcular_risco(seg, guni, f2b, forms) -> tuple[str, str, list[str]]:
     if len(seg['honeypot']) >= 5:
         nivel = max(nivel, 'AMARELO') if nivel == 'VERDE' else nivel
         motivos.append(f"{len(seg['honeypot'])} captura(s) de honeypot no formulario")
-
-    if seg['falhas_login']:
-        if nivel == 'VERDE':
-            nivel = 'AMARELO'
-        motivos.append(f"{len(seg['falhas_login'])} tentativa(s) de login mal sucedida(s)")
 
     if guni['scanners']:
         if nivel == 'VERDE':
@@ -245,6 +321,49 @@ def _calcular_risco(seg, guni, f2b, forms) -> tuple[str, str, list[str]]:
     return nivel, cores[nivel], motivos
 
 
+_ORDEM_RISCO = {'VERDE': 0, 'AMARELO': 1, 'VERMELHO': 2}
+
+
+def _calcular_risco_monitoramento(resumo_monit, saude_monit, integr_monit) -> tuple[str, list[str]]:
+    """Risco baseado em erros 5xx, saude do sistema e integracoes (painel Monitoramento)."""
+    motivos = []
+    nivel = 'VERDE'
+
+    if saude_monit.get('db') is False or saude_monit.get('cache') is False:
+        nivel = 'VERMELHO'
+        servico = 'banco de dados' if not saude_monit.get('db') else 'cache'
+        motivos.append(f'Falha de prontidao no {servico} (/readyz)')
+
+    total_24h = resumo_monit.get('total_24h', 0)
+    if total_24h >= 10:
+        nivel = 'VERMELHO'
+        motivos.append(f'{total_24h} erro(s) 5xx nas ultimas 24h')
+    elif total_24h >= 1:
+        if nivel == 'VERDE':
+            nivel = 'AMARELO'
+        motivos.append(f'{total_24h} erro(s) 5xx nas ultimas 24h')
+
+    incidentes = [i for i in integr_monit if i['estado'] == 'incidente']
+    atencao = [i for i in integr_monit if i['estado'] == 'atencao']
+    if incidentes:
+        nivel = 'VERMELHO'
+        motivos.append(f"Integracao(oes) em incidente: {', '.join(i['nome'] for i in incidentes)}")
+    elif atencao:
+        if nivel == 'VERDE':
+            nivel = 'AMARELO'
+        motivos.append(f"Integracao(oes) em atencao: {', '.join(i['nome'] for i in atencao)}")
+
+    disco_pct = saude_monit.get('disco_pct')
+    if disco_pct is not None and disco_pct >= 90:
+        nivel = 'VERMELHO'
+        motivos.append(f'Disco em {disco_pct}% de uso')
+
+    if not motivos:
+        motivos.append('Monitoramento sem incidentes nas ultimas 24h')
+
+    return nivel, motivos
+
+
 # --------------------------------------------------------------------------- #
 # Geracao do e-mail HTML                                                       #
 # --------------------------------------------------------------------------- #
@@ -255,17 +374,65 @@ def _fmt_hora(dt):
     return date_format(timezone.localtime(dt), 'd/m/Y H:i')
 
 
-def _gerar_html(seg, guni, f2b, forms, nivel, cor, motivos, horas, agora):
+def _gerar_secao_monitoramento(resumo_monit, saude_monit, integr_monit):
+    badge_estado = {
+        'saudavel': ('#27ae60', 'saudavel'),
+        'atencao': ('#e67e22', 'atencao'),
+        'incidente': ('#c0392b', 'incidente'),
+        'sem_dado': ('#999', 'sem dado'),
+    }
+    rows_integr = ''
+    for i in integr_monit:
+        c, label = badge_estado.get(i['estado'], ('#999', i['estado']))
+        rows_integr += f'''
+        <tr>
+          <td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;">{i['nome']}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">
+            <span style="background:{c};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;">{label}</span>
+          </td>
+          <td style="padding:6px 12px;border-bottom:1px solid #f0f0f0;text-align:center;">{i['erros_24h']}</td>
+        </tr>'''
+
+    saude_ok = saude_monit.get('db') and saude_monit.get('cache')
+
+    return f'''
+    <h2 style="margin:0 0 12px;font-size:15px;color:#333;border-bottom:2px solid #f0f0f0;padding-bottom:8px;">Monitoramento (Erros 5xx e Integracoes)</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;margin-bottom:16px;">
+      <tr><td style="padding:6px 12px;">Erros 5xx (24h)</td><td style="padding:6px 12px;text-align:center;font-weight:600;">{resumo_monit.get('total_24h', 0)}</td></tr>
+      <tr><td style="padding:6px 12px;">Erros 5xx (7 dias)</td><td style="padding:6px 12px;text-align:center;font-weight:600;">{resumo_monit.get('total_7d', 0)}</td></tr>
+      <tr><td style="padding:6px 12px;">Falhas de checkout (7 dias)</td><td style="padding:6px 12px;text-align:center;font-weight:600;">{resumo_monit.get('checkout_7d', 0)}</td></tr>
+      <tr><td style="padding:6px 12px;">Falhas de integracao (7 dias)</td><td style="padding:6px 12px;text-align:center;font-weight:600;">{resumo_monit.get('integracoes_7d', 0)}</td></tr>
+      <tr><td style="padding:6px 12px;">Banco de dados / cache</td><td style="padding:6px 12px;text-align:center;">{'OK' if saude_ok else 'FALHA'}</td></tr>
+      <tr><td style="padding:6px 12px;">Disco em uso</td><td style="padding:6px 12px;text-align:center;">{saude_monit.get('disco_pct', '?')}%</td></tr>
+      <tr><td style="padding:6px 12px;">Memoria em uso</td><td style="padding:6px 12px;text-align:center;">{saude_monit.get('mem_pct', '?')}%</td></tr>
+    </table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+      <tr style="background:#f8f8f8;"><th style="padding:6px 12px;text-align:left;">Integracao</th><th style="padding:6px 12px;text-align:center;">Estado</th><th style="padding:6px 12px;text-align:center;">Erros 24h</th></tr>
+      {rows_integr}
+    </table>
+    <p style="margin:12px 0 0;font-size:12px;color:#999;">
+      Detalhes completos: <a href="https://www.dellainstore.com/painel/monitoramento/" style="color:#c9a96e;">Visao geral</a> &middot;
+      <a href="https://www.dellainstore.com/painel/monitoramento/erros/" style="color:#c9a96e;">Erros 5xx</a> &middot;
+      <a href="https://www.dellainstore.com/painel/monitoramento/checkout/" style="color:#c9a96e;">Checkout</a>
+    </p>
+    '''
+
+
+def _gerar_html(seg, guni, f2b, forms, nivel, cor, motivos, horas, agora, resumo_monit, saude_monit, integr_monit):
     desde = agora - timedelta(hours=horas)
 
     icone = {'VERDE': '✅', 'AMARELO': '⚠️', 'VERMELHO': '🔴'}[nivel]
 
     # Linhas da tabela de resumo
     linhas_resumo = [
-        ('Tentativas de login mal sucedidas', len(seg['falhas_login']),
-         'AMARELO' if seg['falhas_login'] else 'VERDE'),
-        ('Bloqueios por excesso de login (Axes)', len(seg['bloqueios']),
-         'VERMELHO' if seg['bloqueios'] else 'VERDE'),
+        ('Tentativas de login mal sucedidas (painel)', len(seg['falhas_login_painel']),
+         'AMARELO' if seg['falhas_login_painel'] else 'VERDE'),
+        ('Bloqueios de login (painel)', len(seg['bloqueios_painel']),
+         'VERMELHO' if seg['bloqueios_painel'] else 'VERDE'),
+        ('Tentativas de login mal sucedidas (loja)', len(seg['falhas_login_loja']),
+         'AMARELO' if len(seg['falhas_login_loja']) >= LIMIAR_FALHAS_LOJA_AMARELO else 'VERDE'),
+        ('Bloqueios de login (loja)', len(seg['bloqueios_loja']),
+         'AMARELO' if len(seg['bloqueios_loja']) >= LIMIAR_BLOQUEIOS_LOJA_AMARELO else 'VERDE'),
         ('Capturas de honeypot (formulario)', len(seg['honeypot']),
          'AMARELO' if seg['honeypot'] else 'VERDE'),
         ('Hosts falsos bloqueados (DisallowedHost)', len(seg['disallowed']),
@@ -300,11 +467,17 @@ def _gerar_html(seg, guni, f2b, forms, nivel, cor, motivos, horas, agora):
     # Secao de detalhes
     detalhes = ''
 
-    if seg['bloqueios']:
+    if seg['bloqueios_painel']:
         items = '<br>'.join(
-            re.sub(r'\*+', '[ocultado]', b)[:200] for b in seg['bloqueios'][-5:]
+            re.sub(r'\*+', '[ocultado]', b)[:200] for b in seg['bloqueios_painel'][-5:]
         )
-        detalhes += f'<h3 style="color:#c0392b;">Bloqueios de Login (Axes)</h3><p style="font-family:monospace;font-size:12px;background:#fff5f5;padding:10px;border-radius:4px;">{items}</p>'
+        detalhes += f'<h3 style="color:#c0392b;">Bloqueios de Login no PAINEL (Axes)</h3><p style="font-family:monospace;font-size:12px;background:#fff5f5;padding:10px;border-radius:4px;">{items}</p>'
+
+    if seg['bloqueios_loja']:
+        items = '<br>'.join(
+            re.sub(r'\*+', '[ocultado]', b)[:200] for b in seg['bloqueios_loja'][-5:]
+        )
+        detalhes += f'<h3 style="color:#e67e22;">Bloqueios de Login na Loja (clientes)</h3><p style="font-family:monospace;font-size:12px;background:#fffbf0;padding:10px;border-radius:4px;">{items}</p>'
 
     if seg['honeypot']:
         items = '<br>'.join(h[:200] for h in seg['honeypot'][-5:])
@@ -345,10 +518,13 @@ def _gerar_html(seg, guni, f2b, forms, nivel, cor, motivos, horas, agora):
         acao = ('Situacao de atencao. Revisite os detalhes abaixo. '
                 'O fail2ban e os controles automaticos ja estao atuando. '
                 'Se houver formularios suspeitos, marque como spam no painel.')
-    else:
-        acao = ('ATENCAO: Atividade de alto risco detectada. '
+    elif seg['bloqueios_painel']:
+        acao = ('ATENCAO: Atividade de alto risco detectada NO PAINEL ADMINISTRATIVO. '
                 'Verifique imediatamente os bloqueios de login no painel '
                 '(/painel/axes/accessattempt/) e considere reforcar a senha do admin.')
+    else:
+        acao = ('ATENCAO: Atividade de alto risco detectada (fora do login do painel). '
+                'Revise os detalhes abaixo -- fail2ban ou outro sinal disparou o alerta.')
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -361,7 +537,7 @@ def _gerar_html(seg, guni, f2b, forms, nivel, cor, motivos, horas, agora):
       <!-- Header -->
       <tr><td style="background:{cor};padding:24px 32px;text-align:center;">
         <p style="margin:0;font-size:28px;">{icone}</p>
-        <h1 style="margin:8px 0 4px;color:#fff;font-size:22px;font-weight:700;">Relatorio de Seguranca</h1>
+        <h1 style="margin:8px 0 4px;color:#fff;font-size:22px;font-weight:700;">Relatorio de Seguranca e Monitoramento</h1>
         <p style="margin:0;color:rgba(255,255,255,.85);font-size:14px;">
           D&apos;ELLA Instore &mdash; {_fmt_hora(desde)} ate {_fmt_hora(agora)}
         </p>
@@ -390,6 +566,9 @@ def _gerar_html(seg, guni, f2b, forms, nivel, cor, motivos, horas, agora):
           {rows_resumo}
         </table>
       </td></tr>
+
+      <!-- Monitoramento -->
+      <tr><td style="padding:0 32px 20px;">{_gerar_secao_monitoramento(resumo_monit, saude_monit, integr_monit)}</td></tr>
 
       <!-- Detalhes -->
       {'<tr><td style="padding:0 32px 20px;">' + detalhes + '</td></tr>' if detalhes else ''}
@@ -440,11 +619,23 @@ class Command(BaseCommand):
 
         nivel, cor, motivos = _calcular_risco(seg, guni, f2b, forms)
 
+        from apps.core_utils import monitoramento as monit
+        resumo_monit = monit.resumo_geral()
+        saude_monit  = monit.saude_sistema()
+        integr_monit = monit.status_integracoes()
+        nivel_monit, motivos_monit = _calcular_risco_monitoramento(resumo_monit, saude_monit, integr_monit)
+
+        if _ORDEM_RISCO[nivel_monit] > _ORDEM_RISCO[nivel]:
+            nivel = nivel_monit
+            cor = {'VERDE': '#27ae60', 'AMARELO': '#e67e22', 'VERMELHO': '#c0392b'}[nivel]
+        motivos = motivos + motivos_monit
+
         self.stdout.write(f'Risco: {nivel}')
         for m in motivos:
             self.stdout.write(f'  - {m}')
 
-        html = _gerar_html(seg, guni, f2b, forms, nivel, cor, motivos, horas, agora)
+        html = _gerar_html(seg, guni, f2b, forms, nivel, cor, motivos, horas, agora,
+                            resumo_monit, saude_monit, integr_monit)
 
         if dry_run:
             self.stdout.write('--dry-run: e-mail nao enviado.')

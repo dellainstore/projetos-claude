@@ -2,10 +2,10 @@ from datetime import date
 
 from django.shortcuts import render
 
-from apps.core.decorators import login_obrigatorio
+from apps.core.decorators import perm_required_qualquer
 
 
-@login_obrigatorio
+@perm_required_qualquer("estoque.incluir", "aprovacoes.aprovar", "estoque.historico")
 def view_resumo_produtos(request):
     stats = _get_stats()
     ultimas = _get_ultimas_inclusoes()

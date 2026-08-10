@@ -60,6 +60,27 @@ def handler404(request, exception=None):
             categoria = Categoria.objects.filter(slug=path, ativa=True).first()
             if categoria:
                 return redirect(f'/loja/{categoria.slug}/', permanent=True)
+
+            # /loja/<slug>/ pode apontar para uma categoria que so existe
+            # como subcategoria (ex: "saias" so existe sob "casual"/"couro").
+            # A view loja() exige categoria de topo nesse padrao e da 404,
+            # entao aqui resolvemos para a URL aninhada correta.
+            if path.startswith('loja/'):
+                sub_slug = path[len('loja/'):].strip('/')
+                if sub_slug and '/' not in sub_slug:
+                    subcategorias = list(
+                        Categoria.objects
+                        .filter(slug=sub_slug, parent__isnull=False, ativa=True)
+                        .select_related('parent')
+                    )
+                    if len(subcategorias) == 1:
+                        sub = subcategorias[0]
+                        return redirect(f'/loja/{sub.parent.slug}/{sub.slug}/', permanent=True)
+                    elif len(subcategorias) > 1:
+                        # Slug ambiguo (mesma subcategoria sob pais diferentes):
+                        # sem parent unico para redirect permanente, manda
+                        # para a loja ja filtrada por essa subcategoria.
+                        return redirect(f'/loja/?subcategoria={sub_slug}', permanent=False)
         except Exception:
             logging.getLogger(__name__).debug('Erro ao resolver slug no handler404: %s', request.path, exc_info=True)
 

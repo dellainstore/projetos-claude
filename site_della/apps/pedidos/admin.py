@@ -686,14 +686,17 @@ class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
     )
     list_display_links = ('email',)
     list_filter = ('email_enviado', 'recuperado')
-    search_fields = ('email', 'nome', 'telefone', 'cliente__cpf')
+    search_fields = ('email', 'nome', 'telefone', 'cliente__cpf', 'pedido__numero')
     date_hierarchy = 'atualizado_em'
     ordering = ('-atualizado_em',)
     readonly_fields = (
         'cliente', 'email', 'nome', 'telefone', 'total', 'itens_resumo',
-        'email_enviado', 'email_enviado_em', 'recuperado',
+        'email_enviado', 'email_enviado_em', 'recuperado', 'pedido_link',
         'criado_em', 'atualizado_em',
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('pedido')
 
     class Media:
         js = ('admin/js/admin_linhas.js',)
@@ -711,11 +714,22 @@ class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
     def _action_enviar_email(self, request, queryset):
         from .emails import enviar_email_carrinho_abandonado
         enviados = 0
-        for ca in queryset.filter(recuperado=False):
+        pulados  = 0
+        # Pedido gerado e ainda sem pagamento: nao mandar lembrete de carrinho
+        # (a cliente ja esta na etapa de pagar, nao de montar o carrinho).
+        for ca in queryset.filter(recuperado=False).select_related('pedido'):
+            if ca.situacao == 'aguardando_pagamento':
+                pulados += 1
+                continue
             if enviar_email_carrinho_abandonado(ca):
                 enviados += 1
         from django.contrib import messages as msgs
         msgs.success(request, f'{enviados} e-mail(s) de lembrete enviado(s).')
+        if pulados:
+            msgs.warning(
+                request,
+                f'{pulados} carrinho(s) pulado(s): pedido gerado aguardando pagamento.',
+            )
     _action_enviar_email.short_description = 'Enviar e-mail de lembrete agora'
 
     def has_add_permission(self, request):
@@ -729,7 +743,7 @@ class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
             'fields': ('total', 'itens_resumo'),
         }),
         ('Status', {
-            'fields': ('email_enviado', 'email_enviado_em', 'recuperado'),
+            'fields': ('email_enviado', 'email_enviado_em', 'recuperado', 'pedido_link'),
         }),
         ('Datas', {
             'fields': ('criado_em', 'atualizado_em'),
@@ -747,10 +761,17 @@ class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
     total_formatado.short_description = 'Total'
 
     def badge_status(self, obj):
-        if obj.recuperado and obj.email_enviado:
-            cor, label = '#27ae60', 'Recuperado (e-mail enviado)'
-        elif obj.recuperado:
-            cor, label = '#27ae60', 'Recuperado'
+        # "Recuperado" = pedido PAGO. Pedido gerado sem pagamento (PIX emitido,
+        # cartao em analise) fica como "Aguardando pagamento" e continua na
+        # lista de abandonados ate o pagamento entrar.
+        situacao = obj.situacao
+        if situacao == 'recuperado':
+            cor = '#27ae60'
+            label = 'Recuperado (e-mail enviado)' if obj.email_enviado else 'Recuperado'
+        elif situacao == 'aguardando_pagamento':
+            cor, label = '#8e44ad', f'Pedido {obj.pedido.numero}: aguardando pagamento'
+        elif situacao == 'pedido_cancelado':
+            cor, label = '#c0392b', f'Pedido {obj.pedido.numero} cancelado'
         elif obj.email_enviado:
             cor, label = '#2980b9', 'E-mail enviado'
         else:
@@ -761,6 +782,16 @@ class CarrinhoAbandonadoAdmin(DellaAdminMixin, admin.ModelAdmin):
             cor, label,
         )
     badge_status.short_description = 'Status'
+
+    def pedido_link(self, obj):
+        if not obj.pedido_id:
+            return 'Nenhum pedido gerado a partir deste carrinho'
+        url = reverse('admin:pedidos_pedido_change', args=[obj.pedido_id])
+        return format_html(
+            '<a href="{}">{}</a> ({})',
+            url, obj.pedido.numero, obj.pedido.get_status_display(),
+        )
+    pedido_link.short_description = 'Pedido gerado'
 
     def itens_resumo(self, obj):
         linhas = []

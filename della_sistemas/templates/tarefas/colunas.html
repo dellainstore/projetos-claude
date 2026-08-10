@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block titulo %}Configurar colunas | Tarefas | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+  .colunas-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: .75rem; }
+  .colunas-topo h1 { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: var(--preto); }
+  .colunas-lista { display: flex; flex-direction: column; gap: .6rem; max-width: 720px; }
+  .coluna-linha { display: flex; align-items: center; gap: .5rem; background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 8px; padding: .6rem .8rem; flex-wrap: wrap; }
+  .coluna-linha form { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .coluna-linha input[type=text] { border: 1px solid var(--cinza-medio); border-radius: 6px; padding: .4rem .55rem; font-size: .85rem; }
+  .form-nova-coluna { display: flex; gap: .6rem; margin-bottom: 1.25rem; max-width: 720px; }
+  .form-nova-coluna input[type=text] { flex: 1; padding: .5rem .7rem; border: 1px solid var(--cinza-medio); border-radius: 6px; }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="colunas-topo">
+  <h1>Configurar colunas — Tarefas</h1>
+  <a href="{% url 'tarefas:painel' %}" class="ds-btn ds-btn--outline">Voltar ao quadro</a>
+</div>
+
+<form class="form-nova-coluna" hx-post="{% url 'tarefas:htmx_criar_coluna' %}" hx-target="#colunas-lista" hx-swap="outerHTML"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <input type="text" name="nome" placeholder="Nome da nova coluna" required>
+  <button type="submit" class="ds-btn ds-btn--dourado">Adicionar coluna</button>
+</form>
+
+{% include "tarefas/_colunas_lista.html" %}
+{% endblock %}

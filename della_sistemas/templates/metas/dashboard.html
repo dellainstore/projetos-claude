@@ -93,9 +93,16 @@
 {% endblock %}
 
 {% block conteudo %}
-<div class="ds-page-header">
-  <h1 class="ds-page-titulo">Metas</h1>
-  <p class="ds-page-subtitulo">{{ periodo_label }}</p>
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:0.75rem;">
+  <div>
+    <h1 class="ds-page-titulo">Metas</h1>
+    <p class="ds-page-subtitulo">{{ periodo_label }}</p>
+  </div>
+  {% if periodo_liberado and meta_total > 0 %}
+  <button type="button" id="btn-gerar-imagem" class="ds-btn ds-btn--primario" onclick="gerarImagemMetas(this)" style="white-space:nowrap;">
+    Gerar Imagem
+  </button>
+  {% endif %}
 </div>
 
 <!-- Filtro de período -->
@@ -332,14 +339,154 @@
 </div>
 {% endif %}
 
+<!-- Container oculto usado para gerar a imagem PNG compartilhável -->
+<div style="position:absolute;top:0;left:-99999px;">
+  <div id="metas-export" style="width:640px;background:var(--cinza-claro);padding:28px;font-family:'Jost', system-ui, sans-serif;color:var(--preto);">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1.25rem;">
+      <div>
+        <div style="font-family:'Playfair Display', Georgia, serif;font-size:1.4rem;">D'ELLA</div>
+        <div style="font-size:0.85rem;color:var(--cinza-texto);">Metas — {{ periodo_label }}</div>
+      </div>
+      <div style="font-size:0.7rem;color:var(--cinza-texto);text-align:right;">
+        Atualizado em<br>{{ ultima_atualizacao|date:"d/m/Y" }} às {{ ultima_atualizacao|date:"H:i" }}
+      </div>
+    </div>
+
+    <div class="totais-bar" style="margin-bottom:1rem;">
+      <div class="item">
+        <span class="item-val">{{ totais.total|brl }}</span>
+        <span class="item-label">Faturamento total</span>
+      </div>
+      <div class="item">
+        <span class="item-val">{{ totais.pecas }}</span>
+        <span class="item-label">Peças vendidas</span>
+      </div>
+      <div class="item">
+        <span class="item-val">{{ total_pedidos }}</span>
+        <span class="item-label">Pedidos</span>
+      </div>
+    </div>
+
+    {% if meta_total > 0 %}
+    <div style="background:var(--branco);border:1px solid var(--cinza-medio);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:0.6rem;">
+        <span style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--cinza-texto);">Meta Geral do Período</span>
+        <span style="font-size:1rem;font-weight:700;">{{ pct_meta_total|floatformat:1 }}%</span>
+      </div>
+      <div style="height:8px;background:#e8e8e6;border-radius:4px;overflow:hidden;margin-bottom:0.75rem;">
+        <div style="height:8px;width:{{ pct_meta_total|pct_css }}%;max-width:100%;background:{% if pct_meta_total >= 100 %}#22c55e{% else %}#c9a96e{% endif %};border-radius:4px;"></div>
+      </div>
+      <div style="display:flex;gap:1.5rem;font-size:0.82rem;flex-wrap:wrap;align-items:center;">
+        <span>Meta: <strong>{{ meta_total|brl }}</strong></span>
+        <span>Realizado: <strong>{{ totais.total|brl }}</strong></span>
+        {% if faltam_total > 0 %}
+        <span style="color:var(--cinza-texto);">Faltam: <strong>{{ faltam_total|brl }}</strong></span>
+        {% if por_semana_total > 0 %}
+        <span style="color:var(--cinza-texto);font-size:0.78rem;">≈ {{ por_semana_total|brl }}/semana ({{ dias_restantes }} dias úteis restantes)</span>
+        {% endif %}
+        {% else %}
+        <span style="color:#22c55e;font-weight:600;">&#10003; Meta atingida!</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if modo_individual and individual %}
+    <h2 class="metas-section-titulo">Metas Individuais</h2>
+    <div class="metas-grid" style="margin-bottom:1rem;">
+      {% for item in individual %}
+      <div class="meta-card {% if not item.tem_meta %}sem-meta{% endif %}">
+        <div class="meta-card-nome">{{ item.nome }}</div>
+        <div class="meta-card-realizado">{{ item.realizado|brl }}</div>
+        <div class="meta-card-pecas">{{ item.pecas }} peças</div>
+        {% if item.tem_meta %}
+        <div style="font-size:0.78rem;color:var(--cinza-texto);">Meta: {{ item.meta|brl }}</div>
+        <div style="font-size:0.78rem;color:var(--cinza-texto);">
+          {% if item.pct < 100 %}Faltam: {{ item.faltam|brl }}{% else %}<span style="color:#22c55e;font-weight:600;">&#10003; Atingida</span>{% endif %}
+        </div>
+        <div style="height:6px;background:#e8e8e6;border-radius:3px;overflow:hidden;margin:0.25rem 0;">
+          <div style="height:6px;width:{{ item.pct|pct_css }}%;max-width:100%;background:{% if item.pct >= 100 %}#22c55e{% else %}#c9a96e{% endif %};border-radius:3px;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="meta-pct {% if item.pct >= 100 %}atingida{% else %}pendente{% endif %}">{{ item.pct|floatformat:1 }}%</div>
+        </div>
+        {% if item.por_semana > 0 %}
+        <div style="font-size:0.72rem;color:var(--cinza-texto);border-top:1px solid #f0f0f0;margin-top:0.3rem;padding-top:0.3rem;">
+          ≈ {{ item.por_semana|brl }}/semana
+        </div>
+        {% endif %}
+        {% else %}
+        <div style="font-size:0.75rem;color:var(--cinza-texto);">Sem meta neste mês</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if canais_imagem %}
+    <h2 class="metas-section-titulo">Atacado &amp; Instagram / Site</h2>
+    <div class="metas-grid">
+      {% for canal in canais_imagem %}
+      <div class="meta-card {% if not canal.tem_meta %}sem-meta{% endif %}">
+        <div class="meta-card-nome">{{ canal.label }}</div>
+        <div class="meta-card-realizado">{{ canal.realizado|brl }}</div>
+        <div class="meta-card-pecas">{{ canal.pecas }} peças</div>
+        {% if canal.tem_meta %}
+        <div style="font-size:0.78rem;color:var(--cinza-texto);">Meta: {{ canal.meta|brl }}</div>
+        <div style="font-size:0.78rem;color:var(--cinza-texto);">
+          {% if canal.pct < 100 %}Faltam: {{ canal.faltam|brl }}{% else %}<span style="color:#22c55e;font-weight:600;">&#10003; Atingida</span>{% endif %}
+        </div>
+        <div style="height:6px;background:#e8e8e6;border-radius:3px;overflow:hidden;margin:0.25rem 0;">
+          <div style="height:6px;width:{{ canal.pct|pct_css }}%;max-width:100%;background:{% if canal.pct >= 100 %}#22c55e{% else %}#c9a96e{% endif %};border-radius:3px;"></div>
+        </div>
+        <div class="meta-pct {% if canal.pct >= 100 %}atingida{% else %}pendente{% endif %}">{{ canal.pct|floatformat:1 }}%</div>
+        {% if canal.por_semana > 0 %}
+        <div style="font-size:0.72rem;color:var(--cinza-texto);border-top:1px solid #f0f0f0;margin-top:0.3rem;padding-top:0.3rem;">
+          ≈ {{ canal.por_semana|brl }}/semana
+        </div>
+        {% endif %}
+        {% else %}
+        <div><span class="tag-sem-meta">sem meta — só faturamento</span></div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
 {% endif %}{# /periodo_liberado #}
 {% endblock %}
 
 {% block js_extra %}
+<script src="{{ STATIC_URL }}js/html2canvas.min.js"></script>
 <script>
 function toggleCustom() {
   const f = document.getElementById('form-custom');
   f.style.display = f.style.display === 'none' ? 'flex' : 'none';
+}
+
+function gerarImagemMetas(btn) {
+  const el = document.getElementById('metas-export');
+  if (!el || typeof html2canvas === 'undefined') {
+    alert('Não foi possível gerar a imagem. Recarregue a página e tente novamente.');
+    return;
+  }
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Gerando...';
+  html2canvas(el, { backgroundColor: '#f5f5f3', scale: 2 }).then(function (canvas) {
+    const link = document.createElement('a');
+    link.download = 'metas-{{ periodo_label|slugify }}.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }).catch(function (err) {
+    console.error(err);
+    alert('Não foi possível gerar a imagem. Tente novamente.');
+  }).finally(function () {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  });
 }
 </script>
 {% endblock %}

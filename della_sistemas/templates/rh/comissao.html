@@ -46,7 +46,7 @@
     <table class="ds-table">
       <thead>
         <tr>
-          <th>Data</th><th>Nº pedido</th><th>Cliente</th>
+          <th>Data</th><th>Nº pedido</th><th>Cliente</th><th>Situação</th>
           <th>Valor total</th><th>%</th><th>Comissão</th><th>Válida</th><th></th>
         </tr>
       </thead>
@@ -57,8 +57,11 @@
       </tbody>
       <tfoot>
         <tr style="font-weight:600;border-top:2px solid var(--cinza-medio);">
-          <td colspan="5" style="text-align:right;">Total (linhas válidas):</td>
-          <td colspan="3" id="total-{{ secao.colaborador.id }}">{{ secao.total|brl }}</td>
+          <td colspan="4" style="text-align:right;">Total (linhas válidas):</td>
+          <td id="total-base-{{ secao.colaborador.id }}">{{ secao.total_base|brl }}</td>
+          <td></td>
+          <td id="total-{{ secao.colaborador.id }}">{{ secao.total|brl }}</td>
+          <td colspan="2"></td>
         </tr>
       </tfoot>
     </table>
@@ -84,12 +87,22 @@
     return "R$ " + intPart + "," + parts[1];
   }
   function recalcularTotais() {
-    document.querySelectorAll("[id^='total-']").forEach(function (cell) {
+    document.querySelectorAll("[id^='total-']:not([id^='total-base-'])").forEach(function (cell) {
       var colabId = cell.id.replace("total-", "");
       var total = 0;
       document.querySelectorAll("tr[data-colab='" + colabId + "']").forEach(function (row) {
         if (row.dataset.valida === "1") {
           total += parseFloat(row.dataset.valor || "0");
+        }
+      });
+      cell.textContent = formatBRL(total);
+    });
+    document.querySelectorAll("[id^='total-base-']").forEach(function (cell) {
+      var colabId = cell.id.replace("total-base-", "");
+      var total = 0;
+      document.querySelectorAll("tr[data-colab='" + colabId + "']").forEach(function (row) {
+        if (row.dataset.valida === "1") {
+          total += parseFloat(row.dataset.base || "0");
         }
       });
       cell.textContent = formatBRL(total);

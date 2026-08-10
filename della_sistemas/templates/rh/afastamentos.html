@@ -49,10 +49,43 @@
     </div>
 
     <div class="ds-form-group" style="margin-bottom:1.1rem;">
-      <label class="ds-label">Anexo (atestado / comprovante)</label>
-      <input class="ds-input" type="file" name="anexo" accept="image/*,application/pdf">
-      {% if editando and editando.anexo %}
-      <span style="font-size:0.76rem;color:var(--cinza-texto);">Já existe um anexo. Envie um novo só se quiser substituí-lo.</span>
+      <label class="ds-label">Cobertura</label>
+      <div style="display:flex;gap:1.1rem;flex-wrap:wrap;align-items:center;">
+        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.88rem;font-weight:400;">
+          <input type="radio" name="cobertura" value="dia" onchange="toggleCoberturaHoras(this)"
+                 {% if not editando or editando.dia_inteiro %}checked{% endif %}>
+          Dia inteiro
+        </label>
+        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.88rem;font-weight:400;">
+          <input type="radio" name="cobertura" value="horas" onchange="toggleCoberturaHoras(this)"
+                 {% if editando and not editando.dia_inteiro %}checked{% endif %}>
+          Só algumas horas <span style="color:var(--cinza-texto);">(ex.: atestado de manhã)</span>
+        </label>
+      </div>
+      <div id="cobertura-horas" style="display:{% if editando and not editando.dia_inteiro %}flex{% else %}none{% endif %};gap:1.1rem;flex-wrap:wrap;margin-top:0.7rem;">
+        <div class="ds-form-group" style="flex:1;min-width:140px;margin:0;">
+          <label class="ds-label">Início</label>
+          <input class="ds-input" type="time" name="hora_inicio" value="{{ editando.hora_inicio|time:'H:i' }}">
+        </div>
+        <div class="ds-form-group" style="flex:1;min-width:140px;margin:0;">
+          <label class="ds-label">Fim</label>
+          <input class="ds-input" type="time" name="hora_fim" value="{{ editando.hora_fim|time:'H:i' }}">
+        </div>
+      </div>
+      <span style="font-size:0.76rem;color:var(--cinza-texto);">Fora desse intervalo o ponto continua sendo cobrado normalmente no dia.</span>
+    </div>
+
+    <div class="ds-form-group" style="margin-bottom:1.1rem;">
+      <label class="ds-label">Anexos (atestado / comprovante)</label>
+      <input class="ds-input" type="file" name="anexos" accept="image/*,application/pdf" multiple>
+      <span style="font-size:0.76rem;color:var(--cinza-texto);">Pode selecionar mais de uma foto (ex.: atestado de 2 dias, 2 fotos).</span>
+      {% if anexos_editando %}
+      <div style="margin-top:0.4rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
+        {% for anx in anexos_editando %}
+        <a href="{{ anx.url }}" target="_blank" class="ds-btn" style="font-size:0.7rem;padding:0.15rem 0.4rem;">{{ anx.label }}</a>
+        {% endfor %}
+      </div>
+      <span style="font-size:0.76rem;color:var(--cinza-texto);">Já existem anexos. Enviar novos arquivos os adiciona (não substitui).</span>
       {% endif %}
     </div>
 
@@ -74,6 +107,11 @@
       {% if editando %}<a href="{% url 'rh:afastamentos' %}" class="ds-btn">Cancelar</a>{% endif %}
     </div>
   </form>
+  <script>
+    function toggleCoberturaHoras(radio) {
+      document.getElementById('cobertura-horas').style.display = radio.value === 'horas' ? 'flex' : 'none';
+    }
+  </script>
 </div>
 
 <!-- Histórico -->
@@ -114,9 +152,15 @@
         <tr>
           <td style="white-space:nowrap;"><strong>{{ a.colaborador.nome }}</strong></td>
           <td>{{ a.get_tipo_display }}{% if not a.remunerado %} <span style="font-size:0.72rem;color:var(--cinza-texto);">(não abonado)</span>{% endif %}</td>
-          <td style="white-space:nowrap;">{{ a.data_inicio|date:"d/m/Y" }}{% if a.data_fim != a.data_inicio %} a {{ a.data_fim|date:"d/m/Y" }}{% endif %}</td>
-          <td>{{ a.dias }}</td>
-          <td>{% if a.anexo %}<a href="{% url 'rh:afastamento_anexo' a.pk %}" target="_blank" class="ds-btn" style="font-size:0.7rem;padding:0.15rem 0.4rem;">Ver</a>{% endif %}</td>
+          <td style="white-space:nowrap;">
+            {{ a.data_inicio|date:"d/m/Y" }}{% if a.data_fim != a.data_inicio %} a {{ a.data_fim|date:"d/m/Y" }}{% endif %}
+            {% if not a.dia_inteiro %}<br><span style="font-size:0.72rem;color:var(--cinza-texto);">{{ a.hora_inicio|time:"H:i" }}–{{ a.hora_fim|time:"H:i" }}</span>{% endif %}
+          </td>
+          <td>{% if a.dia_inteiro %}{{ a.dias }}{% else %}<span style="font-size:0.76rem;color:var(--cinza-texto);">parcial</span>{% endif %}</td>
+          <td style="white-space:nowrap;">
+            {% if a.anexo %}<a href="{% url 'rh:afastamento_anexo' a.pk %}" target="_blank" class="ds-btn" style="font-size:0.7rem;padding:0.15rem 0.4rem;">Ver</a>{% endif %}
+            {% for anx in a.anexos.all %}<a href="{% url 'rh:afastamento_anexo_item' anx.pk %}" target="_blank" class="ds-btn" style="font-size:0.7rem;padding:0.15rem 0.4rem;">Ver {{ forloop.counter }}</a>{% endfor %}
+          </td>
           <td style="font-size:0.8rem;color:var(--cinza-texto);">{{ a.observacao }}</td>
           <td style="text-align:right;white-space:nowrap;">
             <a href="{% url 'rh:afastamento_editar' a.pk %}" class="ds-btn" style="font-size:0.7rem;padding:0.2rem 0.45rem;">Editar</a>

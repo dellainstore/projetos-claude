@@ -83,17 +83,9 @@
         <label for="id_indefinido" class="ds-label" style="margin-bottom:0;">Todos os meses (sem fim)</label>
       </div>
       <div id="rec-fim" style="display:none;gap:0.5rem;align-items:flex-end;">
-        <div class="ds-form-group" style="min-width:110px;">
-          <label class="ds-label">Até o mês</label>
-          <select name="mes_fim" class="ds-input">
-            {% for num, nome in meses %}<option value="{{ num }}" {% if num == mes %}selected{% endif %}>{{ nome }}</option>{% endfor %}
-          </select>
-        </div>
-        <div class="ds-form-group" style="min-width:100px;">
-          <label class="ds-label">Ano</label>
-          <select name="ano_fim" class="ds-input">
-            {% for a in anos %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}
-          </select>
+        <div class="ds-form-group" style="min-width:160px;">
+          <label class="ds-label">Até (mês/ano)</label>
+          <input type="month" name="fim_competencia" class="ds-input" value="{{ competencia }}">
         </div>
       </div>
     </div>
@@ -177,16 +169,8 @@
             {% csrf_token %}
             <input type="hidden" name="ano" value="{{ ano }}"><input type="hidden" name="mes" value="{{ mes }}">
             <div class="ds-form-group" style="margin:0;">
-              <label class="ds-label" style="font-size:0.72rem;">Encerrar no mês</label>
-              <select name="mes_fim" class="ds-input" style="width:auto;">
-                {% for num, nome in meses %}<option value="{{ num }}" {% if num == mes %}selected{% endif %}>{{ nome }}</option>{% endfor %}
-              </select>
-            </div>
-            <div class="ds-form-group" style="margin:0;">
-              <label class="ds-label" style="font-size:0.72rem;">Ano</label>
-              <select name="ano_fim" class="ds-input" style="width:auto;">
-                {% for a in anos %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}
-              </select>
+              <label class="ds-label" style="font-size:0.72rem;">Encerrar até (mês/ano)</label>
+              <input type="month" name="fim_competencia" class="ds-input" style="width:auto;" value="{{ competencia }}">
             </div>
             <button type="submit" class="ds-btn ds-btn--primario" style="font-size:0.78rem;padding:0.25rem 0.6rem;">Confirmar</button>
           </form>

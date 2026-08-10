@@ -17,6 +17,7 @@ urlpatterns = [
     path('wishlist/', views.wishlist, name='wishlist'),
     # Página de links da bio (Instagram) - estilo Linktree
     path('links/', views.links, name='links'),
+    path('links/go/<int:pk>/', views.links_go, name='links_go'),
     # Páginas institucionais
     path('sobre/', views.sobre, name='sobre'),
     path('contato/', views.contato, name='contato'),

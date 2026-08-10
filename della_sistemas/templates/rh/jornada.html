@@ -38,15 +38,23 @@
     </div>
     {% if modo == 'custom' %}
     <div class="ds-form-group" style="margin:0;"><label class="ds-label">De</label>
-      <input class="ds-input" type="date" name="inicio" value="{{ inicio|date:'Y-m-d' }}"></div>
+      <input class="ds-input" type="date" name="inicio" min="{{ inicio_controle|date:'Y-m-d' }}" value="{{ inicio|date:'Y-m-d' }}"></div>
     <div class="ds-form-group" style="margin:0;"><label class="ds-label">Até</label>
-      <input class="ds-input" type="date" name="fim" value="{{ fim|date:'Y-m-d' }}"></div>
+      <input class="ds-input" type="date" name="fim" min="{{ inicio_controle|date:'Y-m-d' }}" value="{{ fim|date:'Y-m-d' }}"></div>
     <button type="submit" class="ds-btn ds-btn--primario">Aplicar</button>
     {% else %}
-    <div class="ds-form-group" style="margin:0;min-width:160px;"><label class="ds-label">Mês/Ano</label>
-      <select class="ds-input" name="competencia" onchange="this.form.submit()">
-        {% for val, label in meses_opcoes %}<option value="{{ val }}" {% if val == competencia %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select></div>
+    <div class="ds-form-group" style="margin:0;">
+      <label class="ds-label">Mês/Ano</label>
+      <div style="display:flex;align-items:center;gap:0.4rem;">
+        <button type="submit" name="competencia" value="{{ mes_anterior }}" class="ds-btn"
+                {% if not mes_anterior %}disabled title="Não há mês anterior a esse"{% else %}title="Mês anterior"{% endif %}
+                style="padding:0.45rem 0.75rem;">◀</button>
+        <strong style="min-width:110px;text-align:center;">{{ mes_nome }}/{{ ano }}</strong>
+        <button type="submit" name="competencia" value="{{ mes_seguinte }}" class="ds-btn"
+                {% if not mes_seguinte %}disabled title="Esse mês ainda não chegou"{% else %}title="Próximo mês"{% endif %}
+                style="padding:0.45rem 0.75rem;">▶</button>
+      </div>
+    </div>
     {% endif %}
   </form>
 </div>
@@ -73,7 +81,10 @@
 {% else %}
 
 <div class="ds-form-section" style="margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
-  <span style="font-weight:600;">Saldo do banco de horas no período</span>
+  <div>
+    <span style="font-weight:600;">Saldo do banco de horas (acumulado até {{ fim|date:"d/m/Y" }})</span>
+    <div style="font-size:0.78rem;color:var(--cinza-texto);margin-top:0.15rem;">Não reseta por mês — soma com o saldo do mês seguinte. Só o período filtrado: {{ saldo_periodo|horas_hm }} h</div>
+  </div>
   <span class="ds-status" style="font-size:0.95rem;font-weight:700;background:var(--cinza-claro);color:{% if saldo_total < 0 %}#dc2626{% elif saldo_total > 0 %}#2563eb{% else %}var(--preto){% endif %};">{{ saldo_total|horas_hm }} h</span>
 </div>
 
@@ -104,13 +115,13 @@
       </thead>
       <tbody>
         {% for linha in linhas %}
-        <tr class="{% if linha.afastamento %}ds-linha-indisponivel{% elif linha.fds or linha.feriado %}ds-linha-especial{% endif %}">
+        <tr class="{% if linha.afastamento.dia_inteiro %}ds-linha-indisponivel{% elif linha.fds or linha.feriado %}ds-linha-especial{% endif %}">
           <td style="white-space:nowrap;font-weight:500;">{{ linha.data|date:"d/m D" }}</td>
           {% for slot in linha.slots %}
-          <td><input class="ds-input" type="time" name="{{ slot.pref }}_{{ linha.iso }}" value="{{ slot.hora }}" style="width:96px;padding:0.25rem 0.4rem;" {% if linha.afastamento %}disabled{% endif %}></td>
+          <td><input class="ds-input" type="time" name="{{ slot.pref }}_{{ linha.iso }}" value="{{ slot.hora }}" style="width:96px;padding:0.25rem 0.4rem;" {% if linha.afastamento.dia_inteiro %}disabled{% endif %}></td>
           {% endfor %}
           <td>
-            <select class="ds-input" name="loja_{{ linha.iso }}" style="width:120px;padding:0.25rem 0.4rem;" {% if linha.afastamento %}disabled{% endif %}>
+            <select class="ds-input" name="loja_{{ linha.iso }}" style="width:120px;padding:0.25rem 0.4rem;" {% if linha.afastamento.dia_inteiro %}disabled{% endif %}>
               <option value="">Selecione</option>
               {% for l in lojas %}
               <option value="{{ l.id }}" {% if linha.loja_id == l.id %}selected{% endif %}>{{ l.nome }}</option>
@@ -118,10 +129,13 @@
             </select>
           </td>
           <td style="font-size:0.8rem;color:var(--cinza-texto);">
-            {% if linha.afastamento %}
+            {% if linha.afastamento.dia_inteiro %}
               <span class="ds-status ds-status--ok">{{ linha.afastamento.get_tipo_display }}</span>
             {% else %}
-              <div style="display:flex;align-items:center;gap:0.4rem;white-space:nowrap;">
+              <div style="display:flex;align-items:center;gap:0.4rem;white-space:nowrap;flex-wrap:wrap;">
+                {% if linha.afastamento %}
+                <span class="ds-status ds-status--ok">{{ linha.afastamento.get_tipo_display }} {{ linha.afastamento.hora_inicio|time:"H:i" }}–{{ linha.afastamento.hora_fim|time:"H:i" }}</span>
+                {% endif %}
                 <span style="display:inline-block;width:62px;">
                   {% if linha.feriado %}<span class="ds-status ds-status--ok">Feriado</span>
                   {% elif linha.fds_nome %}<span class="ds-status ds-status--ok">{{ linha.fds_nome }}</span>{% endif %}
@@ -154,13 +168,13 @@
                     name="data" value="{{ linha.iso }}" class="ds-btn"
                     style="font-size:0.7rem;padding:0.2rem 0.45rem;"
                     onclick="return confirm('Remover o abono de {{ linha.data|date:'d/m' }}? O saldo volta a contar no banco de horas.')">Remover abono</button>
-            {% elif linha.saldo and not linha.afastamento %}
+            {% elif linha.saldo and not linha.afastamento.dia_inteiro %}
             <button type="submit" formaction="{% url 'rh:dia_abonar' %}" formnovalidate
                     name="data" value="{{ linha.iso }}" class="ds-btn"
                     style="font-size:0.7rem;padding:0.2rem 0.45rem;"
                     onclick="return prepararAbono(this)">Abonar</button>
             {% endif %}
-            {% if linha.tem_batida and not linha.afastamento %}
+            {% if linha.tem_batida and not linha.afastamento.dia_inteiro %}
             <button type="submit" formaction="{% url 'rh:dia_excluir' %}" formnovalidate
                     name="data" value="{{ linha.iso }}" class="ds-btn ds-btn--perigo"
                     style="font-size:0.7rem;padding:0.2rem 0.45rem;"

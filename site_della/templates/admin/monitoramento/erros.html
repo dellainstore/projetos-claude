@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n della_filters %}
 
 {% block title %}Erros 5xx | Monitoramento{% endblock %}
 {% block content_title %}{% endblock %}
@@ -76,8 +76,8 @@
     <td>{{ g.endpoint|default:"—"|truncatechars:60 }}</td>
     <td>{% if g.exc %}{{ g.exc }}{% else %}<span class="mon-muted">—</span>{% endif %}</td>
     <td>{{ g.integracao|default:"" }}</td>
-    <td class="mon-muted">{{ g.primeira }}</td>
-    <td class="mon-muted">{{ g.ultima }}</td>
+    <td class="mon-muted">{{ g.primeira|datahora_br }}</td>
+    <td class="mon-muted">{{ g.ultima|datahora_br }}</td>
   </tr>
   {% empty %}
   <tr><td colspan="8" class="mon-muted" style="padding:24px;text-align:center;">Nenhum erro 5xx no período. 👍</td></tr>

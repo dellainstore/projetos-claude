@@ -32,9 +32,11 @@
         <video class="hero-video" autoplay muted playsinline
                style="object-position: {{ banner.posicao_imagem }};"
                {% if banner.poster %}poster="{{ banner.poster.url }}"{% endif %}
-               {% if banner.video_mobile %}data-src-mobile="{{ banner.video_mobile.url }}"{% endif %}
                {% if forloop.first %}preload="auto"{% else %}preload="none"{% endif %}
                aria-hidden="true">
+          {% if banner.video_mobile %}
+          <source media="(max-width: 767px)" src="{{ banner.video_mobile.url }}" type="video/mp4">
+          {% endif %}
           <source src="{{ banner.video.url }}" type="video/mp4">
         </video>
       {% elif banner.foto %}

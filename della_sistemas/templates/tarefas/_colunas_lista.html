@@ -1,0 +1,33 @@
+<div id="colunas-lista" class="colunas-lista">
+  {% for c in colunas %}
+  <div class="coluna-linha">
+    <form hx-post="{% url 'tarefas:htmx_editar_coluna' c.pk %}" hx-target="#colunas-lista" hx-swap="outerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' style="flex:1;">
+      <input type="text" name="nome" value="{{ c.nome }}">
+      <label style="display:flex; align-items:center; gap:.3rem; font-size:.78rem; white-space:nowrap; font-weight:400;">
+        <input type="checkbox" name="eh_conclusao" value="1" {% if c.eh_conclusao %}checked{% endif %}>
+        Coluna de conclusão
+      </label>
+      <label style="display:flex; align-items:center; gap:.3rem; font-size:.78rem; white-space:nowrap; font-weight:400;">
+        <input type="checkbox" name="ativa" value="1" {% if c.ativa %}checked{% endif %}>
+        Ativa
+      </label>
+      <button type="submit" class="ds-btn ds-btn--outline ds-btn--sm">Salvar</button>
+    </form>
+    <form hx-post="{% url 'tarefas:htmx_reordenar_colunas' %}" hx-target="#colunas-lista" hx-swap="outerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      <input type="hidden" name="mover" value="{{ c.pk }}">
+      <input type="hidden" name="direcao" value="cima">
+      <button type="submit" class="ds-btn ds-btn--sm" title="Mover para cima" {% if forloop.first %}disabled{% endif %}>&uarr;</button>
+    </form>
+    <form hx-post="{% url 'tarefas:htmx_reordenar_colunas' %}" hx-target="#colunas-lista" hx-swap="outerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      <input type="hidden" name="mover" value="{{ c.pk }}">
+      <input type="hidden" name="direcao" value="baixo">
+      <button type="submit" class="ds-btn ds-btn--sm" title="Mover para baixo" {% if forloop.last %}disabled{% endif %}>&darr;</button>
+    </form>
+  </div>
+  {% empty %}
+  <p style="color:var(--cinza-texto); font-size:.85rem;">Nenhuma coluna cadastrada.</p>
+  {% endfor %}
+</div>

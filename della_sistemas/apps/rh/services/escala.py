@@ -10,7 +10,7 @@ Usado por:
 """
 
 import calendar
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 
 from apps.rh.models import EscalaDia, EscalaExcecao
@@ -113,3 +113,25 @@ def batidas_esperadas_no_dia(colaborador, d: date) -> int | None:
     if not ed or not ed.trabalha:
         return None
     return 4 if (ed.hora_saida_almoco and ed.hora_volta_almoco) else 2
+
+
+def tempos_esperados_no_dia(colaborador, d: date) -> dict[str, time | None] | None:
+    """Horário esperado de cada batida (entrada, saída almoço, volta almoço,
+    saída) nesse dia pela escala. None se não há escala vinculada ou o dia não
+    é de trabalho — usado para saber qual batida um afastamento parcial (por
+    horas) dispensa."""
+    escala = colaborador.escala
+    if escala is None:
+        return None
+    variante = variante_da_semana(colaborador, _segunda_da_semana(d))
+    ed = EscalaDia.objects.filter(
+        escala=escala, variante=variante, dia_semana=d.weekday()
+    ).first()
+    if not ed or not ed.trabalha:
+        return None
+    return {
+        "entrada": ed.hora_entrada,
+        "saida_almoco": ed.hora_saida_almoco,
+        "volta_almoco": ed.hora_volta_almoco,
+        "saida": ed.hora_saida,
+    }

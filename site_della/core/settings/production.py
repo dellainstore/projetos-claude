@@ -73,8 +73,21 @@ LOGGING = {
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
             'style': '{',
         },
+        # JSONL: a mensagem ja e um objeto JSON completo (uma linha por evento).
+        'raw': {
+            'format': '{message}',
+            'style': '{',
+        },
     },
     'handlers': {
+        'file_erros5xx': {
+            'level': 'ERROR',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'erros_5xx.jsonl',
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 9,  # ~50MB de historico (retencao por tamanho)
+            'formatter': 'raw',
+        },
         'file_error': {
             'level': 'ERROR',
             'class': 'logging.handlers.RotatingFileHandler',
@@ -107,6 +120,22 @@ LOGGING = {
             'backupCount': 3,
             'formatter': 'verbose',
         },
+        'file_analytics': {
+            'level': 'WARNING',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'analytics.log',
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 3,
+            'formatter': 'verbose',
+        },
+        'file_pedidos': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'pedidos_error.log',
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 3,
+            'formatter': 'verbose',
+        },
     },
     'loggers': {
         'django': {
@@ -132,6 +161,21 @@ LOGGING = {
         'apps.core_utils.meta': {
             'handlers': ['file_meta'],
             'level': 'INFO',
+            'propagate': False,
+        },
+        'apps.analytics': {
+            'handlers': ['file_analytics'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'apps.pedidos': {
+            'handlers': ['file_pedidos'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'apps.core_utils.erros': {
+            'handlers': ['file_erros5xx'],
+            'level': 'ERROR',
             'propagate': False,
         },
     },

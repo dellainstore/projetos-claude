@@ -664,36 +664,68 @@ def detalhe_produto(request, slug):
     return render(request, 'produtos/detalhe.html', context)
 
 
-@login_required
 def avaliar_pedido(request, numero):
+    """Avaliacao de pedido entregue -- por login (cliente com conta) OU por
+    token assinado no link do e-mail (cliente convidada, sem conta -- ver
+    apps/pedidos/services/avaliacao_token.py). Sem as duas coisas, pede
+    login normalmente (fluxo antigo intacto para quem chegou sem o link)."""
+    from django.contrib.auth.views import redirect_to_login
+    from django.urls import reverse
+    from apps.pedidos.models import Pedido
+    from apps.pedidos.services.avaliacao_token import validar_token_avaliacao
     from .forms import AvaliacaoCompraForm
 
-    pedido = get_object_or_404(
-        request.user.pedidos.prefetch_related('itens__produto'),
-        numero=numero,
-    )
+    token = request.GET.get('token', '') or request.POST.get('token', '')
+    via_token = not request.user.is_authenticated and validar_token_avaliacao(numero, token)
+
+    def _url_avaliacao():
+        url = reverse('produtos:avaliar_pedido', kwargs={'numero': numero})
+        return f'{url}?token={token}' if via_token else url
+
+    if request.user.is_authenticated:
+        pedido = get_object_or_404(
+            request.user.pedidos.prefetch_related('itens__produto'),
+            numero=numero,
+        )
+    elif via_token:
+        pedido = get_object_or_404(
+            Pedido.objects.prefetch_related('itens__produto'),
+            numero=numero,
+        )
+    else:
+        return redirect_to_login(request.get_full_path())
 
     avaliacao_existente = pedido.avaliacao
     if pedido.status != 'entregue' and avaliacao_existente is None:
         messages.info(request, 'A avaliação é liberada assim que o pedido estiver entregue.')
-        return redirect('usuarios:detalhe_pedido', numero=pedido.numero)
+        if request.user.is_authenticated:
+            return redirect('usuarios:detalhe_pedido', numero=pedido.numero)
+        return redirect('produtos:home')
+
+    nome_avaliador = (
+        (request.user.nome if request.user.is_authenticated else '')
+        or pedido.nome_completo or 'Cliente'
+    ).split()[0]
 
     if request.method == 'POST':
         if avaliacao_existente is not None:
             messages.info(request, 'Essa compra já foi avaliada.')
-            return redirect('produtos:avaliar_pedido', numero=pedido.numero)
+            return redirect(_url_avaliacao())
 
         form = AvaliacaoCompraForm(request.POST)
         if form.is_valid():
             avaliacao = form.save(commit=False)
             avaliacao.pedido = pedido
-            avaliacao.cliente = request.user
+            # Convidada sem conta: cliente fica None (pedido.cliente ja e' None
+            # nesse caso). Se o pedido estiver vinculado a uma conta, mantem o
+            # vinculo mesmo entrando pelo token (ex: token clicado deslogada).
+            avaliacao.cliente = request.user if request.user.is_authenticated else pedido.cliente
             avaliacao.produto = None
-            avaliacao.nome_publico = (request.user.nome or pedido.nome_completo or 'Cliente').split()[0]
+            avaliacao.nome_publico = nome_avaliador
             avaliacao.aprovada = False
             avaliacao.save()
             messages.success(request, 'Avaliação enviada com sucesso! Obrigada por compartilhar sua experiência.')
-            return redirect('produtos:avaliar_pedido', numero=pedido.numero)
+            return redirect(_url_avaliacao())
     else:
         form = AvaliacaoCompraForm()
 
@@ -701,7 +733,8 @@ def avaliar_pedido(request, numero):
         'pedido': pedido,
         'form': form,
         'avaliacao_existente': avaliacao_existente,
-        'nome_publico': (request.user.nome or pedido.nome_completo or 'Cliente').split()[0],
+        'nome_publico': nome_avaliador,
+        'token': token if via_token else '',
     })
 
 
@@ -884,6 +917,60 @@ def links(request):
         cache.set(LINKS_BIO, botoes, 60 * 60 * 6)  # 6h
 
     return render(request, 'home/links.html', {'botoes': botoes})
+
+
+def links_go(request, pk):
+    """Redireciona o clique num botao da pagina /links (bio do Instagram) para o
+    destino final, registrando o clique no analytics (ligado a sessao/UTM de
+    origem) antes do redirect 302. Nao filtra por ativo: um link desativado no
+    admin some da pagina /links, mas o botao ja compartilhado no Instagram
+    continua funcionando.
+    """
+    from apps.conteudo.models import LinkBio
+
+    botao = get_object_or_404(LinkBio, pk=pk)
+    destino = botao.url
+    if 'dellainstore.com' in destino:
+        separador = '&' if '?' in destino else '?'
+        destino = f'{destino}{separador}utm_source=instagram&utm_medium=bio&utm_campaign=bio'
+
+    _registrar_clique_link_bio_async(request, botao.pk, destino)
+    return redirect(destino)
+
+
+def _registrar_clique_link_bio_async(request, botao_id, destino_url):
+    """Dispara o registro do clique em thread daemon (mesmo padrao do
+    AnalyticsMiddleware) para nao atrasar o redirect. Extrai so primitivos da
+    request antes de entrar na thread."""
+    import threading
+    from apps.analytics.services import extrair_ip, utms_da_url
+
+    if not request.session.session_key:
+        request.session.save()
+
+    session_key = request.session.session_key or ''
+    ua          = request.META.get('HTTP_USER_AGENT', '')
+    cookie_attr = request.COOKIES.get('della_attr', '')
+    ip          = extrair_ip(request.META)
+    url_utms    = utms_da_url(request.GET)
+
+    t = threading.Thread(
+        target=_executar_clique_link_bio,
+        args=(session_key, ua, cookie_attr, url_utms, ip, botao_id, destino_url[:500]),
+        daemon=True,
+    )
+    t.start()
+
+
+def _executar_clique_link_bio(session_key, ua, cookie_attr, url_utms, ip, botao_id, destino_url):
+    try:
+        from apps.analytics.services import obter_ou_criar_sessao_por_valores, registrar_evento
+        sessao = obter_ou_criar_sessao_por_valores(session_key, ua, cookie_attr, url_utms, ip)
+        if sessao:
+            registrar_evento(sessao, 'link_bio_clicado', pagina_url=destino_url, metodo=str(botao_id))
+    except Exception:
+        import logging
+        logging.getLogger('apps.analytics').exception('Falha ao registrar clique de link da bio')
 
 
 def _formatar_telefone_contato(telefone):

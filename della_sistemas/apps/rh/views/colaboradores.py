@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from django.contrib import messages
@@ -8,7 +9,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth import get_user_model
 
 from apps.core.decorators import perm_required
-from apps.rh.models import Colaborador, Escala, LocalEmpresa
+from apps.rh.models import Colaborador, Escala, LocalEmpresa, VtValorVigencia
 from apps.rh.services.utils import parse_decimal as _parse_decimal
 from apps.rh.services.utils import parse_int as _parse_int
 
@@ -100,6 +101,7 @@ def view_colaborador_form(request: HttpRequest, pk: int | None = None) -> HttpRe
         "usuarios": _usuarios_disponiveis(obj),
         "lojas": LocalEmpresa.objects.filter(ativo=True).order_by("nome"),
         "lojas_vinculadas": set(obj.lojas_ponto.values_list("id", flat=True)) if obj else set(),
+        "vt_vigencias": obj.vt_vigencias.all() if obj else [],
     })
 
 
@@ -111,3 +113,49 @@ def view_colaborador_toggle(request: HttpRequest, pk: int) -> HttpResponse:
     obj.save(update_fields=["ativo"])
     messages.success(request, f'Colaborador "{obj.nome}" {"ativado" if obj.ativo else "desativado"}.')
     return redirect("rh:colaboradores")
+
+
+@perm_required("rh.gerir")
+@require_POST
+def view_vt_vigencia_nova(request: HttpRequest, pk: int) -> HttpResponse:
+    """Registra um novo valor de VT (R$/dia) a partir de uma data — os meses
+    anteriores a essa data continuam usando o valor vigente antes dela."""
+    obj = get_object_or_404(Colaborador, pk=pk)
+    valor = _parse_decimal(request.POST.get("valor_dia", ""))
+    desde_raw = request.POST.get("vigente_desde", "").strip()
+
+    if not valor or valor <= 0:
+        messages.error(request, "Informe um valor de VT válido.")
+    elif not desde_raw:
+        messages.error(request, "Informe a data a partir da qual esse valor passa a valer.")
+    else:
+        try:
+            desde = date.fromisoformat(desde_raw)
+        except ValueError:
+            messages.error(request, "Data inválida.")
+        else:
+            VtValorVigencia.objects.update_or_create(
+                colaborador=obj, vigente_desde=desde,
+                defaults={"valor_dia": valor, "criado_por": request.user},
+            )
+            # Mantém o campo legado sincronizado com o valor vigente mais recente
+            # (usado só como fallback quando não há nenhuma vigência cadastrada).
+            atual = obj.vt_vigencias.filter(vigente_desde__lte=date.today()).order_by("-vigente_desde").first()
+            if atual:
+                obj.vt_valor_dia = atual.valor_dia
+                obj.save(update_fields=["vt_valor_dia"])
+            messages.success(
+                request,
+                f"VT de {obj.nome} atualizado: R$ {valor} a partir de {desde:%d/%m/%Y}.",
+            )
+    return redirect("rh:colaborador_editar", pk=pk)
+
+
+@perm_required("rh.gerir")
+@require_POST
+def view_vt_vigencia_excluir(request: HttpRequest, pk: int) -> HttpResponse:
+    vigencia = get_object_or_404(VtValorVigencia, pk=pk)
+    colaborador_id = vigencia.colaborador_id
+    vigencia.delete()
+    messages.success(request, "Vigência de VT removida.")
+    return redirect("rh:colaborador_editar", pk=colaborador_id)

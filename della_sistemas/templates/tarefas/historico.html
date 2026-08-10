@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load tarefas_extras %}
+{% block titulo %}Histórico | Tarefas | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+  .historico-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: .75rem; }
+  .historico-topo h1 { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: var(--preto); }
+  .historico-filtros {
+    display: flex; gap: .6rem; align-items: center; flex-wrap: wrap;
+    margin-bottom: 1.25rem; background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: .7rem .9rem;
+  }
+  .historico-filtros input[type=text], .historico-filtros input[type=date], .historico-filtros select {
+    padding: .4rem .6rem; border-radius: 6px; border: 1px solid var(--cinza-medio);
+    background: var(--branco); font-size: .82rem;
+  }
+  .historico-filtros label { display: flex; align-items: center; gap: .3rem; font-size: .78rem; color: var(--cinza-texto); }
+  .historico-filtros input[type=text] { flex: 1; min-width: 160px; }
+
+  .historico-lista { display: flex; flex-direction: column; gap: .5rem; }
+  .historico-linha {
+    background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 8px;
+    padding: .7rem .9rem; cursor: pointer; display: flex; align-items: center;
+    justify-content: space-between; gap: .75rem; flex-wrap: wrap;
+  }
+  .historico-linha:hover { background: var(--cinza-claro); }
+  .historico-titulo { font-weight: 600; font-size: .88rem; color: var(--preto); }
+  .historico-meta { font-size: .76rem; color: var(--cinza-texto); display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
+  .historico-tag { padding: .1rem .55rem; border-radius: 999px; font-size: .68rem; font-weight: 600; }
+  .historico-tag.concluida { background: rgba(45,158,110,.12); color: var(--verde); }
+  .historico-tag.excluida { background: rgba(217,79,79,.12); color: var(--vermelho); }
+
+  #modal-container:empty { display: none; }
+  .ds-modal-fundo {
+    position: fixed; inset: 0; background: rgba(10,10,10,.5); display: flex;
+    align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
+  }
+  .ds-modal {
+    background: var(--branco); border-radius: 12px; padding: 1.5rem; width: 100%;
+    max-width: 520px; max-height: 90vh; overflow-y: auto;
+  }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="historico-topo">
+  <h1>Histórico de Tarefas</h1>
+  <a href="{% url 'tarefas:painel' %}" class="ds-btn ds-btn--outline">Voltar ao quadro</a>
+</div>
+
+<form method="get" class="historico-filtros">
+  <input type="text" name="q" value="{{ f_q }}" placeholder="Buscar por título ou descrição">
+  <select name="pessoa">
+    <option value="">Todas as pessoas</option>
+    {% for u in usuarios_atribuiveis %}
+    <option value="{{ u.pk }}" {% if f_pessoa == u.pk|stringformat:"s" %}selected{% endif %}>{{ u|primeiro_nome }}</option>
+    {% endfor %}
+  </select>
+  <select name="motivo">
+    <option value="">Concluídas e excluídas</option>
+    <option value="concluida" {% if f_motivo == "concluida" %}selected{% endif %}>Só concluídas</option>
+    <option value="excluida" {% if f_motivo == "excluida" %}selected{% endif %}>Só excluídas</option>
+  </select>
+  <label>De <input type="date" name="data_de" value="{{ f_data_de }}"></label>
+  <label>até <input type="date" name="data_ate" value="{{ f_data_ate }}"></label>
+  <button type="submit" class="ds-btn ds-btn--outline ds-btn--sm">Filtrar</button>
+  {% if f_pessoa or f_q or f_motivo or f_data_de or f_data_ate %}
+  <a href="{% url 'tarefas:historico' %}" class="ds-btn ds-btn--sm" style="border:none;">Limpar filtros</a>
+  {% endif %}
+</form>
+
+<div class="historico-lista">
+  {% for t in tarefas %}
+  <div class="historico-linha" hx-get="{% url 'tarefas:htmx_detalhe_tarefa' t.pk %}" hx-target="#modal-container">
+    <div>
+      <div class="historico-titulo">{{ t.titulo }}</div>
+      <div class="historico-meta">
+        <span class="historico-tag {{ t.motivo_arquivamento }}">{{ t.get_motivo_arquivamento_display }}</span>
+        <span>Criada por {{ t.criado_por|primeiro_nome }}</span>
+        <span>
+          Responsáveis:
+          {% for r in t.responsaveis.all %}{{ r|primeiro_nome }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </span>
+      </div>
+    </div>
+    <div class="historico-meta">
+      {{ t.arquivada_em|date:"d/m/Y H:i" }}
+    </div>
+  </div>
+  {% empty %}
+  <p style="color:var(--cinza-texto); font-size:.9rem;">Nenhuma tarefa no histórico ainda.</p>
+  {% endfor %}
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block js_extra %}
+<script>window.DELLA_CSRF = "{{ csrf_token }}";</script>
+<script src="{{ STATIC_URL }}js/tarefas-kanban.js"></script>
+{% endblock %}

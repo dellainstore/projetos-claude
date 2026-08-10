@@ -1,7 +1,8 @@
-"""Dias úteis e feriados (nacionais + bancários móveis + São Paulo capital).
+"""Dias úteis e feriados (nacionais + bancários móveis + São Paulo capital/estado).
 
 Usado para ajustar datas de pagamento: quando um pagamento cai em sábado, domingo
-ou feriado, antecipa para o dia útil anterior.
+ou feriado, antecipa para o dia útil anterior. Também usado no ponto: dia de
+feriado não cobra batida nem gera pendência de correção.
 """
 
 import calendar
@@ -25,6 +26,7 @@ def feriados(ano: int) -> frozenset[date]:
         date(ano, 11, 20),  # Consciência Negra (nacional desde 2024)
         date(ano, 12, 25),  # Natal
         date(ano, 1, 25),   # Aniversário de São Paulo (capital)
+        date(ano, 7, 9),    # Revolução Constitucionalista de 1932 (estadual SP)
     }
     moveis = {
         pascoa - timedelta(days=48),  # Carnaval (segunda)

@@ -6,15 +6,14 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.views.decorators.http import require_POST
 
-from apps.core.decorators import login_obrigatorio, papel_required
+from apps.core.decorators import perm_required
 
 
-@login_obrigatorio
-def view_historico(request: HttpRequest) -> HttpResponse:
+def _buscar_inclusoes(request: HttpRequest) -> tuple[list[dict], list[dict], list[str]]:
+    """Aplica os filtros da querystring e retorna (tabela, resumo, suppliers)."""
     from apps.produtos.services.db import get_conn
     from apps.produtos.services.business.suppliers import build_supplier_options
 
-    today = datetime.now()
     hoje = date.today()
 
     # Filtros via GET
@@ -135,18 +134,25 @@ def view_historico(request: HttpRequest) -> HttpResponse:
         key=lambda x: (x["fornecedor"], x["produto"], x["tamanho"]),
     )
 
+    filtros = {
+        "periodo": periodo,
+        "status": status_filtro,
+        "produto": produto_like,
+        "fornecedor": supplier_filtro,
+        "data_inicio": data_inicio_str,
+        "data_fim": data_fim_str,
+    }
+    return tabela, resumo, suppliers, filtros
+
+
+@perm_required("estoque.historico")
+def view_historico(request: HttpRequest) -> HttpResponse:
+    tabela, resumo, suppliers, filtros = _buscar_inclusoes(request)
     return render(request, "produtos/historico.html", {
         "tabela": tabela,
         "resumo": resumo,
         "suppliers": suppliers,
-        "filtros": {
-            "periodo": periodo,
-            "status": status_filtro,
-            "produto": produto_like,
-            "fornecedor": supplier_filtro,
-            "data_inicio": data_inicio_str,
-            "data_fim": data_fim_str,
-        },
+        "filtros": filtros,
         "status_opcoes": [("DONE", "Concluído"), ("PENDING", "Pendente"), ("ERROR", "Erro")],
         "periodos": [
             ("hoje", "Hoje"),
@@ -159,7 +165,75 @@ def view_historico(request: HttpRequest) -> HttpResponse:
     })
 
 
-@papel_required("superadmin", "gestor")
+@perm_required("estoque.historico")
+def view_historico_pdf(request: HttpRequest) -> HttpResponse:
+    """PDF do histórico de inclusões com os mesmos filtros da tela."""
+    import io
+
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    tabela, _resumo, _suppliers, filtros = _buscar_inclusoes(request)
+    agora = datetime.now()
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4), title="Histórico de Inclusões",
+        leftMargin=1.2 * cm, rightMargin=1.2 * cm, topMargin=1.2 * cm, bottomMargin=1.2 * cm,
+    )
+    styles = getSampleStyleSheet()
+    titulo_style = ParagraphStyle(
+        "TituloInclusoes", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER,
+    )
+    periodo_style = ParagraphStyle(
+        "PeriodoInclusoes", parent=styles["Normal"], fontSize=9, leading=12,
+        alignment=TA_CENTER, textColor=colors.HexColor("#666666"),
+    )
+
+    elementos = [
+        Paragraph("Histórico de Inclusões", titulo_style),
+        Paragraph(
+            f"Período: {filtros['periodo']} — {len(tabela)} registro(s) (emitido em {agora:%d/%m/%Y %H:%M})",
+            periodo_style,
+        ),
+        Spacer(1, 0.4 * cm),
+    ]
+
+    cabecalho = ["Data/Hora", "SKU", "Nome do Produto", "Cor", "Tamanho", "Quantidade", "Fornecedor"]
+    linhas = [cabecalho]
+    for r in tabela:
+        linhas.append([
+            r["data"], r["sku"], r["produto"], r["cor"], r["tamanho"], str(r["qty"]), r["fornecedor"],
+        ])
+
+    if len(linhas) == 1:
+        elementos.append(Paragraph("Nenhum registro para o período/filtro selecionado.", styles["Normal"]))
+    else:
+        tabela_pdf = Table(linhas, repeatRows=1)
+        tabela_pdf.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c9a96e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dddddd")),
+            ("ALIGN", (5, 0), (5, -1), "CENTER"),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#faf8f5")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elementos.append(tabela_pdf)
+
+    doc.build(elementos)
+    pdf = buffer.getvalue()
+    buffer.close()
+    resp = HttpResponse(pdf, content_type="application/pdf")
+    resp["Content-Disposition"] = f'attachment; filename="Historico de Inclusoes ({agora:%d-%m-%Y %Hh%M}).pdf"'
+    return resp
+
+
+@perm_required("estoque.excluir")
 @require_POST
 def view_excluir_move(request: HttpRequest, move_id: int) -> HttpResponse:
     from apps.produtos.services.db import get_conn

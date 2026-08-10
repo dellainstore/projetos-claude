@@ -41,8 +41,8 @@ def view_aprovacoes(request: HttpRequest) -> HttpResponse:
         CorrecaoPonto.objects.select_related("colaborador", "avaliado_por")
         .exclude(status="pendente").order_by("-avaliado_em")[:30]
     )
-    # Monta os campos: os já batidos ficam travados (alterar só na Jornada);
-    # o gestor preenche/ajusta apenas os que faltaram.
+    # Monta os campos: os já batidos vêm preenchidos como sugestão, mas
+    # continuam editáveis (o tipo gravado pode estar errado num dia parcial).
     for corr in pendentes:
         atuais = {
             b.tipo: timezone.localtime(b.momento).strftime("%H:%M")
@@ -51,10 +51,18 @@ def view_aprovacoes(request: HttpRequest) -> HttpResponse:
         slots = []
         for tipo, pref, label, attr in _SLOTS:
             prop = getattr(corr, attr)
-            valor = prop.strftime("%H:%M") if prop else atuais.get(tipo, "")
+            # A batida real (já existe) tem prioridade sobre a proposta do
+            # funcionário — a proposta só preenche o que realmente falta. Sem
+            # isso, um horário digitado de memória (ex.: entrada "09:12" quando
+            # a batida real do app foi "09:08") aparecia pré-preenchido no
+            # lugar do valor certo; se o gestor aprovasse sem notar, a batida
+            # real virava "ajuste manual" mesmo sem ter sido tocada.
+            valor = atuais.get(tipo) or (prop.strftime("%H:%M") if prop else "")
             slots.append({
                 "pref": pref, "label": label, "hora": valor,
-                "travado": tipo in atuais,
+                # "sugerido" = já existe batida desse tipo — só um indicativo visual,
+                # o campo continua editável (o tipo gravado pode estar errado).
+                "sugerido": tipo in atuais,
                 "almoco": tipo in ("saida_almoco", "volta_almoco"),
             })
         corr.slots = slots
@@ -80,6 +88,11 @@ def view_correcao_aprovar(request: HttpRequest, pk: int) -> HttpResponse:
     s = _parse_hora(request.POST.get("s", ""))
     if not e or not s:
         messages.error(request, "Informe ao menos a entrada e a saída.")
+        return redirect("rh:aprovacoes")
+
+    from apps.rh.services.correcoes import horarios_em_ordem
+    if not horarios_em_ordem(sem_almoco, e, sa, va, s):
+        messages.error(request, "Os horários devem estar em ordem: entrada, saída p/ almoço, volta e saída.")
         return redirect("rh:aprovacoes")
 
     corr.prop_entrada = e

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% load estoque_extras core_extras %}
+
+{% block titulo %}Saúde do Estoque{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <h1 class="ds-page-titulo">Saúde do Estoque</h1>
+    <p class="ds-page-subtitulo">Visão geral do estoque com base no histórico acumulado.</p>
+  </div>
+  <form method="post" action="{% url 'estoque:atualizar' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="estoque:saude">
+    <button type="submit" class="ds-btn ds-btn--outline ds-btn--sm">Atualizar dados</button>
+  </form>
+</div>
+
+<h2 style="font-size:1rem;font-weight:600;margin-bottom:.75rem;">O que está acontecendo</h2>
+<div class="ds-cards-grid">
+  <div class="ds-card">
+    <div class="ds-card-rotulo">Total SKUs</div>
+    <div class="ds-card-valor">{{ total_skus|br_int }}</div>
+  </div>
+  <div class="ds-card ds-card--dourado">
+    <div class="ds-card-rotulo">Estoque total a custo</div>
+    <div class="ds-card-valor">{{ estoque_total_custo|brl }}</div>
+  </div>
+  <div class="ds-card">
+    <div class="ds-card-rotulo">Estoque total a venda</div>
+    <div class="ds-card-valor">{{ estoque_total_venda|brl }}</div>
+  </div>
+  <div class="ds-card ds-card--verde">
+    <div class="ds-card-rotulo">Estoque positivo</div>
+    <div class="ds-card-valor">{{ estoque_positivo|br_int }}</div>
+  </div>
+</div>
+
+<h2 style="font-size:1rem;font-weight:600;margin:1.5rem 0 .75rem;">O que precisa de atenção</h2>
+<div class="ds-cards-grid">
+  <div class="ds-card">
+    <div class="ds-card-rotulo">Cobertura excessiva</div>
+    <div class="ds-card-valor">{{ qtd_cobertura_excessiva|br_int }}</div>
+  </div>
+  <div class="ds-card ds-card--vermelho">
+    <div class="ds-card-rotulo">Saldo negativo com venda</div>
+    <div class="ds-card-valor">{{ qtd_negativo_ativo|br_int }}</div>
+  </div>
+  <div class="ds-card ds-card--verde">
+    <div class="ds-card-rotulo">Estoque curto com giro</div>
+    <div class="ds-card-valor">{{ qtd_curto_bom_giro|br_int }}</div>
+  </div>
+</div>
+
+<h2 style="font-size:1rem;font-weight:600;margin:1.5rem 0 .75rem;">O que fazer agora</h2>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>SKU</th><th>Nome</th><th>Estoque</th><th>Vendido Total</th><th>Vendido 30d</th>
+        <th>Média/mês</th><th>Cobertura (dias)</th><th>Sem venda</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in linhas %}
+      <tr>
+        <td>{{ row.sku }}</td>
+        <td>{{ row.nome }}</td>
+        <td>{{ row.estoque_atual|br_float:0 }}</td>
+        <td>{{ row.vendido_total_periodo|br_float:0 }}</td>
+        <td>{{ row.vendido_30d|br_float:0 }}</td>
+        <td>{{ row.media_venda_mensal_historica|br_float:1 }}</td>
+        <td>{{ row.dias_cobertura_historico|br_float:1 }}</td>
+        <td>{{ row.faixa_dias_sem_venda }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="text-muted">Sem dados no momento.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.5rem;margin-top:1.5rem;">
+  <div>
+    <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.5rem;">Top estoque parado</h3>
+    <div class="ds-table-wrapper">
+      <table class="ds-table">
+        <thead><tr><th>SKU</th><th>Nome</th><th>Estoque</th><th>Valor (custo)</th><th>Sem venda</th></tr></thead>
+        <tbody>
+          {% for row in top_parado %}
+          <tr>
+            <td>{{ row.sku }}</td><td>{{ row.nome }}</td>
+            <td>{{ row.estoque_atual|br_float:0 }}</td>
+            <td>{{ row.valor_total_custo|brl }}</td>
+            <td>{{ row.faixa_dias_sem_venda }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted">Sem itens.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.5rem;">Top maior cobertura</h3>
+    <div class="ds-table-wrapper">
+      <table class="ds-table">
+        <thead><tr><th>SKU</th><th>Nome</th><th>Estoque</th><th>Cobertura (dias)</th><th>Vendido Total</th></tr></thead>
+        <tbody>
+          {% for row in top_cobertura %}
+          <tr>
+            <td>{{ row.sku }}</td><td>{{ row.nome }}</td>
+            <td>{{ row.estoque_atual|br_float:0 }}</td>
+            <td>{{ row.dias_cobertura_historico|br_float:1 }}</td>
+            <td>{{ row.vendido_total_periodo|br_float:0 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted">Sem itens.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

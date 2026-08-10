@@ -16,7 +16,13 @@ pra nao virar spam quando bots/scanners geram uma onda de 500:
   e paineis internos (/admin/, /painel/, /bling/);
 - descarta navegador nao reconhecido (curl, scripts e bots automatizados
   normalmente nao batem com nenhuma familia de browser conhecida em
-  apps.core_utils.erros.classificar_ua);
+  apps.core_utils.erros.classificar_ua), EXCETO em fonte 'checkout': quem
+  chegou a criar pedido e chamar o gateway passou por form validado e e
+  cliente real, mesmo com UA exotica (webview de app, navegador antigo);
+- recusa de cartao pelo emissor so vira alerta em volume (_LIMIAR_RECUSA_
+  CARTAO na janela): uma recusa isolada e rotina de varejo, varias seguidas
+  sao sintoma de credencial/gateway quebrado. Falha real do gateway chega
+  com status HTTP 4xx/5xx e alerta na primeira ocorrencia;
 - so dispara 1 e-mail a cada 30 minutos (debounce via cache), mesmo que
   varios eventos novos apareçam -- nunca inunda a caixa de entrada.
 
@@ -36,6 +42,7 @@ from apps.core_utils import monitoramento as monit
 _JANELA_MIN_PADRAO = 15   # olha os ultimos N minutos a cada execucao
 _DEBOUNCE_S = 60 * 30     # no maximo 1 e-mail a cada 30 min
 _CACHE_DEBOUNCE = 'alerta5xx:ultimo_envio'
+_LIMIAR_RECUSA_CARTAO = 4  # recusas na janela antes de virar alerta
 
 _PATHS_IGNORAR = re.compile(
     r'(?:\.php|wp-admin|wp-content|wp-login|phpmyadmin|adminer|xmlrpc|\.git|\.env'
@@ -54,9 +61,27 @@ def _e_evento_real(ev: dict) -> bool:
     endpoint = ev.get('endpoint') or ''
     if _PATHS_IGNORAR.search(caminho) or _PATHS_IGNORAR.search(endpoint):
         return False
-    if ev.get('navegador') == 'Outro':
+    # UA desconhecida so descarta trafego de navegacao. Um evento de checkout
+    # ja passou por form validado e criacao de pedido: e cliente real mesmo
+    # com UA que nao bate com nenhuma familia conhecida.
+    if ev.get('navegador') == 'Outro' and ev.get('fonte') != 'checkout':
         return False
     return True
+
+
+def _e_recusa_de_cartao(ev: dict) -> bool:
+    """Recusa do emissor (sem saldo, cartao bloqueado, antifraude do banco).
+
+    E rotina no varejo e nao indica site quebrado, entao so entra no alerta
+    em volume. Falha real do gateway (credencial invalida, PagBank fora do ar)
+    e registrada com o status HTTP da resposta, nao 200, e por isso nunca cai
+    aqui: alerta na primeira ocorrencia.
+    """
+    return (
+        ev.get('fonte') == 'checkout'
+        and ev.get('etapa') == 'pagamento'
+        and ev.get('status') == 200
+    )
 
 
 def _gerar_html_alerta(agrupados, total, minutos, agora):
@@ -126,6 +151,16 @@ class Command(BaseCommand):
 
         eventos = monit.ler_eventos(horas=minutos / 60)
         reais = [e for e in eventos if _e_evento_real(e)]
+
+        # Recusa de cartao isolada nao vira e-mail (fica so no painel). Em
+        # volume, entra no alerta junto com o resto.
+        recusas = [e for e in reais if _e_recusa_de_cartao(e)]
+        if recusas and len(recusas) < _LIMIAR_RECUSA_CARTAO:
+            reais = [e for e in reais if not _e_recusa_de_cartao(e)]
+            self.stdout.write(
+                f'{len(recusas)} recusa(s) de cartao abaixo do limiar '
+                f'({_LIMIAR_RECUSA_CARTAO} na janela): fora do alerta.'
+            )
 
         if not reais:
             self.stdout.write(f'Nenhum erro real de cliente nos ultimos {minutos} min.')

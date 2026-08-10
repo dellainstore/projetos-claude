@@ -45,6 +45,7 @@
 }
 .check-cor { accent-color: var(--dourado); width: 15px; height: 15px; cursor: pointer; }
 .loading-msg { color: var(--cinza-texto); font-size: 0.88rem; padding: 2rem 0; text-align: center; }
+.htmx-indicator { pointer-events: none; }
 
 /* Tabela de preços */
 .tabela-precos { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
@@ -54,13 +55,14 @@
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
   color: var(--cinza-texto); text-transform: uppercase;
 }
-.tabela-precos tbody tr { border-bottom: 1px solid var(--cinza-medio); }
-.tabela-precos tbody tr:last-child { border-bottom: none; }
+.tabela-precos tbody td { border-bottom: 1px solid var(--cinza-medio); }
+.tabela-precos tbody tr:last-child td { border-bottom: none; }
 .tabela-precos tbody tr:hover { background: var(--cinza-claro); }
 .tabela-precos td { padding: 0.85rem 1rem; vertical-align: middle; }
 .col-check { width: 44px; text-align: center !important; }
 .col-sku { width: 90px; text-align: center; color: var(--cinza-texto); font-size: 0.8rem; }
 .col-cor { text-align: left; }
+.cor-fornecedor { float: right; color: var(--cinza-texto); font-weight: 400; font-size: 0.76rem; }
 .col-preco { width: 120px; text-align: center; font-variant-numeric: tabular-nums; }
 .preco-vazio { color: var(--cinza-texto); }
 
@@ -135,26 +137,44 @@
         <input class="ds-input" type="text" name="varejo" id="inp-varejo" placeholder="0,00" autocomplete="off">
       </div>
       <div class="precos-campo-valor">
-        <label>Custo (R$)</label>
-        <input class="ds-input" type="text" name="custo" id="inp-custo" placeholder="0,00" autocomplete="off">
-      </div>
-      <div class="precos-campo-valor">
         <label>Atacado (R$)</label>
         <input class="ds-input" type="text" name="atacado" id="inp-atacado" placeholder="0,00" autocomplete="off">
       </div>
+      <div class="precos-campo-valor">
+        <label>Custo (R$)</label>
+        <input class="ds-input" type="text" name="custo" id="inp-custo" placeholder="0,00" autocomplete="off">
+      </div>
+
+      <div class="ds-form-group" id="div-fornecedor-custo" style="display:none;margin-top:0.5rem;">
+        <label class="ds-label" style="font-size:0.78rem;">
+          Fornecedor <span style="color:#dc2626;">*</span>
+        </label>
+        <select class="ds-select" name="fornecedor_custo" id="sel-fornecedor-custo">
+          <option value="">Selecione o fornecedor...</option>
+          {% for f in fornecedores %}
+          <option value="{{ f }}">{{ f }}</option>
+          {% endfor %}
+        </select>
+        <p id="erro-fornecedor" style="display:none;color:#dc2626;font-size:0.78rem;margin-top:0.25rem;">
+          Selecione o fornecedor para atualizar o custo.
+        </p>
+      </div>
 
       <button type="submit" class="ds-btn ds-btn--dourado" id="btn-aplicar"
-              style="width:100%;justify-content:center;margin-top:1rem;" disabled>
+              style="width:100%;justify-content:center;margin-top:1rem;">
         Aplicar aos selecionados
       </button>
       <p class="loading-msg" id="info-sel" style="padding:0.5rem 0;font-size:0.78rem;">
         Selecione um modelo e as cores desejadas
       </p>
+      <p id="erro-selecao" style="display:none;color:#dc2626;font-size:0.78rem;margin-top:0.25rem;">
+        Selecione um modelo e ao menos uma cor para continuar.
+      </p>
     </div>
 
     <!-- Tabela de cores -->
     <div>
-      <div id="acoes-tabela" style="display:none;" class="ds-table-wrapper" style="margin-bottom:0;border-bottom:none;border-radius:10px 10px 0 0;">
+      <div id="acoes-tabela" class="ds-table-wrapper" style="display:none;margin-bottom:0;border-bottom:none;border-radius:10px 10px 0 0;">
         <div class="tabela-precos-actions">
           <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" id="btn-sel-todos">Selecionar todos</button>
           <span style="font-size:0.8rem;color:var(--cinza-texto);" id="sel-count">0 cor(es) selecionada(s)</span>
@@ -221,6 +241,21 @@ const inputModelo   = document.getElementById('input-modelo');
 const modelosLista  = document.getElementById('modelos-lista');
 const modeloTag     = document.getElementById('modelo-selecionado-tag');
 const modeloNome    = document.getElementById('modelo-selecionado-nome');
+const inpCusto      = document.getElementById('inp-custo');
+const divFornecedor = document.getElementById('div-fornecedor-custo');
+const selFornecedor = document.getElementById('sel-fornecedor-custo');
+const erroFornecedor = document.getElementById('erro-fornecedor');
+const erroSelecao   = document.getElementById('erro-selecao');
+
+inpCusto.addEventListener('input', () => {
+  const temCusto = inpCusto.value.trim() !== '';
+  divFornecedor.style.display = temCusto ? 'block' : 'none';
+  if (!temCusto) erroFornecedor.style.display = 'none';
+});
+
+selFornecedor.addEventListener('change', () => {
+  if (selFornecedor.value) erroFornecedor.style.display = 'none';
+});
 
 function onModeloPrecoSelecionado(nome) {
   hiddenBase.value = nome;
@@ -276,10 +311,12 @@ function atualizarBotao() {
   const n = document.querySelectorAll('.check-cor:checked').length;
   const temModelo = hiddenBase.value !== '';
   selCount.textContent = `${n} cor(es) selecionada(s)`;
-  btnAplicar.disabled = !(temModelo && n > 0);
   infoSel.textContent = n > 0
     ? `${n} cor(es) — preencha os valores e clique em Aplicar`
     : 'Selecione as cores que deseja ajustar';
+  if (temModelo && n > 0) {
+    erroSelecao.style.display = 'none';
+  }
 }
 
 let todosSel = false;
@@ -293,6 +330,13 @@ btnSelTodos.addEventListener('click', () => {
 formPrecos.addEventListener('submit', (e) => {
   if (!hiddenBase.value || !document.querySelectorAll('.check-cor:checked').length) {
     e.preventDefault();
+    erroSelecao.style.display = 'block';
+    return;
+  }
+  if (inpCusto.value.trim() && !selFornecedor.value) {
+    e.preventDefault();
+    erroFornecedor.style.display = 'block';
+    selFornecedor.focus();
     return;
   }
   btnAplicar.disabled = true;

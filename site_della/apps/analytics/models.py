@@ -16,6 +16,7 @@ TIPOS_EVENTO = [
     ('wishlist_adicionado',   'Wishlist Adicionado'),
     ('cupom_aplicado',        'Cupom Aplicado'),
     ('cupom_invalido',        'Cupom Invalido'),
+    ('link_bio_clicado',      'Link da Bio Clicado'),
 ]
 
 TIPOS_VALIDOS = {t[0] for t in TIPOS_EVENTO}
@@ -38,6 +39,18 @@ class SessaoAnalytics(models.Model):
     iniciada_em    = models.DateTimeField(auto_now_add=True, db_index=True)
     ultima_acao_em = models.DateTimeField(auto_now=True, db_index=True)
     total_paginas  = models.PositiveIntegerField(default=0)
+    # Deteccao de bot que falsifica User-Agent de navegador (o filtro de UA em
+    # services.eh_bot so pega bots que se identificam). is_bot e marcado por
+    # comportamento: volume anormal de paginas ou rajada de sessoes do mesmo IP.
+    # O painel (della_sistemas) filtra is_bot=False. Flag, nao apaga: reversivel.
+    is_bot         = models.BooleanField(default=False, db_index=True)
+    # Hash salgado do IP (nunca o IP em texto). Usado so para detectar rajadas
+    # ("mesmo IP criou N sessoes no mesmo minuto") -- pseudonimo, fim de seguranca.
+    ip_hash        = models.CharField(max_length=64, blank=True, db_index=True)
+    # Cidade/UF aproximadas resolvidas do IP via GeoLite2 (MaxMind) no momento
+    # da criacao da sessao, antes do hash. O IP em si nunca e persistido.
+    cidade         = models.CharField(max_length=100, blank=True)
+    estado         = models.CharField(max_length=2, blank=True)
 
     class Meta:
         verbose_name = 'Sessao Analytics'
@@ -45,6 +58,7 @@ class SessaoAnalytics(models.Model):
         indexes = [
             models.Index(fields=['ultima_acao_em']),
             models.Index(fields=['iniciada_em']),
+            models.Index(fields=['ip_hash', 'iniciada_em']),
         ]
 
     def __str__(self):

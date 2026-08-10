@@ -23,6 +23,24 @@ def _vendedoras_qs():
     ).order_by("nome")
 
 
+def _dono_conflitante(pedido: PedidoBling, colaborador: Colaborador) -> str | None:
+    """Nome de OUTRA vendedora que já tem esse pedido na comissão (vendedor natural
+    do Bling ou override manual), se houver. Um pedido não pode contar em dobro."""
+    if pedido.vendedor_id:
+        outra = _vendedoras_qs().exclude(id=colaborador.id).filter(
+            bling_vendedor_id=pedido.vendedor_id
+        ).first()
+        if outra:
+            return outra.nome
+    outra_ov = (
+        ComissaoPedido.objects.filter(pedido=pedido)
+        .exclude(colaborador=colaborador)
+        .select_related("colaborador")
+        .first()
+    )
+    return outra_ov.colaborador.nome if outra_ov else None
+
+
 def _periodo_qs(periodo) -> str:
     return urlencode({
         "filtro": periodo.filtro,
@@ -31,7 +49,7 @@ def _periodo_qs(periodo) -> str:
     })
 
 
-@perm_required("rh.ver")
+@perm_required("rh.gerir")
 def view_comissao(request: HttpRequest) -> HttpResponse:
     vendedoras = _vendedoras_qs()
     selecionadas, _ = parse_colaboradores(request, vendedoras)
@@ -40,10 +58,12 @@ def view_comissao(request: HttpRequest) -> HttpResponse:
     secoes = []
     for v in selecionadas:
         d = linhas_comissao_periodo(v, periodo.meses)
+        total_base = sum((l["base"] for l in d["linhas"] if l["valida"]), Decimal("0.00"))
         secoes.append({
             "colaborador": v,
             "linhas": d["linhas"],
             "total": d["total"],
+            "total_base": total_base,
             "qtd_nao_pagos": sum(1 for l in d["linhas"] if not l["pago"]),
         })
 
@@ -100,6 +120,7 @@ def view_comissao_salvar(request: HttpRequest, colaborador_id: int, pedido_id: i
         "data": pedido.data_pedido,
         "numero": pedido.numero or pedido.bling_id,
         "cliente": pedido.cliente_nome,
+        "situacao": pedido.situacao_nome,
         "base": obj.base_efetiva(),
         "percentual": obj.percentual_efetivo(),
         "valor": obj.valor_comissao(),
@@ -126,6 +147,12 @@ def view_comissao_incluir(request: HttpRequest) -> HttpResponse:
 
     if pedido is None:
         messages.error(request, f"Pedido nº {numero} não encontrado na base sincronizada.")
+    elif (conflito := _dono_conflitante(pedido, colaborador)):
+        messages.error(
+            request,
+            f"Pedido nº {numero} já está na comissão de {conflito} — "
+            "um mesmo pedido não pode contar pra duas vendedoras.",
+        )
     else:
         obj, created = ComissaoPedido.objects.get_or_create(
             colaborador=colaborador, pedido=pedido,
@@ -143,16 +170,18 @@ def view_comissao_incluir(request: HttpRequest) -> HttpResponse:
     return redirect(destino)
 
 
-@perm_required("rh.ver")
+@perm_required("rh.gerir")
 def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse:
     """Gera o PDF de comissão de uma vendedora no período (para envio/conferência)."""
     from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 
     from apps.metas.services.relatorio import MESES_PT
+    from apps.rh.services.utils import nome_exibicao
 
     colaborador = get_object_or_404(Colaborador, pk=colaborador_id)
     periodo = parse_periodo(request)
@@ -170,9 +199,21 @@ def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, title=f"Comissão {primeiro_nome}")
     styles = getSampleStyleSheet()
+    titulo_style = ParagraphStyle(
+        "TituloComissao", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER,
+    )
+    nome_style = ParagraphStyle(
+        "NomeComissao", parent=styles["Normal"], fontSize=12, leading=15,
+        alignment=TA_CENTER, fontName="Helvetica-Bold",
+    )
+    referencia_style = ParagraphStyle(
+        "ReferenciaComissao", parent=styles["Normal"], fontSize=9, leading=12,
+        alignment=TA_CENTER, textColor=colors.HexColor("#666666"),
+    )
     elementos = [
-        Paragraph(f"Comissão — {colaborador.nome}", styles["Title"]),
-        Paragraph(f"Referência: {ref}", styles["Normal"]),
+        Paragraph("Comissão", titulo_style),
+        Paragraph(nome_exibicao(colaborador.nome), nome_style),
+        Paragraph(f"Referência: {ref}", referencia_style),
         Spacer(1, 0.5 * cm),
     ]
 
@@ -181,9 +222,11 @@ def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse
 
     cabecalho = ["Data", "Nº Pedido", "Cliente", "Valor Pedido", "%", "Comissão", "Pago?"]
     linhas_tab = [cabecalho]
+    total_base = Decimal("0.00")
     for l in dados["linhas"]:
         if not l["valida"]:
             continue
+        total_base += l["base"]
         if l["comissao_parcelada"]:
             num_str = f'{l["numero"]} P{l["parcela_num"]}/{l["parcela_total"]}'
         else:
@@ -203,7 +246,7 @@ def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse
             _brl(l["valor"]),
             pago_str,
         ])
-    linhas_tab.append(["", "", "", "", "", _brl(dados["total"]), ""])
+    linhas_tab.append(["", "", "", _brl(total_base), "", _brl(dados["total"]), ""])
 
     # Colorir células "Parcial" em laranja e "NÃO" em vermelho
     style_cmds = [
@@ -231,7 +274,7 @@ def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse
 
     pdf = buffer.getvalue()
     buffer.close()
-    filename = f"Comissão {primeiro_nome} - {ref_fname}.pdf"
+    filename = f"Comissão {primeiro_nome} ({ref_fname}).pdf"
     resp = HttpResponse(pdf, content_type="application/pdf")
     resp["Content-Disposition"] = f'attachment; filename="{filename}"'
     return resp

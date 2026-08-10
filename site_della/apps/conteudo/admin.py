@@ -595,7 +595,7 @@ class TarjaFraseAdmin(DellaAdminMixin, admin.ModelAdmin):
 
 @admin.register(LinkBio)
 class LinkBioAdmin(DellaAdminMixin, admin.ModelAdmin):
-    list_display  = ('ordem', 'titulo', 'icone', 'link_clicavel', 'ativo', 'acoes_linha')
+    list_display  = ('ordem', 'titulo', 'icone', 'link_clicavel', 'total_cliques', 'ativo', 'acoes_linha')
     list_editable = ('ordem', 'ativo')
     list_display_links = ('titulo',)
     ordering = ('ordem', 'id')
@@ -615,6 +615,13 @@ class LinkBioAdmin(DellaAdminMixin, admin.ModelAdmin):
     def link_clicavel(self, obj):
         return format_html('<a href="{}" target="_blank" rel="noopener">{}</a>', obj.url, obj.url)
     link_clicavel.short_description = 'Link'
+
+    def total_cliques(self, obj):
+        from apps.analytics.models import EventoAnalytics
+        return EventoAnalytics.objects.filter(
+            tipo='link_bio_clicado', metodo=str(obj.pk), sessao__is_bot=False,
+        ).count()
+    total_cliques.short_description = 'Cliques'
 
     def acoes_linha(self, obj):
         edit_url   = reverse('admin:conteudo_linkbio_change', args=[obj.pk])

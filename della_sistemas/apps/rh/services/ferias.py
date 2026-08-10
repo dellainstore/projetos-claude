@@ -9,6 +9,31 @@ from datetime import date, timedelta
 from apps.rh.models import PeriodoAquisitivo
 
 
+def data_fim_gozo(data_inicio: date, dias: int) -> date:
+    """Último dia de um período de férias que começa em `data_inicio` e dura
+    `dias` dias corridos."""
+    return data_inicio + timedelta(days=dias - 1)
+
+
+def data_retorno_gozo(colaborador, data_fim: date) -> date:
+    """Primeiro dia de volta ao trabalho após o fim das férias: sempre o dia
+    útil seguinte. Domingo e feriado são sempre pulados; sábado só conta como
+    dia útil se a escala do colaborador determinar que ele trabalha naquele
+    sábado (variante B) — sem escala vinculada, sábado é sempre pulado."""
+    from apps.rh.services.calendario import feriados
+    from apps.rh.services.escala import horas_esperadas_no_dia
+
+    d = data_fim + timedelta(days=1)
+    while True:
+        if d.weekday() == 6 or d in feriados(d.year):
+            d += timedelta(days=1)
+            continue
+        if d.weekday() == 5 and not horas_esperadas_no_dia(colaborador, d):
+            d += timedelta(days=1)
+            continue
+        return d
+
+
 def _add_meses(d: date, meses: int) -> date:
     """Soma `meses` a uma data, ajustando o dia ao último dia do mês quando necessário."""
     total = d.month - 1 + meses

@@ -3,42 +3,20 @@ import time
 from typing import Any
 
 from apps.produtos.services.bling.products import atualizar_produto_patch, criar_produto, get_produto
-from apps.produtos.services.bling.api import bling_request_raw
 from apps.produtos.services.db import get_conn
 from apps.produtos.services.business.pricing import extract_prices
-from apps.produtos.services.business.suppliers import normalize_supplier_name, get_or_create_bling_supplier
-from apps.produtos.services.precos import atualizar_custo_bling
+from apps.produtos.services.business.suppliers import normalize_supplier_name
+from apps.produtos.services.precos import _atualizar_custo_bling_detalhado
 
 
-def _vincular_custo_bling(bling_id: int, price_custo: float, supplier_name: str, sku: str = "") -> bool:
+def _vincular_custo_bling(bling_id: int, price_custo: float, supplier_name: str) -> bool:
     """
-    Vincula fornecedor e define precoCusto no Bling.
-    Busca/cria o contato do fornecedor e usa POST /produtos/fornecedores.
-    Fallback para atualizar_custo_bling se o GET já retornar um registro existente.
+    Vincula fornecedor e define precoCusto no Bling — reaproveita a mesma
+    lógica da tela de Preços (garante custo E fornecedor corretos, não só o
+    custo contra um vínculo vazio que o Bling cria sozinho).
     """
-    # Tenta PUT no registro existente primeiro
-    if atualizar_custo_bling(bling_id, price_custo):
-        return True
-
-    # Não há registro de fornecedor — cria com o contato correto
-    contato_id = get_or_create_bling_supplier(supplier_name) if supplier_name else None
-    if not contato_id:
-        return False
-
-    payload: dict = {
-        "produto":    {"id": bling_id},
-        "fornecedor": {"id": contato_id},
-        "codigo":     sku or "",
-        "descricao":  "",
-        "precoCusto": float(price_custo),
-        "precoCompra": 0.0,
-        "padrao":     True,
-    }
-    try:
-        r = bling_request_raw("POST", "/produtos/fornecedores", json=payload, timeout=10)
-        return r.status_code in (200, 201, 204)
-    except Exception:
-        return False
+    ok, _motivo = _atualizar_custo_bling_detalhado(bling_id, price_custo, supplier_name=supplier_name or "NAO INFORMADA")
+    return ok
 
 
 def _extract_sku_from_product(product_data: dict[str, Any]) -> str | None:
@@ -313,7 +291,7 @@ def processar_aprovacao(
 
     result = processar_requests_aprovados(limit=20)
     ok = result.get("created_products", 0) + result.get("skipped_existing", 0)
-    return {"ok": ok, "error": len(result.get("errors", []))}
+    return {"ok": ok, "error": len(result.get("errors", [])), "move_ids": result.get("move_ids", [])}
 
 
 def processar_requests_aprovados(limit: int = 10) -> dict[str, Any]:
@@ -326,6 +304,7 @@ def processar_requests_aprovados(limit: int = 10) -> dict[str, Any]:
         "created_stock_moves": 0,
         "skipped_existing": 0,
         "errors": [],
+        "move_ids": [],
     }
 
     rows = cur.execute(
@@ -417,7 +396,7 @@ def processar_requests_aprovados(limit: int = 10) -> dict[str, Any]:
                     # Custo: tenta registro existente, senão cria vínculo com fornecedor
                     price_custo = template_prices.get("price_custo")
                     if price_custo:
-                        _vincular_custo_bling(int(new_id), float(price_custo), supplier_name, sku or "")
+                        _vincular_custo_bling(int(new_id), float(price_custo), supplier_name)
                     bling_product_id = int(new_id)
                     created_product_data = get_produto(int(new_id)).get("data", {}) or {}
                     sku = _extract_sku_from_product(created_product_data)
@@ -462,6 +441,7 @@ def processar_requests_aprovados(limit: int = 10) -> dict[str, Any]:
                 )
                 move_count += 1
                 stats["created_stock_moves"] += 1
+                stats["move_ids"].append(cur.lastrowid)
 
             now = int(time.time())
             cur.execute(

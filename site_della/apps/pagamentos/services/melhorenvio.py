@@ -10,6 +10,8 @@ import requests
 from decimal import Decimal
 from django.conf import settings
 
+from apps.core_utils.erros import registrar_erro_integracao
+
 
 logger = logging.getLogger(__name__)
 
@@ -114,13 +116,25 @@ def calcular(cep_destino: str, itens: list) -> list:
                     resp = requests.post(url, json=payload, headers=headers, timeout=10)
                 except Exception as exc2:
                     logger.error('Melhor Envio: exceção na tentativa com CEP raiz — %s', exc2)
+                    registrar_erro_integracao(
+                        'melhorenvio', f'Exceção na tentativa com CEP raiz: {exc2}',
+                        status=502, endpoint='calcular_frete',
+                    )
                     return FALLBACK_OPCOES
         if not resp.ok:
             logger.error('Melhor Envio: HTTP %s — resposta: %s', resp.status_code, resp.text[:500])
+            registrar_erro_integracao(
+                'melhorenvio', f'HTTP {resp.status_code} no cálculo de frete',
+                status=resp.status_code, endpoint='calcular_frete',
+            )
             return FALLBACK_OPCOES
         dados = resp.json()
     except Exception as exc:
         logger.error('Melhor Envio: exceção no cálculo — %s', exc)
+        registrar_erro_integracao(
+            'melhorenvio', f'Exceção no cálculo de frete: {exc}',
+            status=502, endpoint='calcular_frete',
+        )
         return FALLBACK_OPCOES
 
     opcoes = []

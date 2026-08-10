@@ -24,6 +24,8 @@ urlpatterns = [
     path("colaboradores/novo/", v_colab.view_colaborador_form, name="colaborador_novo"),
     path("colaboradores/<int:pk>/editar/", v_colab.view_colaborador_form, name="colaborador_editar"),
     path("colaboradores/<int:pk>/toggle/", v_colab.view_colaborador_toggle, name="colaborador_toggle"),
+    path("colaboradores/<int:pk>/vt-vigencia/nova/", v_colab.view_vt_vigencia_nova, name="vt_vigencia_nova"),
+    path("colaboradores/vt-vigencia/<int:pk>/excluir/", v_colab.view_vt_vigencia_excluir, name="vt_vigencia_excluir"),
 
     # Escalas
     path("escalas/", v_escalas.view_escalas, name="escalas"),
@@ -53,10 +55,13 @@ urlpatterns = [
     path("ferias/", v_ferias.view_ferias, name="ferias"),
     path("ferias/pdf/", v_ferias.view_ferias_pdf, name="ferias_pdf"),
     path("ferias/periodo/novo/", v_ferias.view_periodo_novo, name="periodo_novo"),
+    path("ferias/periodo/<int:pk>/salvar/", v_ferias.view_periodo_salvar, name="periodo_salvar"),
     path("ferias/periodo/<int:pk>/excluir/", v_ferias.view_periodo_excluir, name="periodo_excluir"),
     path("ferias/periodo/<int:pk>/abono/", v_ferias.view_abono_salvar, name="abono_salvar"),
     path("ferias/gozo/novo/", v_ferias.view_gozo_novo, name="gozo_novo"),
+    path("ferias/gozo/<int:pk>/salvar/", v_ferias.view_gozo_salvar, name="gozo_salvar"),
     path("ferias/gozo/<int:pk>/excluir/", v_ferias.view_gozo_excluir, name="gozo_excluir"),
+    path("ferias/htmx/preview-gozo/", v_ferias.htmx_preview_gozo, name="ferias_preview_gozo"),
 
     # Afastamentos (faltas, atestados, folgas — férias ficam no módulo Férias)
     path("afastamentos/", v_afast.view_afastamentos, name="afastamentos"),
@@ -88,6 +93,7 @@ urlpatterns = [
     path("ponto/aprovacoes/<int:pk>/excluir/", v_aprov.view_correcao_excluir, name="correcao_excluir"),
 
     # Controle de Ponto — Jornada (gestor)
+    path("ponto/minha-jornada/", v_jornada.view_minha_jornada, name="minha_jornada"),
     path("ponto/jornada/", v_jornada.view_jornada, name="jornada"),
     path("ponto/jornada/salvar/", v_jornada.view_jornada_salvar, name="jornada_salvar"),
     path("ponto/jornada/dia/excluir/", v_jornada.view_dia_excluir, name="dia_excluir"),

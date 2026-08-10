@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block titulo %}Dashboard Faturamento | D'ELLA Sistemas{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block css_extra %}
+<style>
+  .fin-titulo { font-family:'Playfair Display',Georgia,serif; font-size:1.4rem; font-weight:400; color:var(--preto); margin-bottom:1.1rem; }
+
+  .fin-filtro { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; margin-bottom:1.25rem; background:var(--branco); border:1px solid var(--cinza-medio); border-radius:10px; padding:.75rem 1rem; }
+  .fin-dropdown { position:relative; }
+  .fin-dropdown-btn { display:inline-flex; align-items:center; gap:.4rem; font-size:.85rem; color:var(--preto); background:var(--cinza-claro); border:1px solid var(--cinza-medio); border-radius:6px; padding:.4rem .75rem; cursor:pointer; font-family:inherit; max-width:260px; }
+  .fin-dropdown-btn span.fin-dropdown-txt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .fin-dropdown-btn:hover { background:var(--dourado-claro); }
+  .fin-dropdown-arrow { font-size:.65rem; color:var(--cinza-texto); flex-shrink:0; }
+  .fin-dropdown-panel {
+    display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:30;
+    background:var(--branco); border:1px solid var(--cinza-medio); border-radius:8px;
+    box-shadow:0 10px 28px rgba(0,0,0,0.14); padding:.5rem; min-width:170px;
+    max-height:260px; overflow-y:auto; flex-direction:column; gap:.2rem;
+  }
+  .fin-dropdown-panel.aberto { display:flex; }
+  .fin-checkbox { display:flex; align-items:center; gap:.45rem; font-size:.85rem; color:var(--preto); border-radius:6px; padding:.35rem .5rem; cursor:pointer; user-select:none; white-space:nowrap; }
+  .fin-checkbox:hover { background:var(--cinza-claro); }
+  .fin-checkbox input { accent-color:var(--dourado); cursor:pointer; }
+
+  .fin-periodo-row { margin-bottom:1rem; }
+  .fin-periodo-label { font-size:.95rem; font-weight:600; color:var(--preto); }
+
+  #fin-dashboard-conteudo { min-width:0; max-width:100%; }
+  .fin-cards-grid { display:grid; grid-template-columns:1.2fr .7fr 1.2fr 1.2fr; align-items:stretch; gap:1rem; margin-bottom:1.5rem; min-width:0; }
+  .fin-card { background:var(--branco); border:1px solid var(--cinza-medio); border-radius:10px; padding:1.1rem 1.3rem; transition:var(--transicao); min-width:0; display:flex; flex-direction:column; }
+  .fin-card:hover { box-shadow:0 4px 20px rgba(0,0,0,0.07); transform:translateY(-1px); }
+  .fin-card-rotulo { font-size:.72rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--cinza-texto); margin-bottom:.6rem; }
+  .fin-card-corpo { display:flex; align-items:flex-start; gap:.7rem; min-width:0; flex:1; }
+  .fin-card-icone { font-size:2.2rem; line-height:1; flex-shrink:0; }
+  .fin-card-valor { font-family:'Playfair Display',serif; font-size:1.7rem; font-weight:400; color:var(--preto); line-height:1.2; min-width:0; white-space:normal; overflow-wrap:break-word; word-break:break-word; align-self:center; }
+  .fin-card-valor--nome { font-size:1.1rem; line-height:1.35; }
+  .fin-card-apoio { font-size:.78rem; color:var(--cinza-texto); margin-top:.3rem; white-space:normal; overflow-wrap:break-word; }
+
+  .fin-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:1.5rem; min-width:0; }
+  .fin-bloco { background:var(--branco); border:1px solid var(--cinza-medio); border-radius:10px; padding:1.1rem 1.25rem; min-width:0; }
+  .fin-bloco-titulo { font-size:.78rem; font-weight:600; color:var(--cinza-texto); margin-bottom:.75rem; text-transform:uppercase; letter-spacing:.08em; }
+  .fin-ranking-scroll { max-height:420px; overflow-y:auto; padding-right:1rem; margin-right:-.25rem; }
+  .fin-ranking-scroll::-webkit-scrollbar { width:7px; }
+  .fin-ranking-scroll::-webkit-scrollbar-track { background:transparent; }
+  .fin-ranking-scroll::-webkit-scrollbar-thumb { background:var(--cinza-medio); border-radius:4px; }
+  .fin-ranking-row { display:flex; justify-content:space-between; align-items:flex-start; gap:.75rem; padding:.5rem .25rem; border-bottom:1px solid var(--cinza-claro); font-size:.85rem; }
+  .fin-ranking-row:last-child { border-bottom:none; }
+  .fin-ranking-pos { color:var(--cinza-texto); font-size:.75rem; width:1.3rem; flex-shrink:0; padding-top:.1rem; }
+  .fin-ranking-nome { color:var(--preto); white-space:normal; overflow-wrap:break-word; word-break:break-word; flex:1; min-width:0; line-height:1.35; }
+  .fin-ranking-valor { color:var(--dourado); font-weight:600; white-space:nowrap; flex-shrink:0; padding-top:.1rem; }
+  .fin-ranking-vazio { font-size:.82rem; color:var(--cinza-texto); padding:.5rem 0; }
+
+  .fin-charts-grid { display:grid; grid-template-columns:2fr 1fr; gap:1.25rem; margin-bottom:1.5rem; min-width:0; }
+  .fin-chart-card { background:var(--branco); border:1px solid var(--cinza-medio); border-radius:10px; padding:1.1rem 1.25rem; min-width:0; }
+  .fin-chart-titulo { font-size:.78rem; font-weight:600; color:var(--cinza-texto); margin-bottom:.75rem; text-transform:uppercase; letter-spacing:.08em; }
+  .fin-chart-canvas-wrap { position:relative; height:300px; width:100%; min-width:0; overflow:hidden; }
+  .fin-chart-canvas-wrap canvas { max-width:100%; }
+
+  @media (max-width:1100px) {
+    .fin-cards-grid { grid-template-columns:repeat(2,1fr); }
+  }
+  @media (max-width:900px) {
+    .fin-grid-2 { grid-template-columns:1fr; }
+    .fin-charts-grid { grid-template-columns:1fr; }
+  }
+  @media (max-width:640px) {
+    .fin-titulo { font-size:1.15rem; }
+    .fin-cards-grid { grid-template-columns:repeat(2,1fr); gap:.6rem; }
+    .fin-card { padding:.8rem .9rem; }
+    .fin-card-icone { font-size:1.6rem; }
+    .fin-card-valor { font-size:1.15rem; }
+    .fin-card-valor--nome { font-size:.92rem; }
+    .fin-filtro { padding:.6rem .7rem; gap:.5rem; }
+    .fin-dropdown-btn { max-width:150px; padding:.35rem .6rem; }
+    .fin-chart-canvas-wrap { height:230px; }
+  }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<h1 class="fin-titulo">Dashboard Faturamento</h1>
+
+<div id="fin-dashboard-conteudo">
+  {% include "financeiro/_dashboard_conteudo.html" %}
+</div>
+{% endblock %}
+
+{% block js_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var DOURADO = '#c9a96e';
+  var DOURADO_SEL = '#8a7147';
+  var GRID_CLR = '#f0ece4';
+  var TEXT_CLR = '#666666';
+  var PRETO = '#1a1a1a';
+  var PALETA_LOJA = ['#c9a96e', '#6366f1', '#14b8a6', '#d94f4f', '#ec4899', '#6b6b6b'];
+
+  function brl(v) {
+    return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  window._finFiltrarPorClique = function (mes) {
+    var dados = window._finDados || {};
+    var params = new URLSearchParams();
+    (dados.anosSelecionados || []).forEach(function (a) { params.append('anos', a); });
+    var soEsseMes = (dados.mesesSelecionados || []).length === 1 && dados.mesesSelecionados[0] === mes;
+    if (!soEsseMes) { params.append('meses', mes); }
+    var url = "{% url 'financeiro:htmx_dashboard_faturamento' %}?" + params.toString();
+    htmx.ajax('GET', url, { target: '#fin-dashboard-conteudo', swap: 'innerHTML' });
+  };
+
+  window._finIniciar = function (dados) {
+    if (!dados) return;
+    window._finDados = dados;
+
+    if (window._finChartMensal) { window._finChartMensal.destroy(); window._finChartMensal = null; }
+    if (window._finChartLoja) { window._finChartLoja.destroy(); window._finChartLoja = null; }
+
+    var ctxM = document.getElementById('fin-chart-mensal');
+    if (ctxM && dados.labels && dados.labels.length) {
+      var mesesSel = dados.mesesSelecionados || [];
+      var datasets = [{
+        label: String(dados.anoGrafico), data: dados.valores,
+        backgroundColor: dados.mesesDisponiveis.map(function (m) {
+          return mesesSel.indexOf(m) !== -1 ? DOURADO_SEL : DOURADO;
+        }),
+        hoverBackgroundColor: '#b8924a', borderRadius: 5, borderSkipped: false, order: 2
+      }];
+      if (dados.valoresAnoAnterior) {
+        datasets.push({
+          label: String(dados.anoAnterior), type: 'line', data: dados.valoresAnoAnterior,
+          borderColor: '#9b9b9b', backgroundColor: '#9b9b9b', borderWidth: 2, borderDash: [5, 4],
+          pointRadius: 3, pointBackgroundColor: '#9b9b9b', tension: 0.3, order: 1
+        });
+      }
+      window._finChartMensal = new Chart(ctxM, {
+        type: 'bar',
+        data: { labels: dados.labels, datasets: datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: !!dados.valoresAnoAnterior, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: TEXT_CLR, usePointStyle: true } },
+            tooltip: {
+              backgroundColor: PRETO, titleColor: '#fff', bodyColor: '#fff', padding: 10, cornerRadius: 6,
+              callbacks: { label: function (c) { return c.dataset.label + ': ' + brl(c.parsed.y); } }
+            }
+          },
+          scales: {
+            y: { beginAtZero: true, grid: { color: GRID_CLR }, ticks: { color: TEXT_CLR, font: { size: 11 } } },
+            x: { grid: { display: false }, ticks: { color: TEXT_CLR, font: { size: 11 } } }
+          },
+          onClick: function (evt, els) {
+            var bar = (els || []).find(function (x) { return x.datasetIndex === 0; });
+            if (bar) window._finFiltrarPorClique(dados.mesesDisponiveis[bar.index]);
+          },
+          onHover: function (evt, els) {
+            ctxM.style.cursor = (els || []).some(function (x) { return x.datasetIndex === 0; }) ? 'pointer' : 'default';
+          }
+        }
+      });
+    }
+
+    var ctxL = document.getElementById('fin-chart-loja');
+    if (ctxL && dados.lojaLabels && dados.lojaLabels.length) {
+      window._finChartLoja = new Chart(ctxL, {
+        type: 'pie',
+        data: {
+          labels: dados.lojaLabels,
+          datasets: [{ data: dados.lojaValores, backgroundColor: PALETA_LOJA, borderColor: '#fff', borderWidth: 2 }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: TEXT_CLR, usePointStyle: true } },
+            tooltip: {
+              backgroundColor: PRETO, titleColor: '#fff', bodyColor: '#fff', padding: 10, cornerRadius: 6,
+              callbacks: { label: function (c) { return c.label + ': ' + brl(c.parsed); } }
+            }
+          }
+        }
+      });
+    }
+  };
+
+  window._finDropdownAberto = null;
+
+  window._finToggleDropdown = function (qual) {
+    var abrindo = window._finDropdownAberto !== qual;
+    document.querySelectorAll('.fin-dropdown-panel').forEach(function (p) { p.classList.remove('aberto'); });
+    window._finDropdownAberto = abrindo ? qual : null;
+    if (abrindo) {
+      var painel = document.getElementById('fin-dropdown-panel-' + qual);
+      if (painel) painel.classList.add('aberto');
+    }
+  };
+
+  document.addEventListener('click', function (evt) {
+    if (!evt.target.closest('.fin-dropdown')) {
+      document.querySelectorAll('.fin-dropdown-panel').forEach(function (p) { p.classList.remove('aberto'); });
+      window._finDropdownAberto = null;
+    }
+
+    if (!evt.target.closest('.fin-chart-canvas-wrap')) {
+      [window._finChartMensal, window._finChartLoja].forEach(function (chart) {
+        if (chart) { chart.tooltip.setActiveElements([], { x: 0, y: 0 }); chart.update(); }
+      });
+    }
+  });
+
+  document.addEventListener('htmx:afterSettle', function () {
+    var el = document.getElementById('fin-dados');
+    if (!el) return;
+    try { window._finIniciar(JSON.parse(el.textContent)); } catch (ex) {}
+    if (window._finDropdownAberto) {
+      var painel = document.getElementById('fin-dropdown-panel-' + window._finDropdownAberto);
+      if (painel) painel.classList.add('aberto');
+    }
+  });
+
+  window._finIniciar({{ grafico_json|safe }});
+})();
+</script>
+{% endblock %}

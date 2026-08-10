@@ -166,3 +166,61 @@ def rebuild_variants_from_products() -> Dict[str, Any]:
         "no_sku": no_sku,
         "dedup_wins": dedup_wins,
     }
+
+
+def sync_historico_nomes() -> Dict[str, Any]:
+    """
+    Corrige base_name/color_key/size_key em stock_moves (Histórico de Inclusões)
+    quando o produto foi renomeado no Bling depois do lançamento.
+
+    stock_moves grava um retrato do nome no momento da inclusão; variants_cache
+    reflete sempre o nome atual do Bling (via rebuild_variants_from_products).
+    Aqui comparamos por SKU e corrigimos as divergências, para o histórico não
+    ficar com nomes antigos indefinidamente.
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+
+    catalog = {
+        r["sku"]: (r["base_name"], r["color_key"], r["size_key"])
+        for r in cur.execute(
+            "SELECT sku, base_name, color_key, size_key FROM variants_cache"
+        ).fetchall()
+    }
+
+    moves = cur.execute(
+        """
+        SELECT move_id, sku, base_name, color_key, size_key
+        FROM stock_moves
+        WHERE sku IS NOT NULL AND sku != ''
+        """
+    ).fetchall()
+
+    changes = []
+    for m in moves:
+        atual = catalog.get(m["sku"])
+        if not atual:
+            continue
+        base_name, color_key, size_key = atual
+        antes = (m["base_name"], m["color_key"], m["size_key"])
+        depois = (base_name, color_key, size_key)
+        if antes != depois:
+            cur.execute(
+                """
+                UPDATE stock_moves
+                SET base_name = ?, color_key = ?, size_key = ?
+                WHERE move_id = ?
+                """,
+                (base_name, color_key, size_key, m["move_id"]),
+            )
+            changes.append({
+                "move_id": m["move_id"],
+                "sku": m["sku"],
+                "antes": f"{antes[0]} ({antes[1]}) ({antes[2]})",
+                "depois": f"{depois[0]} ({depois[1]}) ({depois[2]})",
+            })
+
+    conn.commit()
+    conn.close()
+
+    return {"checked": len(moves), "updated": len(changes), "changes": changes}

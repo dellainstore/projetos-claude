@@ -188,7 +188,14 @@ def enviar_confirmacao_entrega(pedido) -> bool:
         return True
 
     try:
-        link_avaliacao = f'{SITE_URL}/avaliacoes/pedido/{pedido.numero}/?utm_source=email&utm_medium=email&utm_campaign=entregue'
+        from apps.pedidos.services.avaliacao_token import gerar_token_avaliacao
+        # Token permite avaliar sem login -- necessario para quem comprou como
+        # convidada (Pedido.cliente = None, sem conta pra logar em /conta/entrar/).
+        token = gerar_token_avaliacao(pedido)
+        link_avaliacao = (
+            f'{SITE_URL}/avaliacoes/pedido/{pedido.numero}/'
+            f'?token={token}&utm_source=email&utm_medium=email&utm_campaign=entregue'
+        )
         ctx = {'pedido': pedido, 'site_url': SITE_URL, 'link_avaliacao': link_avaliacao, **_ctx_base()}
         html = render_to_string('emails/entregue_avaliacao.html', ctx)
         texto = _texto_entregue(pedido)
@@ -616,8 +623,13 @@ def _texto_cancelamento(pedido, estornado: bool) -> str:
 
 
 def _texto_entregue(pedido) -> str:
+    from apps.pedidos.services.avaliacao_token import gerar_token_avaliacao
     nome = pedido.nome_completo.split()[0]
-    link_avaliacao = f'{SITE_URL}/avaliacoes/pedido/{pedido.numero}/?utm_source=email&utm_medium=email&utm_campaign=entregue'
+    token = gerar_token_avaliacao(pedido)
+    link_avaliacao = (
+        f'{SITE_URL}/avaliacoes/pedido/{pedido.numero}/'
+        f'?token={token}&utm_source=email&utm_medium=email&utm_campaign=entregue'
+    )
     linhas = [
         f'Olá, {nome}!',
         '',

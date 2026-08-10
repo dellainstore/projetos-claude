@@ -173,7 +173,7 @@ def registrar_evento_erro(
         }
         if extra:
             # Somente chaves de allowlist e valores curtos/nao sensiveis.
-            for k in ('etapa', 'gateway', 'servico', 'pedido'):
+            for k in ('etapa', 'gateway', 'servico', 'pedido', 'codigo'):
                 if k in extra and extra[k] is not None:
                     registro[k] = str(extra[k])[:60]
         _logger.error(json.dumps(registro, ensure_ascii=False))

@@ -1,0 +1,1 @@
+from .dashboard import view_dashboard_faturamento, htmx_dashboard_dados

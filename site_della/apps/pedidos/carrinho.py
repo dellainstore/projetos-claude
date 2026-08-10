@@ -30,7 +30,7 @@ def _desc_variacao(variacao):
         partes.append(f'Tam. {variacao.tamanho.nome}')
     if variacao.sob_demanda:
         prazo = variacao.prazo_total_adicional_dias
-        partes.append(f'Sob demanda (+{prazo} dia{"s" if prazo != 1 else ""} úteis)')
+        partes.append(f'Sob demanda (+{prazo} dia{"s" if prazo != 1 else ""} {"úteis" if prazo != 1 else "útil"})')
     else:
         partes.append('Pronta entrega')
     return ' / '.join(partes)
@@ -86,6 +86,7 @@ class Carrinho:
                 'produto_id': produto.id,
                 'variacao_id': variacao.id if variacao else None,
                 'nome': produto.nome,
+                'slug': produto.slug,
                 'variacao_desc': _desc_variacao(variacao),
                 'preco': str(variacao.preco_atual if variacao else produto.preco_atual),
                 'peso': produto.peso,

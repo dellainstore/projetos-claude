@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 BASE_URL = 'https://api.correios.com.br'
 CACHE_KEY = 'correios_jwt_token'
 
+# GTW-003 ("Servico inexistente") e devolvido pelo gateway dos Correios pra
+# alguns objetos, de forma persistente — nao e falha transitoria, entao
+# insistir a cada 30 min (cron) so infla o log sem chance de sucesso. Loga
+# UMA vez por objeto e aplica backoff antes de tentar de novo.
+_GTW003_PREFIXO_CACHE = 'correios:gtw003:'
+_GTW003_BACKOFF_S = 60 * 60 * 6  # 6h
+
 
 def _obter_token() -> str | None:
     """Retorna JWT válido, usando cache quando possível."""
@@ -71,6 +78,10 @@ def rastrear_objeto(codigo: str) -> list[dict] | None:
 
     Cada evento: {'descricao': str, 'dtHrCriado': str, 'codigo': str}
     """
+    cache_key_gtw003 = f'{_GTW003_PREFIXO_CACHE}{codigo}'
+    if cache.get(cache_key_gtw003):
+        return None  # ja sabemos que esta indisponivel (GTW-003); aguarda o backoff
+
     token = _obter_token()
     if not token:
         return None
@@ -86,6 +97,14 @@ def rastrear_objeto(codigo: str) -> list[dict] | None:
         if resp.status_code == 401:
             cache.delete(CACHE_KEY)
             logger.warning('Token Correios expirado, invalidado do cache.')
+            return None
+
+        if resp.status_code == 503 and 'GTW-003' in resp.text:
+            logger.warning(
+                'Correios GTW-003 (servico indisponivel) para %s — backoff de %dh ativado, sem novas tentativas ate la.',
+                codigo, _GTW003_BACKOFF_S // 3600,
+            )
+            cache.set(cache_key_gtw003, True, _GTW003_BACKOFF_S)
             return None
 
         resp.raise_for_status()

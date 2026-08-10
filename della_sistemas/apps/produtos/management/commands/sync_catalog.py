@@ -34,13 +34,17 @@ class Command(BaseCommand):
             "started_at": started_at,
             "sync": {},
             "rebuild": {},
+            "historico": {},
             "ok": False,
             "error": None,
         }
 
         try:
+            from apps.produtos.services.business.catalog import sync_historico_nomes
+
             out["sync"] = sync_products(limit_per_page=options["limit_per_page"])
             out["rebuild"] = rebuild_variants_from_products()
+            out["historico"] = sync_historico_nomes()
             out["ok"] = True
         except Exception as e:  # noqa: BLE001 — registramos e retornamos status
             out["error"] = str(e)

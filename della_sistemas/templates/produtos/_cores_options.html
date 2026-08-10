@@ -1,7 +1,7 @@
 <div class="ds-form-section-titulo" style="margin-bottom:0.75rem;">Cores disponíveis</div>
 <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;">
   {% for cor in cores %}
-  <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" onclick="onCorSelecionada('{{ cor|escapejs }}')">{{ cor }}</button>
+  <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" data-cor="{{ cor|escapejs }}" onclick="onCorSelecionada('{{ cor|escapejs }}', this)">{{ cor }}</button>
   {% endfor %}
 </div>
 <div class="ds-form-group" style="margin-top:0.5rem;">

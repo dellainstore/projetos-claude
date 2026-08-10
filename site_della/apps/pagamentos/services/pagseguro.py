@@ -585,9 +585,21 @@ def consultar_ordem(order_id: str) -> dict | None:
 
 def mensagem_recusa(charge: dict) -> str:
     """Extrai mensagem amigável da recusa de cartão."""
-    response = charge.get('payment_response', {})
+    response = charge.get('payment_response') or {}
     code     = str(response.get('code', ''))
     return _DECLINE_MESSAGES.get(code, 'Pagamento recusado. Tente outro cartão ou use o Pix.')
+
+
+def codigo_recusa(charge: dict) -> str:
+    """Código bruto da recusa (payment_response.code do PagBank).
+
+    Vai para o monitoramento junto com o evento de checkout. `mensagem_recusa`
+    traduz esse mesmo código para o texto que a cliente vê, mas ali um código
+    fora do mapa vira a mensagem genérica e a causa se perde: com o código
+    bruto dá para separar recusa do emissor (sem saldo, cartão bloqueado) de
+    código desconhecido, que merece investigação.
+    """
+    return str((charge.get('payment_response') or {}).get('code', ''))[:20]
 
 
 def status_interno(charge_status: str) -> str | None:

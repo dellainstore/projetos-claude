@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n della_filters %}
 
 {% block title %}Checkout | Monitoramento{% endblock %}
 {% block content_title %}{% endblock %}
@@ -24,7 +24,7 @@
   <tr><th>Quando</th><th>Etapa</th><th>Código</th><th>Resumo</th><th>Dispositivo</th><th>Navegador</th><th>Correlation</th></tr>
   {% for e in eventos %}
   <tr>
-    <td class="mon-muted">{{ e.ts }}</td>
+    <td class="mon-muted">{{ e.ts|datahora_br }}</td>
     <td>{% if e.etapa %}<span class="chip">{{ e.etapa }}</span>{% else %}<span class="mon-muted">—</span>{% endif %}</td>
     <td>{{ e.exc|default:e.status }}</td>
     <td>{{ e.resumo|default:""|truncatechars:80 }}</td>

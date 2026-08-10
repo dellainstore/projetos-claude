@@ -18,7 +18,13 @@ from apps.rh.models import (
 )
 from apps.rh.services.filtros import contexto_filtro, parse_colaboradores, parse_periodo
 from apps.rh.services.folha import folha_periodo
-from apps.rh.services.utils import competencia_opcoes, parse_competencia, parse_decimal, parse_int
+from apps.rh.services.utils import (
+    competencia_opcoes,
+    parse_competencia,
+    parse_decimal,
+    parse_int,
+    parse_mes_ano,
+)
 
 
 @perm_required("rh.gerir")
@@ -117,15 +123,14 @@ def view_evento_novo(request: HttpRequest) -> HttpResponse:
     elif recorrente:
         dia = parse_int(request.POST.get("dia_pagamento"), 20)
         indefinido = request.POST.get("indefinido") == "on"
-        ano_fim = parse_int(request.POST.get("ano_fim"), 0) or None
-        mes_fim = parse_int(request.POST.get("mes_fim"), 0) or None
+        fim = None if indefinido else parse_mes_ano(request.POST.get("fim_competencia", ""))
         LancamentoRecorrente.objects.create(
             colaborador=colab, natureza=natureza, tipo=tipo, valor=valor, descricao=descricao,
             dia_pagamento=max(1, min(dia, 31)),
             ano_inicio=ano, mes_inicio=mes,
             indefinido=indefinido,
-            ano_fim=None if indefinido else ano_fim,
-            mes_fim=None if indefinido else mes_fim,
+            ano_fim=fim[0] if fim else None,
+            mes_fim=fim[1] if fim else None,
         )
         messages.success(request, "Lançamento recorrente criado.")
     else:
@@ -155,14 +160,12 @@ def view_recorrencia_encerrar(request: HttpRequest, pk: int) -> HttpResponse:
     rec = get_object_or_404(LancamentoRecorrente, pk=pk)
     ano = parse_int(request.POST.get("ano"), date.today().year)
     mes = parse_int(request.POST.get("mes"), date.today().month)
-    ano_fim = parse_int(request.POST.get("ano_fim"), 0) or None
-    mes_fim = parse_int(request.POST.get("mes_fim"), 0) or None
-    if ano_fim and mes_fim:
+    fim = parse_mes_ano(request.POST.get("fim_competencia", ""))
+    if fim:
         rec.indefinido = False
-        rec.ano_fim = ano_fim
-        rec.mes_fim = mes_fim
+        rec.ano_fim, rec.mes_fim = fim
         rec.save(update_fields=["indefinido", "ano_fim", "mes_fim"])
-        messages.success(request, f"Recorrência encerrada em {mes_fim:02d}/{ano_fim}.")
+        messages.success(request, f"Recorrência encerrada em {fim[1]:02d}/{fim[0]}.")
     else:
         messages.error(request, "Informe o mês e o ano de encerramento.")
     return redirect(f"{reverse('rh:salarios')}?ano={ano}&mes={mes}")

@@ -19,6 +19,7 @@ from apps.metas.services.relatorio import (
     usa_metas_individuais,
     dias_seg_a_sab_restantes,
     calcular_por_semana,
+    ultima_atualizacao_metas,
     _iter_months,
     MESES_PT,
 )
@@ -145,6 +146,9 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
     faltam_total = max(meta_total - totais["total"], Decimal("0")) if meta_total > 0 else Decimal("0")
     por_semana_total = calcular_por_semana(faltam_total, dias)
 
+    # Canais exibidos na imagem compartilhável (exclui Show Room, Anacã e Londrina).
+    canais_imagem = [c for c in canais if c["canal_key"] in ("atacado", "site_instagram")]
+
     return render(request, "metas/dashboard.html", {
         # período
         "ano_ini": ano_ini, "mes_ini": mes_ini,
@@ -158,6 +162,7 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
         "modo_individual": modo_individual,
         "individual": individual,
         "canais": canais,
+        "canais_imagem": canais_imagem,
         "lojas": lojas,
         "vendedoras": vendedoras,
         "por_situacao": por_situacao,
@@ -172,6 +177,7 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
         "faltam_total": faltam_total,
         "por_semana_total": por_semana_total,
         "dias_restantes": dias,
+        "ultima_atualizacao": ultima_atualizacao_metas(),
         # filtro
         "filtro": filtro,
         "ano_atual": ano_atual,

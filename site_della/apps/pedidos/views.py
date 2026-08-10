@@ -54,6 +54,9 @@ def _salvar_carrinho_abandonado(request, cart):
                 'itens_json':  _itens_carrinho_para_json(cart),
                 'total':       cart.get_total(),
                 'recuperado':  False,
+                # Carrinho novo: desfaz o vinculo com o pedido anterior para nao
+                # herdar o status de pagamento de uma compra ja concluida.
+                'pedido':      None,
             },
         )
     except Exception as exc:
@@ -81,7 +84,9 @@ def _salvar_carrinho_abandonado_guest(request, cart, email, nome='', telefone=''
             if telefone:
                 existing.telefone = telefone
             existing.recuperado = False
-            existing.save(update_fields=['itens_json', 'total', 'nome', 'telefone', 'recuperado', 'atualizado_em'])
+            existing.pedido = None
+            existing.save(update_fields=['itens_json', 'total', 'nome', 'telefone',
+                                         'recuperado', 'pedido', 'atualizado_em'])
         else:
             CarrinhoAbandonado.objects.create(
                 cliente=None,
@@ -96,23 +101,47 @@ def _salvar_carrinho_abandonado_guest(request, cart, email, nome='', telefone=''
         logger.debug('Nao foi possivel salvar carrinho abandonado guest: %s', exc)
 
 
-def _limpar_carrinho_abandonado(request, email=None):
-    """Marca o carrinho como recuperado apos checkout bem-sucedido."""
-    try:
-        from .models import CarrinhoAbandonado
-        if request.user.is_authenticated:
-            CarrinhoAbandonado.objects.filter(cliente=request.user).update(recuperado=True)
-        guest_email = email or request.session.get('guest_checkout_email', '')
-        if guest_email and not request.user.is_authenticated:
-            CarrinhoAbandonado.objects.filter(
-                cliente=None, email=guest_email, recuperado=False,
-            ).update(recuperado=True)
-    except Exception as exc:
-        logger.debug('Nao foi possivel marcar carrinho como recuperado: %s', exc)
+def _vincular_carrinho_abandonado(request, pedido, email=None):
+    """Liga o carrinho ao pedido criado no checkout.
+
+    NAO marca como recuperado: carrinho so vira "recuperado" quando o pedido e
+    pago (ver apps/pedidos/services/carrinho_abandonado.py). PIX gerado e nao
+    pago continua contando como carrinho abandonado.
+    """
+    from .services.carrinho_abandonado import vincular_pedido
+    vincular_pedido(pedido, request=request, email=email or '')
 
 
 class _PagamentoRecusado(Exception):
-    """Levantada quando o gateway recusa o cartão dentro do bloco atômico."""
+    """Levantada quando o gateway recusa o cartão dentro do bloco atômico.
+
+    `codigo` guarda o code bruto do PagBank (payment_response.code), que vai
+    para o monitoramento. Sem ele, toda recusa fica com o mesmo texto genérico
+    e não dá para separar problema do cliente (sem saldo) de problema nosso.
+    """
+
+    def __init__(self, mensagem: str, codigo: str = ''):
+        super().__init__(mensagem)
+        self.codigo = codigo
+
+
+def _contexto_erro_request(request) -> dict:
+    """Campos de request para `registrar_evento_erro` no caminho do checkout.
+
+    Sem isso o evento nasce com navegador 'Outro' e o alerta em tempo real
+    (alertar_erros_criticos) descarta como se fosse bot, então falha de
+    checkout nunca gerava e-mail. A UA não é gravada crua: `erros.py` só
+    guarda a família do navegador, e a session_key vai com hash.
+    """
+    try:
+        return {
+            'ua': request.META.get('HTTP_USER_AGENT', ''),
+            'session_key': request.session.session_key or '',
+            'metodo': request.method,
+            'caminho': request.path,
+        }
+    except Exception:
+        return {}
 
 
 def _gerar_dados_pix(pedido):
@@ -207,6 +236,21 @@ def recuperar_carrinho_abandonado(request, token):
         cart.adicionar(produto, variacao=variacao, quantidade=quantidade)
         if len(cart) > tamanho_antes:
             restaurados += 1
+            try:
+                from apps.analytics.services import obter_ou_criar_sessao, registrar_evento
+                _sessao = obter_ou_criar_sessao(request)
+                if _sessao:
+                    _preco = variacao.preco_atual if variacao else produto.preco_atual
+                    registrar_evento(_sessao, 'produto_adicionado',
+                                     produto_slug=produto.slug,
+                                     produto_nome=produto.nome,
+                                     categoria_nome=produto.categoria.nome if produto.categoria_id else '',
+                                     variacao_desc=str(variacao) if variacao else '',
+                                     quantidade=quantidade,
+                                     valor_unitario=_preco,
+                                     valor_total=_preco * quantidade)
+            except Exception:
+                pass
 
     if restaurados == 0:
         messages.info(request, 'Os itens deste carrinho nao estao mais disponiveis.')
@@ -701,6 +745,25 @@ def _ler_ga_session_id(request):
     return ''
 
 
+def _frete_esta_gratis(subtotal) -> bool:
+    """Mesma regra de frete gratis do context processor (frete_meta): usada
+    tanto para assinar o token em calcular_frete quanto para revalidar no
+    checkout, pra nunca cobrar frete de quem bateu o valor minimo."""
+    frete_meta = None
+    try:
+        from django.core.cache import cache
+        from apps.core_utils.cache_utils import LOJA_CONFIG
+        config_loja = cache.get(LOJA_CONFIG)
+        if config_loja is None:
+            from apps.conteudo.models import ConfiguracaoLoja
+            config_loja = ConfiguracaoLoja.get_config()
+            cache.set(LOJA_CONFIG, config_loja, 60 * 60 * 24)
+        frete_meta = getattr(config_loja, 'frete_gratis_acima', None) if config_loja else None
+    except Exception:
+        frete_meta = None
+    return bool(frete_meta) and subtotal >= frete_meta
+
+
 def _processar_checkout(request, form, cart):
     """
     Cria o Pedido e os ItemPedido no banco, processa pagamento e redireciona.
@@ -718,6 +781,47 @@ def _processar_checkout(request, form, cart):
     forma_pagamento = cd['forma_pagamento']
     parcelas        = int(cd.get('parcelas') or 1)
     eh_retirada_loja = (cd.get('opcao_frete') or '').strip() == 'retirada_loja'
+
+    # Fase 7 (Monitoramento 5xx): revalida o frete assinado em calcular_frete.
+    # Nunca bloqueia o pedido — se o token nao bater (ausente, expirado,
+    # adulterado no DevTools), recalcula o valor real na hora.
+    if eh_retirada_loja:
+        frete = Decimal('0')
+    elif getattr(settings, 'SERVER_SIDE_FREIGHT_VALIDATION', False):
+        from apps.pagamentos.services.frete_token import validar as validar_frete_token
+
+        opcao_frete_recebida = (cd.get('opcao_frete') or '').strip()
+        prazo_frete_recebido = cd.get('prazo_frete') or 0
+        token_valido = validar_frete_token(
+            (cd.get('frete_token') or '').strip(),
+            cd['cep'], opcao_frete_recebida, str(frete), prazo_frete_recebido,
+        )
+        if not token_valido:
+            from apps.core_utils.erros import registrar_evento_erro
+            from apps.pagamentos.services.melhorenvio import calcular as calcular_frete_real
+
+            itens_frete = [
+                {'quantidade': item['quantidade'], 'preco': item['preco'], 'peso': item.get('peso', 500)}
+                for item in cart
+            ]
+            opcoes_reais = calcular_frete_real(cd['cep'], itens_frete)
+            opcao_recalculada = next((o for o in opcoes_reais if o['id'] == opcao_frete_recebida), None)
+            if opcao_recalculada:
+                frete_recalculado = Decimal(str(opcao_recalculada['preco']))
+            elif opcoes_reais:
+                frete_recalculado = Decimal(str(opcoes_reais[0]['preco']))
+            else:
+                frete_recalculado = frete
+            if _frete_esta_gratis(subtotal):
+                frete_recalculado = Decimal('0')
+
+            registrar_evento_erro(
+                status=200, fonte='checkout', endpoint='pedidos:checkout',
+                resumo=f'Token de frete invalido/expirado — recalculado {frete} para {frete_recalculado}',
+                extra={'etapa': 'frete_validacao'},
+                **_contexto_erro_request(request),
+            )
+            frete = frete_recalculado
 
     calculo = CalculadorPedido().calcular(
         subtotal=subtotal,
@@ -828,8 +932,13 @@ def _processar_checkout(request, form, cart):
                 from apps.analytics.services import obter_ou_criar_sessao, registrar_evento
                 _sessao = obter_ou_criar_sessao(request)
                 if _sessao:
+                    # pedido_numero tambem nos eventos por item: o painel usa
+                    # esse numero para so contar como venda os itens de pedidos
+                    # efetivamente pagos (eventos anteriores a 2026-07-28 nao
+                    # tem o numero e sao tratados pelo fallback de sessao).
                     for _item in pedido.itens.select_related('produto').all():
                         registrar_evento(_sessao, 'pedido_finalizado',
+                                         pedido_numero=pedido.numero,
                                          produto_slug=_item.produto.slug if _item.produto_id else '',
                                          produto_nome=_item.nome_produto,
                                          variacao_desc=_item.variacao_desc,
@@ -847,7 +956,7 @@ def _processar_checkout(request, form, cart):
             if forma_pagamento == 'cartao_credito':
                 from apps.pagamentos.services.pagseguro import (
                     criar_ordem_cartao, criar_ordem_cartao_token,
-                    status_interno, mensagem_recusa,
+                    status_interno, mensagem_recusa, codigo_recusa,
                 )
 
                 if cartao_salvo_obj:
@@ -863,7 +972,15 @@ def _processar_checkout(request, form, cart):
                 gateway_order_id = resultado.get('id', '')
 
                 if charge_status == 'DECLINED':
-                    raise _PagamentoRecusado(mensagem_recusa(charge))
+                    # Log do motivo bruto: payment_response traz code/message do
+                    # emissor e nao contem dado do cartao nem PII.
+                    _resp_recusa = charge.get('payment_response') or {}
+                    logger.warning(
+                        'PagSeguro recusou cobranca do pedido %s: code=%s message=%s (charge %s)',
+                        pedido.numero, _resp_recusa.get('code', ''),
+                        _resp_recusa.get('message', ''), charge.get('id', ''),
+                    )
+                    raise _PagamentoRecusado(mensagem_recusa(charge), codigo_recusa(charge))
 
                 # PAID, AUTHORIZED ou IN_ANALYSIS → pedido criado
                 novo_status = status_interno(charge_status) or 'aguardando_pagamento'
@@ -880,14 +997,29 @@ def _processar_checkout(request, form, cart):
                 pedido.save(update_fields=['status', 'gateway_id'])
 
     except _PagamentoRecusado as e:
+        from apps.core_utils.erros import registrar_evento_erro
+        registrar_evento_erro(
+            status=200, fonte='checkout', endpoint='pedidos:checkout',
+            resumo=str(e), integracao='pagseguro',
+            extra={'etapa': 'pagamento', 'gateway': 'pagseguro',
+                   'codigo': getattr(e, 'codigo', '')},
+            **_contexto_erro_request(request),
+        )
         messages.error(request, str(e))
         return redirect('pedidos:checkout')
 
     except _EstoqueInsuficiente as e:
+        from apps.core_utils.erros import registrar_evento_erro
+        registrar_evento_erro(
+            status=200, fonte='checkout', endpoint='pedidos:checkout',
+            resumo=str(e), extra={'etapa': 'estoque'},
+            **_contexto_erro_request(request),
+        )
         messages.error(request, str(e))
         return redirect('pedidos:carrinho')
 
     except Exception as e:
+        from apps.core_utils.erros import registrar_evento_erro
         import requests as _req
         if isinstance(e, _req.HTTPError) and e.response is not None:
             logger.error(
@@ -902,9 +1034,21 @@ def _processar_checkout(request, form, cart):
                 ) if erros else e.response.text[:200]
             except Exception:
                 descricao = e.response.text[:200]
+            registrar_evento_erro(
+                status=e.response.status_code, fonte='checkout', endpoint='pedidos:checkout',
+                resumo=descricao, integracao='pagseguro',
+                extra={'etapa': 'pagamento', 'gateway': 'pagseguro'},
+                **_contexto_erro_request(request),
+            )
             messages.error(request, f'Erro no gateway de pagamento: {descricao}')
         else:
             logger.error('Erro ao criar pedido: %s', e, exc_info=True)
+            registrar_evento_erro(
+                status=200, fonte='checkout', endpoint='pedidos:checkout',
+                exc_tipo=type(e).__name__, resumo=str(e),
+                extra={'etapa': 'pedido'},
+                **_contexto_erro_request(request),
+            )
             messages.error(request, 'Ocorreu um erro ao processar seu pedido. Tente novamente.')
         return redirect('pedidos:checkout')
 
@@ -936,7 +1080,7 @@ def _processar_checkout(request, form, cart):
         cupom_emitido_obj.save(update_fields=['usado_em', 'pedido'])
 
     cart.limpar()
-    _limpar_carrinho_abandonado(request, email=cd.get('email', ''))
+    _vincular_carrinho_abandonado(request, pedido, email=cd.get('email', ''))
 
     request.session['ultimo_pedido'] = pedido.numero
     # Flag de rastreamento: garante que o evento purchase (GA4 + Meta) seja
@@ -1154,13 +1298,15 @@ def validar_vendedor(request):
 
 def calcular_frete(request):
     cep = request.GET.get('cep', '').strip()
-    if not cep or len(''.join(filter(str.isdigit, cep))) != 8:
+    cep_limpo = ''.join(filter(str.isdigit, cep))
+    if len(cep_limpo) != 8:
         return JsonResponse({'status': 'erro', 'erro': 'CEP inválido.'})
 
     # Quando a página de produto passa preco+quantidade, usa esses valores diretamente
     # (ignora o carrinho) para que o frete calculado no produto seja idêntico ao do checkout.
     preco_param = request.GET.get('preco', '').strip()
     prazo_adicional = 0
+    frete_gratis = False
     if preco_param:
         try:
             preco_unit = float((preco_param or '0').replace(',', '.'))
@@ -1190,23 +1336,31 @@ def calcular_frete(request):
         if not itens:
             itens = [{'quantidade': 1, 'preco': '1', 'peso': 500}]
 
+        # Mesma regra de frete grátis do context processor/JS: assina o preco
+        # FINAL (ja com o desconto aplicado) para o token bater com o que o
+        # cliente realmente submete no checkout.
+        frete_gratis = _frete_esta_gratis(cart.get_total())
+
+    from apps.pagamentos.services.frete_token import assinar
     from apps.pagamentos.services.melhorenvio import calcular
     opcoes = calcular(cep, itens)
 
-    lista = [
-        {
+    lista = []
+    for o in opcoes:
+        prazo_final = (o['prazo'] or 0) + prazo_adicional
+        preco_final = '0' if frete_gratis else str(o['preco'])
+        lista.append({
             'id':        o['id'],
             'nome':      o['nome'],
             'empresa':   o['empresa'],
-            'preco':     str(o['preco']),
-            'prazo':     (o['prazo'] or 0) + prazo_adicional,
+            'preco':     preco_final,
+            'prazo':     prazo_final,
             'descricao': (
-                f'Entrega em até {(o["prazo"] or 0) + prazo_adicional} dias úteis'
+                f'Entrega em até {prazo_final} dias úteis'
                 + (f' ({prazo_adicional} de confecção + {(o["prazo"] or 0)} de frete)' if prazo_adicional else '')
             ),
-        }
-        for o in opcoes
-    ]
+            'token':     assinar(cep_limpo, o['id'], preco_final, prazo_final),
+        })
 
     lista.append({
         'id':        'retirada_loja',
@@ -1215,6 +1369,7 @@ def calcular_frete(request):
         'preco':     '0',
         'prazo':     0,
         'descricao': 'Disponível a partir de 2h após confirmação do pagamento',
+        'token':     assinar(cep_limpo, 'retirada_loja', '0', 0),
     })
 
     return JsonResponse({'status': 'ok', 'opcoes': lista})

@@ -78,6 +78,15 @@
           <input type="checkbox" name="recebe_vt" {% if not obj or obj.recebe_vt %}checked{% endif %}>
           Recebe vale-transporte
         </label>
+        {% if obj %}
+        <span style="font-size:0.75rem;color:var(--cinza-texto);display:block;margin-top:0.3rem;">
+          Valor usado só se não houver nenhuma vigência cadastrada abaixo. Pra reajustar sem mudar meses passados, use "Histórico de valores do VT".
+        </span>
+        {% else %}
+        <span style="font-size:0.75rem;color:var(--cinza-texto);display:block;margin-top:0.3rem;">
+          Depois de cadastrar, use "Histórico de valores do VT" pra reajustar sem afetar meses passados.
+        </span>
+        {% endif %}
       </div>
       <div class="ds-form-group" style="flex:1;min-width:160px;">
         <label class="ds-label" for="id_carga">Carga horária diária</label>
@@ -149,4 +158,54 @@
     </div>
   </form>
 </div>
+
+{% if obj %}
+<div class="ds-form-section" style="max-width:560px;margin-top:1.25rem;">
+  <h2 style="font-size:1rem;margin-bottom:0.25rem;">Histórico de valores do VT</h2>
+  <p style="font-size:0.8rem;color:var(--cinza-texto);margin-top:0;">
+    Cada reajuste vira um registro novo com a data a partir da qual passa a valer —
+    os meses anteriores a essa data continuam usando o valor que estava vigente antes.
+  </p>
+
+  {% if vt_vigencias %}
+  <div class="ds-table-wrapper" style="margin-bottom:1rem;">
+    <table class="ds-table">
+      <thead>
+        <tr><th>Vigente desde</th><th>Valor (R$/dia)</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for v in vt_vigencias %}
+        <tr>
+          <td>{{ v.vigente_desde|date:"d/m/Y" }}</td>
+          <td>{{ v.valor_dia|floatformat:2 }}</td>
+          <td style="text-align:right;">
+            <form method="post" action="{% url 'rh:vt_vigencia_excluir' v.id %}" style="display:inline;"
+                  onsubmit="return confirm('Excluir esta vigência de R$ {{ v.valor_dia|floatformat:2 }} a partir de {{ v.vigente_desde|date:'d/m/Y' }}?');">
+              {% csrf_token %}
+              <button type="submit" class="ds-btn" style="font-size:0.75rem;padding:0.2rem 0.55rem;">Excluir</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p style="font-size:0.85rem;color:var(--cinza-texto);">Nenhuma vigência cadastrada ainda — os meses seguem usando o valor do campo "VT — valor do dia" acima.</p>
+  {% endif %}
+
+  <form method="post" action="{% url 'rh:vt_vigencia_nova' obj.id %}" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+    {% csrf_token %}
+    <div class="ds-form-group" style="margin-bottom:0;">
+      <label class="ds-label" for="id_vig_valor">Novo valor (R$/dia)</label>
+      <input class="ds-input" type="number" step="0.01" min="0" id="id_vig_valor" name="valor_dia" required style="width:140px;">
+    </div>
+    <div class="ds-form-group" style="margin-bottom:0;">
+      <label class="ds-label" for="id_vig_desde">A partir de</label>
+      <input class="ds-input" type="date" id="id_vig_desde" name="vigente_desde" required style="width:160px;">
+    </div>
+    <button type="submit" class="ds-btn ds-btn--primario">+ Adicionar</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

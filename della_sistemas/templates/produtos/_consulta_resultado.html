@@ -1,0 +1,26 @@
+{% load metas_extras %}
+{% if produto %}
+<div class="ds-card" style="text-align:center;">
+  <div style="font-size:.75rem;color:var(--cinza-texto,#888);letter-spacing:.03em;text-transform:uppercase;margin-bottom:.3rem;">SKU {{ produto.sku }}</div>
+  <div style="font-weight:700;font-size:1.15rem;color:var(--preto);margin-bottom:.15rem;">{{ produto.base_name }}</div>
+  <div style="font-size:.9rem;color:var(--cinza-texto,#555);margin-bottom:1rem;">
+    {{ produto.color_key|default:"—" }} &middot; Tam {{ produto.size_key|default:"—" }}
+  </div>
+
+  <div style="font-size:.75rem;color:var(--cinza-texto,#888);text-transform:uppercase;letter-spacing:.03em;">Varejo</div>
+  <div style="font-size:2.1rem;font-weight:700;color:var(--dourado);line-height:1.2;margin-bottom:.75rem;">
+    {% if produto.varejo %}R$ {{ produto.varejo|brl_valor }}{% else %}—{% endif %}
+  </div>
+
+  <div style="border-top:1px solid var(--cinza-claro,#eee);padding-top:.6rem;">
+    <span style="font-size:.75rem;color:var(--cinza-texto,#888);text-transform:uppercase;letter-spacing:.03em;">Atacado&nbsp;</span>
+    <span style="font-size:1rem;font-weight:600;color:var(--preto);">
+      {% if produto.atacado %}R$ {{ produto.atacado|brl_valor }}{% else %}—{% endif %}
+    </span>
+  </div>
+</div>
+{% elif sku_buscado %}
+<div class="ds-status ds-status--pendente" style="text-align:center;">
+  SKU "{{ sku_buscado }}" não encontrado no catálogo.
+</div>
+{% endif %}

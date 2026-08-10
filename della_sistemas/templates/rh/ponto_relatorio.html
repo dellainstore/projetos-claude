@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load rh_extras %}
 {% block titulo %}Banco de Horas | D'ELLA Sistemas{% endblock %}
 
 {% block conteudo %}
@@ -22,7 +23,7 @@
     <span style="font-size:0.9rem;">
       Saldo do mês:
       <strong style="color:{% if r.saldo_total < 0 %}#dc2626{% else %}#059669{% endif %};">
-        {{ r.saldo_total }} h
+        {{ r.saldo_total|horas_hm }} h
       </strong>
     </span>
   </div>
@@ -36,8 +37,8 @@
         <td style="font-size:0.8rem;color:var(--cinza-texto);">
           {% for b in d.batidas %}{{ b.momento|date:"H:i" }} {{ b.get_tipo_display }}{% if not forloop.last %} · {% endif %}{% endfor %}
         </td>
-        <td>{{ d.horas }} h</td>
-        <td style="color:{% if d.saldo < 0 %}#dc2626{% else %}#059669{% endif %};">{{ d.saldo }} h</td>
+        <td>{{ d.horas|horas_hm }} h</td>
+        <td style="color:{% if d.saldo < 0 %}#dc2626{% else %}#059669{% endif %};">{{ d.saldo|horas_hm }} h</td>
       </tr>
       {% endfor %}
     </tbody>

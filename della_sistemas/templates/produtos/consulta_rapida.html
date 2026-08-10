@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block titulo %}Consulta Rápida{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header">
+  <div>
+    <h1 class="ds-page-title">Consulta Rápida</h1>
+  </div>
+</div>
+
+<div style="max-width:480px;margin:0 auto;">
+  <form id="form-csrf" style="display:none;">{% csrf_token %}</form>
+
+  <div id="scan-idle">
+    <button type="button" id="btn-iniciar-scan"
+            class="ds-btn ds-btn--primario"
+            style="width:100%;padding:1.3rem;font-size:1.05rem;border-radius:14px;justify-content:center;gap:.6rem;">
+      <span style="font-size:1.3rem;line-height:1;">&#9635;</span>
+      Ler código de barras
+    </button>
+  </div>
+
+  <div id="scan-ativo" style="display:none;">
+    <div id="reader" style="width:100%;border-radius:14px;overflow:hidden;border:1px solid var(--cinza-borda,#e5e0d8);"></div>
+    <button type="button" id="btn-cancelar-scan"
+            class="ds-btn ds-btn--outline"
+            style="width:100%;margin-top:.75rem;padding:.8rem;justify-content:center;">
+      Cancelar leitura
+    </button>
+  </div>
+
+  <div id="scan-erro" class="ds-status ds-status--pendente" style="display:none;margin-top:1rem;"></div>
+
+  <details style="margin-top:1.25rem;">
+    <summary style="cursor:pointer;font-size:.85rem;color:var(--cinza-texto,#666);">Digitar o SKU manualmente</summary>
+    <form id="form-sku-manual" style="display:flex;gap:.5rem;margin-top:.6rem;">
+      <input type="text" name="sku" id="input-sku-manual" placeholder="Ex: 12345-AZ-M"
+             autocomplete="off"
+             style="flex:1;padding:.65rem .8rem;border:1px solid var(--cinza-borda,#ddd);border-radius:8px;font-size:.9rem;">
+      <button type="submit" class="ds-btn ds-btn--outline" style="padding:.65rem 1rem;">Buscar</button>
+    </form>
+  </details>
+
+  <div id="resultado" style="margin-top:1.5rem;"></div>
+
+</div>
+{% endblock %}
+
+{% block js_extra %}
+<script src="{{ STATIC_URL }}js/html5-qrcode.min.js"></script>
+<script>
+(function () {
+  var qtd = null;
+  var scanEmAndamento = false;
+
+  var elIdle = document.getElementById('scan-idle');
+  var elAtivo = document.getElementById('scan-ativo');
+  var elErro = document.getElementById('scan-erro');
+  var elResultado = document.getElementById('resultado');
+  var btnIniciar = document.getElementById('btn-iniciar-scan');
+  var btnCancelar = document.getElementById('btn-cancelar-scan');
+  var formManual = document.getElementById('form-sku-manual');
+
+  function mostrarErro(msg) {
+    elErro.textContent = msg;
+    elErro.style.display = 'block';
+  }
+
+  function limparErro() {
+    elErro.style.display = 'none';
+  }
+
+  function csrfToken() {
+    var input = document.querySelector('#form-csrf input[name=csrfmiddlewaretoken]');
+    return input ? input.value : '';
+  }
+
+  function buscarSku(sku) {
+    if (!sku) return;
+    htmx.ajax('POST', "{% url 'produtos:consulta_rapida_buscar' %}", {
+      target: '#resultado',
+      swap: 'innerHTML',
+      values: { sku: sku, csrfmiddlewaretoken: csrfToken() }
+    });
+  }
+
+  function pararScan() {
+    if (qtd && scanEmAndamento) {
+      scanEmAndamento = false;
+      qtd.stop().catch(function () {});
+    }
+    elAtivo.style.display = 'none';
+    elIdle.style.display = 'block';
+  }
+
+  btnIniciar.addEventListener('click', function () {
+    limparErro();
+    if (typeof Html5Qrcode === 'undefined') {
+      mostrarErro('Não foi possível carregar o leitor de câmera. Use a busca manual abaixo.');
+      return;
+    }
+    elIdle.style.display = 'none';
+    elAtivo.style.display = 'block';
+
+    qtd = new Html5Qrcode('reader', {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+      ],
+      verbose: false,
+    });
+    scanEmAndamento = true;
+
+    qtd.start(
+      { facingMode: 'environment' },
+      { fps: 12, qrbox: { width: 260, height: 140 } },
+      function (decodedText) {
+        buscarSku(decodedText.trim());
+        pararScan();
+      },
+      function () { /* frame sem leitura — ignora */ }
+    ).catch(function (err) {
+      scanEmAndamento = false;
+      elAtivo.style.display = 'none';
+      elIdle.style.display = 'block';
+      mostrarErro('Não foi possível acessar a câmera (permissão negada ou indisponível). Use a busca manual abaixo.');
+    });
+  });
+
+  btnCancelar.addEventListener('click', pararScan);
+
+  formManual.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var sku = document.getElementById('input-sku-manual').value.trim();
+    buscarSku(sku);
+  });
+
+  document.body.addEventListener('htmx:responseError', function (evt) {
+    if (evt.detail.target && evt.detail.target.id === 'resultado') {
+      elResultado.innerHTML = '<div class="ds-status ds-status--pendente" style="text-align:center;">Erro ao buscar o produto. Tente novamente.</div>';
+    }
+  });
+  document.body.addEventListener('htmx:sendError', function (evt) {
+    if (evt.detail.target && evt.detail.target.id === 'resultado') {
+      elResultado.innerHTML = '<div class="ds-status ds-status--pendente" style="text-align:center;">Sem conexão. Tente novamente.</div>';
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -135,6 +135,10 @@ class CheckoutForm(forms.Form):
         required=False,
         widget=forms.HiddenInput(attrs={'id': 'id_prazo_frete'}),
     )
+    frete_token = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(attrs={'id': 'id_frete_token'}),
+    )
 
     # ── Pagamento ─────────────────────────────────────────────────────────────
     forma_pagamento = forms.ChoiceField(

@@ -1,0 +1,51 @@
+{% load tarefas_extras %}
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h2 style="font-family:'Playfair Display',serif; font-size:1.2rem; color:var(--preto);">Nova tarefa</h2>
+      <button type="button" onclick="document.getElementById('modal-container').innerHTML=''" class="ds-btn ds-btn--sm" style="border:none;">&times;</button>
+    </div>
+    <form hx-post="{% url 'tarefas:htmx_criar_tarefa' %}" hx-target="#kanban-board" hx-swap="innerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          hx-vals='js:{pessoa: tarefasFiltroValor("pessoa"), q: tarefasFiltroValor("q"), prazo_de: tarefasFiltroValor("prazo_de"), prazo_ate: tarefasFiltroValor("prazo_ate")}'
+          style="display:flex; flex-direction:column; gap:.75rem;">
+      <label style="font-size:.82rem; color:var(--cinza-texto);">Título
+        <input type="text" name="titulo" required class="ds-input" style="width:100%; padding:.45rem .6rem; border:1px solid var(--cinza-medio); border-radius:6px; margin-top:.25rem;">
+      </label>
+      <label style="font-size:.82rem; color:var(--cinza-texto);">Descrição
+        <textarea name="descricao" rows="3" class="ds-textarea-auto"></textarea>
+      </label>
+      <div style="display:flex; gap:.75rem;">
+        <label style="flex:1; font-size:.82rem; color:var(--cinza-texto);">Prazo
+          <input type="date" name="prazo" required class="ds-input" style="width:100%; padding:.45rem .6rem; border:1px solid var(--cinza-medio); border-radius:6px; margin-top:.25rem;">
+        </label>
+        <label style="flex:1; font-size:.82rem; color:var(--cinza-texto);">Prioridade
+          <select name="prioridade" class="ds-input" style="width:100%; padding:.45rem .6rem; border:1px solid var(--cinza-medio); border-radius:6px; margin-top:.25rem;">
+            <option value="baixa">Baixa</option>
+            <option value="media" selected>Média</option>
+            <option value="alta">Alta</option>
+          </select>
+        </label>
+      </div>
+      <label style="font-size:.82rem; color:var(--cinza-texto);">Status inicial
+        <select name="status_id" class="ds-input" style="width:100%; padding:.45rem .6rem; border:1px solid var(--cinza-medio); border-radius:6px; margin-top:.25rem;">
+          {% for c in colunas %}
+          <option value="{{ c.pk }}">{{ c.nome }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div>
+        <span style="font-size:.82rem; color:var(--cinza-texto);">Responsáveis</span>
+        <div style="display:flex; flex-wrap:wrap; gap:.6rem; margin-top:.35rem;">
+          {% for u in usuarios_atribuiveis %}
+          <label style="display:flex; align-items:center; gap:.3rem; font-size:.82rem; font-weight:400;">
+            <input type="checkbox" name="responsaveis" value="{{ u.pk }}" {% if u.pk == request.user.pk %}checked{% endif %}>
+            {{ u|primeiro_nome }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <button type="submit" class="ds-btn ds-btn--dourado">Criar tarefa</button>
+    </form>
+  </div>
+</div>

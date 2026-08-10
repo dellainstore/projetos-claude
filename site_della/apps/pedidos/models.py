@@ -54,7 +54,15 @@ class CarrinhoAbandonado(models.Model):
 
     email_enviado    = models.BooleanField('E-mail enviado', default=False)
     email_enviado_em = models.DateTimeField('E-mail enviado em', null=True, blank=True)
-    recuperado       = models.BooleanField('Recuperado (compra feita)', default=False)
+    # Recuperado = pedido PAGO. Gerar o pedido (PIX emitido, cartao em analise)
+    # so preenche `pedido` e mantem `recuperado=False` ate o pagamento entrar.
+    # Regras em apps/pedidos/services/carrinho_abandonado.py.
+    recuperado       = models.BooleanField('Recuperado (compra paga)', default=False)
+    pedido           = models.ForeignKey(
+        'pedidos.Pedido', on_delete=models.SET_NULL,
+        related_name='carrinhos_abandonados', verbose_name='Pedido gerado',
+        null=True, blank=True,
+    )
     token            = models.UUIDField('Token de recuperacao', default=uuid.uuid4, editable=False, unique=True)
 
     criado_em     = models.DateTimeField('Criado em', auto_now_add=True)
@@ -82,6 +90,26 @@ class CarrinhoAbandonado(models.Model):
     @property
     def quantidade_itens(self):
         return sum(item.get('quantidade', 1) for item in self.itens)
+
+    @property
+    def situacao(self):
+        """`recuperado` | `aguardando_pagamento` | `pedido_cancelado` | `abandonado`."""
+        if self.recuperado:
+            return 'recuperado'
+        if self.pedido_id:
+            if self.pedido.status in ('cancelado', 'estornado'):
+                return 'pedido_cancelado'
+            return 'aguardando_pagamento'
+        return 'abandonado'
+
+    @property
+    def situacao_label(self):
+        return {
+            'recuperado':           'Recuperado (pago)',
+            'aguardando_pagamento': 'Pedido gerado, aguardando pagamento',
+            'pedido_cancelado':     'Pedido cancelado',
+            'abandonado':           'Abandonado',
+        }[self.situacao]
 
 
 def gerar_codigo_cupom_emitido():

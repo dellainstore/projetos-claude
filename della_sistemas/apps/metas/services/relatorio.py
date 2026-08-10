@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import calendar
 import csv
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from django.utils import timezone
+
 # ── Constantes de negócio ──────────────────────────────────────────────────────
 
 CSV_BASE = Path("/var/www/della-sistemas/data/Relatorio de Vendas Atendidas")
+
+# Horários (America/Sao_Paulo) em que o cron de vendas/metas roda no crontab da
+# VPS (vendas_atendidas + custo + cmv + run_metas_e_sync.sh). Em UTC no
+# crontab: 9h, 16h, 20h, 22h. Manter em sincronia se o crontab mudar.
+CRON_HORARIOS_METAS_BRT: tuple[int, ...] = (6, 13, 17, 19)
 
 # Situações que entram na meta INDIVIDUAL da vendedora
 SITUACOES_META_INDIVIDUAL: set[str] = {"Atendido", "Atendido-Anaca"}
@@ -95,6 +102,24 @@ def dias_seg_a_sab_restantes(ano_fim: int, mes_fim: int) -> int:
             count += 1
         d += timedelta(days=1)
     return count
+
+
+def ultima_atualizacao_metas() -> datetime:
+    """Horário (America/Sao_Paulo) da última execução do cron de vendas/metas
+    (06h, 13h, 17h ou 19h). Se nenhum desses horários já passou hoje, usa o
+    último horário de ontem."""
+    agora = timezone.localtime()
+    candidatos = [
+        agora.replace(hour=h, minute=0, second=0, microsecond=0)
+        for h in CRON_HORARIOS_METAS_BRT
+    ]
+    passados = [c for c in candidatos if c <= agora]
+    if passados:
+        return max(passados)
+    ontem = agora - timedelta(days=1)
+    return ontem.replace(
+        hour=CRON_HORARIOS_METAS_BRT[-1], minute=0, second=0, microsecond=0
+    )
 
 
 def calcular_por_semana(faltam: Decimal, dias: int) -> Decimal:

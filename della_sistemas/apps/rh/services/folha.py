@@ -59,7 +59,7 @@ def vt_do_mes(colaborador, ano: int, mes: int) -> dict:
         dias, valor_dia, valor = b.dias, b.valor_dia, b.total()
     else:
         dias = dias_vt_sugeridos(colaborador, ref_a, ref_m)
-        valor_dia = colaborador.vt_valor_dia
+        valor_dia = colaborador.valor_dia_vt_em(ref_a, ref_m)
         valor = (Decimal(dias) * valor_dia).quantize(Decimal("0.01"))
     return {
         "ref_ano": ref_a, "ref_mes": ref_m, "avanco": avanco,

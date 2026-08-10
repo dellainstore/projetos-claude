@@ -1,0 +1,109 @@
+{% load tarefas_extras %}
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h2 style="font-family:'Playfair Display',serif; font-size:1.2rem; color:var(--preto);">{{ tarefa.titulo }}</h2>
+      <button type="button" onclick="document.getElementById('modal-container').innerHTML=''" class="ds-btn ds-btn--sm" style="border:none;">&times;</button>
+    </div>
+
+    {% if recem_editada %}
+    <div class="ds-aviso-editado">
+      Esta tarefa foi editada em {{ tarefa.editado_em|date:"d/m/Y H:i" }} — confira o que mudou.
+    </div>
+    {% endif %}
+
+    <div id="detalhe-leitura">
+      <p style="font-size:.85rem; color:var(--preto); white-space:pre-wrap;">{{ tarefa.descricao }}</p>
+      <p style="font-size:.8rem; color:var(--cinza-texto); margin-top:.6rem;">
+        Prazo {{ tarefa.prazo|date:"d/m/Y" }} · Prioridade {{ tarefa.get_prioridade_display }}
+      </p>
+      <p style="font-size:.8rem; color:var(--cinza-texto); margin-top:.3rem;">
+        Responsáveis:
+        {% for r in tarefa.responsaveis.all %}{{ r|primeiro_nome }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </p>
+
+      {% if not tarefa.arquivada %}
+      <div style="display:flex; gap:.5rem; margin-top:1rem;">
+        {% if pode_editar_conteudo %}
+        <button type="button" class="ds-btn ds-btn--outline ds-btn--sm"
+                onclick="document.getElementById('detalhe-leitura').style.display='none'; document.getElementById('detalhe-edicao').style.display='flex'; tarefasAutoGrowTodas();">
+          Editar tarefa
+        </button>
+        {% endif %}
+        {% if pode_excluir %}
+        <form hx-post="{% url 'tarefas:htmx_arquivar_tarefa' tarefa.pk %}" hx-target="#kanban-board" hx-swap="innerHTML"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              hx-vals='js:{pessoa: tarefasFiltroValor("pessoa"), q: tarefasFiltroValor("q"), prazo_de: tarefasFiltroValor("prazo_de"), prazo_ate: tarefasFiltroValor("prazo_ate")}'
+              hx-confirm="Excluir esta tarefa? Ela some do quadro, mas o histórico fica preservado.">
+          <button type="submit" class="ds-btn ds-btn--perigo ds-btn--sm">Excluir tarefa</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}
+      <p style="font-size:.76rem; color:var(--cinza-texto); margin-top:1rem;">
+        {% if tarefa.motivo_arquivamento == "concluida" %}Concluída{% else %}Excluída{% endif %}
+        em {{ tarefa.arquivada_em|date:"d/m/Y H:i" }} — item de histórico, não editável.
+      </p>
+      {% endif %}
+    </div>
+
+    {% if pode_editar_conteudo and not tarefa.arquivada %}
+    <form id="detalhe-edicao" hx-post="{% url 'tarefas:htmx_editar_tarefa' tarefa.pk %}" hx-target="#kanban-board" hx-swap="innerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          hx-vals='js:{pessoa: tarefasFiltroValor("pessoa"), q: tarefasFiltroValor("q"), prazo_de: tarefasFiltroValor("prazo_de"), prazo_ate: tarefasFiltroValor("prazo_ate")}'
+          style="display:none; flex-direction:column; gap:.75rem;">
+      <label style="font-size:.82rem; color:var(--cinza-texto);">Título
+        <input type="text" name="titulo" value="{{ tarefa.titulo }}" required class="ds-input" style="width:100%; padding:.45rem .6rem; border:1px solid var(--cinza-medio); border-radius:6px; margin-top:.25rem;">
+      </label>
+      <label style="font-size:.82rem; color:var(--cinza-texto);">Descrição
+        <textarea name="descricao" rows="3" class="ds-textarea-auto">{{ tarefa.descricao }}</textarea>
+      </label>
+      <div style="display:flex; gap:.75rem;">
+        <label style="flex:1; font-size:.82rem; color:var(--cinza-texto);">Prazo
+          <input type="date" name="prazo" value="{{ tarefa.prazo|date:'Y-m-d' }}" required class="ds-input" style="width:100%; padding:.45rem .6rem; border:1px solid var(--cinza-medio); border-radius:6px; margin-top:.25rem;">
+        </label>
+        <label style="flex:1; font-size:.82rem; color:var(--cinza-texto);">Prioridade
+          <select name="prioridade" class="ds-input" style="width:100%; padding:.45rem .6rem; border:1px solid var(--cinza-medio); border-radius:6px; margin-top:.25rem;">
+            {% for valor, rotulo in tarefa.PRIORIDADE_CHOICES %}
+            <option value="{{ valor }}" {% if valor == tarefa.prioridade %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div>
+        <span style="font-size:.82rem; color:var(--cinza-texto);">Responsáveis</span>
+        <div style="display:flex; flex-wrap:wrap; gap:.6rem; margin-top:.35rem;">
+          {% for u in usuarios_atribuiveis %}
+          <label style="display:flex; align-items:center; gap:.3rem; font-size:.82rem; font-weight:400;">
+            <input type="checkbox" name="responsaveis" value="{{ u.pk }}" {% if u in tarefa.responsaveis.all %}checked{% endif %}>
+            {{ u|primeiro_nome }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div style="display:flex; gap:.5rem;">
+        <button type="submit" class="ds-btn ds-btn--dourado">Salvar alterações</button>
+        <button type="button" class="ds-btn ds-btn--outline"
+                onclick="document.getElementById('detalhe-edicao').style.display='none'; document.getElementById('detalhe-leitura').style.display='block';">
+          Cancelar
+        </button>
+      </div>
+    </form>
+    {% endif %}
+
+    <hr style="margin:1.25rem 0; border:none; border-top:1px solid var(--cinza-medio);">
+    <h3 style="font-size:.85rem; font-weight:600; margin-bottom:.5rem; color:var(--preto);">Histórico</h3>
+    <div style="display:flex; flex-direction:column; gap:.45rem; max-height:220px; overflow-y:auto;">
+      {% for h in historico %}
+      <div style="font-size:.76rem; color:var(--cinza-texto);">
+        <strong style="color:var(--preto);">{{ h.get_campo_display }}</strong>
+        {% if h.valor_anterior %}de "{{ h.valor_anterior }}" {% endif %}para "{{ h.valor_novo }}"
+        · {% if h.alterado_por %}{{ h.alterado_por|primeiro_nome }}{% else %}usuário removido{% endif %},
+        {{ h.alterado_em|date:"d/m/Y H:i" }}
+      </div>
+      {% empty %}
+      <p style="font-size:.78rem; color:var(--cinza-texto);">Sem histórico ainda.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>

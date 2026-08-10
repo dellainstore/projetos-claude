@@ -52,7 +52,7 @@ def view_ponto(request: HttpRequest) -> HttpResponse:
     if colaborador:
         ctx.update(_contexto_app(colaborador, hoje))
         ctx["qtd_pendencias"] = (
-            NotificacaoPonto.objects.filter(colaborador=colaborador)
+            NotificacaoPonto.objects.filter(colaborador=colaborador, data__lt=hoje)
             .exclude(status="resolvido").count()
         )
     return render(request, "rh/ponto.html", ctx)
@@ -127,7 +127,10 @@ def view_bater(request: HttpRequest) -> HttpResponse:
 def view_relatorio(request: HttpRequest) -> HttpResponse:
     hoje = date.today()
     from apps.rh.services.utils import competencia_opcoes, parse_competencia
+    inicio_controle = ParametrosPonto.get().data_inicio
     ano, mes = parse_competencia(request, hoje)
+    if date(ano, mes, 1) < inicio_controle:
+        ano, mes = inicio_controle.year, inicio_controle.month
 
     import calendar
     from apps.metas.services.relatorio import MESES_PT
@@ -138,7 +141,16 @@ def view_relatorio(request: HttpRequest) -> HttpResponse:
     relatorios = []
     for c in colaboradores:
         dados = banco_de_horas(c, inicio, fim)
-        relatorios.append({"colaborador": c, **dados})
+        # banco_de_horas() agora inclui todo dia do período (pro espelho em PDF
+        # listar sábado/domingo/feriado/atestado). Aqui, no resumo mensal por
+        # colaborador, isso só interessa quando há algo pra ver — mantém o
+        # comportamento enxuto de antes, escondendo o dia de folga "vazio" (sem
+        # batida, sem saldo, sem afastamento/feriado) que não muda em nada.
+        dias_relevantes = [
+            d for d in dados["dias"]
+            if d["batidas"] or d["saldo"] or d["afastamento"] or d["feriado"] or d["sem_registro"]
+        ]
+        relatorios.append({"colaborador": c, "dias": dias_relevantes, "saldo_total": dados["saldo_total"]})
 
     return render(request, "rh/ponto_relatorio.html", {
         "relatorios": relatorios,
@@ -146,5 +158,5 @@ def view_relatorio(request: HttpRequest) -> HttpResponse:
         "mes": mes,
         "mes_nome": MESES_PT.get(mes, ""),
         "competencia": f"{ano}-{mes:02d}",
-        "meses_opcoes": competencia_opcoes(hoje),
+        "meses_opcoes": competencia_opcoes(hoje, desde=inicio_controle),
     })

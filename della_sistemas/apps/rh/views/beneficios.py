@@ -37,7 +37,7 @@ def view_beneficios(request: HttpRequest) -> HttpResponse:
             colabs = Colaborador.objects.filter(ativo=True, recebe_vt=True)
             for c in colabs:
                 dias = parse_int(request.POST.get(f"dias_{c.id}"), -1)
-                valor_dia = parse_decimal(request.POST.get(f"valor_{c.id}", ""), c.vt_valor_dia)
+                valor_dia = parse_decimal(request.POST.get(f"valor_{c.id}", ""), c.valor_dia_vt_em(ano, mes))
                 if dias < 0:
                     continue
                 BeneficioVT.objects.update_or_create(
@@ -67,7 +67,7 @@ def view_beneficios(request: HttpRequest) -> HttpResponse:
         for c in Colaborador.objects.filter(ativo=True, recebe_vt=True).order_by("nome"):
             b = existentes.get(c.id)
             dias = b.dias if b else dias_vt_sugeridos(c, ano, mes)
-            valor_dia = b.valor_dia if b else c.vt_valor_dia
+            valor_dia = b.valor_dia if b else c.valor_dia_vt_em(ano, mes)
             total = (Decimal(dias) * valor_dia).quantize(Decimal("0.01"))
             total_geral += total
             linhas.append({

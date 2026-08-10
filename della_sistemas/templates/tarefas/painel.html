@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load tarefas_extras %}
+{% block titulo %}Tarefas | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+  .tarefas-topo {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem;
+  }
+  .tarefas-topo h1 { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: var(--preto); }
+  .tarefas-acoes { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+  .tarefas-filtros {
+    display: flex; gap: .6rem; align-items: center; flex-wrap: wrap;
+    margin-bottom: 1.25rem; background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: .7rem .9rem;
+  }
+  .tarefas-filtros input[type=text], .tarefas-filtros input[type=date], .tarefas-filtros select {
+    padding: .4rem .6rem; border-radius: 6px; border: 1px solid var(--cinza-medio);
+    background: var(--branco); font-size: .82rem;
+  }
+  .tarefas-filtros label { display: flex; align-items: center; gap: .3rem; font-size: .78rem; color: var(--cinza-texto); }
+  .tarefas-filtros input[type=text] { flex: 1; min-width: 160px; }
+
+  #kanban-board { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: .75rem; align-items: flex-start; }
+  .kanban-coluna {
+    background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px;
+    min-width: 280px; max-width: 280px; display: flex; flex-direction: column;
+  }
+  .kanban-coluna-cab {
+    padding: .85rem 1rem; border-bottom: 1px solid var(--cinza-medio); border-radius: 10px 10px 0 0;
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: 600; font-size: .92rem; color: var(--preto);
+  }
+  .kanban-coluna-corpo {
+    padding: .6rem; display: flex; flex-direction: column; gap: .6rem;
+    min-height: 80px; flex: 1;
+  }
+  .kanban-coluna-corpo.arraste-sobre { background: var(--cinza-claro); }
+  .kanban-card {
+    background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 8px;
+    padding: .7rem .8rem; cursor: grab; box-shadow: 0 1px 2px rgba(0,0,0,.05);
+  }
+  .kanban-card:active { cursor: grabbing; }
+  .kanban-card.arrastando { opacity: .4; }
+  .kanban-card-titulo { font-weight: 600; font-size: .88rem; margin-bottom: .4rem; color: var(--preto); }
+  .kanban-card-meta { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; font-size: .74rem; color: var(--cinza-texto); }
+  .kanban-tag-prioridade { padding: .1rem .5rem; border-radius: 999px; font-size: .68rem; font-weight: 600; }
+  .kanban-tag-prioridade.alta { background: rgba(217,79,79,.12); color: var(--vermelho); }
+  .kanban-tag-prioridade.media { background: rgba(212,160,23,.15); color: var(--amarelo); }
+  .kanban-tag-prioridade.baixa { background: rgba(45,158,110,.12); color: var(--verde); }
+  .kanban-responsaveis { display: flex; gap: .25rem; margin-top: .5rem; flex-wrap: wrap; }
+  .kanban-avatar {
+    width: 22px; height: 22px; border-radius: 50%; background: var(--dourado); color: var(--branco);
+    font-size: .68rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .kanban-selo-criador { color: var(--dourado); font-weight: 600; }
+  .kanban-tag-editado {
+    background: rgba(212,160,23,.18); color: var(--amarelo); font-weight: 700;
+    padding: .1rem .5rem; border-radius: 999px; font-size: .68rem;
+  }
+
+  #modal-container:empty { display: none; }
+  .ds-modal-fundo {
+    position: fixed; inset: 0; background: rgba(10,10,10,.5); display: flex;
+    align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
+  }
+  .ds-modal {
+    background: var(--branco); border-radius: 12px; padding: 1.5rem; width: 100%;
+    max-width: 520px; max-height: 90vh; overflow-y: auto;
+  }
+  .ds-aviso-editado {
+    background: rgba(212,160,23,.12); color: #8a6a10; padding: .6rem .8rem;
+    border-radius: 6px; font-size: .8rem; margin-bottom: 1rem;
+  }
+
+  /* Textarea de descrição: só cresce pra baixo (nunca pros lados), tamanho
+     padrão até 3 linhas, depois passa a rolar por dentro em vez de esticar
+     sem limite — apply.js (autoGrowTextarea) controla a altura via JS. */
+  .ds-textarea-auto {
+    width: 100%; padding: .45rem .6rem; border: 1px solid var(--cinza-medio);
+    border-radius: 6px; margin-top: .25rem; font-family: inherit; font-size: .88rem;
+    resize: none; overflow-y: hidden; min-height: 4.8rem; max-height: 16rem;
+  }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="tarefas-topo">
+  <h1>Tarefas</h1>
+  <div class="tarefas-acoes">
+    {% if request.user.pode_criar_tarefas %}
+    <button type="button" class="ds-btn ds-btn--dourado"
+            hx-get="{% url 'tarefas:htmx_form_nova_tarefa' %}" hx-target="#modal-container">
+      + Nova tarefa
+    </button>
+    {% endif %}
+    <a href="{% url 'tarefas:historico' %}" class="ds-btn ds-btn--outline">Histórico</a>
+    {% if request.user.is_superadmin %}
+    <a href="{% url 'tarefas:colunas' %}" class="ds-btn ds-btn--outline">Configurar colunas</a>
+    {% endif %}
+  </div>
+</div>
+
+<form method="get" class="tarefas-filtros">
+  <input type="text" name="q" value="{{ f_q }}" placeholder="Buscar por título ou descrição">
+  <select name="pessoa">
+    <option value="">Todas as pessoas</option>
+    {% for u in usuarios_atribuiveis %}
+    <option value="{{ u.pk }}" {% if pessoa_id == u.pk|stringformat:"s" %}selected{% endif %}>{{ u|primeiro_nome }}</option>
+    {% endfor %}
+  </select>
+  <label>Prazo de <input type="date" name="prazo_de" value="{{ f_prazo_de }}"></label>
+  <label>até <input type="date" name="prazo_ate" value="{{ f_prazo_ate }}"></label>
+  <button type="submit" class="ds-btn ds-btn--outline ds-btn--sm">Filtrar</button>
+  {% if pessoa_id or f_q or f_prazo_de or f_prazo_ate %}
+  <a href="{% url 'tarefas:painel' %}" class="ds-btn ds-btn--sm" style="border:none;">Limpar filtros</a>
+  {% endif %}
+</form>
+
+<div id="kanban-board"
+     hx-get="{% url 'tarefas:htmx_board' %}"
+     hx-trigger="every 15s"
+     hx-include="[name='q'],[name='pessoa'],[name='prazo_de'],[name='prazo_ate']"
+     hx-swap="innerHTML">
+  {% include "tarefas/_board.html" %}
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block js_extra %}
+<script>window.DELLA_CSRF = "{{ csrf_token }}";</script>
+<script src="{{ STATIC_URL }}js/tarefas-kanban.js"></script>
+{% endblock %}

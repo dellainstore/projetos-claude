@@ -53,6 +53,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'apps.core_utils.middleware.Erro5xxMiddleware',    # correlation id + registro 5xx
     'whitenoise.middleware.WhiteNoiseMiddleware',      # static em produção
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -278,12 +279,28 @@ BLING_DEPOSITO_ID    = config('BLING_DEPOSITO_ID', default='', cast=str)
 WHATSAPP_NUMBER_1 = config('WHATSAPP_NUMBER_1', default='')
 WHATSAPP_NUMBER_2 = config('WHATSAPP_NUMBER_2', default='')
 
+# Valida o frete assinado no checkout (Fase 7 - Monitoramento 5xx): quando o
+# token nao bate (ausente, expirado, adulterado), o servidor RECALCULA o frete
+# na hora em vez de bloquear o pedido — nunca derruba o checkout. Desativavel
+# rapido via .env se algo inesperado aparecer.
+SERVER_SIDE_FREIGHT_VALIDATION = config('SERVER_SIDE_FREIGHT_VALIDATION', default=True, cast=bool)
+
 META_PIXEL_ID = config('META_PIXEL_ID', default='')
 GA_MEASUREMENT_ID = config('GA_MEASUREMENT_ID', default='')
 # GA4 Measurement Protocol (disparo server-side do purchase no webhook de pagamento).
 # Criar em: GA4 Admin > Fluxos de dados > Measurement Protocol API secrets.
 GA_API_SECRET = config('GA_API_SECRET', default='')
 CLARITY_PROJECT_ID = config('CLARITY_PROJECT_ID', default='')
+
+# MaxMind GeoLite2: cidade aproximada do visitante a partir do IP (sem guardar
+# IP bruto). O .mmdb e baixado pelo management command sincronizar_geoip e
+# fica fora do git (data/geoip/). ASN identifica o provedor/rede do IP -- usado
+# para detectar trafego de datacenter/hosting (ver apps.analytics.services).
+MAXMIND_ACCOUNT_ID = config('MAXMIND_ACCOUNT_ID', default='')
+MAXMIND_LICENSE_KEY = config('MAXMIND_LICENSE_KEY', default='')
+GEOIP_DB_PATH = BASE_DIR / 'data' / 'geoip' / 'GeoLite2-City.mmdb'
+GEOIP_ASN_DB_PATH = BASE_DIR / 'data' / 'geoip' / 'GeoLite2-ASN.mmdb'
+
 META_CONVERSIONS_API_TOKEN = config('META_CONVERSIONS_API_TOKEN', default='')
 META_CONVERSIONS_TEST_EVENT_CODE = config('META_CONVERSIONS_TEST_EVENT_CODE', default='')
 META_GRAPH_API_VERSION = config('META_GRAPH_API_VERSION', default='v22.0')

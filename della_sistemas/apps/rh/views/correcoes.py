@@ -34,7 +34,7 @@ def view_correcoes(request: HttpRequest) -> HttpResponse:
     pendencias = []
     if colaborador:
         notifs = (
-            NotificacaoPonto.objects.filter(colaborador=colaborador)
+            NotificacaoPonto.objects.filter(colaborador=colaborador, data__lt=timezone.localdate())
             .exclude(status="resolvido").order_by("data")
         )
         for notif in notifs:
@@ -57,8 +57,10 @@ def view_correcoes(request: HttpRequest) -> HttpResponse:
                     valor = prop[tipo].strftime("%H:%M")
                 elif batidas.get(tipo):
                     valor = batidas[tipo]
-                # "travado" = já existe batida desse tipo (a pessoa não altera o que já bateu).
-                slots.append({"pref": pref, "label": label, "hora": valor, "travado": tipo in batidas})
+                # "sugerido" = já existe uma batida nesse tipo, preenchida como sugestão —
+                # o campo continua editável, pois o tipo gravado pode estar errado
+                # (dia com só 1 batida vira "entrada" por posição, mesmo sendo a saída).
+                slots.append({"pref": pref, "label": label, "hora": valor, "sugerido": tipo in batidas})
             enviada = bool(corr and corr.status == "pendente")
             pendencias.append({
                 "data": dia,
@@ -99,6 +101,12 @@ def view_propor_correcao(request: HttpRequest) -> HttpResponse:
     if not e or not s:
         messages.error(request, "Informe ao menos a entrada e a saída.")
         return redirect("rh:correcoes")
+
+    from apps.rh.services.correcoes import horarios_em_ordem
+    if not horarios_em_ordem(sem_almoco, e, sa, va, s):
+        messages.error(request, "Os horários devem estar em ordem: entrada, saída p/ almoço, volta e saída.")
+        return redirect("rh:correcoes")
+
     motivo = request.POST.get("observacao", "").strip()
     if not motivo:
         messages.error(request, "Informe o motivo da correção.")

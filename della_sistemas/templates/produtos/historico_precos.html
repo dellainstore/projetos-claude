@@ -47,9 +47,14 @@
     <h1 class="ds-page-titulo">Preços</h1>
     <p class="ds-page-subtitulo">Histórico de alterações de preço</p>
   </div>
-  <div class="tabs-precos">
-    <a href="{% url 'produtos:precos' %}">Ajustar Preços</a>
-    <a href="{% url 'produtos:historico_precos' %}" class="ativo">Histórico</a>
+  <div style="display:flex;align-items:center;gap:0.75rem;">
+    <div class="tabs-precos">
+      <a href="{% url 'produtos:precos' %}">Ajustar Preços</a>
+      <a href="{% url 'produtos:historico_precos' %}" class="ativo">Histórico</a>
+    </div>
+    <a href="{% url 'produtos:historico_precos_pdf' %}?{{ request.GET.urlencode }}" class="ds-btn ds-btn--outline ds-btn--sm">
+      Gerar PDF
+    </a>
   </div>
 </div>
 

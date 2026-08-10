@@ -30,21 +30,25 @@ def view_pagamentos_pendentes(request):
         is_permuta=False,
     ).prefetch_related("parcelas").order_by("-data_pedido", "-bling_id")
 
+    # .distinct() puro aqui não dedupe de verdade: BaixaPedido/PedidoBling têm
+    # `ordering` padrão no Meta em colunas fora da projeção, e o Postgres inclui
+    # essas colunas no DISTINCT também. Dedup em Python.
     formas_baixas = list(
         BaixaPedido.objects.exclude(forma_efetiva="")
-        .values_list("forma_efetiva", flat=True).distinct()
+        .values_list("forma_efetiva", flat=True)
     )
     formas_corrigidas = list(
         PedidoBling.objects.exclude(forma_corrigida="").exclude(forma_corrigida__isnull=True)
-        .values_list("forma_corrigida", flat=True).distinct()
+        .values_list("forma_corrigida", flat=True)
     )
     formas = sorted(set(formas_baixas + formas_corrigidas))
 
     hoje = date.today()
 
-    situacoes_presentes = sorted(
-        s for s in pedidos.values_list("situacao_nome", flat=True).distinct() if s
-    )
+    # Dedup em Python, não via .distinct() no banco: a queryset tem .order_by()
+    # em colunas fora da projeção, e no Postgres isso faz o DISTINCT considerar
+    # essas colunas também — resultado: a mesma situação aparece repetida.
+    situacoes_presentes = sorted({s for s in pedidos.values_list("situacao_nome", flat=True) if s})
 
     return render(request, "pedidos/pagamentos_pendentes.html", {
         "pedidos": pedidos,
@@ -66,9 +70,8 @@ def view_pagamentos_confirmados(request):
         pedido__data_pedido__gte=INICIO_2026,
     ).order_by("-confirmado_em")
 
-    situacoes_presentes = sorted(
-        s for s in baixas.values_list("pedido__situacao_nome", flat=True).distinct() if s
-    )
+    # Dedup em Python pelo mesmo motivo de view_pagamentos_pendentes acima.
+    situacoes_presentes = sorted({s for s in baixas.values_list("pedido__situacao_nome", flat=True) if s})
 
     return render(request, "pedidos/pagamentos_confirmados.html", {
         "baixas": baixas,
@@ -242,7 +245,7 @@ def view_dar_baixa_parcela(request, parcela_id: int):
     return HttpResponse(parcela_row)
 
 
-@perm_required("pedidos.ver")
+@perm_required("pedidos.baixar")
 @require_POST
 def view_salvar_correcao(request, pedido_id: int):
     pedido = get_object_or_404(PedidoBling, pk=pedido_id)

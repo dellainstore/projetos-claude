@@ -110,6 +110,34 @@ class ConteudoConfig(AppConfig):
                     ['AccessAttempt', 'AccessLog', 'AccessFailureLog', 'AccessFailure'],
                 )
 
+            if request.user.has_perm('core_utils.ver_monitoramento'):
+                app_map['monitoramento_painel'] = {
+                    'name': 'Monitoramento',
+                    'app_label': 'monitoramento_painel',
+                    'app_url': '/painel/monitoramento/',
+                    'has_module_perms': True,
+                    'models': [
+                        {
+                            'name': 'Visão geral',
+                            'object_name': 'VisaoGeral',
+                            'admin_url': '/painel/monitoramento/',
+                            'view_only': True,
+                        },
+                        {
+                            'name': 'Erros 5xx',
+                            'object_name': 'Erros5xx',
+                            'admin_url': '/painel/monitoramento/erros/',
+                            'view_only': True,
+                        },
+                        {
+                            'name': 'Checkout',
+                            'object_name': 'Checkout',
+                            'admin_url': '/painel/monitoramento/checkout/',
+                            'view_only': True,
+                        },
+                    ],
+                }
+
             desired_app_order = {
                 'conteudo': 0,
                 'produtos': 1,
@@ -117,6 +145,7 @@ class ConteudoConfig(AppConfig):
                 'usuarios': 3,
                 'bling': 4,
                 'axes': 5,
+                'monitoramento_painel': 6,
             }
 
             return sorted(

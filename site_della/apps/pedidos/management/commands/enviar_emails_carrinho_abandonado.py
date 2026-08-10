@@ -47,12 +47,18 @@ class Command(BaseCommand):
         limite_min = agora - timedelta(hours=max_horas)
         limite_max = agora - timedelta(hours=horas)
 
+        # Exclui quem ja gerou pedido e so nao pagou ainda (PIX aberto, cartao em
+        # analise): esse carrinho conta como abandonado nas metricas, mas mandar
+        # "voce esqueceu itens no carrinho" nesse momento confunde a cliente.
+        # Se o pedido for cancelado/estornado, o carrinho volta a ser elegivel.
         candidatos = CarrinhoAbandonado.objects.filter(
             recuperado=False,
             email_enviado=False,
             atualizado_em__gte=limite_min,
             atualizado_em__lte=limite_max,
-        ).select_related('cliente')
+        ).exclude(
+            pedido__status='aguardando_pagamento',
+        ).select_related('cliente', 'pedido')
 
         total = candidatos.count()
         self.stdout.write(

@@ -18,6 +18,24 @@ def perm_required(perm: str):
     return decorator
 
 
+def perm_required_qualquer(*perms: str):
+    """Como perm_required(), mas libera se o usuário tiver QUALQUER UMA das
+    permissões passadas — pra telas que agregam dado de mais de um fluxo
+    (ex.: um resumo que mistura inclusão + aprovação) e não fazem sentido
+    atrás de uma permissão só."""
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return redirect("core:login")
+            if not any(request.user.tem_perm(p) for p in perms):
+                messages.error(request, "Você não tem permissão para acessar esta página.")
+                return redirect("core:home")
+            return view_func(request, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
 def papel_required(*papeis):
     """Legado: verifica papel. Novos recursos devem usar perm_required()."""
     def decorator(view_func):

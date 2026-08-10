@@ -509,39 +509,13 @@ usuário confirmar mudanças no Bling. `atualizar_mes_anterior.sh` fecha essa
 lacuna rodando o mês anterior isoladamente todo dia (não precisa reprocessar
 2 meses inteiros a mais só pra pegar o mês fechado mais recente).
 
-Retry: `jobs/vendas_atendidas.py::listar_pedidos()` agora usa `get_json()`
-(retry exponencial em 429/5xx) na chamada de listagem — antes só as chamadas
-de detalhe por pedido retentavam, e a listagem sem retry causou falha
-silenciosa do backfill de 3 meses (junho falhou em 2026-08-01, HTTP 429 sem
-novas tentativas). Corrigido em conjunto com o cron acima.
-
-**`--forcar-substituicao` (mês fechado pode "prender" pedido como vendido):**
-Por padrão, `salvar_csv_com_merge()` em mês já fechado (anterior ao mês
-corrente) só faz *upsert* dos pedidos que **ainda estão** atendidos — nunca
-remove um pedido que saiu da lista de atendidos. Isso é de propósito, para
-não perder receita se um pedido for cancelado depois do fechamento. Só que
-isso também deixa preso pra sempre um pedido que **voltou** para "Em
-andamento" no Bling sem ter sido cancelado de fato: ele continua contando
-como venda porque nunca mais aparece na lista de "atendidos" para
-sobrescrever a linha antiga.
-
-Caso real (2026-08-04): 2 pedidos da Michelle (R$435 + R$1.717) voltaram de
-`Atendido-Anaca` para `Em andamento - Anaca` no Bling depois que julho
-fechou. O dashboard de Metas continuou contando os R$2.152,00 — Michelle
-aparecia em R$19.582,81 contra R$17.430,81 no relatório do Bling.
-
-A flag `--forcar-substituicao` em `vendas_atendidas.py` substitui o período
-inteiro mesmo em mês fechado (usa o `replace_date_range` que já existia,
-antes só ativo pro mês corrente). Usada por padrão em
-`atualizar_mes_anterior.sh` e `backfill_vendas_situacao.sh`. Para uma
-correção manual pontual em mês fechado:
-```bash
-run_jobs.py vendas_atendidas --inicio AAAA-MM-01 --fim AAAA-MM-DD --forcar-substituicao
-```
-Diagnóstico útil quando um pedido não bate: `apps.pedidos.models.PedidoBling`
-(sincroniza situação diariamente) tem `situacao_nome` legível por
-`bling_id` — mais rápido que decifrar o id numérico da situação via API
-(`/situacoes/modulos` exige scope que o token não tem).
+⚠️ `jobs/vendas_atendidas.py::listar_pedidos()` não tem retry em 429 na
+chamada de listagem (só as chamadas de detalhe por pedido retentam) — se a
+API do Bling estiver sob rate limit nesse instante, o mês inteiro falha
+silenciosamente naquela execução (fica só um `echo ... falhou` no log) e
+espera a próxima janela. Já aconteceu no backfill de 3 meses (junho falhou em
+2026-08-01). Não corrigido ainda — considerar adicionar retry se voltar a
+acontecer com frequência.
 
 ---
 
@@ -595,9 +569,28 @@ Diagnóstico útil quando um pedido não bate: `apps.pedidos.models.PedidoBling`
 
 ## Deploy na VPS
 
+### ⚠️ Operações administrativas: sempre via `della-ops`, nunca `systemctl` direto
+
+Este projeto é o `admin` no registry da `della-ops` (`/var/www/della-sistemas/ops/`).
+**Toda** operação de restart/status/health/logs deve passar pelo CLI `della`
+(instalado no PATH via `~/.local/bin/della`), nunca por `sudo systemctl`,
+`sudo journalctl` ou equivalente direto. Ver regra completa e fluxo
+obrigatório em [`AGENTS.md`](/var/www/della-sistemas/AGENTS.md) e detalhes em
+[`ops/README.md`](/var/www/della-sistemas/ops/README.md).
+
+```bash
+della restart admin   # reinicia o della-sistemas (via sudo restrito, sem pedir senha)
+della health admin     # HTTP + migrations pendentes
+della logs admin error -n 100   # ou access; -f para seguir em tempo real
+della status admin     # estado do serviço (active/inactive)
+```
+
+Se alguma operação não for suportada pela `della-ops`, isso deve ser informado
+explicitamente, e não contornado com `systemctl`/`journalctl` direto.
+
 ### Serviços
-- **Systemd:** `della-sistemas.service` — `sudo systemctl restart della-sistemas`
-- **Logs:** `~/logs/della-sistemas/access.log` e `error.log`
+- **Systemd:** `della-sistemas.service` (gerenciado via `della restart admin`)
+- **Logs:** `~/logs/della-sistemas/access.log` e `error.log` (via `della logs admin`)
 - **Nginx:** `/etc/nginx/sites-available/della-sistemas` (SSL via certbot)
 - **SSL:** Let's Encrypt — renovação automática pelo certbot
 
@@ -605,17 +598,25 @@ Diagnóstico útil quando um pedido não bate: `apps.pedidos.models.PedidoBling`
 
 `gunicorn.conf.py` tem `preload_app = True`. O processo master pré-carrega o app Django na inicialização; workers são forkados do estado em memória do master.
 
-- **`sudo systemctl restart della-sistemas`** é OBRIGATÓRIO após qualquer mudança Python (`.py`, settings, migrations)
+- **`della restart admin`** é OBRIGATÓRIO após qualquer mudança Python (`.py`, settings, migrations)
 - `kill -HUP <pid>` (graceful reload) **não funciona** — novos workers herdam o código antigo do master na memória
-- O serviço tem `Restart=on-failure`, então um `kill` manual não reinicia automaticamente — use sempre `systemctl restart`
+- O serviço tem `Restart=on-failure`, então um `kill` manual não reinicia automaticamente — use sempre `della restart admin`
+
+### Fluxo obrigatório após qualquer alteração Python
+
+1. Aplicar a alteração
+2. `della restart admin`
+3. `della health admin`
+4. `della logs admin error -n 50` (conferir se subiu limpo)
+5. Informar o resultado
 
 ### Comandos úteis
 ```bash
 # Reiniciar após mudanças Python/settings (OBRIGATÓRIO após qualquer .py alterado)
-sudo systemctl restart della-sistemas
+della restart admin
 
 # Ver logs em tempo real
-tail -f ~/logs/della-sistemas/error.log
+della logs admin error -f
 
 # Static files (após mudar CSS/JS/ícones)
 cd /var/www/della-sistemas/projetos-claude/della_sistemas
@@ -646,12 +647,72 @@ python manage.py runserver 8002
 
 ---
 
+## Módulo Estoque (Análise) (`apps/estoque/`)
+
+Migrado do Streamlit `app/estoque` em 2026-07-02. 5 páginas: Estoque Atual,
+Saúde do Estoque, Reposição, Queima, Previsão. Acesso: `estoque_analise.ver`
+(por padrão só superadmin — dado sensível de custo/valor parado).
+
+**Identidade do produto (SKU/nome/modelo/cor/tamanho) NÃO é duplicada aqui** —
+vem em tempo real de `apps.produtos` (`products_cache`/`variants_cache` em
+`inclusoes.db`), via `apps/estoque/services/catalog_bridge.py` (somente
+leitura, reaproveita `apps.produtos.services.db.get_conn()`). O banco próprio
+do módulo (`della_sistemas/data/estoque/estoque.db`, path em
+`ESTOQUE_DB_PATH`) guarda só o que não existe em lugar nenhum do Django:
+- `estoque_precos` (produto_id, preco, custo, fornecedor, estoque_consolidado)
+- `estoque` (produto_id, quantidade)
+- `vendas` (produto_id, quantidade, data, pedido_id, situacao_id)
+
+**Sync Bling:** `apps/estoque/services/bling_client.py` usa
+`apps.produtos.services.bling.api.bling_get` (retry/rate-limit/auth
+compartilhados com produtos — mesmo tenant, mesmo `shared/bling_auth`).
+`sync_produtos()` busca só preço/custo/fornecedor via `/produtos` (identidade
+já vem do catálogo); `sync_estoque()` busca saldo via `/estoques/saldos`;
+`sync_vendas()` busca pedidos atendidos via `/pedidos/vendas`.
+
+**Comando:** `manage.py sync_estoque [--only-vendas] [--dias N] [--historico-mensal] [--workers N]`
+— cron `10 3 * * * ... sync_estoque_analise_03hBRT` (substituiu o cron do
+Streamlit antigo, que apontava pra `app/estoque/jobs/sync_estoque.py`).
+
+**Bootstrap:** dados de saldo/vendas (histórico desde 2025-01-01) foram
+copiados uma vez do `app/estoque/data/estoque.db` do Streamlit para o banco
+novo — sync incremental assume daí pra frente.
+
+**UI:** tabelas server-rendered (sem cache tipo `st.cache_data`), paginação
+via `django.core.paginator.Paginator`, drilldown de tamanho em Reposição via
+`<select>` com reload (`?mc=<indice>`). Modo debug técnico e conciliação CSV
+do Streamlit **não foram portados** (fora de escopo do v1).
+
+---
+
+## Analytics do site — o que conta como venda (2026-07-28)
+
+O evento `pedido_finalizado` é gravado pelo site_della na **criação** do pedido.
+Sozinho, ele contava como venda um PIX gerado e nunca pago (ou um pedido depois
+cancelado). Regra única agora em `apps/analytics/vendas.py`:
+
+| Situação do pedido | Dashboard / relatório |
+|---|---|
+| Pago (`pagamento_confirmado`, `em_separacao`, `pronto_retirada`, `enviado`, `entregue`) | Conta em "Vendas pagas", receita, itens vendidos, produtos mais vendidos |
+| `aguardando_pagamento` | Card "Aguardando pagamento" (contagem + valor). Não entra em venda nem receita |
+| `cancelado` / `estornado` | Não entra em lugar nenhum |
+
+- O status real vem do espelho somente-leitura `PedidoSite` (`db_table = 'pedidos_pedido'`,
+  `app_label = analytics_site`), não do evento de analytics
+- Funil tem duas etapas finais: **Fecharam o pedido** e **Pagaram (venda)** — a
+  diferença entre elas é PIX não pago / cartão recusado
+- "Carrinho/checkout abandonado" = sessão sem venda **paga**. Sessão com pedido
+  pendente segue como abandonada até o pagamento entrar (mesma regra do
+  `CarrinhoAbandonado` no site_della)
+- Eventos por item só carregam `pedido_numero` desde 2026-07-28; para os
+  anteriores o critério é "a sessão gerou um pedido pago" (fallback histórico em
+  `eventos_itens`)
+- **NÃO regredir:** somar `valor_total` de `pedido_finalizado` sem filtrar
+  `produto_slug=''` duplica a receita (soma os eventos de item + o de total)
+
 ## Módulos futuros (placeholders no menu)
 
-- **Estoque** — análise, reposição, queima (virá de `app/estoque/`)
 - **Financeiro** — DRE, fluxo de caixa (virá de `app/financeiro/`)
-
-Para adicionar: criar `apps/estoque/`, adicionar em `INSTALLED_APPS`, incluir URL em `config/urls.py`.
 
 ---
 
@@ -661,6 +722,14 @@ Desativado em 2026-06-28. A UI foi migrada para este projeto Django e o sync de
 catálogo agora roda via `manage.py sync_catalog` (cron diário). O banco `inclusoes.db`
 foi movido para `della_sistemas/data/produtos/`. A pasta `app/produtos/` será removida
 após o período de validação (mantida temporariamente como fallback).
+
+## App Streamlit estoque (cron desativado — migrado para o Django)
+
+Migrado em 2026-07-02 para `apps/estoque/` (ver seção acima). O serviço
+`estoque.service` continua rodando na VPS (porta 8503,
+`estoque.dellainstore.com`) mas o cron não aponta mais pra ele — fica
+congelado até o usuário validar o módulo novo e decidir desativar/apagar
+`app/estoque/` de vez.
 
 ---
 

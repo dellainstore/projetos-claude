@@ -1,0 +1,140 @@
+{% load metas_extras estoque_extras %}
+<script type="application/json" id="fin-dados">{{ grafico_json|safe }}</script>
+
+<form id="fin-filtro-form" class="fin-filtro"
+      hx-get="{% url 'financeiro:htmx_dashboard_faturamento' %}"
+      hx-target="#fin-dashboard-conteudo" hx-swap="innerHTML" hx-trigger="change">
+  <div class="fin-dropdown" id="fin-dropdown-ano">
+    <button type="button" class="fin-dropdown-btn" onclick="window._finToggleDropdown('ano')">
+      <span class="fin-dropdown-txt">{{ ano_botao_label }}</span>
+      <span class="fin-dropdown-arrow">&#9662;</span>
+    </button>
+    <div class="fin-dropdown-panel" id="fin-dropdown-panel-ano">
+      {% for a in anos_todos %}
+      <label class="fin-checkbox">
+        <input type="checkbox" name="anos" value="{{ a }}" {% if a in anos_sel %}checked{% endif %}>
+        {{ a }}
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+  {% if meses_opcoes %}
+  <div class="fin-dropdown" id="fin-dropdown-mes">
+    <button type="button" class="fin-dropdown-btn" onclick="window._finToggleDropdown('mes')">
+      <span class="fin-dropdown-txt">{{ mes_botao_label }}</span>
+      <span class="fin-dropdown-arrow">&#9662;</span>
+    </button>
+    <div class="fin-dropdown-panel" id="fin-dropdown-panel-mes">
+      {% for m, label in meses_opcoes %}
+      <label class="fin-checkbox">
+        <input type="checkbox" name="meses" value="{{ m }}" {% if m in meses_sel %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</form>
+
+<div class="fin-periodo-row">
+  <span class="fin-periodo-label">{{ periodo_label }}</span>
+</div>
+
+<div class="fin-cards-grid">
+  <div class="fin-card fin-card--fatura">
+    <div class="fin-card-rotulo">Faturamento</div>
+    <div class="fin-card-corpo">
+      <span class="fin-card-icone">&#128200;</span>
+      <span class="fin-card-valor">{{ cards.faturamento|brl }}</span>
+    </div>
+  </div>
+  <div class="fin-card fin-card--compacto">
+    <div class="fin-card-rotulo">Qtd produtos vendidos</div>
+    <div class="fin-card-corpo">
+      <span class="fin-card-icone">&#128230;</span>
+      <span class="fin-card-valor">{{ cards.qtd_produtos|br_int }}</span>
+    </div>
+  </div>
+  <div class="fin-card fin-card--nome">
+    <div class="fin-card-rotulo">Qtd mais vendida</div>
+    {% if cards.produto_top_qtd %}
+    <div class="fin-card-corpo">
+      <span class="fin-card-icone">&#127942;</span>
+      <span class="fin-card-valor fin-card-valor--nome" title="{{ cards.produto_top_qtd.nome }}">{{ cards.produto_top_qtd.nome }}</span>
+    </div>
+    <div class="fin-card-apoio">{{ cards.produto_top_qtd.valor|br_int }} peças</div>
+    {% else %}
+    <div class="fin-card-apoio">Sem dados no período</div>
+    {% endif %}
+  </div>
+  <div class="fin-card fin-card--nome">
+    <div class="fin-card-rotulo">R$ mais vendido</div>
+    {% if cards.produto_top_valor %}
+    <div class="fin-card-corpo">
+      <span class="fin-card-icone">&#128176;</span>
+      <span class="fin-card-valor fin-card-valor--nome" title="{{ cards.produto_top_valor.nome }}">{{ cards.produto_top_valor.nome }}</span>
+    </div>
+    <div class="fin-card-apoio">{{ cards.produto_top_valor.valor|brl }}</div>
+    {% else %}
+    <div class="fin-card-apoio">Sem dados no período</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="fin-grid-2">
+  <div class="fin-bloco">
+    <div class="fin-bloco-titulo">Ranking produtos mais vendidos &mdash; R$</div>
+    <div class="fin-ranking-scroll">
+      {% if ranking_valor %}
+      {% for item in ranking_valor %}
+      <div class="fin-ranking-row">
+        <span class="fin-ranking-pos">{{ forloop.counter }}</span>
+        <span class="fin-ranking-nome" title="{{ item.nome }}">{{ item.nome }}</span>
+        <span class="fin-ranking-valor">{{ item.valor|brl }}</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="fin-ranking-vazio">Sem vendas no período.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="fin-bloco">
+    <div class="fin-bloco-titulo">Ranking produtos mais vendidos &mdash; Quantidade</div>
+    <div class="fin-ranking-scroll">
+      {% if ranking_qtd %}
+      {% for item in ranking_qtd %}
+      <div class="fin-ranking-row">
+        <span class="fin-ranking-pos">{{ forloop.counter }}</span>
+        <span class="fin-ranking-nome" title="{{ item.nome }}">{{ item.nome }}</span>
+        <span class="fin-ranking-valor">{{ item.quantidade|br_int }}</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="fin-ranking-vazio">Sem vendas no período.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="fin-charts-grid">
+  <div class="fin-chart-card">
+    <div class="fin-chart-titulo">Faturamento mensal{% if anos_sel %} &mdash; {{ anos_sel|last }}{% endif %}</div>
+    <div class="fin-chart-canvas-wrap">
+      {% if meses_opcoes %}
+      <canvas id="fin-chart-mensal"></canvas>
+      {% else %}
+      <div class="fin-ranking-vazio">Sem vendas no período.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="fin-chart-card">
+    <div class="fin-chart-titulo">Vendas por loja</div>
+    <div class="fin-chart-canvas-wrap">
+      {% if loja %}
+      <canvas id="fin-chart-loja"></canvas>
+      {% else %}
+      <div class="fin-ranking-vazio">Sem vendas no período.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>

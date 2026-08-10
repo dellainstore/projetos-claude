@@ -1,0 +1,25 @@
+{% load estoque_extras %}
+<h3 style="font-size:.9rem;font-weight:600;margin:1rem 0 .5rem;">{{ titulo }}</h3>
+{% if linhas %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr><th>SKU</th><th>Nome</th><th>Situação</th><th>Estoque</th><th>Vendido Total</th><th>Vendido 30d</th><th>Cobertura (dias)</th><th>Comprar</th></tr>
+    </thead>
+    <tbody>
+      {% for row in linhas %}
+      <tr>
+        <td>{{ row.sku }}</td><td>{{ row.nome }}</td><td>{{ row.status_reposicao }}</td>
+        <td>{{ row.estoque_atual|br_float:0 }}</td>
+        <td>{{ row.vendido_total_periodo|br_float:0 }}</td>
+        <td>{{ row.vendido_30d|br_float:0 }}</td>
+        <td>{{ row.dias_cobertura|br_float:1 }}</td>
+        <td>{{ row.quantidade_sugerida_reposicao_operacional|br_float:0 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">Sem itens neste bloco.</p>
+{% endif %}

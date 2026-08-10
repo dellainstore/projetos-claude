@@ -131,6 +131,21 @@ def token_refresh_manual(request):
 
 # ── Webhook ───────────────────────────────────────────────────────────────────
 
+def _registrar_falha_webhook(origem: str, resumo: str) -> None:
+    """Falha inesperada ao processar um webhook do Bling (SEC-03): loga com
+    traceback e alimenta o painel de Monitoramento, mas NUNCA propaga —
+    o Bling ja recebeu 200 antes disso e nao deve ficar retentando um
+    evento que sempre vai falhar do mesmo jeito."""
+    logger.exception('Bling webhook: falha ao processar %s', origem)
+    try:
+        from apps.core_utils.erros import registrar_erro_integracao
+        registrar_erro_integracao(
+            'bling', resumo, status=200, endpoint=f'bling_webhook:{origem}',
+        )
+    except Exception:
+        pass
+
+
 @csrf_exempt
 @require_POST
 def webhook(request):
@@ -188,12 +203,15 @@ def webhook(request):
         data = payload.get('data', {})
         logger.info('Bling webhook v3: estrutura=%s id=%s', estrutura_v3, data.get('id'))
 
-        if estrutura_v3 == 'pedidoVenda':
-            _processar_webhook_pedido(data)
-        elif estrutura_v3 == 'notaFiscal':
-            _processar_webhook_nfe(data)
-        elif estrutura_v3 == 'estoque':
-            _processar_webhook_estoque(data)
+        try:
+            if estrutura_v3 == 'pedidoVenda':
+                _processar_webhook_pedido(data)
+            elif estrutura_v3 == 'notaFiscal':
+                _processar_webhook_nfe(data)
+            elif estrutura_v3 == 'estoque':
+                _processar_webhook_estoque(data)
+        except Exception as exc:
+            _registrar_falha_webhook(estrutura_v3 or 'v3', str(exc))
 
     elif event_v1:
         # Valida HMAC-SHA256 igual ao v3 — mesmo header, mesma chave
@@ -218,10 +236,13 @@ def webhook(request):
             evento_tipo, event_v1.get('eventId'), data.get('id'),
         )
 
-        if evento_tipo.startswith('order.'):
-            _processar_webhook_pedido_v1(data, evento_tipo)
-        elif evento_tipo.startswith('stock.'):
-            _processar_webhook_estoque_v1(data, evento_tipo)
+        try:
+            if evento_tipo.startswith('order.'):
+                _processar_webhook_pedido_v1(data, evento_tipo)
+            elif evento_tipo.startswith('stock.'):
+                _processar_webhook_estoque_v1(data, evento_tipo)
+        except Exception as exc:
+            _registrar_falha_webhook(evento_tipo or 'v1', str(exc))
     else:
         logger.info(
             'Bling webhook: payload sem `estrutura` (v3) nem `event` (v1) — ignorado. '

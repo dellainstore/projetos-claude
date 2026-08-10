@@ -98,6 +98,14 @@ class Colaborador(models.Model):
     def __str__(self) -> str:
         return self.nome
 
+    def valor_dia_vt_em(self, ano: int, mes: int) -> Decimal:
+        """Valor do VT (R$/dia) vigente no mês de referência informado — usa o
+        histórico de vigências (`VtValorVigencia`); sem nenhum registro cadastrado
+        (ou nenhum vigente ainda naquela data), cai no campo legado `vt_valor_dia`."""
+        ref = date(ano, mes, 1)
+        vigencia = self.vt_vigencias.filter(vigente_desde__lte=ref).order_by("-vigente_desde").first()
+        return vigencia.valor_dia if vigencia else self.vt_valor_dia
+
 
 # ── Escalas de trabalho ──────────────────────────────────────────────────────
 
@@ -399,6 +407,9 @@ class PeriodoAquisitivo(models.Model):
         help_text="Abono pecuniário (venda de férias): dias comprados pela empresa. "
                   "Abatem do saldo. Só liberado após o período completar.",
     )
+    abono_data_pagamento = models.DateField(
+        null=True, blank=True, help_text="Data de pagamento do abono.",
+    )
     observacao   = models.CharField(max_length=200, blank=True)
 
     class Meta:
@@ -417,6 +428,12 @@ class GozoFerias(models.Model):
     data_inicio = models.DateField()
     dias        = models.IntegerField(default=1)
     observacao  = models.CharField(max_length=200, blank=True)
+    afastamento = models.ForeignKey(
+        "Afastamento", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="gozo_ferias",
+        help_text="Afastamento (dia inteiro, tipo férias) gerado automaticamente "
+                  "para dispensar a batida de ponto nesses dias.",
+    )
 
     class Meta:
         verbose_name = "Gozo de Férias"
@@ -425,6 +442,16 @@ class GozoFerias(models.Model):
 
     def __str__(self) -> str:
         return f"{self.periodo.colaborador} — {self.dias} dia(s) a partir de {self.data_inicio:%d/%m/%Y}"
+
+    @property
+    def data_fim(self) -> date:
+        from apps.rh.services.ferias import data_fim_gozo
+        return data_fim_gozo(self.data_inicio, self.dias)
+
+    @property
+    def data_retorno(self) -> date:
+        from apps.rh.services.ferias import data_retorno_gozo
+        return data_retorno_gozo(self.periodo.colaborador, self.data_fim)
 
 
 # ── Afastamentos (férias, folga, atestado…) ──────────────────────────────────
@@ -436,7 +463,10 @@ def _anexo_afastamento_path(instance, filename):
 class Afastamento(models.Model):
     """Ausência justificada de um colaborador num intervalo de dias. Cobre férias
     (puxa do período aquisitivo), folga, atestado, falta e outros. Dias cobertos
-    não geram pendência de ponto."""
+    não geram pendência de ponto — com `dia_inteiro=False` (afastamento parcial,
+    ex.: atestado só de manhã), só o intervalo hora_inicio–hora_fim é dispensado;
+    o resto do dia continua exigindo ponto normalmente (ver
+    `services/afastamentos.py::slots_dispensados_por_afastamento`)."""
 
     # "ferias" continua nos choices só para exibir lançamentos legados; o lançamento
     # de férias agora é feito exclusivamente no módulo Férias. Use FORM_TIPO_CHOICES
@@ -467,6 +497,17 @@ class Afastamento(models.Model):
     remunerado    = models.BooleanField(
         default=True, help_text="Folga/falta abonada (remunerada). Desmarque para falta não abonada.",
     )
+    dia_inteiro   = models.BooleanField(
+        default=True,
+        help_text="Desmarque para um afastamento parcial (ex.: atestado só de manhã) — "
+                   "informe hora_inicio/hora_fim. Fora desse intervalo, o ponto continua sendo cobrado.",
+    )
+    hora_inicio   = models.TimeField(
+        null=True, blank=True, help_text="Só para afastamento parcial (dia_inteiro=False).",
+    )
+    hora_fim      = models.TimeField(
+        null=True, blank=True, help_text="Só para afastamento parcial (dia_inteiro=False).",
+    )
     anexo         = models.FileField(
         upload_to=_anexo_afastamento_path, null=True, blank=True,
         help_text="Atestado/comprovante (PDF ou imagem). Imagens são convertidas para WebP.",
@@ -484,7 +525,10 @@ class Afastamento(models.Model):
         ordering = ["-data_inicio", "colaborador"]
 
     def __str__(self) -> str:
-        return f"{self.colaborador} — {self.get_tipo_display()} {self.data_inicio:%d/%m} a {self.data_fim:%d/%m/%Y}"
+        periodo = f"{self.data_inicio:%d/%m} a {self.data_fim:%d/%m/%Y}"
+        if not self.dia_inteiro and self.hora_inicio and self.hora_fim:
+            periodo += f" ({self.hora_inicio:%H:%M}–{self.hora_fim:%H:%M})"
+        return f"{self.colaborador} — {self.get_tipo_display()} {periodo}"
 
     @property
     def dias(self) -> int:
@@ -595,6 +639,34 @@ class BeneficioVT(models.Model):
         return (Decimal(self.dias) * self.valor_dia).quantize(Decimal("0.01"))
 
 
+class VtValorVigencia(models.Model):
+    """Histórico de valores do VT (R$/dia) por colaborador. Cada mudança de valor
+    vira um registro novo com a data a partir da qual passa a valer — assim, ao
+    reajustar o valor, os meses anteriores continuam calculando com o valor antigo.
+    `vt_do_mes()` usa o registro vigente mais recente cuja `vigente_desde` seja
+    menor ou igual ao 1º dia do mês de referência do VT; sem nenhum registro,
+    cai no valor legado `Colaborador.vt_valor_dia`."""
+
+    colaborador   = models.ForeignKey(Colaborador, on_delete=models.CASCADE, related_name="vt_vigencias")
+    valor_dia     = models.DecimalField(max_digits=10, decimal_places=2)
+    vigente_desde = models.DateField(
+        help_text="A partir de qual data (1º dia do mês) esse valor passa a valer.",
+    )
+    criado_por    = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    criado_em     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Vigência de valor do VT"
+        verbose_name_plural = "Vigências de valor do VT"
+        ordering = ["-vigente_desde"]
+        unique_together = [("colaborador", "vigente_desde")]
+
+    def __str__(self) -> str:
+        return f"{self.colaborador.nome} — R$ {self.valor_dia}/dia a partir de {self.vigente_desde:%d/%m/%Y}"
+
+
 # ── Controle de Ponto ────────────────────────────────────────────────────────
 
 class LocalEmpresa(models.Model):
@@ -652,9 +724,11 @@ class ParametrosPonto(models.Model):
 class BatidaPonto(models.Model):
     """Batida individual de ponto, com geolocalização validada no momento do registro.
 
-    O `tipo` é definido pela ordem cronológica das batidas do dia (1ª=entrada,
-    2ª=saída almoço, 3ª=volta, 4ª=saída) — reordenado automaticamente a cada
-    inclusão/edição. Ver services.ponto.reordenar_tipos_do_dia."""
+    O `tipo` é reatribuído automaticamente a cada inclusão/edição do dia:
+    casado com o horário esperado da escala (mais próximo, preservando a
+    ordem cronológica) quando há escala definida pro dia, ou pela posição
+    (1ª=entrada, 2ª=saída almoço, 3ª=volta, 4ª=saída) quando não há.
+    Ver services.ponto.reordenar_tipos_do_dia."""
 
     TIPO_CHOICES = [
         ("entrada", "Entrada"),

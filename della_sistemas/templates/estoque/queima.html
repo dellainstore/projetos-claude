@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load estoque_extras core_extras %}
+
+{% block titulo %}Queima{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <h1 class="ds-page-titulo">Queima</h1>
+    <p class="ds-page-subtitulo">Estoque parado e valor travado, para agir rápido.</p>
+  </div>
+  <form method="post" action="{% url 'estoque:atualizar' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="estoque:queima">
+    <button type="submit" class="ds-btn ds-btn--outline ds-btn--sm">Atualizar dados</button>
+  </form>
+</div>
+
+{% if vazio %}
+<p class="text-muted">Sem produtos com estoque positivo e sem venda relevante para queima.</p>
+{% else %}
+<div class="ds-cards-grid">
+  <div class="ds-card ds-card--dourado">
+    <div class="ds-card-rotulo">Valor parado (custo)</div>
+    <div class="ds-card-valor">{{ valor_parado|brl }}</div>
+  </div>
+  <div class="ds-card">
+    <div class="ds-card-rotulo">Parados há 90+ dias</div>
+    <div class="ds-card-valor">{{ qtd_90|br_int }}</div>
+  </div>
+  <div class="ds-card ds-card--vermelho">
+    <div class="ds-card-rotulo">Parados há 180+ dias</div>
+    <div class="ds-card-valor">{{ qtd_180|br_int }}</div>
+  </div>
+</div>
+
+<p class="text-muted" style="margin:1rem 0;">Liquidar itens muito parados e caros. Manter os que ainda têm histórico forte. Reavaliar reposição futura para os relevantes.</p>
+
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>SKU</th><th>Nome</th><th>Estoque</th><th>Sem venda</th><th>Valor (custo)</th>
+        <th>Vendido Total</th><th>Média/mês</th><th>O que fazer</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in linhas %}
+      <tr>
+        <td>{{ row.sku }}</td>
+        <td>{{ row.nome }}</td>
+        <td>{{ row.estoque_atual|br_float:0 }}</td>
+        <td>{{ row.faixa_dias_sem_venda }}</td>
+        <td>{{ row.valor_total_custo|brl }}</td>
+        <td>{{ row.vendido_total_periodo|br_float:0 }}</td>
+        <td>{{ row.media_venda_mensal_historica|br_float:1 }}</td>
+        <td>
+          {% if row.acao_sugerida == "liquidar" %}<span class="ds-status ds-status--rejeitado">liquidar</span>
+          {% elif row.acao_sugerida == "avaliar reposição futura" %}<span class="ds-status ds-status--pendente">avaliar reposição</span>
+          {% else %}<span class="ds-status ds-status--processado">manter</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

@@ -6,10 +6,10 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.views.decorators.http import require_POST
 
-from apps.core.decorators import papel_required
+from apps.core.decorators import perm_required
 
 
-@papel_required("superadmin", "gestor")
+@perm_required("aprovacoes.ver")
 def view_aprovacoes(request: HttpRequest) -> HttpResponse:
     from apps.produtos.services.db import get_conn
     from apps.produtos.services.business.suppliers import build_supplier_options
@@ -67,7 +67,7 @@ def view_aprovacoes(request: HttpRequest) -> HttpResponse:
     })
 
 
-@papel_required("superadmin", "gestor")
+@perm_required("aprovacoes.aprovar")
 @require_POST
 def view_aprovar(request: HttpRequest, request_id: int) -> HttpResponse:
     from apps.produtos.services.db import get_conn
@@ -127,8 +127,11 @@ def view_aprovar(request: HttpRequest, request_id: int) -> HttpResponse:
             template_id_override=template_id_override,
         )
 
-        # Processa imediatamente os stock_moves gerados
-        r2 = processar_stock_moves(limit=50)
+        # Processa imediatamente só os stock_moves gerados por ESTA aprovação
+        # (nunca uma varredura global — evita reprocessar moves que outra
+        # aprovação concorrente ainda esteja aplicando).
+        move_ids = resultado.get("move_ids") or []
+        r2 = processar_stock_moves(move_ids=move_ids) if move_ids else {"ok": 0, "error": 0}
 
         ok = resultado.get("ok", 0)
         erros = resultado.get("error", 0)

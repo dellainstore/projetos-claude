@@ -2,6 +2,7 @@ import threading
 import time
 
 from django.conf import settings
+from django.http import Http404
 
 
 class Erro5xxMiddleware:
@@ -31,6 +32,12 @@ class Erro5xxMiddleware:
         return response
 
     def process_exception(self, request, exception):
+        # Http404 e sinalizacao normal de fluxo (handler404 customizado ainda
+        # pode devolver um redirect 301) -- nao e uma falha real, entao nao
+        # entra no registro de 5xx.
+        if isinstance(exception, Http404):
+            return None
+
         # View levantou excecao nao tratada -> Django devolvera 500.
         # Registramos aqui (temos o tipo da excecao) e marcamos para o __call__
         # nao duplicar.

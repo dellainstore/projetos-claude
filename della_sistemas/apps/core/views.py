@@ -24,14 +24,22 @@ def _safe_redirect_url(url: str, request: HttpRequest) -> str:
     return reverse("core:home")
 
 
-def _html_redirect(target: str) -> HttpResponse:
+def _html_redirect(target: str, delay_ms: int = 0) -> HttpResponse:
     """Retorna 200 com JS/meta redirect para garantir que o browser
-    processe Set-Cookie antes de navegar (necessário no iOS WebKit)."""
+    processe Set-Cookie antes de navegar (necessário no iOS WebKit).
+
+    delay_ms > 0 quando esta resposta também está gravando um cookie (ex.:
+    sessão de login): navegar embora instantaneamente (0ms) não dá tempo do
+    Safari no iOS persistir o Set-Cookie antes da próxima requisição — o
+    request seguinte chega sem o cookie mesmo com a página HTML/JS de
+    transição. Um atraso pequeno (não perceptível ao usuário) resolve.
+    """
     t = target.replace('"', "%22").replace("'", "%27")
+    refresh_seconds = f"{delay_ms / 1000:.2f}".rstrip("0").rstrip(".") or "0"
     html = (
         "<!DOCTYPE html><html><head>"
-        f'<meta http-equiv="refresh" content="0;url={t}">'
-        f"</head><body><script>window.location.replace('{t}');</script></body></html>"
+        f'<meta http-equiv="refresh" content="{refresh_seconds};url={t}">'
+        f"</head><body><script>setTimeout(function(){{ window.location.replace('{t}'); }}, {delay_ms});</script></body></html>"
     )
     return HttpResponse(html)
 
@@ -80,12 +88,23 @@ def view_login_finalizar(request: HttpRequest) -> HttpResponse:
         return redirect("core:login")
 
     login(request, user, backend=data["backend"])
-    # O cookie de sessão é definido AQUI, numa resposta a GET. Usamos um
-    # redirect HTTP 302 (e não um redirect via HTML/JS): a camada de rede do
-    # WebKit grava o Set-Cookie ANTES de emitir o GET para o destino, evitando
-    # a corrida em que o iOS Safari navega antes de persistir o cookie (que
-    # fazia o login "voltar" para a tela de login num loop).
-    return redirect(data.get("dest") or reverse("core:home"))
+    # O cookie de sessão é definido AQUI, numa resposta a GET (Safari no iOS
+    # não salva Set-Cookie em respostas a POST). A página HTML/JS com um
+    # pequeno atraso (em vez de um redirect 302 direto) é defesa extra contra
+    # corridas de commit de cookie no Safari.
+    #
+    # NOTA (2026-07-23): um bug parecido ("login sempre autentica no servidor,
+    # mas o usuário volta pro /login/ sem nenhuma mensagem de erro") tinha
+    # causa raiz DIFERENTE: SESSION_COOKIE_NAME/CSRF_COOKIE_NAME usavam os
+    # nomes padrão do Django ("sessionid"/"csrftoken"), iguais aos do
+    # site_della — que define SESSION_COOKIE_DOMAIN/CSRF_COOKIE_DOMAIN =
+    # ".dellainstore.com" (cobre todos os subdomínios). Quem já tinha visitado
+    # o site principal carregava um "sessionid" antigo válido em todo
+    # *.dellainstore.com, que colidia com o nosso (restrito a este
+    # subdomínio) — o navegador mandava os dois cookies com o mesmo nome e o
+    # Django podia ler o valor errado. Corrigido dando nomes próprios aos
+    # cookies deste app (ver settings.py, perto de SESSION_COOKIE_AGE).
+    return _html_redirect(data.get("dest") or reverse("core:home"), delay_ms=500)
 
 
 @require_POST
@@ -246,8 +265,15 @@ def view_usuario_editar(request: HttpRequest, pk: int) -> HttpResponse:
                 novas_permissoes[gid][pid] = (request.POST.get(chave) == "1")
 
         usuario.permissoes = novas_permissoes
-        # papel legado: inferido das permissões de admin
-        usuario.papel = "superadmin" if novas_permissoes.get("admin", {}).get("usuarios") else "gestor"
+        # papel legado: usado só como fallback quando `permissoes` está vazio
+        # (apps.core.models.User.tem_perm). Nunca demovemos aqui — antes este
+        # código forçava "gestor" pra qualquer usuário não-admin editado,
+        # ignorando as permissões granulares recém-salvas (achado de auditoria
+        # IDOR 2026-08-09: liberava precos.alterar/aprovacoes.aprovar mesmo
+        # desmarcados). Só promovemos pra "superadmin" quando a permissão é
+        # concedida; caso contrário o papel atual é preservado.
+        if novas_permissoes.get("admin", {}).get("usuarios"):
+            usuario.papel = "superadmin"
         usuario.is_staff = novas_permissoes.get("admin", {}).get("usuarios", False)
         usuario.save()
         messages.success(request, f"Usuário {usuario.username} atualizado.")

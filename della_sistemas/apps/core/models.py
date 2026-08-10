@@ -56,8 +56,30 @@ class User(AbstractUser):
         return self.tem_perm("aprovacoes.aprovar")
 
     @property
+    def pode_ver_precos(self) -> bool:
+        return self.tem_perm("precos.ver")
+
+    @property
     def pode_incluir(self) -> bool:
         return self.tem_perm("estoque.incluir")
+
+    @property
+    def pode_ver_historico(self) -> bool:
+        return self.tem_perm("estoque.historico")
+
+    @property
+    def pode_excluir_estoque(self) -> bool:
+        return self.tem_perm("estoque.excluir")
+
+    @property
+    def pode_ver_resumo_produtos(self) -> bool:
+        # "Resumo" agrega pendências/inclusões/aprovações — mesma audiência de
+        # quem já mexe nesse fluxo (inclui, aprova ou vê o histórico).
+        return self.pode_incluir or self.pode_aprovar or self.pode_ver_historico
+
+    @property
+    def pode_consulta_rapida(self) -> bool:
+        return self.tem_perm("consulta_rapida.ver")
 
     @property
     def pode_ver_metas(self) -> bool:
@@ -76,6 +98,14 @@ class User(AbstractUser):
         return self.tem_perm("em_breve.ver")
 
     @property
+    def pode_ver_estoque_analise(self) -> bool:
+        return self.tem_perm("estoque_analise.ver")
+
+    @property
+    def pode_ver_financeiro(self) -> bool:
+        return self.tem_perm("financeiro.ver")
+
+    @property
     def pode_ver_pedidos(self) -> bool:
         return self.tem_perm("pedidos.ver")
 
@@ -92,6 +122,14 @@ class User(AbstractUser):
         return self.tem_perm("analytics.ver")
 
     @property
+    def pode_ver_tarefas(self) -> bool:
+        return self.tem_perm("tarefas.ver")
+
+    @property
+    def pode_criar_tarefas(self) -> bool:
+        return self.tem_perm("tarefas.criar")
+
+    @property
     def pode_ver_rh(self) -> bool:
         return self.tem_perm("rh.ver")
 
@@ -102,6 +140,10 @@ class User(AbstractUser):
     @property
     def pode_bater_ponto(self) -> bool:
         return self.tem_perm("rh.ponto_bater")
+
+    @property
+    def pode_ver_jornada_propria(self) -> bool:
+        return self.tem_perm("rh.ponto_jornada_ver")
 
     @property
     def pode_gerir_ponto(self) -> bool:

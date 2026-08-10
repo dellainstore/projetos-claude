@@ -18,6 +18,7 @@
 .campo-wrapper { position:relative; }
 .pendente-card { border:1px solid var(--cinza-medio);border-radius:8px;padding:1rem;margin-bottom:0.75rem; }
 .pendente-card-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.4rem; }
+#cores-container button.ds-btn--selecionada { background:var(--dourado);border-color:var(--dourado);color:var(--branco); }
 </style>
 {% endblock %}
 
@@ -128,6 +129,7 @@
   <!-- Tamanhos e quantidades -->
   <div class="step-card" id="step-tamanhos" style="display:none;">
     <div class="ds-form-section-titulo">5. Quantidades por Tamanho</div>
+    <div id="cor-selecionada-label" style="display:none;margin-bottom:0.75rem;font-size:0.85rem;font-weight:600;color:var(--dourado);"></div>
     <div id="tamanhos-container"></div>
   </div>
 
@@ -219,9 +221,17 @@ function onBaseNova(val) {
   }
 }
 
-function onCorSelecionada(cor) {
+function onCorSelecionada(cor, btnEl) {
   document.getElementById('hid-cor').value = cor;
   document.getElementById('step-tamanhos').style.display = 'block';
+
+  document.querySelectorAll('#cores-container button[data-cor]').forEach(b => {
+    b.classList.toggle('ds-btn--selecionada', b === btnEl || b.dataset.cor === cor);
+  });
+
+  const label = document.getElementById('cor-selecionada-label');
+  label.textContent = 'Cor selecionada: ' + cor;
+  label.style.display = 'block';
 
   const base = document.getElementById('hid-base').value;
   htmx.ajax('GET', '{% url "produtos:htmx_tamanhos" %}?base=' + encodeURIComponent(base) + '&cor=' + encodeURIComponent(cor), {target: '#tamanhos-container'});
@@ -244,6 +254,10 @@ function resetApartirDe(from) {
       if (el) el.style.display = 'none';
     });
     document.getElementById('hid-cor').value = '';
+    document.querySelectorAll('#cores-container button[data-cor]').forEach(b => b.classList.remove('ds-btn--selecionada'));
+    const label = document.getElementById('cor-selecionada-label');
+    label.textContent = '';
+    label.style.display = 'none';
   }
 }
 

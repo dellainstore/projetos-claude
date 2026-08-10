@@ -551,6 +551,35 @@ body.sidebar-colapsada .ds-sidebar-tab {
 
 .ds-textarea { resize: vertical; min-height: 80px; }
 
+/* ── Jornada de ponto: linhas especiais ─────────────────────────────────── */
+.ds-linha-indisponivel { background: #f1f0ee; }
+.ds-linha-indisponivel td { color: var(--cinza-texto); }
+
+.ds-linha-especial { background: #faf5e9; }
+
+/* Mantém a linha especial diferenciada mesmo com o hover padrão da tabela
+   (que tem mais especificidade por vir de .ds-table tbody tr:hover). */
+.ds-table tbody tr.ds-linha-indisponivel:hover { background: #f1f0ee; }
+.ds-table tbody tr.ds-linha-especial:hover { background: #faf5e9; }
+
+.ds-input:disabled,
+.ds-select:disabled,
+.ds-textarea:disabled {
+  background: var(--cinza-claro, #f2f0ec);
+  color: var(--cinza-texto);
+  border-color: var(--cinza-medio);
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+/* Campos travados por afastamento: mesma cor da linha (some visualmente),
+   mantendo só a borda pra ainda parecer um campo (só que bloqueado). */
+.ds-linha-indisponivel .ds-input:disabled,
+.ds-linha-indisponivel .ds-select:disabled {
+  background: transparent;
+  opacity: 1;
+}
+
 /* ── Botões ───────────────────────────────────────────────────────────────── */
 .ds-btn {
   display: inline-flex;
@@ -574,6 +603,14 @@ body.sidebar-colapsada .ds-sidebar-tab {
   white-space: nowrap;
 }
 .ds-btn:hover { border-color: var(--preto); color: var(--preto); }
+.ds-btn:disabled,
+.ds-btn:disabled:hover {
+  background: var(--cinza-claro);
+  color: var(--cinza-texto);
+  opacity: 0.55;
+  border-color: var(--cinza-medio);
+  cursor: not-allowed;
+}
 
 .ds-btn--primario {
   background: var(--preto);
@@ -735,6 +772,11 @@ body.sidebar-colapsada .ds-sidebar-tab {
   background: #f3f0eb;
   color: #9b9b9b;
   cursor: not-allowed;
+}
+/* Campo com sugestão (já teve batida) — continua editável, só um indicativo visual. */
+.corr-sugerido {
+  background: #eff6ff;
+  border-color: #bfdbfe;
 }
 @media (max-width: 380px) {
   .corr-horarios { grid-template-columns: 1fr; }

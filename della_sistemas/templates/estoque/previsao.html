@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load estoque_extras %}
+
+{% block titulo %}Previsão{% endblock %}
+
+{% block conteudo %}
+<div class="ds-page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <h1 class="ds-page-titulo">Previsão</h1>
+    <p class="ds-page-subtitulo">Itens com demanda subindo, caindo ou estável, com base no histórico acumulado.</p>
+  </div>
+  <form method="post" action="{% url 'estoque:atualizar' %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="estoque:previsao">
+    <button type="submit" class="ds-btn ds-btn--outline ds-btn--sm">Atualizar dados</button>
+  </form>
+</div>
+
+{% if vazio %}
+<p class="text-muted">Sem itens com histórico relevante para previsão no momento.</p>
+{% else %}
+<div class="ds-cards-grid">
+  <div class="ds-card ds-card--verde">
+    <div class="ds-card-rotulo">Itens que subiram</div>
+    <div class="ds-card-valor">{{ subiram|br_int }}</div>
+  </div>
+  <div class="ds-card ds-card--vermelho">
+    <div class="ds-card-rotulo">Itens que caíram</div>
+    <div class="ds-card-valor">{{ cairam|br_int }}</div>
+  </div>
+  <div class="ds-card">
+    <div class="ds-card-rotulo">Itens estáveis relevantes</div>
+    <div class="ds-card-valor">{{ estaveis|br_int }}</div>
+  </div>
+</div>
+
+<p class="text-muted" style="margin:1rem 0;">Aumentar reposição dos itens em alta, revisar compras dos itens em queda e manter os estáveis de maior relevância.</p>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.5rem;">
+  <div>
+    <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.5rem;">Vendas subiram</h3>
+    <div class="ds-table-wrapper">
+      <table class="ds-table">
+        <thead><tr><th>SKU</th><th>Nome</th><th>Vendido Total</th><th>Vendido 30d</th><th>Variação</th></tr></thead>
+        <tbody>
+          {% for row in linhas_subiram %}
+          <tr>
+            <td>{{ row.sku }}</td><td>{{ row.nome }}</td>
+            <td>{{ row.vendido_total_periodo|br_float:0 }}</td>
+            <td>{{ row.vendido_30d|br_float:0 }}</td>
+            <td>{{ row.variacao_percentual_30d|br_float:1 }}%</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted">Sem itens.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.5rem;">Vendas caíram</h3>
+    <div class="ds-table-wrapper">
+      <table class="ds-table">
+        <thead><tr><th>SKU</th><th>Nome</th><th>Vendido Total</th><th>Vendido 30d</th><th>Variação</th></tr></thead>
+        <tbody>
+          {% for row in linhas_cairam %}
+          <tr>
+            <td>{{ row.sku }}</td><td>{{ row.nome }}</td>
+            <td>{{ row.vendido_total_periodo|br_float:0 }}</td>
+            <td>{{ row.vendido_30d|br_float:0 }}</td>
+            <td>{{ row.variacao_percentual_30d|br_float:1 }}%</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted">Sem itens.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

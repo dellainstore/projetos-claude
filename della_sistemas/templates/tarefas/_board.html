@@ -1,0 +1,40 @@
+{% load tarefas_extras %}
+{% for bloco in quadro %}
+<div class="kanban-coluna">
+  <div class="kanban-coluna-cab" style="{% if bloco.coluna.cor %}border-top:3px solid {{ bloco.coluna.cor }};{% endif %}">
+    <span>{{ bloco.coluna.nome }}</span>
+    <span style="color:var(--cinza-texto); font-weight:400;">{{ bloco.tarefas|length }}</span>
+  </div>
+  <div class="kanban-coluna-corpo" data-status-id="{{ bloco.coluna.pk }}">
+    {% for t in bloco.tarefas %}
+    <div class="kanban-card" draggable="true" data-tarefa-id="{{ t.pk }}"
+         data-mover-url="{% url 'tarefas:htmx_mover_status' t.pk %}"
+         hx-get="{% url 'tarefas:htmx_detalhe_tarefa' t.pk %}" hx-target="#modal-container" hx-trigger="click">
+      <div class="kanban-card-titulo">{{ t.titulo }}</div>
+      <div class="kanban-card-meta">
+        <span class="kanban-tag-prioridade {{ t.prioridade }}">{{ t.get_prioridade_display }}</span>
+        <span>Prazo {{ t.prazo|date:"d/m" }}</span>
+        {% if t.criado_por_id == request.user.pk %}
+        <span class="kanban-selo-criador">você pediu</span>
+        {% endif %}
+        {% if t|editado_nao_visto:request.user %}
+        <span class="kanban-tag-editado">Editado</span>
+        {% endif %}
+      </div>
+      <div class="kanban-responsaveis">
+        {% for r in t.responsaveis.all %}
+        <span class="kanban-avatar" title="{{ r|primeiro_nome }}">{{ r|primeiro_nome|slice:":1"|upper }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% empty %}
+    <div style="font-size:.78rem; color:var(--cinza-texto); text-align:center; padding:.6rem;">Nenhuma tarefa aqui</div>
+    {% endfor %}
+  </div>
+</div>
+{% empty %}
+<p style="color:var(--cinza-texto); font-size:.9rem;">
+  Nenhuma coluna configurada ainda.
+  {% if request.user.is_superadmin %}<a href="{% url 'tarefas:colunas' %}">Configurar colunas</a>.{% endif %}
+</p>
+{% endfor %}

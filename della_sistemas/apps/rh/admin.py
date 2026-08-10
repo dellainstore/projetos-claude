@@ -17,6 +17,7 @@ from apps.rh.models import (
     ParametrosPonto,
     PeriodoAquisitivo,
     TipoBeneficio,
+    VtValorVigencia,
 )
 
 
@@ -71,8 +72,11 @@ class AfastamentoAnexoInline(admin.TabularInline):
 
 @admin.register(Afastamento)
 class AfastamentoAdmin(admin.ModelAdmin):
-    list_display = ("colaborador", "tipo", "data_inicio", "data_fim", "remunerado", "qtd_anexos", "criado_em")
-    list_filter = ("tipo", "remunerado")
+    list_display = (
+        "colaborador", "tipo", "data_inicio", "data_fim", "dia_inteiro",
+        "hora_inicio", "hora_fim", "remunerado", "qtd_anexos", "criado_em",
+    )
+    list_filter = ("tipo", "remunerado", "dia_inteiro")
     date_hierarchy = "data_inicio"
     search_fields = ("colaborador__nome", "observacao")
     inlines = [AfastamentoAnexoInline]
@@ -96,3 +100,4 @@ admin.site.register(ComissaoPedido)
 admin.site.register(PeriodoAquisitivo)
 admin.site.register(GozoFerias)
 admin.site.register(BeneficioVT)
+admin.site.register(VtValorVigencia)

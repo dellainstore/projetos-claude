@@ -48,6 +48,17 @@ def processar_stock_moves(
     error_moves = []
 
     for move_id, sku, qty_delta, bling_product_id, base_name, color_key, size_key, supplier_name, price_varejo, price_custo, price_atacado, req_ts in rows:
+        # Claim atômico: evita que duas chamadas concorrentes (ex.: aprovações
+        # clicadas em sequência rápida) apliquem o mesmo lançamento duas vezes
+        # no Bling. Se outra chamada já pegou este move_id, pula.
+        claimed = cur.execute(
+            "UPDATE stock_moves SET status='PROCESSING' WHERE move_id=? AND status='PENDING'",
+            (move_id,),
+        ).rowcount
+        conn.commit()
+        if not claimed:
+            continue
+
         try:
             id_produto = int(bling_product_id) if bling_product_id else None
             if not id_produto and sku:

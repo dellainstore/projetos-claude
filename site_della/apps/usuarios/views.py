@@ -38,7 +38,10 @@ def login_view(request):
     if request.method == 'POST':
         if form.is_valid():
             usuario = form.get_usuario()
+            _session_key_antes = request.session.session_key
             login(request, usuario)
+            from apps.analytics.services import migrar_sessao_analytics
+            migrar_sessao_analytics(_session_key_antes, request.session.session_key)
             if not request.POST.get('lembrar'):
                 # sessão expira ao fechar o browser
                 request.session.set_expiry(0)
@@ -84,7 +87,10 @@ def cadastro(request):
 
         if form.is_valid():
             usuario = form.save()
+            _session_key_antes = request.session.session_key
             login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
+            from apps.analytics.services import migrar_sessao_analytics
+            migrar_sessao_analytics(_session_key_antes, request.session.session_key)
 
             # Evento CompleteRegistration (CAPI + Pixel). O mesmo event_id e compartilhado
             # entre o disparo server-side (CAPI) e o client-side (Pixel via session flash),
@@ -135,7 +141,10 @@ def ativar_conta(request, uidb64, token):
             cliente.save(update_fields=['password', 'precisa_ativar', 'telefone'])
             cliente.enderecos.all().delete()
             update_session_auth_hash(request, cliente)
+            _session_key_antes = request.session.session_key
             login(request, cliente, backend='django.contrib.auth.backends.ModelBackend')
+            from apps.analytics.services import migrar_sessao_analytics
+            migrar_sessao_analytics(_session_key_antes, request.session.session_key)
             messages.success(
                 request,
                 f'Bem-vinda de volta, {cliente.nome}! '

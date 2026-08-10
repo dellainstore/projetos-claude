@@ -453,7 +453,7 @@ class ProdutoAdmin(DellaAdminMixin, admin.ModelAdmin):
             'description': 'Peso da peça em gramas — usado no cálculo de frete.',
         }),
         ('Controle e ordem', {
-            'fields': ('ativo', 'destaque', 'novo', 'ordem'),
+            'fields': ('ativo', 'destaque', 'novo', 'ordem', 'cor_principal'),
             'description': 'Ordem: número menor aparece primeiro na listagem.',
         }),
         ('SEO — Google', {

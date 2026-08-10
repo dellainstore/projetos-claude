@@ -48,17 +48,23 @@ npm run build:css          # se mudou classes Tailwind (obrigatório antes do co
 python manage.py collectstatic --noinput --settings=core.settings.production
 python manage.py makemigrations && python manage.py migrate --settings=core.settings.production
 
-# ⚠️ SEMPRE usar systemctl para reiniciar — NUNCA kill -HUP manual
+# ⚠️ SEMPRE reiniciar via della-ops — NUNCA sudo systemctl / kill -HUP manual
 # kill -HUP acumula masters antigos que ficam servindo código desatualizado
-sudo systemctl restart gunicorn_della_site && sudo nginx -t && sudo systemctl reload nginx
-
-# Validar:
-python manage.py check --settings=core.settings.production
+della restart site
 ```
 
 ⚠️ **`collectstatic` e `restart` são inseparáveis.** O WhiteNoise (`ManifestStaticFilesStorage`) carrega o `staticfiles.json` na MEMÓRIA do worker no boot. Rodar `collectstatic` sem reiniciar = workers continuam servindo o hash ANTIGO do CSS/JS, e o navegador recebe arquivo desatualizado. **Diagnóstico real (2026-06-10):** o evento GA4 `add_to_cart` (que vive SÓ no JS) ficou zerado numa venda real mesmo estando no código — o `collectstatic` rodou às 18:05, o restart só às 02:21, e a venda das 20:45 pegou o `della.js` anterior, sem o handler. `view_item`/`purchase` (declarados nos templates via `data-ga-event`) não dependem do deploy do JS, por isso funcionaram no mesmo pedido. Ver subseção GA4.
 
-Logs: `sudo journalctl -u gunicorn_della_site -f`
+Validar após o restart: `della health site` (HTTP + migrations pendentes).
+
+Logs: `della logs site error -f`
+
+⚠️ **Reload de nginx (`nginx -t` + `reload`) não é coberto pela `della-ops` nesta
+etapa** (fora de escopo por decisão explícita, ver `ops/README.md`). Só é
+necessário quando a config do nginx muda (não a cada deploy de código Python).
+Quando for realmente necessário, informe essa limitação e peça para o
+humano rodar manualmente (`sudo nginx -t && sudo systemctl reload nginx`) —
+não contorne executando por conta própria.
 
 ### Tailwind
 
@@ -304,6 +310,25 @@ BLING_DEPOSITO_ID=7521173180   # Show Room - Della (depósito padrão)
 - **Eventos de página GA4** (`view_item`, `begin_checkout`, `purchase`): declarados no template como `<script type="application/json" data-ga-event="...">` e disparados por `dispararGAEventosCustom()` (em `della.js`, dentro de `carregarGA()`). Espelha o padrão Meta. Suporta `_once_key` (dedup via `sessionStorage`). Não usar `DOMContentLoaded` inline para esses (corre o risco de rodar antes de `carregarGA()` e o evento ser engolido)
 - **Eventos de interação GA4** (`add_to_cart`, `add_shipping_info`, `add_payment_info`): vivem SÓ no JS (`della.js`, `produto-detalhe.js`, `checkout-index.js`), disparados via `window.dellaTrackGA()` no clique. **Por isso dependem do deploy do JS** — diferente dos eventos de página acima, que vêm do template (renderizado pelo servidor a cada request). Consequência crítica: **todo deploy de evento client-side exige `collectstatic` + restart do gunicorn juntos** (use `bash scripts/deploy_estaticos.sh`). Em 2026-06-10 o `add_to_cart` ficou zerado numa venda real porque o `collectstatic` rodou sem restart e o navegador recebeu o `della.js` antigo, sem o handler — enquanto `view_item`/`purchase` (template) funcionaram no mesmo pedido. O diagnóstico (navegação cancelando beacon? gate de consentimento?) NÃO era nenhum dos dois: `add_to_cart` usa `fetch` (AJAX, sem navegar) e o mesmo `gtag` dos demais. Era deploy defasado.
 - **GA4 Measurement Protocol** (server-side): `apps/core_utils/ga4.py:enviar_ga4_purchase()`. Requer `GA_API_SECRET` no `.env` (GA4 Admin: Fluxos de dados, Measurement Protocol API secrets). No-op silencioso sem o secret ou sem consent
+
+### Carrinho abandonado: "recuperado" = pedido PAGO (2026-07-28)
+
+Ate 2026-07-28 o checkout marcava `CarrinhoAbandonado.recuperado = True` na criacao do pedido, entao um PIX gerado e nunca pago aparecia como carrinho recuperado. Agora:
+
+| Estado do pedido vinculado | `recuperado` | Como aparece no admin |
+|---|---|---|
+| Nenhum pedido gerado | `False` | Abandonado |
+| Aguardando pagamento (PIX aberto, cartao em analise) | `False` | Pedido XXXX: aguardando pagamento |
+| Pago (`pagamento_confirmado`, `em_separacao`, `pronto_retirada`, `enviado`, `entregue`) | `True` | Recuperado |
+| Cancelado / estornado | `False` | Pedido XXXX cancelado (volta a contar como abandonado) |
+
+**Pontos da implementacao (NAO regredir):**
+- `CarrinhoAbandonado.pedido` (FK, migration `pedidos/0021`) liga o carrinho ao pedido gerado; `pedidos/0022` fez o backfill dos registros antigos casando por e-mail
+- Regras em `apps/pedidos/services/carrinho_abandonado.py` (`STATUS_PAGOS`, `vincular_pedido`, `sincronizar_recuperacao`). O checkout so **vincula**, nunca marca recuperado
+- `apps/pedidos/signals.py` (post_save em `Pedido`, registrado em `PedidosConfig.ready`) sincroniza `recuperado` em QUALQUER caminho que mude o status: webhook PagBank, action do admin, webhook Bling, checkout de cartao aprovado. Nao espalhar chamadas manuais pelos call sites
+- Novo carrinho (adicionar item depois de comprar) limpa `pedido` e `recuperado` — nao herda o pagamento anterior
+- E-mail de lembrete nao vai para carrinho com pedido `aguardando_pagamento` (cron `enviar_emails_carrinho_abandonado` e action do admin): a cliente esta na etapa de pagar, nao de montar carrinho
+- Eventos de analytics por item (`pedido_finalizado` com `produto_slug`) agora carregam `pedido_numero` — o painel usa isso para so contar itens de pedido pago. Consultas que somam `valor_total` de `pedido_finalizado` devem filtrar `produto_slug=''` (evento de total) para nao somar item + total
 
 ### Purchase: regra de disparo (pago + dedup + captura via webhook)
 
@@ -712,7 +737,7 @@ Upgrade de Regular 1vCPU/2GB para 2vCPU/4GB no Digital Ocean. Snapshot pre-upgra
 
 ### Gunicorn: 5 workers (era 3)
 
-`/etc/systemd/system/gunicorn_della_site.service` linha `--workers 5`. Formula `(2*CPU)+1 = 5`. Restart obrigatorio com `sudo systemctl restart gunicorn_della_site` apos qualquer mudanca de codigo Python. Se voltar para 1 vCPU, baixar para 3.
+`/etc/systemd/system/gunicorn_della_site.service` linha `--workers 5`. Formula `(2*CPU)+1 = 5`. Restart obrigatorio com `della restart site` apos qualquer mudanca de codigo Python. Se voltar para 1 vCPU, baixar para 3.
 
 ### Webhook Bling estoque: SEM sync generico
 
@@ -783,18 +808,30 @@ Infra atual tem grande folga para o trafego esperado. Limitacao do teste foi ban
 
 ### Comandos de operacao critica
 
+Operações administrativas (restart, status, health, logs) devem sempre
+passar pela `della-ops` (ver `AGENTS.md` e `ops/README.md`). `nginx reload`
+e leitura direta de log do nginx ainda NAO tem equivalente na `della-ops`
+nesta etapa (fora de escopo por decisao explicita) — informar essa limitacao
+em vez de contornar com `sudo` direto.
+
 ```bash
 # Reiniciar tudo depois de mudanca de codigo Python
-sudo systemctl restart gunicorn_della_site
+della restart site
 
-# Reload nginx apos mudanca de config (sem cortar conexoes ativas)
-sudo nginx -t && sudo systemctl reload nginx
+# Health check (HTTP + migrations pendentes)
+della health site
 
-# Confirmar quantidade de workers
+# Logs (error/access, com -n N ou -f para seguir em tempo real)
+della logs site error -f
+
+# Confirmar quantidade de workers (leitura, sem sudo)
 ps aux | grep gunicorn_della_site | grep -v grep | wc -l   # esperado: 6 (1 master + 5 workers)
 
-# Verificar real IP funcionando (deve listar IP do cliente, nao do CF)
-sudo tail /var/log/nginx/della_site_access.log
+# Reload nginx apos mudanca de config (NAO coberto pela della-ops ainda,
+# sem cortar conexoes ativas) e leitura do access log do nginx: pedir para
+# o humano rodar manualmente, nao contornar por conta propria.
+# sudo nginx -t && sudo systemctl reload nginx
+# sudo tail /var/log/nginx/della_site_access.log
 ```
 
 ---

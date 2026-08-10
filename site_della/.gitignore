@@ -28,6 +28,9 @@ venv/
 env/
 ENV/
 
+# GeoIP (banco baixado pelo management command, atualizado mensalmente)
+data/geoip/*.mmdb
+
 # Static (coletados pelo collectstatic)
 staticfiles/
 
