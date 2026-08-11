@@ -44,13 +44,23 @@ class Command(BaseCommand):
             self.stdout.write(str(stats))
             return
 
-        analise = self._obter_analise_ia(stats, semana_inicio, semana_fim)
+        historico = self._obter_historico(semana_inicio)
+        analise = self._obter_analise_ia(stats, semana_inicio, semana_fim, historico)
         pdf_rel  = self._gerar_pdf(stats, analise, semana_inicio, semana_fim)
 
         from apps.analytics.models import RelatorioSemanal
         rel, _ = RelatorioSemanal.objects.update_or_create(
             semana_inicio=semana_inicio,
-            defaults={'semana_fim': semana_fim, 'arquivo': pdf_rel},
+            defaults={
+                'semana_fim': semana_fim, 'arquivo': pdf_rel,
+                'visitantes': stats['visitantes'], 'paginas_vistas': stats['visitas'],
+                'pedidos_pagos': stats['pedidos'], 'aguardando_pagamento': stats['aguardando'],
+                'itens_vendidos': stats['itens_vendidos'], 'receita': stats['receita'],
+                'taxa_conversao': stats['taxa'],
+                'carrinhos_abandonados': stats['carrinhos_abandonados'],
+                'checkouts_abandonados': stats['checkouts_abandonados'],
+                'analise_ia': analise,
+            },
         )
         # gerado_em e auto_now_add (so grava na criacao). Ao regerar a mesma
         # semana, atualizamos a data manualmente para refletir a ultima geracao.
@@ -273,7 +283,21 @@ class Command(BaseCommand):
         drawing.add(bc)
         return drawing
 
-    def _obter_analise_ia(self, stats, semana_inicio, semana_fim):
+    def _obter_historico(self, semana_inicio, n_semanas=8):
+        """Ultimas N semanas ja geradas, mais recente primeiro.
+
+        E a "memoria" do relatorio: sem isso, cada semana e analisada como
+        um evento isolado, sem noticia do que vem se repetindo ou mudando
+        na operacao.
+        """
+        from apps.analytics.models import RelatorioSemanal
+        return list(
+            RelatorioSemanal.objects
+            .filter(semana_inicio__lt=semana_inicio)
+            .order_by('-semana_inicio')[:n_semanas]
+        )
+
+    def _obter_analise_ia(self, stats, semana_inicio, semana_fim, historico=None):
         api_key = getattr(settings, 'ANTHROPIC_API_KEY', '')
         if not api_key:
             return ''
@@ -298,10 +322,35 @@ class Command(BaseCommand):
             for o in stats['origens']
         ) or '  Sem dados'
 
+        historico = historico or []
+        if historico:
+            historico_txt = '\n'.join(
+                f"  - {h.semana_inicio.strftime('%d/%m')} a {h.semana_fim.strftime('%d/%m')}: "
+                f"{h.visitantes} visitantes, {h.pedidos_pagos} vendas pagas, "
+                f"R$ {h.receita:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.') +
+                f", conversao {h.taxa_conversao}%, {h.carrinhos_abandonados} carrinhos abandonados"
+                for h in historico
+            )
+            # Analise da semana imediatamente anterior, para dar continuidade
+            # narrativa sem repetir as mesmas frases.
+            analise_anterior = historico[0].analise_ia
+            bloco_historico = f"""
+HISTORICO DAS ULTIMAS {len(historico)} SEMANAS (mais recente primeiro, ja gerado antes desta):
+{historico_txt}
+
+ANALISE QUE VOCE MESMO ESCREVEU NA SEMANA ANTERIOR (so para voce ter contexto do que ja foi dito - NAO repita as mesmas frases nem a mesma estrutura):
+{analise_anterior or '(sem analise registrada nessa semana)'}
+"""
+        else:
+            bloco_historico = "\nHISTORICO: esta e a primeira semana com relatorio gerado, ainda nao ha semanas anteriores para comparar.\n"
+
         periodo_str = f"{semana_inicio.strftime('%d/%m/%Y')} a {semana_fim.strftime('%d/%m/%Y')}"
         prompt = f"""Voce e um especialista em analytics de e-commerce. Analise os dados abaixo para a D'ELLA Instore (moda feminina premium, loja online) e forneca uma analise objetiva em portugues.
 
 Importante: nao inclua titulo, cabecalho nem a data no inicio da resposta - essas informacoes ja aparecem no PDF. Comece diretamente com o conteudo da analise. Nao use travessao (tracos longos tipo --) nem asteriscos.
+
+Voce escreve esse relatorio toda semana e tem memoria das semanas anteriores (dados abaixo). Trate a operacao como algo continuo: aponte tendencias reais (ex: "e a terceira semana seguida de queda na conversao", "o pico de trafego de sexta se repete ha um mes", "carrinho abandonado caiu depois da mudanca da semana passada"), e nao comente a semana atual como um evento isolado. Ao mesmo tempo, NAO repita as mesmas frases, exemplos ou estrutura de paragrafo da analise anterior (colada abaixo) - varie a redacao mesmo quando o diagnostico for parecido. Se o historico for curto (menos de 3 semanas) ou os numeros muito instaveis, foque mais na semana atual e comente a tendencia com cautela.
+{bloco_historico}
 
 DADOS DA SEMANA ({periodo_str}):
 - Visitantes unicos: {stats['visitantes']}
@@ -331,10 +380,10 @@ ORIGENS DOS VISITANTES:
 {origens_txt}
 
 Forneca uma analise estruturada com:
-1. DESEMPENHO GERAL: como foi a semana em termos de trafego e vendas
-2. PONTOS POSITIVOS: o que funcionou bem
-3. PONTOS DE ATENCAO: onde melhorar (ex: alto abandono de carrinho, baixa conversao, etc)
-4. SUGESTOES PARA PROXIMA SEMANA: acoes concretas e praticas
+1. DESEMPENHO GERAL: como foi a semana em termos de trafego e vendas, situando no contexto das semanas anteriores (melhorou, piorou ou manteve o padrao recente)
+2. PONTOS POSITIVOS: o que funcionou bem, destacando o que e recorrente (se ja apareceu em semanas passadas) e o que e novo
+3. PONTOS DE ATENCAO: onde melhorar (ex: alto abandono de carrinho, baixa conversao, etc), sinalizando se e um problema pontual desta semana ou algo que persiste ha mais tempo
+4. SUGESTOES PARA PROXIMA SEMANA: acoes concretas e praticas, levando em conta o que ja foi sugerido antes (nao repita uma sugestao antiga como se fosse nova sem dizer que ela ainda nao foi resolvida)
 
 Se os dados forem insuficientes (poucos visitantes, semana sem pedidos), mencione isso e oriente a coletar mais dados antes de tirar conclusoes definitivas.
 

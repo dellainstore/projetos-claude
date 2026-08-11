@@ -2,12 +2,34 @@ from django.db import models
 
 
 class RelatorioSemanal(models.Model):
-    """Registro de cada relatorio semanal gerado em PDF."""
+    """Registro de cada relatorio semanal gerado em PDF.
+
+    Os campos de metricas + analise_ia sao a "memoria" do relatorio: cada
+    semana nova le as semanas anteriores aqui para o Claude comparar
+    tendencia em vez de comentar a semana como um evento isolado (ver
+    management/commands/gerar_relatorio_semanal.py::_obter_historico).
+    """
 
     semana_inicio = models.DateField('Inicio da semana')
     semana_fim    = models.DateField('Fim da semana')
     gerado_em     = models.DateTimeField('Gerado em', auto_now_add=True)
     arquivo       = models.CharField('Caminho do PDF (relativo a MEDIA_ROOT)', max_length=300)
+
+    # Metricas-resumo da semana, gravadas junto com o PDF para servirem de
+    # historico estruturado nas proximas geracoes (nao exigem reabrir o PDF).
+    visitantes             = models.IntegerField('Visitantes unicos', default=0)
+    paginas_vistas         = models.IntegerField('Paginas vistas', default=0)
+    pedidos_pagos          = models.IntegerField('Vendas pagas', default=0)
+    aguardando_pagamento   = models.IntegerField('Pedidos aguardando pagamento', default=0)
+    itens_vendidos         = models.IntegerField('Itens vendidos', default=0)
+    receita                = models.DecimalField('Receita total', max_digits=12, decimal_places=2, default=0)
+    taxa_conversao         = models.DecimalField('Taxa de conversao (%)', max_digits=5, decimal_places=1, default=0)
+    carrinhos_abandonados  = models.IntegerField('Carrinhos abandonados', default=0)
+    checkouts_abandonados  = models.IntegerField('Checkouts abandonados', default=0)
+
+    # Texto gerado pela IA nesta semana — reaproveitado como contexto de
+    # continuidade (nao literal) na proxima geracao.
+    analise_ia = models.TextField('Analise da IA', blank=True, default='')
 
     class Meta:
         ordering        = ['-semana_inicio']
