@@ -87,9 +87,8 @@ def proximo_tipo(colaborador, dia: date) -> str | None:
                 return None
             agora_min = _minutos_do_dia(timezone.localtime(timezone.now()).time())
             momentos_min = [_minutos_do_dia(timezone.localtime(b.momento).time()) for b in batidas] + [agora_min]
-            esperados_min = [_minutos_do_dia(tempos[t]) for t in slots_disponiveis]
-            indices = _melhor_encaixe(momentos_min, esperados_min)
-            return slots_disponiveis[indices[-1]]
+            tipos = _tipos_por_encaixe(momentos_min, tempos, slots_disponiveis)
+            return tipos[-1]
 
     return _ORDEM[n]
 
@@ -141,6 +140,46 @@ def _melhor_encaixe(momentos: list[int], esperados: list[int]) -> list[int]:
     return slots_escolhidos
 
 
+def _sequencia_valida(tipos: list[str]) -> bool:
+    """False se 'volta_almoco' aparece na sequência sem 'saida_almoco' antes
+    dele — fisicamente impossível voltar do almoço sem ter saído pra ele."""
+    viu_saida_almoco = False
+    for t in tipos:
+        if t == "volta_almoco" and not viu_saida_almoco:
+            return False
+        if t == "saida_almoco":
+            viu_saida_almoco = True
+    return True
+
+
+def _tipos_por_encaixe(momentos_min: list[int], tempos: dict, slots_disponiveis: list[str]) -> list[str]:
+    """Casa `momentos_min` aos `slots_disponiveis` (na ordem, minimizando
+    distância — ver `_melhor_encaixe`) e devolve os TIPOS escolhidos, um por
+    momento.
+
+    O almoço é o único horário variável da escala (ex.: saída entre 12h e
+    14h) — a DP pura, ao comparar só distância em minutos, pode preferir
+    pular 'saida_almoco' e casar direto com 'volta_almoco' quando o horário
+    bate mais perto do esperado pra volta do que pra saída (ex.: entrada às
+    9h + 2ª batida às 13h, com escala saída-almoço=12h/volta=13h: 13h fica a
+    0min de 'volta_almoco' e a 60min de 'saida_almoco', então sem essa
+    checagem a DP rotularia a 2ª batida do dia como 'volta_almoco' — pulando
+    a saída pro almoço, que nunca aconteceu). Quando isso é detectado, refaz
+    a conta sem 'volta_almoco' como candidato: o momento cai em
+    'saida_almoco' (se ainda for o mais próximo) ou no próximo slot depois
+    dele ('saida', se realmente já for fim de expediente sem almoço)."""
+    esperados_min = [_minutos_do_dia(tempos[t]) for t in slots_disponiveis]
+    indices = _melhor_encaixe(momentos_min, esperados_min)
+    tipos = [slots_disponiveis[i] for i in indices]
+    if not _sequencia_valida(tipos) and "volta_almoco" in slots_disponiveis:
+        slots_sem_volta = [t for t in slots_disponiveis if t != "volta_almoco"]
+        if len(momentos_min) <= len(slots_sem_volta):
+            esperados_sem_volta = [_minutos_do_dia(tempos[t]) for t in slots_sem_volta]
+            indices = _melhor_encaixe(momentos_min, esperados_sem_volta)
+            tipos = [slots_sem_volta[i] for i in indices]
+    return tipos
+
+
 def reordenar_tipos_do_dia(colaborador, dia: date) -> None:
     """Reatribui o `tipo` de todas as batidas do dia.
 
@@ -162,10 +201,8 @@ def reordenar_tipos_do_dia(colaborador, dia: date) -> None:
     if tempos:
         slots_disponiveis = [t for t in _ORDEM if tempos.get(t) is not None]
         if 0 < len(batidas) <= len(slots_disponiveis):
-            esperados_min = [_minutos_do_dia(tempos[t]) for t in slots_disponiveis]
             momentos_min = [_minutos_do_dia(timezone.localtime(b.momento).time()) for b in batidas]
-            indices = _melhor_encaixe(momentos_min, esperados_min)
-            tipos = [slots_disponiveis[idx] for idx in indices]
+            tipos = _tipos_por_encaixe(momentos_min, tempos, slots_disponiveis)
 
     if tipos is None:
         tipos = [_ORDEM[i] if i < BATIDAS_POR_DIA else _ORDEM[-1] for i in range(len(batidas))]
