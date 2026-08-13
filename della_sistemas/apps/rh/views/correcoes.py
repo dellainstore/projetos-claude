@@ -53,10 +53,16 @@ def view_correcoes(request: HttpRequest) -> HttpResponse:
             slots = []
             for tipo, pref, label in SLOTS:
                 valor = ""
-                if prop.get(tipo):
-                    valor = prop[tipo].strftime("%H:%M")
-                elif batidas.get(tipo):
+                # A batida real (já existe) tem prioridade sobre a proposta digitada
+                # pelo funcionário — mesma regra da tela de Aprovações do gestor. Sem
+                # isso, uma proposta antiga (digitada quando a batida ainda estava com
+                # o tipo errado, ex.: o bug do 'volta_almoco' sem 'saida_almoco' antes)
+                # continuava aparecendo pra sempre, mesmo depois da batida real ser
+                # corrigida — o campo nunca refletia a correção.
+                if batidas.get(tipo):
                     valor = batidas[tipo]
+                elif prop.get(tipo):
+                    valor = prop[tipo].strftime("%H:%M")
                 # "sugerido" = já existe uma batida nesse tipo, preenchida como sugestão —
                 # o campo continua editável, pois o tipo gravado pode estar errado
                 # (dia com só 1 batida vira "entrada" por posição, mesmo sendo a saída).
