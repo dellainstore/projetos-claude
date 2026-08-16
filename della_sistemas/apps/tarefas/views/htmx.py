@@ -160,7 +160,7 @@ def htmx_detalhe_tarefa(request: HttpRequest, pk: int) -> HttpResponse:
 def htmx_editar_tarefa(request: HttpRequest, pk: int) -> HttpResponse:
     tarefa = _tarefa_visivel_ou_404(request, pk)
     if not pode_editar_conteudo(tarefa, request.user):
-        return HttpResponseForbidden("Só quem criou a tarefa pode editar o conteúdo dela.")
+        return HttpResponseForbidden("Só quem criou a tarefa ou é responsável por ela pode editar o conteúdo.")
     if request.method != "POST":
         return HttpResponseForbidden()
 

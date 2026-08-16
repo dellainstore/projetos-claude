@@ -28,10 +28,12 @@ def pode_mover_status(tarefa, user) -> bool:
 
 
 def pode_editar_conteudo(tarefa, user) -> bool:
-    """Só quem criou a tarefa (ou Super Admin) edita título/descrição/prazo/
-    prioridade/responsáveis — evita que o pedido original seja alterado por
-    quem só recebeu a tarefa. Mover de coluna é outra permissão (acima)."""
-    return user.is_superadmin or user.pk == tarefa.criado_por_id
+    """Criador, responsáveis (participantes) ou Super Admin editam título/
+    descrição/prazo/prioridade/responsáveis. Excluir é outra permissão, mais
+    restrita (abaixo) — só quem criou (ou Super Admin)."""
+    if user.is_superadmin or user.pk == tarefa.criado_por_id:
+        return True
+    return tarefa.responsaveis.filter(pk=user.pk).exists()
 
 
 def pode_excluir(tarefa, user) -> bool:
