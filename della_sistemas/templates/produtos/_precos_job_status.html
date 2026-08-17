@@ -29,14 +29,13 @@
     {% for av in job.avisos %}
       <p style="color:#d97706;font-size:0.82rem;margin:0.2rem 0 0;">{{ av }}</p>
     {% endfor %}
-    {% if job.csv_atacado %}
+    {% if job.csv_atacado and request.user.is_superadmin %}
       <p style="color:#d97706;font-size:0.82rem;margin:0.5rem 0 0.5rem;">
-        Preços de atacado salvos localmente. Importe o arquivo abaixo em <strong>Cadastros → Lista de Preços</strong> no Bling.
+        Preços de atacado salvos localmente e prontos para baixar — use
+        <strong>Baixar Últimas Alterações</strong> logo abaixo, em "Exportar Preços de Atacado para o Bling".
       </p>
-      <a href="{% url 'produtos:download_csv_job' job.job_id %}"
-         class="ds-btn ds-btn--outline ds-btn--sm"
-         style="display:inline-flex;">
-        Baixar CSV atacado para o Bling
+      <a href="#exportar-atacado" class="ds-btn ds-btn--outline ds-btn--sm" style="display:inline-flex;">
+        Ir para exportação ↓
       </a>
     {% endif %}
   {% endif %}

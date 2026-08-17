@@ -31,7 +31,10 @@ PERMISSION_TREE = [
         "perms": [
             {"id": "ver",              "label": "Ver preços"},
             {"id": "alterar",          "label": "Alterar preços (varejo, custo, atacado)"},
-            {"id": "exportar_atacado", "label": "Exportar planilha de atacado (CSV)"},
+            # "Exportar planilha de atacado" não é mais um checkbox aqui — a
+            # exportação (CSV/XLSX pra importar no Bling) ficou travada em
+            # is_superadmin direto (2026-08-17), pedido explícito do dono:
+            # só ele deve ver/baixar essas planilhas, não é algo delegável.
         ],
     },
     {
@@ -125,7 +128,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "estoque_analise": {"ver": True},
         "financeiro":      {"ver": True},
         "aprovacoes": {"ver": True,       "aprovar": True},
-        "precos":     {"ver": True,       "alterar": True,   "exportar_atacado": True},
+        "precos":     {"ver": True,       "alterar": True},
         "manutencao": {"sync": True,      "rebuild": True,   "limpeza": True},
         "metas":      {"ver": True, "cadastrar": True, "ver_situacao": True},
         "pedidos":    {"ver": True, "baixar": True, "sync": True},
@@ -141,7 +144,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "estoque_analise": {"ver": False},
         "financeiro":      {"ver": False},
         "aprovacoes": {"ver": True,       "aprovar": True},
-        "precos":     {"ver": True,       "alterar": True,   "exportar_atacado": True},
+        "precos":     {"ver": True,       "alterar": True},
         "manutencao": {"sync": False,     "rebuild": False,  "limpeza": False},
         "metas":      {"ver": True, "cadastrar": True, "ver_situacao": True},
         "pedidos":    {"ver": True, "baixar": True, "sync": False},
@@ -157,7 +160,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "estoque_analise": {"ver": False},
         "financeiro":      {"ver": False},
         "aprovacoes": {"ver": False,      "aprovar": False},
-        "precos":     {"ver": False,      "alterar": False,  "exportar_atacado": False},
+        "precos":     {"ver": False,      "alterar": False},
         "manutencao": {"sync": False,     "rebuild": False,  "limpeza": False},
         "metas":      {"ver": True, "cadastrar": False, "ver_situacao": False},
         "pedidos":    {"ver": True, "baixar": False, "sync": False},
@@ -172,7 +175,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "estoque_analise": {"ver": False},
         "financeiro":      {"ver": False},
         "aprovacoes": {"ver": True,       "aprovar": False},
-        "precos":     {"ver": False,      "alterar": False,  "exportar_atacado": False},
+        "precos":     {"ver": False,      "alterar": False},
         "manutencao": {"sync": False,     "rebuild": False,  "limpeza": False},
         "metas":      {"ver": True, "cadastrar": False, "ver_situacao": False},
         "pedidos":    {"ver": True, "baixar": False, "sync": False},

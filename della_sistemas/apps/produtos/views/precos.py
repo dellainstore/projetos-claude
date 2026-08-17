@@ -11,7 +11,7 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_http_methods
 
-from apps.core.decorators import login_obrigatorio, perm_required
+from apps.core.decorators import login_obrigatorio, papel_required, perm_required
 from apps.produtos.services import precos as svc
 
 BR_TZ = ZoneInfo("America/Sao_Paulo")
@@ -47,7 +47,7 @@ def view_precos(request):
     return render(request, "produtos/precos.html", {
         "modelos": modelos,
         "modelo_selecionado": modelo_selecionado,
-        "pode_exportar": request.user.tem_perm("precos.exportar_atacado"),
+        "pode_exportar": request.user.is_superadmin,
         "job": job,
         "fornecedores": build_supplier_options(extra_sup),
     })
@@ -134,7 +134,7 @@ def view_job_precos_status(request, job_id: str):
 
 
 @login_obrigatorio
-@perm_required("precos.alterar")
+@papel_required("superadmin")
 def view_download_csv_job(request, job_id: str):
     """Download do CSV de atacado gerado pelo job de background."""
     job = svc.get_job(job_id)
@@ -282,7 +282,7 @@ def view_upload_atacado(request):
 
 
 @login_obrigatorio
-@perm_required("precos.exportar_atacado")
+@papel_required("superadmin")
 def view_exportar_atacado_csv(request):
     """Exporta TODOS os preços de atacado (mais recente por SKU) como XLSX para o Bling."""
     from apps.produtos.services.db import get_conn
@@ -334,7 +334,7 @@ def view_exportar_atacado_csv(request):
 
 
 @login_obrigatorio
-@perm_required("precos.exportar_atacado")
+@papel_required("superadmin")
 def view_exportar_atacado_ultimas(request):
     """Exporta apenas preços de atacado ainda não exportados (exportado_em IS NULL)."""
     from apps.produtos.services.db import get_conn
@@ -505,7 +505,7 @@ def view_historico_precos(request):
         "filtros": filtros,
         "pagina": pagina,
         "periodos": periodos,
-        "pode_exportar": request.user.tem_perm("precos.exportar_atacado"),
+        "pode_exportar": request.user.is_superadmin,
         "pode_alterar_preco": request.user.tem_perm("precos.alterar"),
     })
 
