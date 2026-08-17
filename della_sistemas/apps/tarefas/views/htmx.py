@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.core.decorators import perm_required
 from apps.tarefas.context_processors import tarefas_pendencias
-from apps.tarefas.models import ColunaStatus, Tarefa, TarefaResponsavel
+from apps.tarefas.models import ColunaStatus, Tarefa, TarefaComentario, TarefaResponsavel
 from apps.tarefas.services.regras import (
     foi_editado_e_nao_visto,
     montar_quadro,
@@ -14,6 +14,7 @@ from apps.tarefas.services.regras import (
     pode_excluir,
     pode_mover_status,
     registrar_historico,
+    responsaveis_removiveis,
     tarefas_visiveis,
 )
 
@@ -54,15 +55,39 @@ def _nomes(ids) -> str:
     )
 
 
-def _set_responsaveis(tarefa: Tarefa, ids, usuario) -> None:
-    antigos = set(tarefa.responsaveis.values_list("pk", flat=True))
-    novos = set(ids)
-    if antigos == novos:
-        return
-    TarefaResponsavel.objects.filter(tarefa=tarefa).exclude(usuario_id__in=novos).delete()
-    for uid in novos - antigos:
-        TarefaResponsavel.objects.get_or_create(tarefa=tarefa, usuario_id=uid)
-    registrar_historico(tarefa, "responsaveis", _nomes(antigos), _nomes(novos), usuario)
+def _set_responsaveis(tarefa: Tarefa, ids, usuario) -> list:
+    """Aplica a lista de responsáveis pedida por `usuario` no formulário de
+    edição. Acrescentar gente nova é sempre livre pra quem chega aqui (só
+    entra quem já passou por pode_editar_conteudo). Já remover é restrito:
+    quem criou a tarefa (ou Super Admin) tira qualquer um; um responsável
+    comum só tira quem ele mesmo colocou — ver responsaveis_removiveis().
+    Pedido de remoção sem permissão é ignorado (a pessoa continua no card) e
+    os IDs bloqueados voltam pro chamador avisar quem não pôde ser tirado."""
+    vinculos = {v.usuario_id: v for v in TarefaResponsavel.objects.filter(tarefa=tarefa)}
+    antigos = set(vinculos)
+    pedidos = set(ids)
+    if antigos == pedidos:
+        return []
+
+    removiveis = responsaveis_removiveis(tarefa, usuario)
+    removidos, bloqueados = set(), []
+    for uid in antigos - pedidos:
+        if uid in removiveis:
+            vinculos[uid].delete()
+            removidos.add(uid)
+        else:
+            bloqueados.append(uid)
+
+    adicionados = pedidos - antigos
+    for uid in adicionados:
+        TarefaResponsavel.objects.get_or_create(
+            tarefa=tarefa, usuario_id=uid, defaults={"adicionado_por": usuario},
+        )
+
+    final = (antigos - removidos) | adicionados
+    if final != antigos:
+        registrar_historico(tarefa, "responsaveis", _nomes(antigos), _nomes(final), usuario)
+    return bloqueados
 
 
 @perm_required("tarefas.ver")
@@ -125,13 +150,35 @@ def htmx_criar_tarefa(request: HttpRequest) -> HttpResponse:
         concluida_em=timezone.now() if coluna.eh_conclusao else None,
     )
     for uid in responsavel_ids:
-        TarefaResponsavel.objects.get_or_create(tarefa=tarefa, usuario_id=uid)
+        TarefaResponsavel.objects.get_or_create(
+            tarefa=tarefa, usuario_id=uid, defaults={"adicionado_por": request.user},
+        )
 
     quem = request.user.first_name or request.user.username
     registrar_historico(tarefa, "criacao", "", f"criada por {quem}", request.user)
 
     messages.success(request, "Tarefa criada.")
     return _resposta_board(request)
+
+
+def _marcar_visto_e_montar_contexto(request: HttpRequest, tarefa: Tarefa, recem_editada=False) -> dict:
+    """Marca a tarefa como vista por request.user (limpa a notificação dela
+    pra ele) e monta o contexto do modal de detalhe — usado tanto na abertura
+    do card quanto depois de responder na conversa (o modal se re-renderiza
+    sem fechar, com a mensagem nova já aparecendo)."""
+    TarefaResponsavel.objects.filter(tarefa=tarefa, usuario=request.user).update(
+        visto_em=timezone.now(),
+    )
+    return {
+        "tarefa": tarefa,
+        "pode_editar_conteudo": pode_editar_conteudo(tarefa, request.user),
+        "pode_excluir": pode_excluir(tarefa, request.user),
+        "recem_editada": recem_editada,
+        "usuarios_atribuiveis": User.objects.filter(is_active=True).order_by("first_name", "username"),
+        "responsaveis_removiveis": responsaveis_removiveis(tarefa, request.user),
+        "comentarios": tarefa.comentarios.select_related("autor"),
+        "historico": tarefa.historico.select_related("alterado_por")[:50],
+    }
 
 
 @perm_required("tarefas.ver")
@@ -141,19 +188,33 @@ def htmx_detalhe_tarefa(request: HttpRequest, pk: int) -> HttpResponse:
     # última vez que você olhou" que precisa aparecer justo agora, na
     # abertura, antes de ser silenciado pela linha abaixo.
     recem_editada = foi_editado_e_nao_visto(tarefa, request.user)
+    contexto = _marcar_visto_e_montar_contexto(request, tarefa, recem_editada)
+    return render(request, "tarefas/_modal_detalhe.html", contexto)
 
-    TarefaResponsavel.objects.filter(tarefa=tarefa, usuario=request.user).update(
-        visto_em=timezone.now(),
-    )
 
-    return render(request, "tarefas/_modal_detalhe.html", {
-        "tarefa": tarefa,
-        "pode_editar_conteudo": pode_editar_conteudo(tarefa, request.user),
-        "pode_excluir": pode_excluir(tarefa, request.user),
-        "recem_editada": recem_editada,
-        "usuarios_atribuiveis": User.objects.filter(is_active=True).order_by("first_name", "username"),
-        "historico": tarefa.historico.select_related("alterado_por")[:50],
-    })
+@perm_required("tarefas.ver")
+def htmx_comentar_tarefa(request: HttpRequest, pk: int) -> HttpResponse:
+    """Adiciona uma resposta na conversa do card — o "bate-papo" que registra
+    como a tarefa foi evoluindo, com nome e horário de quem escreveu. Reabre
+    o próprio modal (não fecha pro board) já com a mensagem nova."""
+    tarefa = _tarefa_visivel_ou_404(request, pk)
+    if not pode_editar_conteudo(tarefa, request.user):
+        return HttpResponseForbidden("Só quem criou a tarefa ou é responsável por ela pode responder.")
+    if request.method != "POST":
+        return HttpResponseForbidden()
+
+    texto = request.POST.get("texto", "").strip()
+    if texto:
+        TarefaComentario.objects.create(tarefa=tarefa, autor=request.user, texto=texto)
+        # Conta como atividade nova pra quem ainda não viu — mesmo sinal que
+        # uma edição de conteúdo usa pra acender o selo "Editado"/notificação.
+        tarefa.editado_em = timezone.now()
+        tarefa.save(update_fields=["editado_em"])
+    else:
+        messages.error(request, "Escreva algo antes de enviar.")
+
+    contexto = _marcar_visto_e_montar_contexto(request, tarefa)
+    return render(request, "tarefas/_modal_detalhe.html", contexto)
 
 
 @perm_required("tarefas.ver")
@@ -193,12 +254,18 @@ def htmx_editar_tarefa(request: HttpRequest, pk: int) -> HttpResponse:
     # pode passar batido — vira o selo "Editado" no board dela até reabrir.
     tarefa.editado_em = timezone.now()
     tarefa.save()
-    _set_responsaveis(tarefa, responsavel_ids, request.user)
+    bloqueados = _set_responsaveis(tarefa, responsavel_ids, request.user)
     # Quem editou não precisa de aviso pra si mesmo, mesmo se também for responsável.
     TarefaResponsavel.objects.filter(tarefa=tarefa, usuario=request.user).update(
         visto_em=timezone.now(),
     )
 
+    if bloqueados:
+        messages.warning(
+            request,
+            f"{_nomes(bloqueados)} continua(m) como responsável — só quem "
+            "adicionou a pessoa (ou quem criou a tarefa) pode tirá-la.",
+        )
     messages.success(request, "Tarefa atualizada.")
     return _resposta_board(request)
 

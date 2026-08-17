@@ -41,10 +41,40 @@ def pode_excluir(tarefa, user) -> bool:
     return user.is_superadmin or user.pk == tarefa.criado_por_id
 
 
+def responsaveis_removiveis(tarefa, user) -> set:
+    """IDs de responsáveis que `user` tem permissão de tirar do card. Quem
+    criou a tarefa (ou Super Admin) tira qualquer um; um responsável comum só
+    tira quem ele mesmo colocou — nunca alguém que outra pessoa adicionou.
+    Adicionar gente nova continua liberado pra todo mundo com pode_editar_conteudo."""
+    if user.is_superadmin or user.pk == tarefa.criado_por_id:
+        return set(tarefa.responsaveis.values_list("pk", flat=True))
+    return set(
+        TarefaResponsavel.objects.filter(tarefa=tarefa, adicionado_por_id=user.pk)
+        .values_list("usuario_id", flat=True)
+    )
+
+
+def tem_atividade_nao_vista(tarefa, user) -> bool:
+    """True quando `user` (responsável) ainda não abriu o card depois da
+    última atividade (edição de conteúdo ou nova resposta na conversa) — ou
+    nunca abriu o card. Usado no contador do menu: some assim que a pessoa
+    abre/responde a tarefa, e passa a contar pra quem ainda não viu aquela
+    novidade. Diferente de foi_editado_e_nao_visto() abaixo, que só cobre o
+    selo "Editado" do board e ignora tarefa nunca aberta (não é 'edição')."""
+    vinculo = TarefaResponsavel.objects.filter(tarefa=tarefa, usuario=user).first()
+    if not vinculo:
+        return False
+    if vinculo.visto_em is None:
+        return True
+    referencia = tarefa.editado_em or tarefa.criado_em
+    return vinculo.visto_em < referencia
+
+
 def foi_editado_e_nao_visto(tarefa, user) -> bool:
-    """True quando o criador editou o conteúdo depois da última vez que
-    `user` (um dos responsáveis) abriu o card — vira o selo "Editado" no
-    board, pra nunca mudar o pedido sem a pessoa perceber."""
+    """True quando o criador editou o conteúdo (ou alguém respondeu na
+    conversa) depois da última vez que `user` (um dos responsáveis) abriu o
+    card — vira o selo "Editado" no board, pra nunca mudar o pedido sem a
+    pessoa perceber."""
     if not tarefa.editado_em:
         return False
     vinculo = TarefaResponsavel.objects.filter(tarefa=tarefa, usuario=user).first()

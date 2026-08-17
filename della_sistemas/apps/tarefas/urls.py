@@ -14,6 +14,7 @@ urlpatterns = [
     path("htmx/criar/", htmx.htmx_criar_tarefa, name="htmx_criar_tarefa"),
     path("htmx/tarefa/<int:pk>/", htmx.htmx_detalhe_tarefa, name="htmx_detalhe_tarefa"),
     path("htmx/tarefa/<int:pk>/editar/", htmx.htmx_editar_tarefa, name="htmx_editar_tarefa"),
+    path("htmx/tarefa/<int:pk>/comentar/", htmx.htmx_comentar_tarefa, name="htmx_comentar_tarefa"),
     path("htmx/tarefa/<int:pk>/mover/", htmx.htmx_mover_status, name="htmx_mover_status"),
     path("htmx/tarefa/<int:pk>/arquivar/", htmx.htmx_arquivar_tarefa, name="htmx_arquivar_tarefa"),
 

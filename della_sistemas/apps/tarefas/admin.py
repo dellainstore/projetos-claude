@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.tarefas.models import ColunaStatus, HistoricoTarefa, Tarefa, TarefaResponsavel
+from apps.tarefas.models import ColunaStatus, HistoricoTarefa, Tarefa, TarefaComentario, TarefaResponsavel
 
 
 @admin.register(ColunaStatus)
@@ -11,6 +11,12 @@ class ColunaStatusAdmin(admin.ModelAdmin):
 
 class TarefaResponsavelInline(admin.TabularInline):
     model = TarefaResponsavel
+    fk_name = "tarefa"
+    extra = 0
+
+
+class TarefaComentarioInline(admin.TabularInline):
+    model = TarefaComentario
     extra = 0
 
 
@@ -19,7 +25,7 @@ class TarefaAdmin(admin.ModelAdmin):
     list_display = ("titulo", "status", "prioridade", "prazo", "criado_por", "arquivada")
     list_filter = ("status", "prioridade", "arquivada")
     search_fields = ("titulo", "descricao")
-    inlines = [TarefaResponsavelInline]
+    inlines = [TarefaResponsavelInline, TarefaComentarioInline]
 
 
 @admin.register(HistoricoTarefa)

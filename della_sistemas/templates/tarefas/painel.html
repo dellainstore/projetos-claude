@@ -74,6 +74,21 @@
     border-radius: 6px; font-size: .8rem; margin-bottom: 1rem;
   }
 
+  /* "Conversa" do card — bate-papo estilo WhatsApp: cada resposta é uma
+     bolha, alinhada à direita quando é do próprio usuário logado. */
+  .ds-chat {
+    display: flex; flex-direction: column; gap: .5rem; max-height: 260px;
+    overflow-y: auto; padding: .25rem .1rem;
+  }
+  .ds-chat-msg {
+    max-width: 82%; padding: .45rem .65rem; border-radius: 10px; font-size: .82rem;
+    color: var(--preto); word-break: break-word;
+  }
+  .ds-chat-msg.propria { align-self: flex-end; background: rgba(212,160,23,.2); border-bottom-right-radius: 2px; }
+  .ds-chat-msg.outra { align-self: flex-start; background: var(--cinza-claro); border-bottom-left-radius: 2px; }
+  .ds-chat-autor { display: block; font-weight: 600; font-size: .72rem; margin-bottom: .15rem; }
+  .ds-chat-hora { display: block; font-size: .66rem; color: var(--cinza-texto); margin-top: .2rem; text-align: right; }
+
   /* Textarea de descrição: só cresce pra baixo (nunca pros lados), tamanho
      padrão até 3 linhas, depois passa a rolar por dentro em vez de esticar
      sem limite — apply.js (autoGrowTextarea) controla a altura via JS. */

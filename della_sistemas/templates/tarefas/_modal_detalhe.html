@@ -74,12 +74,23 @@
         <span style="font-size:.82rem; color:var(--cinza-texto);">Responsáveis</span>
         <div style="display:flex; flex-wrap:wrap; gap:.6rem; margin-top:.35rem;">
           {% for u in usuarios_atribuiveis %}
+          {% if u in tarefa.responsaveis.all and u.pk not in responsaveis_removiveis %}
+          <label style="display:flex; align-items:center; gap:.3rem; font-size:.82rem; font-weight:400; opacity:.55;"
+                 title="Só quem colocou {{ u|primeiro_nome }} como responsável (ou quem criou a tarefa) pode tirá-la.">
+            <input type="checkbox" name="responsaveis" value="{{ u.pk }}" checked onclick="return false;" style="cursor:not-allowed;">
+            {{ u|primeiro_nome }} 🔒
+          </label>
+          {% else %}
           <label style="display:flex; align-items:center; gap:.3rem; font-size:.82rem; font-weight:400;">
             <input type="checkbox" name="responsaveis" value="{{ u.pk }}" {% if u in tarefa.responsaveis.all %}checked{% endif %}>
             {{ u|primeiro_nome }}
           </label>
+          {% endif %}
           {% endfor %}
         </div>
+        <p style="font-size:.72rem; color:var(--cinza-texto); margin-top:.35rem;">
+          🔒 = você não pode tirar essa pessoa (só quem a adicionou ou quem criou a tarefa).
+        </p>
       </div>
       <div style="display:flex; gap:.5rem;">
         <button type="submit" class="ds-btn ds-btn--dourado">Salvar alterações</button>
@@ -88,6 +99,28 @@
           Cancelar
         </button>
       </div>
+    </form>
+    {% endif %}
+
+    <hr style="margin:1.25rem 0; border:none; border-top:1px solid var(--cinza-medio);">
+    <h3 style="font-size:.85rem; font-weight:600; margin-bottom:.5rem; color:var(--preto);">Conversa</h3>
+    <div class="ds-chat" id="tarefa-chat">
+      {% for c in comentarios %}
+      <div class="ds-chat-msg {% if c.autor_id == request.user.pk %}propria{% else %}outra{% endif %}">
+        <span class="ds-chat-autor">{% if c.autor %}{{ c.autor|primeiro_nome }}{% else %}usuário removido{% endif %}</span>
+        <div>{{ c.texto|linebreaksbr }}</div>
+        <span class="ds-chat-hora">{{ c.criado_em|date:"d/m/Y H:i" }}</span>
+      </div>
+      {% empty %}
+      <p style="font-size:.78rem; color:var(--cinza-texto);">Nenhuma resposta ainda — conte aqui como a tarefa foi andando.</p>
+      {% endfor %}
+    </div>
+    {% if pode_editar_conteudo and not tarefa.arquivada %}
+    <form hx-post="{% url 'tarefas:htmx_comentar_tarefa' tarefa.pk %}" hx-target="#modal-container" hx-swap="innerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          style="display:flex; gap:.5rem; margin-top:.6rem; align-items:flex-end;">
+      <textarea name="texto" rows="1" required placeholder="Escreva uma resposta…" class="ds-textarea-auto" style="flex:1; min-height:2.3rem;"></textarea>
+      <button type="submit" class="ds-btn ds-btn--dourado ds-btn--sm">Enviar</button>
     </form>
     {% endif %}
 

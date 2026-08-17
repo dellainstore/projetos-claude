@@ -68,6 +68,7 @@ class Tarefa(models.Model):
     responsaveis = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through="TarefaResponsavel",
+        through_fields=("tarefa", "usuario"),
         related_name="tarefas_responsavel",
     )
 
@@ -89,12 +90,39 @@ class TarefaResponsavel(models.Model):
         help_text="Última vez que este responsável abriu o card — comparado com "
                    "Tarefa.editado_em pra saber se ele já viu a versão mais recente.",
     )
+    adicionado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        help_text="Quem colocou esta pessoa como responsável — controla quem pode tirá-la "
+                   "depois: o criador da tarefa (ou Super Admin) tira qualquer um; um "
+                   "responsável só tira quem ele mesmo adicionou.",
+    )
 
     class Meta:
         unique_together = [("tarefa", "usuario")]
 
     def __str__(self) -> str:
         return f"{self.usuario} em {self.tarefa}"
+
+
+class TarefaComentario(models.Model):
+    """Mensagem livre no 'bate-papo' do card — separado do Histórico (que só
+    registra mudança de campo): aqui é a narrativa de como a tarefa evoluiu,
+    com nome de quem escreveu e quando, tipo uma conversa de WhatsApp."""
+
+    tarefa = models.ForeignKey(Tarefa, on_delete=models.CASCADE, related_name="comentarios")
+    autor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+",
+    )
+    texto = models.TextField()
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["criado_em"]
+        verbose_name = "Comentário de tarefa"
+        verbose_name_plural = "Comentários de tarefa"
+
+    def __str__(self) -> str:
+        return f"{self.autor} em {self.tarefa}"
 
 
 class HistoricoTarefa(models.Model):
