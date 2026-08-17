@@ -13,13 +13,18 @@
     {% endif %}
 
     <div id="detalhe-leitura">
-      <p style="font-size:.85rem; color:var(--preto); white-space:pre-wrap;">{{ tarefa.descricao }}</p>
-      <p style="font-size:.8rem; color:var(--cinza-texto); margin-top:.6rem;">
-        Prazo {{ tarefa.prazo|date:"d/m/Y" }} · Prioridade {{ tarefa.get_prioridade_display }}
+      <p style="font-size:.8rem; color:var(--cinza-texto);">
+        Criada por <strong style="color:var(--preto);">{% if tarefa.criado_por %}{{ tarefa.criado_por|primeiro_nome }}{% else %}usuário removido{% endif %}</strong>
+        em {{ tarefa.criado_em|date:"d/m/Y" }}
       </p>
-      <p style="font-size:.8rem; color:var(--cinza-texto); margin-top:.3rem;">
+      <p style="font-size:.8rem; color:var(--cinza-texto); margin-top:.2rem;">
         Responsáveis:
         {% for r in tarefa.responsaveis.all %}{{ r|primeiro_nome }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </p>
+
+      <p style="font-size:.85rem; color:var(--preto); white-space:pre-wrap; margin-top:.75rem;">{{ tarefa.descricao }}</p>
+      <p style="font-size:.8rem; color:var(--cinza-texto); margin-top:.6rem;">
+        Prazo {{ tarefa.prazo|date:"d/m/Y" }} · Prioridade {{ tarefa.get_prioridade_display }}
       </p>
 
       {% if not tarefa.arquivada %}
@@ -124,8 +129,9 @@
     </form>
     {% endif %}
 
+    {% if request.user.is_superadmin %}
     <hr style="margin:1.25rem 0; border:none; border-top:1px solid var(--cinza-medio);">
-    <h3 style="font-size:.85rem; font-weight:600; margin-bottom:.5rem; color:var(--preto);">Histórico</h3>
+    <h3 style="font-size:.85rem; font-weight:600; margin-bottom:.5rem; color:var(--preto);">Histórico de alterações</h3>
     <div style="display:flex; flex-direction:column; gap:.45rem; max-height:220px; overflow-y:auto;">
       {% for h in historico %}
       <div style="font-size:.76rem; color:var(--cinza-texto);">
@@ -138,5 +144,6 @@
       <p style="font-size:.78rem; color:var(--cinza-texto);">Sem histórico ainda.</p>
       {% endfor %}
     </div>
+    {% endif %}
   </div>
 </div>

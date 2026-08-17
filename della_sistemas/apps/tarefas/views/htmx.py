@@ -165,10 +165,16 @@ def _marcar_visto_e_montar_contexto(request: HttpRequest, tarefa: Tarefa, recem_
     """Marca a tarefa como vista por request.user (limpa a notificação dela
     pra ele) e monta o contexto do modal de detalhe — usado tanto na abertura
     do card quanto depois de responder na conversa (o modal se re-renderiza
-    sem fechar, com a mensagem nova já aparecendo)."""
+    sem fechar, com a mensagem nova já aparecendo).
+
+    O histórico técnico de alterações (campo mudou de X pra Y) só aparece pra
+    Super Admin — pra todo mundo o card mostra só criador/responsáveis,
+    descrição e a conversa; quem editou o quê fica registrado, mas não é
+    exposto a qualquer responsável."""
     TarefaResponsavel.objects.filter(tarefa=tarefa, usuario=request.user).update(
         visto_em=timezone.now(),
     )
+    historico = tarefa.historico.select_related("alterado_por")[:50] if request.user.is_superadmin else None
     return {
         "tarefa": tarefa,
         "pode_editar_conteudo": pode_editar_conteudo(tarefa, request.user),
@@ -177,7 +183,7 @@ def _marcar_visto_e_montar_contexto(request: HttpRequest, tarefa: Tarefa, recem_
         "usuarios_atribuiveis": User.objects.filter(is_active=True).order_by("first_name", "username"),
         "responsaveis_removiveis": responsaveis_removiveis(tarefa, request.user),
         "comentarios": tarefa.comentarios.select_related("autor"),
-        "historico": tarefa.historico.select_related("alterado_por")[:50],
+        "historico": historico,
     }
 
 
