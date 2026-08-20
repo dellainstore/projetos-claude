@@ -359,9 +359,9 @@ def listar_cores_por_modelo(base_name: str) -> list[dict]:
     return resultado
 
 
-def _fetch_precos_bling(bling_id: int) -> dict[str, float | None]:
+def _fetch_precos_bling(bling_id: int, *, timeout: int = 30, retries: int = 6) -> dict[str, float | None]:
     try:
-        data = bling_get(f"/produtos/{bling_id}").get("data") or {}
+        data = bling_get(f"/produtos/{bling_id}", timeout=timeout, retries=retries).get("data") or {}
         varejo = _to_float(data.get("preco"))
 
         # Custo: tenta precoCusto direto, depois fornecedores
@@ -524,16 +524,31 @@ def validar_hierarquia_precos(
     todos_skus = [item["sku"] for item in skus if item["sku"]]
     ultimos_atacados = _fetch_ultimos_atacados_local(todos_skus)
 
-    erros: list[str] = []
-    checadas: set[str] = set()
-
+    # Uma cor por bling_id (evita chamada duplicada quando a cor tem vários tamanhos)
+    itens_por_cor: dict[str, dict] = {}
     for item in skus:
-        color = item["color_key"]
-        if color in checadas:
-            continue
-        checadas.add(color)
+        itens_por_cor.setdefault(item["color_key"], item)
 
-        atuais = _fetch_precos_bling(item["bling_id"])
+    # Busca em paralelo (mesmo padrão de listar_cores_por_modelo) com timeout/retries
+    # curtos: essa checagem é só uma referência para a validação de hierarquia e já
+    # falha de forma segura (retorna None) se o Bling não responder — não vale a pena
+    # travar a requisição HTTP inteira (e o worker do gunicorn) esperando 30s x 6
+    # tentativas por cor, sequencialmente, para modelos com muitas cores (ex.: 70+).
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    atuais_por_cor: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {
+            pool.submit(_fetch_precos_bling, item["bling_id"], timeout=8, retries=1): color
+            for color, item in itens_por_cor.items()
+        }
+        for fut in as_completed(futures):
+            atuais_por_cor[futures[fut]] = fut.result()
+
+    erros: list[str] = []
+
+    for color, item in itens_por_cor.items():
+        atuais = atuais_por_cor.get(color) or {}
         final_varejo = varejo if varejo is not None else atuais.get("varejo")
         final_custo = custo if custo is not None else atuais.get("custo")
         final_atacado = (
