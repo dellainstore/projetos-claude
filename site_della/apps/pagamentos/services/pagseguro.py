@@ -123,7 +123,6 @@ def montar_payload_ordem_cartao(
             'address': {
                 'street':      pedido.logradouro,
                 'number':      pedido.numero_entrega,
-                'complement':  pedido.complemento or '',
                 'locality':    pedido.bairro,
                 'city':        pedido.cidade,
                 'region_code': pedido.estado.upper(),
@@ -155,6 +154,12 @@ def montar_payload_ordem_cartao(
             }
         ],
     }
+
+    # Complemento e opcional. O PagBank rejeita com "40002: must not be
+    # blank" quando o campo vem como string vazia, entao so incluir quando
+    # realmente preenchido.
+    if pedido.complemento:
+        payload['shipping']['address']['complement'] = pedido.complemento
 
     # Telefone (opcional, mas melhora aprovação no antifraude)
     phones = _telefone_payload(pedido.telefone)
@@ -194,7 +199,6 @@ def montar_payload_ordem_cartao_token(pedido, card_token: str, parcelas: int = 1
             'address': {
                 'street':      pedido.logradouro,
                 'number':      pedido.numero_entrega,
-                'complement':  pedido.complemento or '',
                 'locality':    pedido.bairro,
                 'city':        pedido.cidade,
                 'region_code': pedido.estado.upper(),
@@ -225,6 +229,12 @@ def montar_payload_ordem_cartao_token(pedido, card_token: str, parcelas: int = 1
             }
         ],
     }
+
+    # Complemento e opcional. O PagBank rejeita com "40002: must not be
+    # blank" quando o campo vem como string vazia, entao so incluir quando
+    # realmente preenchido.
+    if pedido.complemento:
+        payload['shipping']['address']['complement'] = pedido.complemento
 
     phones = _telefone_payload(pedido.telefone)
     if phones:
