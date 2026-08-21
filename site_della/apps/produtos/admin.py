@@ -127,7 +127,8 @@ class VariacaoInline(admin.TabularInline):
     fields = (
         'cor', 'cor_preview', 'tamanho', 'preco', 'preco_promocional',
         'disponibilidade', 'comportamento_sem_estoque', 'prazo_confeccao_dias',
-        'estoque', 'sku_variacao', 'bling_variacao_id', 'usa_sync_bling', 'ativa', 'clonar_btn'
+        'estoque', 'sku_variacao', 'bling_variacao_id',
+        'usa_sync_bling', 'usa_sync_preco_bling', 'ativa', 'clonar_btn'
     )
     readonly_fields = ('cor_preview', 'clonar_btn')
     ordering = ('cor__ordem', 'cor__nome', 'tamanho__ordem')
@@ -474,6 +475,7 @@ class ProdutoAdmin(DellaAdminMixin, admin.ModelAdmin):
     actions = [
         'marcar_ativo', 'marcar_inativo', 'marcar_destaque', 'remover_destaque',
         'ativar_sync_bling_variacoes', 'desativar_sync_bling_variacoes',
+        'ativar_sync_preco_bling_variacoes', 'desativar_sync_preco_bling_variacoes',
     ]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -1820,6 +1822,25 @@ class ProdutoAdmin(DellaAdminMixin, admin.ModelAdmin):
         self.message_user(
             request,
             f'{n} variação(ões) com sync Bling desativado em '
+            f'{queryset.count()} produto(s).',
+        )
+
+    @admin.action(description='Ativar sync PREÇO Bling em TODAS as variações dos produtos selecionados')
+    def ativar_sync_preco_bling_variacoes(self, request, queryset):
+        n = Variacao.objects.filter(produto__in=queryset).update(usa_sync_preco_bling=True)
+        self.message_user(
+            request,
+            f'{n} variação(ões) marcada(s) com sync de preço Bling ativo em '
+            f'{queryset.count()} produto(s). '
+            'O cron horário vai começar a sincronizar o preço automaticamente.',
+        )
+
+    @admin.action(description='Desativar sync PREÇO Bling em TODAS as variações dos produtos selecionados')
+    def desativar_sync_preco_bling_variacoes(self, request, queryset):
+        n = Variacao.objects.filter(produto__in=queryset).update(usa_sync_preco_bling=False)
+        self.message_user(
+            request,
+            f'{n} variação(ões) com sync de preço Bling desativado em '
             f'{queryset.count()} produto(s).',
         )
 

@@ -61,3 +61,4 @@ static/css/tailwind.css
 *.dump
 *.bak
 clientes*
+relatorios/

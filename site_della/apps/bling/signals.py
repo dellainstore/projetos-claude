@@ -17,17 +17,23 @@ logger = logging.getLogger(__name__)
 
 @receiver(pre_save, sender='produtos.Variacao')
 def _capturar_estado_anterior_sync(sender, instance, **kwargs):
-    """Guarda `usa_sync_bling` e `ativo` antes do save para comparar no post_save."""
+    """Guarda `usa_sync_bling`, `usa_sync_preco_bling` e `ativo` antes do save
+    para comparar no post_save."""
     if instance.pk:
         try:
-            anterior = sender.objects.only('usa_sync_bling', 'ativa').get(pk=instance.pk)
+            anterior = sender.objects.only(
+                'usa_sync_bling', 'usa_sync_preco_bling', 'ativa'
+            ).get(pk=instance.pk)
             instance._sync_anterior = anterior.usa_sync_bling
+            instance._sync_preco_anterior = anterior.usa_sync_preco_bling
             instance._ativo_anterior = anterior.ativa
         except sender.DoesNotExist:
             instance._sync_anterior = False
+            instance._sync_preco_anterior = False
             instance._ativo_anterior = False
     else:
         instance._sync_anterior = False
+        instance._sync_preco_anterior = False
         instance._ativo_anterior = False
 
 
@@ -65,5 +71,44 @@ def _sincronizar_estoque_ao_ativar(sender, instance, created, **kwargs):
     except Exception as exc:
         logger.warning(
             'Variação %s: sync inicial pós-ativação falhou (cron resolverá depois): %s',
+            instance.pk, exc,
+        )
+
+
+@receiver(post_save, sender='produtos.Variacao')
+def _sincronizar_preco_ao_ativar(sender, instance, created, **kwargs):
+    """Dispara sync de preço imediato quando usa_sync_preco_bling vira True OU
+    variação é reativada com sync de preço ligado."""
+    sync_ativou = (
+        not getattr(instance, '_sync_preco_anterior', False)
+        and instance.usa_sync_preco_bling
+    )
+    variacao_reativada = (
+        not getattr(instance, '_ativo_anterior', True)
+        and instance.ativa
+        and instance.usa_sync_preco_bling
+    )
+    if not (sync_ativou or variacao_reativada):
+        return
+
+    motivo = 'sync preço ativado' if sync_ativou else 'variacao reativada'
+
+    if not instance.bling_variacao_id:
+        logger.info(
+            'Variação %s: %s mas sem bling_variacao_id — sync de preço ignorado',
+            instance.pk, motivo,
+        )
+        return
+
+    try:
+        from apps.bling.services import sincronizar_preco_bling
+        resultado = sincronizar_preco_bling([instance])
+        logger.info(
+            'Variação %s: sync de preço imediato (%s) — %s',
+            instance.pk, motivo, resultado,
+        )
+    except Exception as exc:
+        logger.warning(
+            'Variação %s: sync de preço inicial pós-ativação falhou (cron resolverá depois): %s',
             instance.pk, exc,
         )

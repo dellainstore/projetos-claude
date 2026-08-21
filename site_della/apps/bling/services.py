@@ -362,6 +362,76 @@ def sincronizar_estoque_bling(variacoes=None, *, usar_retry: bool = True) -> dic
     return resultados
 
 
+# ── Sync de preço Bling → Site ───────────────────────────────────────────────
+
+def sincronizar_preco_bling(variacoes=None) -> dict:
+    """
+    Puxa o preço varejo do Bling (GET /produtos/{id} → campo `preco`) e
+    atualiza Variacao.preco (override da variação — não mexe em
+    Produto.preco nem em preco_promocional, que continuam manuais).
+
+    Parâmetros:
+        variacoes: queryset ou lista de Variacao com usa_sync_preco_bling=True.
+                   Se None, busca todas as variações ativas com sync habilitado.
+
+    Retorna dict com contadores: atualizadas, sem_id, erros.
+    """
+    from apps.produtos.models import Variacao
+
+    if variacoes is None:
+        variacoes = Variacao.objects.filter(usa_sync_preco_bling=True, ativa=True)
+
+    resultados = {'atualizadas': 0, 'sem_id': 0, 'erros': 0}
+
+    try:
+        api = BlingAPI()
+    except Exception as exc:
+        logger.error('Sync preço Bling: não foi possível inicializar API — %s', exc)
+        return resultados
+
+    for var in variacoes:
+        if not var.bling_variacao_id:
+            resultados['sem_id'] += 1
+            logger.debug('Sync preço: variação %s sem bling_variacao_id', var.pk)
+            continue
+
+        try:
+            data = api.consultar_produto(var.bling_variacao_id).get('data') or {}
+            preco_bling = data.get('preco')
+            if preco_bling is None:
+                resultados['erros'] += 1
+                logger.warning(
+                    'Sync preço: Bling não retornou preço para variação %s (bling=%s)',
+                    var.pk, var.bling_variacao_id,
+                )
+                continue
+            preco_bling = round(float(preco_bling), 2)
+
+            if var.preco is None or abs(float(var.preco) - preco_bling) >= 0.005:
+                Variacao.objects.filter(pk=var.pk).update(preco=preco_bling)
+                logger.info(
+                    'Sync preço: variação %s (bling=%s) %s → %s',
+                    var.pk, var.bling_variacao_id, var.preco, preco_bling,
+                )
+            resultados['atualizadas'] += 1
+
+        except BlingAPIError as exc:
+            resultados['erros'] += 1
+            logger.warning(
+                'Sync preço: erro API para variação %s (bling=%s): %s',
+                var.pk, var.bling_variacao_id, exc,
+            )
+        except Exception as exc:
+            resultados['erros'] += 1
+            logger.error('Sync preço: erro inesperado na variação %s: %s', var.pk, exc)
+
+    logger.info(
+        'Sync preço Bling concluído — atualizadas=%s, sem_id=%s, erros=%s',
+        resultados['atualizadas'], resultados['sem_id'], resultados['erros'],
+    )
+    return resultados
+
+
 # ── NF-e ──────────────────────────────────────────────────────────────────────
 
 def emitir_nfe_bling(pedido) -> bool:

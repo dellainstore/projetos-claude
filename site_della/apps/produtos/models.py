@@ -587,8 +587,13 @@ class Variacao(models.Model):
                         help_text='ID do produto filho desta variação no Bling.')
     usa_sync_bling = models.BooleanField(
         'Sync estoque Bling',
-        default=False,
+        default=True,
         help_text='Quando ativo, o estoque é atualizado automaticamente pelo Bling.',
+    )
+    usa_sync_preco_bling = models.BooleanField(
+        'Sync preço Bling',
+        default=True,
+        help_text='Quando ativo, o preço (varejo) desta variação é atualizado automaticamente pelo Bling.',
     )
     comportamento_sem_estoque = models.CharField(
         'Quando acabar o estoque',

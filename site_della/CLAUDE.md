@@ -279,6 +279,68 @@ BLING_DEPOSITO_ID=7521173180   # Show Room - Della (depósito padrão)
 - Webhook v1: aceitar formato PLANO (real) E aninhado (logs suporte) — não simplificar para um só
 - Logger `apps.bling`: deve ter handler `file_bling` em `core/settings/production.py` apontando para `logs/bling_webhook.log` — sem ele os `logger.info` do webhook somem (todo handler de produção é específico, não tem catch-all)
 
+#### Sync de preço Bling → Site (migration `0022`, 2026-08-20)
+
+Mesmo padrão do sync de estoque acima, mas para o preço varejo (`Variacao.preco`).
+**`preco_promocional` nunca é tocado pelo sync — continua 100% manual**, é assim
+que a loja lança promoção pontual numa peça mesmo com o preço base sincronizado.
+
+**Campo `Variacao.usa_sync_preco_bling`** (BooleanField, default `True` em
+variações novas — assim como `usa_sync_bling` do estoque, que também passou a
+default `True` em variações novas nesta mesma data):
+- `True` → o preço varejo é puxado do Bling (`GET /produtos/{bling_variacao_id}`
+  → campo `preco`) e grava em `Variacao.preco` (nunca em `Produto.preco`, que
+  continua existindo como fallback pra variações sem sync/sem override).
+- `False` → preço 100% manual, como sempre foi.
+
+**Como o sync dispara:**
+1. **Signal** (`apps/bling/signals.py::_sincronizar_preco_ao_ativar`) — dispara
+   na hora quando `usa_sync_preco_bling` vira `False → True` ou a variação é
+   reativada já com o campo marcado. Mesmo mecanismo do sync de estoque.
+2. **Cron `30 * * * *`** (site_della) — roda 30 min deslocado do cron de
+   estoque (`0 * * * *`) pra não competir na mesma janela de rate limit do Bling.
+
+**Admin:** trava visual do campo `preco` na inline de Variação quando o sync
+está ligado (mesmo padrão do campo `estoque`) — `VariacaoInlineForm` (server-side)
++ `variacao_sync_lock.js` (client-side, agora genérico pra múltiplos pares
+checkbox↔campo). Actions em massa no `ProdutoAdmin`: "Ativar/Desativar sync
+PREÇO Bling em TODAS as variações dos produtos selecionados".
+
+**Management command:**
+```bash
+python manage.py sincronizar_preco_bling --dry-run --settings=core.settings.production
+python manage.py sincronizar_preco_bling --variacao-id 42 55 --settings=core.settings.production
+```
+
+**Auditoria inicial (2026-08-20):** antes de ligar o sync, comparei o preço
+varejo do Bling com o preço efetivo do site em TODAS as 659 variações ativas.
+**632 batiam** (sync ligado direto) — **27 divergiam** em 4 modelos (VESTIDO
+LINHO MIAMI, BODY TRANSPASSADO ML, BODY FRANCE SEM FORRO, CALÇA FENDA LINHO) e
+ficaram com `usa_sync_preco_bling=False` de propósito, aguardando o Neto decidir
+qual valor é o certo antes de ligar o sync nelas (não foram tocadas).
+
+**Resolvido em 2026-08-21:** o Neto conferiu os 4 modelos. Em 2 (VESTIDO LINHO
+MIAMI e CALÇA FENDA LINHO) o preço estava errado no **Bling** e foi corrigido
+lá. Nos outros 2 (BODY TRANSPASSADO ML e BODY FRANCE SEM FORRO) o Bling já
+estava certo e era o site que estava desatualizado. `usa_sync_preco_bling`
+ligado nas 27 variações + `sincronizar_preco_bling --variacao-id` rodado na
+hora pra puxar o preço final do Bling. **As 659 variações ativas do site
+agora têm sync de preço ligado, 0 divergências.**
+
+**Bug real encontrado e corrigido nesse processo — `BlingAPI` cacheava o
+access_token em memória por instância (`self.access_token` setado só no
+`__init__`).** Em jobs longos (centenas de variações, minutos de execução), se
+OUTRO processo (ex.: o cron de estoque da hora cheia, que roda em paralelo)
+disparasse um refresh do token nesse meio-tempo, o Bling invalida o
+access_token anterior (refresh_token rotativo) e o job em andamento passava a
+tomar `401 invalid or expired` em massa a partir dali — foi exatamente o que
+aconteceu no primeiro dry-run desse sync (205 OK, depois 427 erros 401, bem no
+minuto em que o cron de estoque da hora cheia rodou). **Fix:** `_headers()`
+agora busca o token do banco a cada chamada (`get_valid_access_token()`
+direto, sem cachear em `self`) — `apps/bling/api.py`. Beneficia TODOS os
+consumidores de `BlingAPI` (estoque, preço, pedidos, NF-e), não só o sync novo.
+**NÃO regredir para cachear o token em memória por instância.**
+
 ### PagSeguro (PagBank) — PRODUÇÃO (`PAGSEGURO_SANDBOX=False`)
 - Estorno: `POST /charges/{charge_id}/cancel` com `{"amount": {"value": <centavos>}}` — **sem body retorna `40002`**
 - Webhook reconsulta `GET /orders/{id}` autenticado antes de atualizar pedido (segurança)
@@ -360,6 +422,7 @@ Ate 2026-07-28 o checkout marcava `CarrinhoAbandonado.recuperado = True` na cria
 - **Tailwind = build local, NÃO CDN** — sempre `npm run build:css` antes de `collectstatic`
 - **Meta Pixel: NÃO no HTML** — sempre JS condicional (111D)
 - **Estoque oficial = `Variacao.estoque` local** — importador Bling não sincroniza estoque automático (sync seletivo via `usa_sync_bling=True` por variação)
+- **Preço varejo (`Variacao.preco`) tem sync seletivo via `usa_sync_preco_bling=True` por variação** (desde 2026-08-20, ver seção "Sync de preço Bling → Site"). `preco_promocional` continua sempre manual, nunca sincronizado.
 - **CEP endpoint** `/carrinho/cep/{cep}/` retorna `cidade`/`estado` — não `localidade`/`uf` da ViaCEP
 - **`item.variacao_desc`** (snapshot histórico) — nunca `item.variacao.get_tipo_display`/`.nome`
 - **Categoria pai inativa → subs inativam** (cascata em `Categoria.save()`)

@@ -5,10 +5,17 @@ from .models import Avaliacao, Categoria, Produto, ProdutoCorFoto, ProdutoImagem
 
 
 class VariacaoInlineForm(forms.ModelForm):
-    """Bloqueia visualmente o campo `estoque` quando a variação tem
-    `usa_sync_bling=True` — o estoque passa a ser fonte do Bling. O JS
-    `variacao_sync_lock.js` libera o campo dinamicamente se o usuário
-    desmarcar o checkbox (sem precisar salvar antes)."""
+    """Bloqueia visualmente os campos `estoque` e `preco` quando a variação tem,
+    respectivamente, `usa_sync_bling=True` ou `usa_sync_preco_bling=True` — esses
+    valores passam a ser fonte do Bling. O JS `variacao_sync_lock.js` libera os
+    campos dinamicamente se o usuário desmarcar o checkbox (sem precisar salvar
+    antes)."""
+
+    # (checkbox, campo bloqueado, valor de fallback pra variação nova)
+    _CAMPOS_SYNC = (
+        ('usa_sync_bling', 'estoque', 0),
+        ('usa_sync_preco_bling', 'preco', None),
+    )
 
     class Meta:
         model = Variacao
@@ -17,8 +24,12 @@ class VariacaoInlineForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         instance = getattr(self, 'instance', None)
-        if instance and instance.pk and instance.usa_sync_bling:
-            campo = self.fields.get('estoque')
+        if not (instance and instance.pk):
+            return
+        for checkbox_field, campo_nome, _fallback in self._CAMPOS_SYNC:
+            if not getattr(instance, checkbox_field):
+                continue
+            campo = self.fields.get(campo_nome)
             if campo is not None:
                 campo.widget.attrs['disabled'] = 'disabled'
                 campo.widget.attrs['style'] = 'background:#f5f5f5;cursor:not-allowed;'
@@ -27,22 +38,24 @@ class VariacaoInlineForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         instance = self.instance
-        sync_ativo_no_post = cleaned.get('usa_sync_bling')
-        sync_no_banco = bool(instance and instance.pk and instance.usa_sync_bling)
 
-        if sync_ativo_no_post:
-            # Sync ativo: campo estoque pode estar ausente do POST (disabled).
-            # Para variacao existente: mantém o valor do banco até o Bling sincronizar.
-            # Para variacao nova: começa com 0, o Bling atualiza no próximo ciclo.
-            self.errors.pop('estoque', None)
-            if instance and instance.pk:
-                cleaned['estoque'] = instance.estoque
-            else:
-                cleaned.setdefault('estoque', 0)
-        elif sync_no_banco:
-            # Sync estava ativo mas foi desativado: mantém o valor atual do banco.
-            self.errors.pop('estoque', None)
-            cleaned['estoque'] = instance.estoque
+        for checkbox_field, campo_nome, fallback in self._CAMPOS_SYNC:
+            sync_ativo_no_post = cleaned.get(checkbox_field)
+            sync_no_banco = bool(instance and instance.pk and getattr(instance, checkbox_field))
+
+            if sync_ativo_no_post:
+                # Sync ativo: campo pode estar ausente do POST (disabled).
+                # Para variacao existente: mantém o valor do banco até o Bling sincronizar.
+                # Para variacao nova: usa o fallback, o Bling atualiza no próximo ciclo.
+                self.errors.pop(campo_nome, None)
+                if instance and instance.pk:
+                    cleaned[campo_nome] = getattr(instance, campo_nome)
+                else:
+                    cleaned.setdefault(campo_nome, fallback)
+            elif sync_no_banco:
+                # Sync estava ativo mas foi desativado: mantém o valor atual do banco.
+                self.errors.pop(campo_nome, None)
+                cleaned[campo_nome] = getattr(instance, campo_nome)
         return cleaned
 
 

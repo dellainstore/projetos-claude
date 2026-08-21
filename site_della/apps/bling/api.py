@@ -37,13 +37,21 @@ class BlingAPI:
     """
 
     def __init__(self):
-        self.access_token = get_valid_access_token()
-        if not self.access_token:
+        if not get_valid_access_token():
             raise BlingAPIError(401, {'error': {'description': 'Token Bling não disponível.'}})
 
     def _headers(self) -> dict:
+        # Busca o token a cada chamada (não cacheia em self) — um job longo
+        # (ex.: sync de preço/estoque de centenas de variações) pode atravessar
+        # o refresh de outro processo (cron concorrente) que roda no mesmo
+        # instante. Bling usa refresh_token rotativo: ao refrescar, o
+        # access_token anterior é invalidado. Cachear o token em memória no
+        # início do job causava 401 em massa no meio do loop sempre que outro
+        # processo (ex.: sincronizar_estoque_bling, hora cheia) refrescava o
+        # token durante a execução. Buscar no banco a cada request é barato
+        # (uma linha só) e sempre pega a versão vigente.
         return {
-            'Authorization': f'Bearer {self.access_token}',
+            'Authorization': f'Bearer {get_valid_access_token()}',
             'Content-Type':  'application/json',
             'Accept':        'application/json',
         }
