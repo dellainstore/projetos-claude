@@ -29,6 +29,13 @@ class SessaoAnalytics(models.Model):
     utm_campaign   = models.CharField(max_length=200, blank=True)
     utm_content    = models.CharField(max_length=200, blank=True)
     utm_term       = models.CharField(max_length=200, blank=True)
+    # Codigo da campanha na plataforma de anuncio ({{campaign.id}} da Meta).
+    # Diferente de utm_campaign, que carrega o NOME e muda quando a campanha e
+    # renomeada; o codigo nunca muda, e e por ele que o painel de Anuncios
+    # cruza a visita com o gasto declarado pela Meta. O `Pedido` ja guardava
+    # este campo desde o inicio, mas a sessao nao, entao a etiqueta chegava e
+    # era descartada aqui.
+    utm_id         = models.CharField(max_length=200, blank=True)
     gclid          = models.CharField(max_length=300, blank=True)
     fbclid         = models.CharField(max_length=300, blank=True)
     dispositivo    = models.CharField(max_length=10, choices=[

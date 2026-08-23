@@ -47,6 +47,14 @@ class SessaoSite(models.Model):
     utm_source = models.CharField(max_length=200, blank=True)
     utm_medium = models.CharField(max_length=200, blank=True)
     utm_campaign = models.CharField(max_length=200, blank=True)
+    # Nome e codigo do anuncio/conjunto, quando a campanha esta etiquetada com
+    # as macros da Meta. `utm_id` (codigo da campanha) e a chave estavel para
+    # cruzar com o gasto declarado pela Meta: o nome muda ao renomear, o codigo
+    # nunca. Capturado a partir de 2026-08-23 (migration analytics/0006 no
+    # site_della), vazio para sessoes anteriores.
+    utm_content = models.CharField(max_length=200, blank=True)
+    utm_term = models.CharField(max_length=200, blank=True)
+    utm_id = models.CharField(max_length=200, blank=True)
     # Click ids: usados como fallback de atribuicao quando nao ha utm_source
     # (clique de anuncio sem UTM ainda carrega fbclid/gclid).
     fbclid = models.CharField(max_length=300, blank=True)
