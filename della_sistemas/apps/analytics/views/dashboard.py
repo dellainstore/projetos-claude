@@ -321,7 +321,9 @@ def _calcular_carrinhos_recentes(inicio, fim):
     from apps.analytics.vendas import (
         sessoes_com_pedido_pendente, sessoes_com_venda_paga,
     )
-    from django.db.models import Exists, OuterRef
+    from apps.analytics.vendas import numeros_pagos
+    from django.db.models import Exists, OuterRef, Subquery
+    from django.db.models.functions import Coalesce
 
     # "Comprou" so quando o pedido foi pago; pedido gerado e nao pago aparece
     # como "Aguardando pagamento".
@@ -333,19 +335,50 @@ def _calcular_carrinhos_recentes(inicio, fim):
     popup_qs = EventoSite.objects.filter(
         sessao=OuterRef('pk'), tipo='popup_saida_exibido'
     )
+
+    # Data que a linha realmente descreve, e nao `ultima_acao_em`.
+    #
+    # A sessao vive ate 30 dias (SESSION_COOKIE_AGE), entao `ultima_acao_em` e
+    # so "a ultima vez que essa pessoa mexeu no site", que pode ser dias depois
+    # do que a linha esta contando. Na pratica: a cliente do pedido 2026-0030
+    # comprou em 22/08 20h17 e voltou a navegar em 23/08 16h16; a linha dizia
+    # "23/08 16h16 / Comprou", como se a venda fosse de hoje.
+    #
+    # Agora a coluna mostra a hora do evento da propria linha: a compra, quando
+    # houve compra; senao, a ultima vez que algo entrou no carrinho.
+    def _ultimo(**filtros):
+        return Subquery(
+            EventoSite.objects
+            .filter(sessao=OuterRef('pk'), **filtros)
+            .order_by('-ocorrido_em')
+            .values('ocorrido_em')[:1]
+        )
+
+    momento_compra = _ultimo(tipo='pedido_finalizado', produto_slug='',
+                             pedido_numero__in=numeros_pagos())
+    momento_carrinho = _ultimo(tipo='produto_adicionado')
+
+    # Ancorado no evento dentro da janela (mesmo criterio do resumo e do funil),
+    # nao em `iniciada_em`: quem comecou a navegar antes do periodo e so mexeu
+    # no carrinho dentro dele pertence a esta lista.
+    ids_no_periodo = (
+        EventoSite.objects
+        .filter(Q(ocorrido_em__range=(inicio, fim)), tipo='produto_adicionado')
+        .values_list('sessao_id', flat=True).distinct()
+    )
     sessoes = list(
         base_trafego()
-        .filter(iniciada_em__range=(inicio, fim))
-        .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
+        .filter(pk__in=ids_no_periodo)
         .annotate(
             comprou=Exists(comprou_qs),
             aguardando=Exists(aguardando_qs),
             foi_checkout=Exists(checkout_qs),
             viu_popup=Exists(popup_qs),
+            momento=Coalesce(momento_compra, momento_carrinho, 'ultima_acao_em'),
         )
-        .order_by('-ultima_acao_em')
+        .order_by('-momento')
         .values('id', 'comprou', 'aguardando', 'foi_checkout', 'viu_popup',
-                'ultima_acao_em')[:20]
+                'momento')[:20]
     )
 
     if not sessoes:
@@ -390,7 +423,7 @@ def _calcular_carrinhos_recentes(inicio, fim):
             continue
         valor_total = sum(i['valor'] for i in itens)
         result.append({
-            'ultima_acao': s['ultima_acao_em'],
+            'ultima_acao': s['momento'],
             'comprou': s['comprou'],
             'aguardando': s['aguardando'] and not s['comprou'],
             'foi_checkout': s['foi_checkout'],
