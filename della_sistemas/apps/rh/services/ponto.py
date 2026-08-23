@@ -241,11 +241,22 @@ def dia_incompleto(colaborador, dia: date) -> bool:
     # Sem loja vinculada → sem onde bater ponto, não cobra nem gera pendência.
     if not colaborador.lojas_ponto.filter(ativo=True).exists():
         return False
-    # Sábado, domingo e feriado não têm horário de almoço fixo (normalmente só
-    # entrada/saída) e não são cobrados pelo fluxo automático de correção — o
-    # gestor confere manualmente pela Jornada, se precisar.
-    from apps.rh.services.calendario import eh_dia_util
-    if not eh_dia_util(dia):
+    # Feriado nunca é dia de trabalho esperado, mesmo que a escala normalmente
+    # preveja jornada nesse dia da semana — mesma regra do banco de horas.
+    from apps.rh.services.calendario import eh_dia_util, feriados
+    if dia in feriados(dia.year):
+        return False
+    from apps.rh.services.escala import horas_esperadas_no_dia
+    esperado_escala = horas_esperadas_no_dia(colaborador, dia)
+    # Sábado/domingo: só entra no fluxo automático de correção se a ESCALA da
+    # colaboradora prevê trabalho nesse dia específico (ex.: Sara e Tina têm
+    # escala de sábado 10h–14h — uma batida faltando aí é falta de correção
+    # igual a um dia de semana). Sem escala pro fim de semana (a maioria dos
+    # colaboradores, ou quem não tem `escala` nenhuma vinculada — que cairia no
+    # padrão fixo de `carga_horaria_diaria` mais abaixo, que não varia por dia
+    # da semana e faria todo fim de semana parecer dia útil) continua sem
+    # cobrar automaticamente — o gestor confere manualmente pela Jornada.
+    if not eh_dia_util(dia) and not esperado_escala:
         return False
     # Dia abonado pelo gestor (faltou sem atestado, saída antecipada autorizada
     # etc.) → decisão manual já cobre a falta; não gera/mantém pendência de
@@ -261,8 +272,7 @@ def dia_incompleto(colaborador, dia: date) -> bool:
         return False
     dispensados = slots_dispensados_por_afastamento(colaborador, dia, af) if af else set()
 
-    from apps.rh.services.escala import horas_esperadas_no_dia
-    esperado = horas_esperadas_no_dia(colaborador, dia)
+    esperado = esperado_escala
     if esperado is None:
         esperado = colaborador.carga_horaria_diaria
     dia_util = bool(esperado and esperado > 0)
@@ -280,7 +290,10 @@ def dia_incompleto(colaborador, dia: date) -> bool:
     # a regra de que as que ela DE FATO bateu têm que fechar par.
     if n % 2 == 1:
         return True
-    esperadas = BATIDAS_POR_DIA - len(dispensados)
+    from apps.rh.services.escala import batidas_esperadas_no_dia
+    # Dia de escala sem almoço (ex.: sábado só entrada/saída) espera 2 batidas,
+    # não as 4 do padrão — mesma função que o banco de horas já usa pra isso.
+    esperadas = (batidas_esperadas_no_dia(colaborador, dia) or BATIDAS_POR_DIA) - len(dispensados)
     # Dia completo (todas as batidas esperadas, descontadas as dispensadas por
     # afastamento parcial) ou "sem almoço" aprovado (2 bastam) → ok.
     if n >= esperadas:
