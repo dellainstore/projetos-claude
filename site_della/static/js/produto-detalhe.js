@@ -248,33 +248,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function atualizarDisponibilidadeCores() {
+    // Cor NUNCA fica bloqueada pelo tamanho selecionado no momento: travava a
+    // troca de cor quando o tamanho escolhido não existia na cor de destino
+    // (ex.: só resta P no preto, bege/branco esgotados em todos os tamanhos)
+    // e o clique nem chegava a registrar (`btn.disabled` some cedo no
+    // handler). Quem mostra o que está disponível na cor escolhida é
+    // `atualizarDisponibilidadeTamanhos()`, chamada logo depois de trocar de
+    // cor: se não sobrar nenhum tamanho, todos aparecem indisponíveis lá.
     corButtons.forEach((btn) => {
-      const corId = btn.dataset.corId;
-      const tamKey = tamSelecionadoId || 'null';
-      if (!tamSelecionadoId) {
-        btn.classList.remove('esgotado');
-        btn.disabled = false;
-        btn.removeAttribute('aria-disabled');
-        btn.title = '';
-        return;
-      }
-      const entry = variacoesMap[`${corId}_${tamKey}`];
-      if (entry === undefined) {
-        btn.classList.add('esgotado');
-        btn.disabled = true;
-        btn.setAttribute('aria-disabled', 'true');
-        btn.title = 'Indisponível neste tamanho';
-      } else if (!entry.disponivel) {
-        btn.classList.add('esgotado');
-        btn.disabled = true;
-        btn.setAttribute('aria-disabled', 'true');
-        btn.title = 'Esgotado';
-      } else {
-        btn.classList.remove('esgotado');
-        btn.disabled = false;
-        btn.removeAttribute('aria-disabled');
-        btn.title = '';
-      }
+      btn.classList.remove('esgotado');
+      btn.disabled = false;
+      btn.removeAttribute('aria-disabled');
+      btn.title = '';
     });
   }
 
@@ -290,9 +275,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function validarCorAposTamanhoMudar() {
     if (!corSelecionadaId) return;
-    const entry = variacoesMap[`${corSelecionadaId}_${tamSelecionadoId || 'null'}`];
+    const tamKey = tamSelecionadoId || 'null';
+    const entry = variacoesMap[`${corSelecionadaId}_${tamKey}`];
     if (!entry || !entry.disponivel) {
-      const fallback = corButtons.find((btn) => !btn.disabled);
+      // Cor atual não tem o tamanho escolhido: busca a primeira cor que TEM
+      // esse tamanho disponível, olhando o estoque direto (não dá mais pra
+      // usar `!btn.disabled` como atalho, já que cor nunca fica desabilitada
+      // pelo tamanho, ver `atualizarDisponibilidadeCores`).
+      const fallback = corButtons.find((btn) => {
+        const e = variacoesMap[`${btn.dataset.corId}_${tamKey}`];
+        return e && e.disponivel;
+      });
       corButtons.forEach((btn) => btn.classList.remove('selecionado'));
       corSelecionadaId = fallback ? fallback.dataset.corId : null;
       if (fallback) {
