@@ -108,6 +108,15 @@ def nome_campanha(valor: str) -> str:
     try:
         # `unquote_plus` tambem troca "+" por espaco, que e como a Meta escreve
         # o espaco nesses casos.
-        return unquote_plus(valor).strip()
+        limpo = unquote_plus(valor).strip()
     except Exception:
-        return valor
+        limpo = valor
+
+    # Campanha etiquetada com {{campaign.id}} em vez de {{campaign.name}}: o
+    # valor e so o codigo numerico da Meta, ilegivel na tela. Enquanto as
+    # campanhas nao forem repadronizadas para mandar codigo E nome, mostra os
+    # ultimos digitos, que ja bastam para distinguir uma campanha da outra sem
+    # ocupar a coluna inteira.
+    if limpo.isdigit() and len(limpo) > 8:
+        return f'Campanha {limpo[-6:]}'
+    return limpo

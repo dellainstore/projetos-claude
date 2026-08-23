@@ -469,6 +469,11 @@
             <span class="ds-nav-icon">&#9679;</span>
             Visitas
           </a>
+          <a href="{% url 'analytics:vendas' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'vendas' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9670;</span>
+            Vendas
+          </a>
           <a href="{% url 'analytics:dashboard' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'analytics' %}ativo{% endif %}">
             <span class="ds-nav-icon">&#9636;</span>

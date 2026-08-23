@@ -87,6 +87,25 @@ class PedidoSite(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     criado_em = models.DateTimeField()
 
+    # Quem comprou. `cliente_id` fica nulo em compra de convidada (checkout sem
+    # cadastro), por isso "novos x recorrentes" casa por e-mail, nao pelo FK.
+    cliente_id = models.BigIntegerField(null=True, blank=True)
+    nome_completo = models.CharField(max_length=200, blank=True)
+    email = models.EmailField(blank=True)
+
+    # Atribuicao gravada no proprio pedido. Vazia na maioria dos pedidos
+    # anteriores a 2026-08-23 (o cookie do Safari expirava antes da compra, ver
+    # apps/pedidos/views.py::_utms_da_sessao_analytics no site_della), por isso
+    # o painel usa a origem da SESSAO como fonte principal e esta aqui como
+    # complemento.
+    utm_source = models.CharField(max_length=200, blank=True)
+    utm_medium = models.CharField(max_length=200, blank=True)
+    utm_campaign = models.CharField(max_length=200, blank=True)
+    utm_content = models.CharField(max_length=200, blank=True)
+    utm_id = models.CharField(max_length=200, blank=True)
+    fbclid = models.CharField(max_length=300, blank=True)
+    gclid = models.CharField(max_length=300, blank=True)
+
     class Meta:
         app_label = 'analytics_site'
         db_table = 'pedidos_pedido'

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Vendas do Site | D'ELLA Sistemas{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block css_extra %}
+{% include "analytics/_estilos.html" %}
+{% include "analytics/_mapa_estilos.html" %}
+<style>
+  .an-barra-attr { height: 8px; background: var(--cinza-claro); border-radius: 4px; overflow: hidden; margin: 0.5rem 0 0.4rem; }
+  .an-barra-attr span { display: block; height: 100%; background: var(--dourado); border-radius: 4px; }
+  .an-attr-legenda { font-size: 0.78rem; color: var(--cinza-texto); }
+  .an-export { display: flex; gap: 0.4rem; justify-content: flex-end; margin-bottom: 0.4rem; }
+  .an-export a { font-size: 0.72rem; color: var(--cinza-texto); text-decoration: none;
+                 border: 1px solid var(--cinza-medio); border-radius: 6px; padding: 0.2rem 0.6rem; }
+  .an-export a:hover { background: var(--cinza-claro); color: var(--preto); }
+  .an-status-pill { font-size: 0.66rem; padding: 0.1rem 0.4rem; border-radius: 3px;
+                    background: var(--cinza-claro); color: var(--cinza-texto); white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<h1 class="an-titulo">Vendas</h1>
+<p class="an-subtitulo">Quanto entrou, de qual canal e de qual campanha.</p>
+
+{% if sem_config %}
+<div class="an-sem-config">
+  <h2>Banco de dados nao configurado</h2>
+  <p>Para ativar o painel, configure o acesso ao banco do site no <strong>.env</strong>.</p>
+</div>
+{% else %}
+
+<div class="an-filtro">
+  <span class="an-filtro-label">Periodo:</span>
+  <a href="?periodo=hoje"  class="an-filtro-tab {% if filtro == 'hoje' %}ativo{% endif %}">Hoje</a>
+  <a href="?periodo=ontem" class="an-filtro-tab {% if filtro == 'ontem' %}ativo{% endif %}">Ontem</a>
+  <a href="?periodo=7d"    class="an-filtro-tab {% if filtro == '7d' %}ativo{% endif %}">Ultimos 7 dias</a>
+  <a href="?periodo=30d"   class="an-filtro-tab {% if filtro == '30d' %}ativo{% endif %}">Ultimos 30 dias</a>
+  <button type="button" onclick="toggleCustomPeriodo(this)" class="an-filtro-tab {% if filtro == 'custom' %}ativo{% endif %}">Personalizado</button>
+</div>
+<form id="an-form-custom" class="an-custom-form{% if filtro != 'custom' %} oculto{% endif %}" method="get" action="">
+  <input type="hidden" name="periodo" value="custom">
+  <label class="an-data-label">De&nbsp;<input type="date" name="de" value="{{ de_val }}" class="an-data-input"></label>
+  <label class="an-data-label">Ate&nbsp;<input type="date" name="ate" value="{{ ate_val }}" class="an-data-input"></label>
+  <button type="submit" class="an-filtro-tab ativo">Ver</button>
+</form>
+<script>
+function toggleCustomPeriodo(btn) {
+  var form = document.getElementById('an-form-custom');
+  var aberto = form.classList.toggle('oculto');
+  btn.classList.toggle('ativo', !aberto);
+}
+</script>
+<div style="margin-bottom:1.5rem;"></div>
+
+<!-- RESUMO -->
+<div class="an-secao-titulo">Resumo do periodo</div>
+<div class="an-cards-grid">
+  <div class="an-card">
+    <div class="an-card-label">Faturamento</div>
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ resumo.receita|brl }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Vendas pagas</div>
+    <div class="an-card-valor">{{ resumo.vendas }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Ticket medio</div>
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ resumo.ticket|brl }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Pecas vendidas</div>
+    <div class="an-card-valor">{{ resumo.itens }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Aguardando pagamento</div>
+    <div class="an-card-valor">{{ resumo.aguardando }}</div>
+    {% if resumo.aguardando %}
+    <div style="font-size:0.75rem;color:var(--cinza-texto);">{{ resumo.aguardando_valor|brl }} ainda nao pagos</div>
+    {% endif %}
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Clientes</div>
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ clientes.novos }} nova{{ clientes.novos|pluralize }}</div>
+    <div style="font-size:0.75rem;color:var(--cinza-texto);">
+      {{ clientes.recorrentes }} que ja tinha{{ clientes.recorrentes|pluralize:"m" }} comprado
+    </div>
+  </div>
+</div>
+
+<!-- QUALIDADE DA ATRIBUICAO -->
+<div class="an-secao-titulo">Quanto do faturamento sabemos de onde veio</div>
+<div class="an-mapa-wrap">
+  <div style="font-size:1.35rem;font-weight:600;">{{ qualidade.pct }}%</div>
+  <div class="an-barra-attr"><span style="width:{{ qualidade.pct }}%"></span></div>
+  <div class="an-attr-legenda">
+    {{ qualidade.com_origem }} pedido{{ qualidade.com_origem|pluralize }} com origem conhecida
+    ({{ qualidade.receita_com|brl }}) &nbsp;·&nbsp;
+    {{ qualidade.sem_origem }} sem etiqueta ({{ qualidade.receita_sem|brl }}).
+    Se este numero cair de repente, quase sempre e etiqueta quebrada no anuncio,
+    nao mudanca de comportamento da cliente.
+  </div>
+</div>
+
+<!-- POR ORIGEM -->
+<div class="an-secao-titulo">Quanto cada canal faturou</div>
+<div class="an-export">
+  <a href="{% url 'analytics:vendas_export' %}?periodo={{ filtro }}&amp;de={{ de_val }}&amp;ate={{ ate_val }}&amp;tipo=origem">Exportar canais</a>
+  {% if campanhas %}
+  <a href="{% url 'analytics:vendas_export' %}?periodo={{ filtro }}&amp;de={{ de_val }}&amp;ate={{ ate_val }}&amp;tipo=campanha">Exportar campanhas</a>
+  {% endif %}
+</div>
+<div class="an-tabela-wrap">
+  <table class="an-tabela">
+    <thead>
+      <tr>
+        <th>Canal</th>
+        <th class="num">Vendas</th>
+        <th class="num">Faturamento</th>
+        <th class="num">Ticket medio</th>
+        <th class="num">Do total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in origens %}
+      <tr>
+        <td>{{ o.origem }}{% if o.paga %}<span class="an-tag-paga">pago</span>{% endif %}</td>
+        <td class="num">{{ o.vendas }}</td>
+        <td class="num">{{ o.receita|brl }}</td>
+        <td class="num">{{ o.ticket|brl }}</td>
+        <td class="num">{{ o.pct }}%</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" style="color:var(--cinza-texto);">Sem vendas no periodo.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- CAMPANHAS -->
+{% if campanhas %}
+<div class="an-secao-titulo">Campanhas</div>
+<div class="an-tabela-wrap">
+  <table class="an-tabela">
+    <thead>
+      <tr>
+        <th>Campanha</th>
+        <th>Canal</th>
+        <th class="num">Vendas</th>
+        <th class="num">Faturamento</th>
+        <th class="num">Ticket medio</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in campanhas %}
+      <tr>
+        <td>{{ c.campanha }}</td>
+        <td>{{ c.origem }}</td>
+        <td class="num">{{ c.vendas }}</td>
+        <td class="num">{{ c.receita|brl }}</td>
+        <td class="num">{{ c.ticket|brl }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- PRODUTOS MAIS VENDIDOS -->
+<div class="an-secao-titulo">Pecas mais vendidas</div>
+<div class="an-tabela-wrap">
+  <table class="an-tabela">
+    <thead>
+      <tr><th>Peca</th><th class="num">Vendas</th><th class="num">Faturamento</th></tr>
+    </thead>
+    <tbody>
+      {% for p in mais_vendidos %}
+      <tr>
+        <td>{{ p.produto_nome|default:p.produto_slug }}</td>
+        <td class="num">{{ p.total }}</td>
+        <td class="num">{{ p.receita|brl }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3" style="color:var(--cinza-texto);">Sem vendas no periodo.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ULTIMOS PEDIDOS -->
+<div class="an-secao-titulo">Ultimos pedidos</div>
+<div class="an-tabela-wrap">
+  <table class="an-tabela">
+    <thead>
+      <tr>
+        <th>Pedido</th><th>Cliente</th><th class="num">Valor</th>
+        <th>Veio de</th><th>Quando</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in pedidos %}
+      <tr>
+        <td>{{ p.numero }}</td>
+        <td>{{ p.cliente }}</td>
+        <td class="num">{{ p.total|brl }}</td>
+        <td>
+          {{ p.origem }}
+          {% if p.campanha %}<div style="font-size:0.7rem;color:var(--cinza-texto);">{{ p.campanha }}</div>{% endif %}
+        </td>
+        <td style="white-space:nowrap;">{{ p.criado_em|date:"d/m H\hi" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" style="color:var(--cinza-texto);">Sem pedidos no periodo.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- CARRINHOS -->
+{% if carrinhos %}
+<div class="an-secao-titulo">Carrinhos recentes</div>
+<div class="an-tabela-wrap">
+  <table class="an-tabela">
+    <thead>
+      <tr><th>Quando</th><th>Produtos</th><th class="num">Itens</th><th class="num">Valor</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for c in carrinhos %}
+      <tr>
+        <td style="white-space:nowrap;">{{ c.ultima_acao|date:"d/m H\hi" }}</td>
+        <td>{% for i in c.itens %}{{ i.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td class="num">{{ c.total_itens }}</td>
+        <td class="num">{{ c.valor_total|brl }}</td>
+        <td>
+          {% if c.comprou %}<span class="an-status-pill" style="background:#e4ede2;color:#2e7d32;">Comprou</span>
+          {% elif c.aguardando %}<span class="an-status-pill" style="background:#f2e7cd;color:#7a6220;">Aguardando</span>
+          {% else %}<span class="an-status-pill">Abandonou</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
