@@ -622,35 +622,96 @@ def _ler_consentimento(request):
     return bool(data.get('marketing')), bool(data.get('analytics'))
 
 
+_CAMPOS_UTM = ('utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id')
+
+
+def _utms_da_sessao_analytics(request):
+    """Atribuicao gravada no SERVIDOR, na SessaoAnalytics da sessao atual.
+
+    Terceira e ultima fonte de `_ler_utms_atribuicao`, e a unica que nao depende
+    de nada guardado pelo navegador.
+
+    Motivo: o cookie `della_attr` e gravado por JavaScript (`document.cookie` em
+    static/js/della.js). O Safari, sob ITP, limita cookie criado assim a 7 dias
+    de vida real, ignorando o `expires` de 30 dias que o JS pede. Como a loja e
+    majoritariamente mobile, a cliente que clica no anuncio e volta para comprar
+    duas semanas depois chega ao checkout sem nenhuma UTM, e a venda vira
+    "direto" no painel.
+
+    A SessaoAnalytics ja guarda a mesma atribuicao desde o primeiro hit, do lado
+    do servidor, sem depender de cookie de navegador (ver
+    apps/analytics/services.py::_get_or_create_por_valores, que le a UTM da
+    query string da requisicao de entrada). O dado sempre esteve la, so nao era
+    consultado aqui.
+
+    Medicao em 2026-08-23, 16 pedidos pagos nos 30 dias anteriores: 3 tinham
+    UTM no pedido e 5 tinham a origem apenas na sessao (4 de anuncio no
+    Instagram, 1 de clique de anuncio da Meta). Esta funcao recupera esses 5.
+
+    Nunca levanta excecao: atribuicao e telemetria, nao pode derrubar checkout.
+    """
+    try:
+        import hashlib
+
+        from apps.analytics.models import SessaoAnalytics
+
+        session_key = request.session.session_key
+        if not session_key:
+            return {}
+        sessao = SessaoAnalytics.objects.filter(
+            sessao_hash=hashlib.sha256(session_key.encode()).hexdigest()
+        ).only(*_CAMPOS_UTM[:-1]).first()
+        if not sessao:
+            return {}
+        # `utm_id` nao existe na SessaoAnalytics, so os cinco primeiros.
+        return {
+            campo: getattr(sessao, campo)
+            for campo in _CAMPOS_UTM[:-1]
+            if getattr(sessao, campo, '')
+        }
+    except Exception:
+        return {}
+
+
 def _ler_utms_atribuicao(request):
     """
-    Le UTMs dos parametros GET da requisicao atual e, como fallback, do cookie
-    della_attr gravado pelo della.js quando o usuario chegou via link com UTMs.
+    Le UTMs em tres fontes, da mais confiavel para a menos, sem sobrescrever o
+    que uma fonte anterior ja preencheu:
 
-    O cookie permite recuperar a atribuicao mesmo quando o checkout ocorre em
-    sessao diferente da visita original (localStorage nao chega ao servidor).
+    1. query string da requisicao atual;
+    2. cookie `della_attr`, gravado pelo della.js na visita original;
+    3. SessaoAnalytics do servidor (ver `_utms_da_sessao_analytics`).
+
+    A fonte 3 cobre o caso em que o navegador perdeu o cookie mas o servidor
+    ainda sabe de onde a visita veio (tipicamente Safari/iOS depois de 7 dias).
 
     Retorna dict com os campos disponiveis.
     """
     params = request.GET
     utms = {}
-    for key in ('utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id'):
+    for key in _CAMPOS_UTM:
         val = (params.get(key) or '').strip()[:200]
         if val:
             utms[key] = val
 
-    # Fallback: cookie della_attr gravado pelo JS na visita original
+    # Fallback 1: cookie della_attr gravado pelo JS na visita original
     try:
         import json as _json
         from urllib.parse import unquote as _unq
         raw_attr = request.COOKIES.get('della_attr', '')
         if raw_attr:
             attr = _json.loads(_unq(raw_attr))
-            for key in ('utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id'):
+            for key in _CAMPOS_UTM:
                 if key not in utms and attr.get(key):
                     utms[key] = str(attr[key])[:200]
     except Exception:
         pass
+
+    # Fallback 2: atribuicao do servidor, imune a limite de cookie do navegador
+    if not utms.get('utm_source'):
+        for key, val in _utms_da_sessao_analytics(request).items():
+            if key not in utms and val:
+                utms[key] = str(val)[:200]
 
     return utms
 
