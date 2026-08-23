@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Visitas do Site | D'ELLA Sistemas{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block css_extra %}
+{% include "analytics/_estilos.html" %}
+{% include "analytics/_mapa_estilos.html" %}
+{% endblock %}
+
+{% block conteudo %}
+<h1 class="an-titulo">Visitas</h1>
+<p class="an-subtitulo">Quem chega ao site, de onde vem e de que lugar do Brasil.</p>
+
+{% if sem_config %}
+<div class="an-sem-config">
+  <h2>Banco de dados nao configurado</h2>
+  <p>Para ativar o painel, configure o acesso ao banco do site no <strong>.env</strong>.</p>
+</div>
+{% else %}
+
+<div class="an-filtro">
+  <span class="an-filtro-label">Periodo:</span>
+  <a href="?periodo=hoje"  class="an-filtro-tab {% if filtro == 'hoje' %}ativo{% endif %}">Hoje</a>
+  <a href="?periodo=ontem" class="an-filtro-tab {% if filtro == 'ontem' %}ativo{% endif %}">Ontem</a>
+  <a href="?periodo=7d"    class="an-filtro-tab {% if filtro == '7d' %}ativo{% endif %}">Ultimos 7 dias</a>
+  <a href="?periodo=30d"   class="an-filtro-tab {% if filtro == '30d' %}ativo{% endif %}">Ultimos 30 dias</a>
+  <button type="button" onclick="toggleCustomPeriodo(this)" class="an-filtro-tab {% if filtro == 'custom' %}ativo{% endif %}">Personalizado</button>
+</div>
+<form id="an-form-custom" class="an-custom-form{% if filtro != 'custom' %} oculto{% endif %}" method="get" action="">
+  <input type="hidden" name="periodo" value="custom">
+  <label class="an-data-label">De&nbsp;<input type="date" name="de" value="{{ de_val }}" class="an-data-input"></label>
+  <label class="an-data-label">Ate&nbsp;<input type="date" name="ate" value="{{ ate_val }}" class="an-data-input"></label>
+  <button type="submit" class="an-filtro-tab ativo">Ver</button>
+</form>
+<script>
+function toggleCustomPeriodo(btn) {
+  var form = document.getElementById('an-form-custom');
+  var aberto = form.classList.toggle('oculto');
+  btn.classList.toggle('ativo', !aberto);
+}
+</script>
+<div style="margin-bottom:1.5rem;"></div>
+
+<!-- AO VIVO -->
+<div class="an-secao-titulo">Ao vivo agora</div>
+<div class="an-ao-vivo-card"
+     hx-get="{% url 'analytics:ao_vivo' %}"
+     hx-trigger="load, every 30s"
+     hx-swap="innerHTML">
+  <div style="font-size:0.8rem;color:var(--cinza-texto);">Carregando...</div>
+</div>
+
+<!-- RESUMO -->
+<div class="an-secao-titulo">Resumo do periodo</div>
+<div class="an-cards-grid">
+  <div class="an-card">
+    <div class="an-card-label">Visitantes</div>
+    <div class="an-card-valor">{{ resumo.visitantes }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Paginas vistas</div>
+    <div class="an-card-valor">{{ resumo.paginas }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Paginas por visitante</div>
+    <div class="an-card-valor">{{ resumo.paginas_por_visitante }}</div>
+  </div>
+  {% for d in dispositivo %}{% if forloop.first %}
+  <div class="an-card">
+    <div class="an-card-label">Maioria em</div>
+    <div class="an-card-valor" style="font-size:1.15rem;">{{ d.rotulo }}</div>
+    <div style="font-size:0.75rem;color:var(--cinza-texto);">{{ d.pct }}% das visitas</div>
+  </div>
+  {% endif %}{% endfor %}
+</div>
+
+<!-- DE ONDE VIERAM -->
+<div class="an-secao-titulo">De onde vieram, e quanto cada canal rendeu</div>
+<div class="an-tabela-wrap">
+  <table class="an-tabela">
+    <thead>
+      <tr>
+        <th>Origem</th>
+        <th class="num">Visitantes</th>
+        <th class="num">Compraram</th>
+        <th class="num">A cada 100</th>
+        <th class="num">Faturamento</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in origens %}
+      <tr>
+        <td>
+          {{ o.origem }}
+          {% if o.paga %}<span class="an-tag-paga">pago</span>{% endif %}
+        </td>
+        <td class="num">{{ o.visitantes }}</td>
+        <td class="num">{{ o.vendas }}</td>
+        {# floatformat (nao pct_css) porque aqui e texto lido por gente: com
+           LANGUAGE_CODE=pt-br sai com virgula. pct_css so serve para width em
+           style="", onde a virgula quebraria o CSS. #}
+        <td class="num {% if o.conversao >= 2 %}an-conv-forte{% endif %}">
+          {{ o.conversao|floatformat:2 }}
+        </td>
+        <td class="num">{% if o.receita %}{{ o.receita|brl }}{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" style="color:var(--cinza-texto);">Sem visitas no periodo.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- MAPA E CIDADES -->
+<div class="an-secao-titulo">De que lugar do Brasil</div>
+<div class="an-geo">
+  <div class="an-mapa-wrap">
+    <div class="an-mapa">
+      {% for e in estados %}
+      <div class="an-uf an-uf-n{{ e.nivel }}"
+           style="grid-row:{{ e.linha }};grid-column:{{ e.coluna }};"
+           title="{{ e.nome }}: {{ e.total }} visitante{{ e.total|pluralize }}">{{ e.uf }}</div>
+      {% endfor %}
+    </div>
+    <div class="an-mapa-legenda">
+      <span>menos</span>
+      <span class="an-legenda-escala">
+        <span class="an-legenda-bloco an-uf-n1"></span>
+        <span class="an-legenda-bloco an-uf-n2"></span>
+        <span class="an-legenda-bloco an-uf-n3"></span>
+        <span class="an-legenda-bloco an-uf-n4"></span>
+      </span>
+      <span>mais &nbsp;(ate {{ topo_mapa }})</span>
+    </div>
+  </div>
+
+  <div class="an-mapa-wrap">
+    <div class="an-cidades">
+      {% for c in cidades %}
+      <div class="an-cidade-linha">
+        <span class="an-cidade-nome">{{ c.cidade }} <span class="an-cidade-uf">{{ c.estado }}</span></span>
+        <span class="an-cidade-total">{{ c.total }}</span>
+        <span class="an-cidade-barra"><span style="width:{{ c.pct_barra }}%"></span></span>
+      </div>
+      {% empty %}
+      <div style="font-size:0.82rem;color:var(--cinza-texto);">Sem cidades no periodo.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- DISPOSITIVO -->
+<div class="an-secao-titulo">Celular ou computador</div>
+<div class="an-disp">
+  {% for d in dispositivo %}
+  <div class="an-disp-item">
+    <div class="an-disp-rotulo">{{ d.rotulo }}</div>
+    <div class="an-disp-valor">{{ d.total }}</div>
+    <div class="an-disp-pct">{{ d.pct }}% das visitas</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- TRAFEGO SEMANAL -->
+{% if trafico %}
+<div id="an-trafico-slot">
+  {% include "analytics/_trafico_card.html" %}
+</div>
+{% endif %}
+
+<!-- FUNIL -->
+{% if funil %}
+<div class="an-secao-titulo">Caminho ate a compra</div>
+<div class="an-funil">
+  {% for etapa in funil %}
+  <div class="an-funil-etapa">
+    <div class="an-funil-info">
+      <span class="an-funil-label">{{ etapa.label }}</span>
+      <span class="an-funil-nums">{{ etapa.total }} pessoas &nbsp;({{ etapa.pct }}%)</span>
+    </div>
+    <div class="an-funil-barra-fundo">
+      <div class="an-funil-barra{% if forloop.first %} primeira{% endif %}" style="width:{{ etapa.pct|pct_css }}%"></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- PRODUTOS: INTERESSE -->
+<div class="an-secao-titulo">O que mais chamou atencao</div>
+<div class="an-produtos-grid">
+  <div class="an-produtos-col">
+    <div class="an-produtos-titulo">Mais vistos</div>
+    {% for p in produtos.mais_vistos %}
+    <div class="an-produto-linha">
+      <span class="an-produto-nome">{{ p.produto_nome|default:p.produto_slug }}</span>
+      <span class="an-produto-total">{{ p.total }}</span>
+    </div>
+    {% empty %}<div class="an-vazio">Sem dados no periodo.</div>{% endfor %}
+  </div>
+  <div class="an-produtos-col">
+    <div class="an-produtos-titulo">Mais colocados no carrinho</div>
+    {% for p in produtos.mais_adicionados %}
+    <div class="an-produto-linha">
+      <span class="an-produto-nome">{{ p.produto_nome|default:p.produto_slug }}</span>
+      <span class="an-produto-total">{{ p.total }}</span>
+    </div>
+    {% empty %}<div class="an-vazio">Sem dados no periodo.</div>{% endfor %}
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

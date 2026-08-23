@@ -1,0 +1,81 @@
+<style>
+  /* ── Mapa em blocos + cidades ─────────────────────────────────────────── */
+  .an-geo {
+    display: grid; gap: 1rem;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 900px) {
+    .an-geo { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  }
+
+  .an-mapa-wrap {
+    background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 1rem;
+  }
+  .an-mapa {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    max-width: 340px; margin: 0 auto;
+  }
+  .an-uf {
+    aspect-ratio: 1 / 1;
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.62rem; font-weight: 600; letter-spacing: 0.02em;
+    border: 1px solid transparent;
+    cursor: default;
+  }
+  /* Escala de intensidade sobre o dourado da marca. */
+  .an-uf-n0 { background: var(--cinza-claro); color: #b9b3a4; }
+  .an-uf-n1 { background: #f2e7cd; color: #7a6220; }
+  .an-uf-n2 { background: #e3cd95; color: #6a541a; }
+  .an-uf-n3 { background: #cfae5c; color: #3d3010; }
+  .an-uf-n4 { background: var(--dourado); color: var(--branco); }
+
+  .an-mapa-legenda {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.4rem; margin-top: 0.85rem;
+    font-size: 0.7rem; color: var(--cinza-texto);
+  }
+  .an-legenda-escala { display: flex; gap: 2px; }
+  .an-legenda-bloco { width: 18px; height: 10px; border-radius: 2px; }
+
+  /* Lista de cidades */
+  .an-cidades { display: flex; flex-direction: column; gap: 0.55rem; }
+  .an-cidade-linha { display: grid; grid-template-columns: 1fr auto; gap: 0.3rem 0.6rem; align-items: baseline; }
+  .an-cidade-nome { font-size: 0.85rem; color: var(--preto); }
+  .an-cidade-uf { font-size: 0.72rem; color: var(--cinza-texto); }
+  .an-cidade-total { font-size: 0.85rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .an-cidade-barra { grid-column: 1 / -1; height: 4px; background: var(--cinza-claro); border-radius: 2px; overflow: hidden; }
+  .an-cidade-barra span { display: block; height: 100%; background: var(--dourado); border-radius: 2px; }
+
+  /* ── Tabela de origens com retorno ────────────────────────────────────── */
+  .an-tabela-wrap { overflow-x: auto; background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px; }
+  .an-tabela { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 520px; }
+  .an-tabela thead th {
+    text-align: left; padding: 0.65rem 0.85rem;
+    font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--cinza-texto); background: var(--cinza-claro);
+    border-bottom: 1px solid var(--cinza-medio); white-space: nowrap;
+  }
+  .an-tabela tbody td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--cinza-claro); vertical-align: middle; }
+  .an-tabela tbody tr:last-child td { border-bottom: none; }
+  .an-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .an-tag-paga {
+    display: inline-block; margin-left: 0.4rem; padding: 0.08rem 0.35rem;
+    font-size: 0.6rem; letter-spacing: 0.04em; text-transform: uppercase;
+    background: #f2e7cd; color: #7a6220; border-radius: 3px; vertical-align: 0.08em;
+  }
+  .an-conv-forte { color: #2e7d32; font-weight: 600; }
+
+  /* ── Dispositivo ──────────────────────────────────────────────────────── */
+  .an-disp { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .an-disp-item {
+    flex: 1 1 90px; background: var(--branco); border: 1px solid var(--cinza-medio);
+    border-radius: 10px; padding: 0.7rem 0.85rem;
+  }
+  .an-disp-rotulo { font-size: 0.7rem; color: var(--cinza-texto); margin-bottom: 0.2rem; }
+  .an-disp-valor { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .an-disp-pct { font-size: 0.72rem; color: var(--cinza-texto); }
+</style>
