@@ -996,6 +996,27 @@ def _processar_checkout(request, form, cart):
                 pedido.gateway_id = gateway_order_id
                 pedido.save(update_fields=['status', 'gateway_id'])
 
+                if novo_status == 'pagamento_confirmado':
+                    try:
+                        # Pagamento real confirmado e prova definitiva de que a
+                        # sessao nao e bot (bot nao completa checkout pago).
+                        # Mesmo fix ja aplicado no webhook assincrono do
+                        # PagBank/PIX (apps/pagamentos/views.py), mas para o
+                        # cartao aprovado na hora, direto no checkout sincrono
+                        # -- sem isso, cartao aprovado na hora nunca passava
+                        # por essa desmarcacao e a venda ficava presa como bot
+                        # no dashboard (ver pedidos 2026-0023 e 2026-0027).
+                        if _sessao and _sessao.is_bot:
+                            from apps.analytics.models import SessaoAnalytics
+                            SessaoAnalytics.objects.filter(pk=_sessao.pk).update(is_bot=False)
+                            logger.info(
+                                'Analytics: sessao %s desmarcada como bot apos pagamento '
+                                'confirmado do pedido %s (checkout cartao)',
+                                _sessao.pk, pedido.numero,
+                            )
+                    except Exception:
+                        pass
+
     except _PagamentoRecusado as e:
         from apps.core_utils.erros import registrar_evento_erro
         registrar_evento_erro(
