@@ -475,11 +475,41 @@ function gerarImagemMetas(btn) {
   const textoOriginal = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Gerando...';
+  const ehMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   html2canvas(el, { backgroundColor: '#f5f5f3', scale: 2 }).then(function (canvas) {
-    const link = document.createElement('a');
-    link.download = 'metas-{{ periodo_label|slugify }}.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    canvas.toBlob(function (blob) {
+      if (!blob) {
+        alert('Não foi possível gerar a imagem. Tente novamente.');
+        return;
+      }
+      const nomeArquivo = 'metas-{{ periodo_label|slugify }}.png';
+
+      // Mobile: abre a folha de compartilhamento nativa (permite salvar direto na galeria)
+      if (ehMobile && navigator.canShare) {
+        const file = new File([blob], nomeArquivo, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: 'Metas {{ periodo_label }}' }).catch(function (err) {
+            if (err && err.name !== 'AbortError') abrirImagemEmNovaAba(blob);
+          });
+          return;
+        }
+      }
+
+      // Desktop: download tradicional
+      if (!ehMobile) {
+        const link = document.createElement('a');
+        link.download = nomeArquivo;
+        link.href = URL.createObjectURL(blob);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(function () { URL.revokeObjectURL(link.href); }, 10000);
+        return;
+      }
+
+      // Mobile sem Web Share API: abre a imagem numa aba pra salvar com toque longo
+      abrirImagemEmNovaAba(blob);
+    }, 'image/png');
   }).catch(function (err) {
     console.error(err);
     alert('Não foi possível gerar a imagem. Tente novamente.');
@@ -487,6 +517,17 @@ function gerarImagemMetas(btn) {
     btn.disabled = false;
     btn.textContent = textoOriginal;
   });
+}
+
+function abrirImagemEmNovaAba(blob) {
+  const url = URL.createObjectURL(blob);
+  const aba = window.open(url, '_blank');
+  if (!aba) {
+    alert('Não foi possível abrir a imagem. Toque e segure o botão para salvar, ou permita pop-ups.');
+  } else {
+    alert('A imagem abriu em outra aba. Toque e segure nela para salvar na galeria.');
+  }
+  setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
 }
 </script>
 {% endblock %}

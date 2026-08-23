@@ -148,6 +148,7 @@ def view_incluir_submit(request: HttpRequest) -> HttpResponse:
     )
     from apps.produtos.services.business.product_map import get_id_produto_by_sku
     from apps.produtos.services.business.process_stock_moves import processar_stock_moves
+    from apps.produtos.services.business.pricing import get_product_prices_by_id
 
     supplier_name = request.POST.get("supplier_name", "").strip().upper()
     if not supplier_name:
@@ -192,14 +193,22 @@ def view_incluir_submit(request: HttpRequest) -> HttpResponse:
 
             if not needs_approval and sku:
                 bling_product_id = get_id_produto_by_sku(sku)
+                # Produto/cor já existe no Bling: busca o preço/custo atuais para o
+                # lançamento não ficar "sem custo" no Histórico de Inclusões (só o
+                # caminho de criação de produto novo via aprovação buscava isso).
+                prices = get_product_prices_by_id(int(bling_product_id)) if bling_product_id else {}
                 conn.execute(
                     """
                     INSERT INTO stock_moves
                     (sku, qty_delta, status, created_by, created_at, result_json,
-                     base_name, color_key, size_key, supplier_name, requested_at, bling_product_id)
-                    VALUES (?, ?, 'PENDING', ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+                     base_name, color_key, size_key, supplier_name, requested_at, bling_product_id,
+                     price_varejo, price_custo, price_atacado)
+                    VALUES (?, ?, 'PENDING', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (sku, q, username, now, base, cor, tam, supplier_name, now, bling_product_id),
+                    (
+                        sku, q, username, now, base, cor, tam, supplier_name, now, bling_product_id,
+                        prices.get("price_varejo"), prices.get("price_custo"), prices.get("price_atacado"),
+                    ),
                 )
                 move_ids.append(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
             else:
