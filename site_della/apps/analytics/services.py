@@ -303,6 +303,77 @@ def _rajada_global() -> bool:
     return False
 
 
+# UFs do Brasil (siglas ISO retornadas pelo GeoLite2 para subdivisao). Usado
+# so para diferenciar cidade nacional de estrangeira na checagem abaixo -- nao
+# e validacao de endereco.
+_UF_BRASIL = frozenset((
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
+    'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC',
+    'SP', 'SE', 'TO',
+))
+
+# Volume agregado por cidade estrangeira: scraper de catalogo real identificado
+# em 2026-08-16 (~600 sessoes em 30 dias vindas de "Riga", usando 124 IPs
+# residenciais diferentes, ritmo de ~1 sessao/dia por IP) roda devagar e
+# distribuido especificamente para nunca bater _ip_em_rajada (poucas sessoes
+# por IP) nem _rajada_global (nunca em rajada, volume espalhado ao longo de
+# semanas). Cada sessao isolada e indistinguivel de visita humana -- so o
+# volume ACUMULADO da mesma cidade ao longo de dias denuncia o padrao. A loja
+# e 100% em portugues, sem campanha fora do Brasil, entao volume sustentado de
+# uma cidade fora do Brasil com sessoes curtas (1-2 paginas) e sem UTM nunca e
+# trafego organico legitimo -- diferente de um turista/expatriado isolado, que
+# fica bem abaixo do limiar.
+LIMIAR_CIDADE_ESTRANGEIRA = 8
+JANELA_CIDADE_ESTRANGEIRA_DIAS = 14
+
+# Rajada estrangeira de CIDADES DIFERENTES: o mesmo scraper tambem aparece em
+# leva rapida (ver 2026-08-16, 12h00 BRT -- 7 cidades diferentes em 13min:
+# Tan Uyen, City of London, Cordoba, Karaganda, Hong Kong, Yumbo, Santo
+# Domingo, cada uma so 1x, nunca repetindo), o que escapa tanto de
+# _cidade_estrangeira_em_rajada (exige a MESMA cidade repetir) quanto de
+# _rajada_global (limiar calibrado sobre trafego nacional, alto demais pra
+# pegar so a fatia estrangeira). Ritmo de fundo observado fora do incidente:
+# ~1 sessao estrangeira isolada a cada poucas horas -- 4 em 30min ja e muito
+# acima disso.
+LIMIAR_RAJADA_ESTRANGEIRA_GLOBAL = 4
+RAJADA_ESTRANGEIRA_GLOBAL_JANELA_SEG = 1800
+
+
+def _rajada_estrangeira_global() -> bool:
+    """True se o site recebeu, na janela recente, varias sessoes curtas e sem
+    UTM vindas de cidades estrangeiras DIFERENTES -- sinal do mesmo scraper
+    distribuido rodando em leva rapida (ver LIMIAR_RAJADA_ESTRANGEIRA_GLOBAL)."""
+    from apps.analytics.models import SessaoAnalytics
+    desde = timezone.now() - timezone.timedelta(seconds=RAJADA_ESTRANGEIRA_GLOBAL_JANELA_SEG)
+    recentes = SessaoAnalytics.objects.filter(
+        iniciada_em__gte=desde, total_paginas__lte=2, utm_source='',
+    ).exclude(cidade='').exclude(estado__in=_UF_BRASIL)
+    if recentes.count() >= LIMIAR_RAJADA_ESTRANGEIRA_GLOBAL - 1:
+        # Marca tambem as irmas ja gravadas dessa rajada (corrige retroativo).
+        recentes.filter(is_bot=False).update(is_bot=True)
+        return True
+    return False
+
+
+def _cidade_estrangeira_em_rajada(cidade: str, estado: str) -> bool:
+    """True se a cidade (fora do Brasil) acumulou volume anormal de sessoes
+    curtas e sem UTM na janela recente -- sinal de scraper distribuido por
+    muitos IPs residenciais diferentes (ver LIMIAR_CIDADE_ESTRANGEIRA)."""
+    if not cidade or estado in _UF_BRASIL:
+        return False
+    from apps.analytics.models import SessaoAnalytics
+    desde = timezone.now() - timezone.timedelta(days=JANELA_CIDADE_ESTRANGEIRA_DIAS)
+    candidatas = SessaoAnalytics.objects.filter(
+        cidade=cidade, estado=estado, iniciada_em__gte=desde,
+        total_paginas__lte=2, utm_source='',
+    )
+    if candidatas.count() >= LIMIAR_CIDADE_ESTRANGEIRA - 1:
+        # Marca tambem as irmas ja gravadas dessa cidade (corrige retroativo).
+        candidatas.filter(is_bot=False).update(is_bot=True)
+        return True
+    return False
+
+
 def _paginas_em_rajada(sessao) -> bool:
     """True se o volume de paginas da sessao veio de uma rajada recente
     (scraper real), nao acumulado aos poucos ao longo de dias com o mesmo
@@ -357,9 +428,17 @@ def _get_or_create_por_valores(session_key: str, ua: str, cookie_attr: str,
             'ip_hash':       ip_hash,
             'cidade':        cidade,
             'estado':        estado,
-            # Datacenter/hosting/VPN (ASN), rajada do mesmo IP, ou rajada
-            # global (muitos IPs diferentes, 1-2 sessoes cada) = bot.
-            'is_bot':        _eh_ip_datacenter(ip) or _ip_em_rajada(ip_hash) or _rajada_global(),
+            # Datacenter/hosting/VPN (ASN), rajada do mesmo IP, rajada global
+            # (muitos IPs diferentes, 1-2 sessoes cada), rajada estrangeira em
+            # leva rapida (varias cidades diferentes fora do Brasil na mesma
+            # janela curta) ou volume acumulado de uma mesma cidade estrangeira
+            # (scraper distribuido e lento, espalhado ao longo de dias/semanas)
+            # = bot.
+            'is_bot':        (
+                _eh_ip_datacenter(ip) or _ip_em_rajada(ip_hash) or _rajada_global()
+                or _rajada_estrangeira_global()
+                or _cidade_estrangeira_em_rajada(cidade, estado)
+            ),
         },
     )
 
