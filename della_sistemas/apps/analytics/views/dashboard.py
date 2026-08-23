@@ -34,7 +34,9 @@ def _resolver_periodo(request):
         inicio = hoje_inicio - timedelta(days=1)
         fim = hoje_inicio - timedelta(microseconds=1)
     elif filtro == '30d':
-        inicio = agora - timedelta(days=30)
+        # Dia de calendario (30 dias contando hoje), nao 30x24h para tras. Ver
+        # a nota sobre a janela de "7d" no bloco final desta funcao.
+        inicio = hoje_inicio - timedelta(days=29)
         fim = agora
     elif filtro == 'custom' and de_val and ate_val:
         try:
@@ -48,12 +50,18 @@ def _resolver_periodo(request):
             )
         except (ValueError, TypeError):
             filtro = '7d'
-            inicio = agora - timedelta(days=7)
+            inicio = hoje_inicio - timedelta(days=6)
             fim = agora
             de_val = ate_val = ''
     else:
+        # "Ultimos 7 dias" = 7 dias de CALENDARIO contando hoje (hoje-6 as 00:00
+        # ate agora), no fuso de Sao Paulo. Antes era uma janela rolante de
+        # 7x24h para tras, o que fazia o painel divergir do "Marketing e
+        # Atribuicao" do site_della (que sempre usou calendario) por 1 pedido
+        # inteiro dependendo da hora da consulta: em 2026-08-23 o site contava
+        # 3 vendas e este painel 4, ambos "corretos" para a propria definicao.
         filtro = '7d'
-        inicio = agora - timedelta(days=7)
+        inicio = hoje_inicio - timedelta(days=6)
         fim = agora
 
     # Oculta dados anteriores ao corte (28/06/2026 — remoção de bots/scans).
@@ -71,7 +79,8 @@ def _calcular_ao_vivo():
     agora = timezone.now()
     corte = agora - timedelta(minutes=5)
 
-    vivos = SessaoSite.objects.filter(ultima_acao_em__gte=corte, is_bot=False)
+    from apps.analytics.trafego import base_trafego
+    vivos = base_trafego().filter(ultima_acao_em__gte=corte)
     visitantes = vivos.count()
 
     # Pagina atual de cada sessao ativa = pagina_url do evento de navegacao mais
@@ -121,43 +130,72 @@ def _calcular_resumo(inicio, fim):
     )
     from django.db.models import Exists, OuterRef
 
-    # is_bot=False em todas as metricas: o painel mostra apenas pessoas reais.
-    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
-    sessoes_periodo = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False)
+    from apps.analytics.trafego import base_trafego
+
+    # TRAFEGO: alem do is_bot marcado na coleta, tira o scraper que passa por
+    # ele (ver apps/analytics/trafego.py).
+    reais_ids = base_trafego().values('pk')
+    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__in=reais_ids)
 
     visitas    = EventoSite.objects.filter(periodo, tipo='pagina_vista').count()
-    visitantes = sessoes_periodo.count()
+    # Visitante do periodo = quem teve ATIVIDADE no periodo, nao quem criou a
+    # sessao nele. A sessao aqui vive ate 30 dias (SESSION_COOKIE_AGE), entao
+    # contar por `iniciada_em` respondia "quantos cookies novos nasceram", nao
+    # "quanta gente visitou": quem voltou ao site com o cookie da semana
+    # passada gerava paginas contadas em `visitas` sem existir no denominador.
+    # Alem de inflar a media de paginas e a taxa de conversao, isso punha dois
+    # numeros diferentes de visitante na mesma tela (o card dizia 209 e o funil
+    # ao lado 298, medido em 2026-08-23). Mesmo criterio do funil agora.
+    visitantes = (
+        EventoSite.objects.filter(periodo).values('sessao_id').distinct().count()
+    )
+
+    # VENDA: dinheiro que entrou nunca passa por filtro de bot. A heuristica de
+    # bot e probabilistica e ja marcou cliente real por engano mais de uma vez
+    # (pedidos 2026-0023 e 2026-0027, corrigidos no site_della em 2026-08-17);
+    # o status do pedido no espelho `PedidoSite` ja e prova suficiente de que a
+    # venda existe. Sem `sessao__is_bot` aqui, uma sessao marcada como bot
+    # DEPOIS da compra (o filtro de rajada remarca irmas retroativamente) nao
+    # consegue mais apagar a venda do painel.
+    periodo_venda = Q(ocorrido_em__range=(inicio, fim))
 
     # Venda = pedido PAGO. Pedido gerado e ainda sem pagamento entra em
     # "aguardando pagamento"; cancelado/estornado nao entra em nada.
-    pagos_qs = eventos_pedidos(periodo)
+    pagos_qs = eventos_pedidos(periodo_venda)
     pedidos = pagos_qs.values('pedido_numero').distinct().count()
     receita = pagos_qs.aggregate(total=Sum('valor_total'))['total'] or 0
-    itens_vendidos = eventos_itens(periodo).aggregate(total=Sum('quantidade'))['total'] or 0
+    itens_vendidos = eventos_itens(periodo_venda).aggregate(total=Sum('quantidade'))['total'] or 0
 
-    aguardando_qs = eventos_pedidos(periodo, status=STATUS_AGUARDANDO)
+    aguardando_qs = eventos_pedidos(periodo_venda, status=STATUS_AGUARDANDO)
     aguardando = aguardando_qs.values('pedido_numero').distinct().count()
     aguardando_valor = aguardando_qs.aggregate(total=Sum('valor_total'))['total'] or 0
 
     # Abandonado = nao gerou venda PAGA. Sessao com pedido aguardando pagamento
     # continua contando como abandonada ate o pagamento entrar (mesma regra do
     # carrinho abandonado no site_della, que so vira "recuperado" quando pago).
+    #
+    # Ancorado no EVENTO ocorrido na janela, nao na sessao iniciada na janela.
+    # A sessao vive ate 30 dias (SESSION_COOKIE_AGE), entao quem comecou a
+    # navegar antes do inicio do periodo e so abandonou o carrinho dentro dele
+    # ficava fora desta conta enquanto aparecia normalmente no funil ao lado.
+    # Era o que produzia "3 no checkout" embaixo de um funil mostrando 4 vendas
+    # pagas na mesma tela (medido em 2026-08-23).
     comprou_qs = sessoes_com_venda_paga()
-    candidatos_carrinho = (
-        sessoes_periodo
-        .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
-        .exclude(Exists(comprou_qs))
-        .values_list('id', flat=True)
-    )
-    # So conta quem ainda tem algo no carrinho -- quem adicionou e removeu
-    # tudo antes de sair nao e um carrinho abandonado (ver vendas.py).
+    nao_comprou = ~Exists(comprou_qs)
+
+    def _sessoes_com_evento(tipo):
+        ids = (
+            EventoSite.objects
+            .filter(periodo, tipo=tipo)
+            .values_list('sessao_id', flat=True).distinct()
+        )
+        return SessaoSite.objects.filter(pk__in=ids).filter(nao_comprou)
+
+    # So conta quem ainda tem algo no carrinho: quem adicionou e removeu tudo
+    # antes de sair nao e um carrinho abandonado (ver vendas.py).
+    candidatos_carrinho = _sessoes_com_evento('produto_adicionado').values_list('id', flat=True)
     carrinhos_abandonados = len(ids_com_carrinho_liquido_positivo(candidatos_carrinho))
-    checkouts_abandonados = (
-        sessoes_periodo
-        .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='checkout_iniciado')))
-        .exclude(Exists(comprou_qs))
-        .count()
-    )
+    checkouts_abandonados = _sessoes_com_evento('checkout_iniciado').count()
 
     taxa = round(pedidos / visitantes * 100, 1) if visitantes > 0 else 0
     media_paginas = round(visitas / visitantes, 1) if visitantes > 0 else 0
@@ -179,11 +217,22 @@ def _calcular_resumo(inicio, fim):
 
 def _calcular_funil(inicio, fim):
     from apps.analytics.models import SessaoSite, EventoSite
+    from apps.analytics.trafego import base_trafego
     from apps.analytics.vendas import eventos_pedidos
 
-    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
+    reais_ids = base_trafego().values('pk')
+    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__in=reais_ids)
 
-    visitantes = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False).count()
+    # Todas as 6 etapas contam sobre o MESMO universo: sessao com atividade
+    # dentro da janela. Antes, so esta primeira etapa contava por
+    # `iniciada_em`, entao quem comecou a navegar antes do periodo e comprou
+    # dentro dele aparecia nas etapas de baixo sem estar no topo -- o funil
+    # chegava a mostrar uma etapa com mais gente que a anterior.
+    visitantes = (
+        EventoSite.objects
+        .filter(periodo)
+        .values('sessao_id').distinct().count()
+    )
     viram = (
         EventoSite.objects
         .filter(periodo, tipo='produto_visualizado')
@@ -233,7 +282,9 @@ def _calcular_produtos(inicio, fim):
     from apps.analytics.models import EventoSite
     from apps.analytics.vendas import eventos_itens
 
-    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
+    from apps.analytics.trafego import base_trafego
+
+    periodo = Q(ocorrido_em__range=(inicio, fim), sessao__in=base_trafego().values('pk'))
 
     mais_vistos = list(
         EventoSite.objects
@@ -266,6 +317,7 @@ def _calcular_produtos(inicio, fim):
 
 def _calcular_carrinhos_recentes(inicio, fim):
     from apps.analytics.models import SessaoSite, EventoSite
+    from apps.analytics.trafego import base_trafego
     from apps.analytics.vendas import (
         sessoes_com_pedido_pendente, sessoes_com_venda_paga,
     )
@@ -282,8 +334,8 @@ def _calcular_carrinhos_recentes(inicio, fim):
         sessao=OuterRef('pk'), tipo='popup_saida_exibido'
     )
     sessoes = list(
-        SessaoSite.objects
-        .filter(iniciada_em__range=(inicio, fim), is_bot=False)
+        base_trafego()
+        .filter(iniciada_em__range=(inicio, fim))
         .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
         .annotate(
             comprou=Exists(comprou_qs),
@@ -375,8 +427,11 @@ def _calcular_trafico_semanal(seg_semana):
     from datetime import datetime as _dt
     from apps.analytics.models import EventoSite
     from apps.analytics.constants import inicio_corte_aware
+    from apps.analytics.trafego import base_trafego
     from django.db.models import Count
     from django.db.models.functions import ExtractHour, TruncDate
+
+    _reais = base_trafego().values('pk')
 
     NOMES = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom']
     NOMES_FULL = ['Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado', 'Domingo']
@@ -393,7 +448,7 @@ def _calcular_trafico_semanal(seg_semana):
             ini = corte
         raw = dict(
             EventoSite.objects
-            .filter(ocorrido_em__range=(ini, fim), tipo='pagina_vista', sessao__is_bot=False)
+            .filter(ocorrido_em__range=(ini, fim), tipo='pagina_vista', sessao__in=_reais)
             .annotate(d=TruncDate('ocorrido_em')).values('d')
             .annotate(t=Count('id')).values_list('d', 't')
         )
@@ -409,7 +464,7 @@ def _calcular_trafico_semanal(seg_semana):
     por_dia_hora = [[0] * 24 for _ in range(7)]
     for (d, h, t) in (
         EventoSite.objects
-        .filter(ocorrido_em__range=(ini, fim), tipo='pagina_vista', sessao__is_bot=False)
+        .filter(ocorrido_em__range=(ini, fim), tipo='pagina_vista', sessao__in=_reais)
         .annotate(d=TruncDate('ocorrido_em'), h=ExtractHour('ocorrido_em'))
         .values('d', 'h').annotate(t=Count('id')).values_list('d', 'h', 't')
     ):
@@ -472,28 +527,30 @@ def _calcular_trafico_semanal(seg_semana):
 def _calcular_origens(inicio, fim):
     from apps.analytics.attribution import label_origem
     from apps.analytics.models import SessaoSite
+    from apps.analytics.trafego import base_trafego
     from django.db.models import BooleanField, Case, Value, When
 
     # Agrupa por utm_source + presenca de click id (fbclid/gclid). Os click ids
     # entram apenas como BOOLEAN (tem/nao tem) para nao explodir o agrupamento --
     # o valor de cada fbclid e unico por clique.
     sessoes = list(
-        SessaoSite.objects
-        .filter(iniciada_em__range=(inicio, fim), is_bot=False)
+        base_trafego()
+        .filter(iniciada_em__range=(inicio, fim))
         .annotate(
             tem_fbclid=Case(When(fbclid='', then=Value(False)),
                             default=Value(True), output_field=BooleanField()),
             tem_gclid=Case(When(gclid='', then=Value(False)),
                            default=Value(True), output_field=BooleanField()),
         )
-        .values('utm_source', 'tem_fbclid', 'tem_gclid')
+        .values('utm_source', 'utm_medium', 'tem_fbclid', 'tem_gclid')
         .annotate(total=Count('id'))
-        .order_by('-total')[:40]
+        .order_by('-total')[:60]
     )
 
     agg = {}
     for row in sessoes:
-        label = label_origem(row['utm_source'], row['tem_fbclid'], row['tem_gclid'])
+        label = label_origem(row['utm_source'], row['tem_fbclid'], row['tem_gclid'],
+                             row['utm_medium'])
         agg[label] = agg.get(label, 0) + row['total']
 
     total = sum(agg.values()) or 1

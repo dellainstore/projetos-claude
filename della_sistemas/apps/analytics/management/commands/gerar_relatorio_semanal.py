@@ -91,10 +91,12 @@ class Command(BaseCommand):
         corte = inicio_corte_aware()
         if inicio < corte:
             inicio = corte
-        # is_bot=False: relatorio considera apenas pessoas reais (bots sao
-        # marcados na coleta do site_della por comportamento, nao so por UA).
-        periodo   = Q(ocorrido_em__range=(inicio, fim), sessao__is_bot=False)
-        sess_qs   = SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False)
+        # Mesma regra de trafego do painel (apps/analytics/trafego.py): alem do
+        # is_bot da coleta, tira o scraper que passa por ele. Manter os dois
+        # lados iguais, senao o PDF da semana diverge da tela que o gerou.
+        from apps.analytics.trafego import base_trafego
+        periodo   = Q(ocorrido_em__range=(inicio, fim), sessao__in=base_trafego().values('pk'))
+        sess_qs   = base_trafego().filter(iniciada_em__range=(inicio, fim))
         # Venda = pedido PAGO (regra unica em apps/analytics/vendas.py). Pedido
         # gerado e nao pago entra em "aguardando"; cancelado nao entra em nada.
         from apps.analytics.vendas import (
@@ -104,31 +106,37 @@ class Command(BaseCommand):
         comprou = sessoes_com_venda_paga()
 
         visitas    = EventoSite.objects.filter(periodo, tipo='pagina_vista').count()
-        visitantes = sess_qs.count()
+        # Visitante = quem teve ATIVIDADE na semana, nao quem criou a sessao
+        # nela (mesmo criterio do painel, ver views/dashboard.py).
+        visitantes = (
+            EventoSite.objects.filter(periodo).values('sessao_id').distinct().count()
+        )
 
-        pagos_qs = eventos_pedidos(periodo)
+        # Venda nao passa por filtro de bot (ver a nota em views/dashboard.py).
+        periodo_venda = Q(ocorrido_em__range=(inicio, fim))
+        pagos_qs = eventos_pedidos(periodo_venda)
         pedidos = pagos_qs.values('pedido_numero').distinct().count()
         receita = pagos_qs.aggregate(t=Sum('valor_total'))['t'] or 0
-        itens_vendidos = eventos_itens(periodo).aggregate(t=Sum('quantidade'))['t'] or 0
+        itens_vendidos = eventos_itens(periodo_venda).aggregate(t=Sum('quantidade'))['t'] or 0
 
-        aguardando_qs = eventos_pedidos(periodo, status=STATUS_AGUARDANDO)
+        aguardando_qs = eventos_pedidos(periodo_venda, status=STATUS_AGUARDANDO)
         aguardando = aguardando_qs.values('pedido_numero').distinct().count()
         aguardando_valor = float(aguardando_qs.aggregate(t=Sum('valor_total'))['t'] or 0)
-        candidatos_carrinho = (
-            sess_qs
-            .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='produto_adicionado')))
-            .exclude(Exists(comprou))
-            .values_list('id', flat=True)
-        )
+        # Ancorado no EVENTO ocorrido na semana, nao na sessao iniciada nela
+        # (mesmo criterio do painel, ver views/dashboard.py::_calcular_resumo).
+        def _sessoes_com_evento(tipo):
+            ids = (
+                EventoSite.objects
+                .filter(periodo, tipo=tipo)
+                .values_list('sessao_id', flat=True).distinct()
+            )
+            return SessaoSite.objects.filter(pk__in=ids).exclude(Exists(comprou))
+
         # So conta quem ainda tem algo no carrinho -- quem adicionou e
         # removeu tudo antes de sair nao e um carrinho abandonado.
+        candidatos_carrinho = _sessoes_com_evento('produto_adicionado').values_list('id', flat=True)
         carrinhos_ab = len(ids_com_carrinho_liquido_positivo(candidatos_carrinho))
-        checkouts_ab = (
-            sess_qs
-            .filter(Exists(EventoSite.objects.filter(sessao=OuterRef('pk'), tipo='checkout_iniciado')))
-            .exclude(Exists(comprou))
-            .count()
-        )
+        checkouts_ab = _sessoes_com_evento('checkout_iniciado').count()
 
         taxa         = round(pedidos / visitantes * 100, 1) if visitantes else 0
         media_pags   = round(visitas / visitantes, 1) if visitantes else 0
@@ -156,19 +164,20 @@ class Command(BaseCommand):
         from django.db.models import BooleanField, Case, Value, When
 
         sessoes_all = list(
-            SessaoSite.objects.filter(iniciada_em__range=(inicio, fim), is_bot=False)
+            base_trafego().filter(iniciada_em__range=(inicio, fim))
             .annotate(
                 tem_fbclid=Case(When(fbclid='', then=Value(False)),
                                 default=Value(True), output_field=BooleanField()),
                 tem_gclid=Case(When(gclid='', then=Value(False)),
                                default=Value(True), output_field=BooleanField()),
             )
-            .values('utm_source', 'tem_fbclid', 'tem_gclid')
-            .annotate(total=Count('id')).order_by('-total')[:20]
+            .values('utm_source', 'utm_medium', 'tem_fbclid', 'tem_gclid')
+            .annotate(total=Count('id')).order_by('-total')[:40]
         )
         agg: dict = {}
         for row in sessoes_all:
-            label = label_origem(row['utm_source'], row['tem_fbclid'], row['tem_gclid'])
+            label = label_origem(row['utm_source'], row['tem_fbclid'], row['tem_gclid'],
+                                 row['utm_medium'])
             agg[label] = agg.get(label, 0) + row['total']
         total_orig = sum(agg.values()) or 1
         origens = [
@@ -229,7 +238,11 @@ class Command(BaseCommand):
     def _calcular_funil(self, sess_qs, periodo):
         from apps.analytics.models import EventoSite
         from apps.analytics.vendas import eventos_pedidos
-        visitantes = sess_qs.count()
+        # Visitante = quem teve ATIVIDADE na semana, nao quem criou a sessao
+        # nela (mesmo criterio do painel, ver views/dashboard.py).
+        visitantes = (
+            EventoSite.objects.filter(periodo).values('sessao_id').distinct().count()
+        )
         viram      = EventoSite.objects.filter(periodo, tipo='produto_visualizado').values('sessao_id').distinct().count()
         adicionaram = EventoSite.objects.filter(periodo, tipo='produto_adicionado').values('sessao_id').distinct().count()
         checkout   = EventoSite.objects.filter(periodo, tipo='checkout_iniciado').values('sessao_id').distinct().count()
