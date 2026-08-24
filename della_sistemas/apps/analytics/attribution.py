@@ -21,9 +21,15 @@ ANUNCIO_META      = 'Anúncio da Meta'
 LOJA_INSTAGRAM    = 'Loja do Instagram'
 LINK_BIO          = 'Link da bio'
 STORY_INSTAGRAM   = 'Story do Instagram'
-POST_INSTAGRAM    = 'Post do Instagram'
 REELS_INSTAGRAM   = 'Reels do Instagram'
-POST_FACEBOOK     = 'Post do Facebook'
+# Post organico: uma unica categoria para Instagram + Facebook, porque na
+# pratica o post sai identico nos dois ao mesmo tempo (cross-post da Meta) e
+# o link colado na legenda e o mesmo em ambos — nao ha como saber de qual dos
+# dois app a pessoa veio clicando. Separar em duas linhas daria uma precisao
+# que o dado nao tem.
+POST_ORGANICO     = 'Post (Instagram e Facebook)'
+STORY_TIKTOK      = 'Story do TikTok'
+POST_TIKTOK       = 'Post do TikTok'
 INSTAGRAM_PERFIL  = 'Instagram (perfil)'
 FACEBOOK_PERFIL   = 'Facebook (perfil)'
 WHATSAPP          = 'WhatsApp'
@@ -51,36 +57,48 @@ def label_origem(source: str, tem_fbclid: bool = False, tem_gclid: bool = False,
     m = (medium or '').lower().strip()
     pago = m in ('paid', 'cpc', 'ppc', 'paid_social')
 
-    # Instagram, nas suas quatro formas distintas.
+    # Instagram, nas suas formas distintas.
     if s == 'igshopping':
         return LOJA_INSTAGRAM
     if s in ('ig', 'instagram') or 'instagram' in s:
         if pago:
             return ANUNCIO_INSTAGRAM
+        # Etiqueta fixa da propria pagina /links (bio do Instagram), gravada
+        # automaticamente pelo redirect /links/go/<id>/ do site_della — nao
+        # digitada a mao, entao continua reconhecida mesmo sem opcao propria
+        # no gerador de links.
         if m == 'bio':
             return LINK_BIO
         # Postagens organicas etiquetadas a mao (ver o gerador de links em
-        # Site > Gerar link). Separar story de post e de reels responde qual
-        # formato faz a cliente sair do Instagram e vir comprar.
+        # Site > Gerar link). Story e reels separados de post porque
+        # respondem qual formato faz a cliente sair do Instagram e comprar;
+        # post cai no balde combinado com o Facebook, ver POST_ORGANICO.
         if m in ('story', 'stories'):
             return STORY_INSTAGRAM
-        if m in ('post', 'feed'):
-            return POST_INSTAGRAM
         if m in ('reels', 'reel'):
             return REELS_INSTAGRAM
+        if m in ('post', 'feed'):
+            return POST_ORGANICO
         return INSTAGRAM_PERFIL
 
     if s in ('fb', 'facebook') or 'facebook' in s:
         if pago:
             return ANUNCIO_FACEBOOK
         if m in ('post', 'feed'):
-            return POST_FACEBOOK
+            return POST_ORGANICO
         return FACEBOOK_PERFIL
 
     # "th" e o Threads: a Meta preenche a origem sozinha com a sigla da rede
     # onde o anuncio foi entregue (ig, fb, th, msg) via {{site_source_name}}.
     if s == 'th' or 'threads' in s:
         return ANUNCIO_THREADS
+
+    if s == 'tiktok' or 'tiktok' in s:
+        if m in ('story', 'stories'):
+            return STORY_TIKTOK
+        if m in ('post', 'feed', 'video'):
+            return POST_TIKTOK
+        return 'TikTok'
 
     if s in ('msg', 'messenger'):
         return ANUNCIO_META if pago else 'Messenger'

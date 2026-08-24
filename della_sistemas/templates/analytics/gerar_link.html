@@ -68,25 +68,25 @@
       <span class="gl-opcao-nome">Story do Instagram</span>
       <span class="gl-opcao-dica">figurinha de link no story</span>
     </button>
-    <button type="button" class="gl-opcao" data-source="instagram" data-medium="post">
-      <span class="gl-opcao-nome">Post do Instagram</span>
-      <span class="gl-opcao-dica">legenda de publicacao no feed</span>
-    </button>
     <button type="button" class="gl-opcao" data-source="instagram" data-medium="reels">
       <span class="gl-opcao-nome">Reels do Instagram</span>
       <span class="gl-opcao-dica">legenda do reels</span>
     </button>
-    <button type="button" class="gl-opcao" data-source="instagram" data-medium="bio">
-      <span class="gl-opcao-nome">Link da bio</span>
-      <span class="gl-opcao-dica">o link fixo do perfil</span>
+    <button type="button" class="gl-opcao" data-source="instagram" data-medium="post">
+      <span class="gl-opcao-nome">Post (Instagram e Facebook)</span>
+      <span class="gl-opcao-dica">quando publica nos dois juntos</span>
+    </button>
+    <button type="button" class="gl-opcao" data-source="tiktok" data-medium="story">
+      <span class="gl-opcao-nome">Story do TikTok</span>
+      <span class="gl-opcao-dica">link no story do TikTok</span>
+    </button>
+    <button type="button" class="gl-opcao" data-source="tiktok" data-medium="post">
+      <span class="gl-opcao-nome">Post do TikTok</span>
+      <span class="gl-opcao-dica">legenda do video</span>
     </button>
     <button type="button" class="gl-opcao" data-source="whatsapp" data-medium="mensagem">
       <span class="gl-opcao-nome">WhatsApp</span>
       <span class="gl-opcao-dica">conversa ou lista de transmissao</span>
-    </button>
-    <button type="button" class="gl-opcao" data-source="facebook" data-medium="post">
-      <span class="gl-opcao-nome">Post do Facebook</span>
-      <span class="gl-opcao-dica">publicacao na pagina</span>
     </button>
   </div>
 
@@ -106,8 +106,12 @@
     Use este link no lugar do endereco normal quando for postar. Ele leva a
     cliente para a mesma pagina, e faz a visita aparecer em Visitas e a venda
     em Vendas com a origem certa. Sem ele, a visita cai em "Direto ou busca" e
-    nao da para saber o que funcionou. Anuncios pagos nao precisam disto: a
-    Meta ja etiqueta sozinha.
+    nao da para saber o que funcionou.
+    <br><br>
+    <strong>Anuncio pago</strong> nao precisa disto: a Meta ja etiqueta
+    sozinha. <strong>O link fixo da bio</strong> tambem nao: a propria pagina
+    de links ja marca a origem automaticamente, e continua funcionando sem
+    passar por aqui.
   </div>
 </div>
 {% endblock %}
