@@ -478,6 +478,13 @@
             Vendas
           </a>
           {% endif %}
+          {% if user.pode_ver_anuncios %}
+          <a href="{% url 'analytics:anuncios' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'anuncios' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9650;</span>
+            Anúncios
+          </a>
+          {% endif %}
           {% if user.pode_ver_relatorio_semanal %}
           <a href="{% url 'analytics:relatorio_list' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'relatorio_list' or request.resolver_match.url_name == 'relatorio_download' %}ativo{% endif %}">

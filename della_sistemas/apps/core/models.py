@@ -134,13 +134,19 @@ class User(AbstractUser):
         return self.tem_perm("analytics.gerar_link")
 
     @property
+    def pode_ver_anuncios(self) -> bool:
+        return self.tem_perm("analytics.ver_anuncios")
+
+    @property
     def pode_ver_analytics(self) -> bool:
-        """Algum acesso ao grupo 'Site' (visitas, vendas, relatorio ou gerar
-        link) — usado so para abrir/fechar o grupo inteiro no menu. Cada link
-        dentro do grupo checa a propria permissao especifica, nao esta."""
+        """Algum acesso ao grupo 'Site' (visitas, vendas, relatorio, anuncios
+        ou gerar link) — usado so para abrir/fechar o grupo inteiro no menu.
+        Cada link dentro do grupo checa a propria permissao especifica, nao
+        esta."""
         return (
             self.pode_ver_visitas or self.pode_ver_vendas
-            or self.pode_ver_relatorio_semanal or self.pode_gerar_link
+            or self.pode_ver_relatorio_semanal or self.pode_ver_anuncios
+            or self.pode_gerar_link
         )
 
     @property

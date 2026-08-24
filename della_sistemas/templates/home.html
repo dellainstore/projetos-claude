@@ -315,6 +315,12 @@
         <span style="font-size:.9rem;">Relatorios Semanais</span>
       </a>
       {% endif %}
+      {% if user.pode_ver_anuncios %}
+      <a href="{% url 'analytics:anuncios' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
+        <span style="width:26px;text-align:center;font-size:1rem;">&#128227;</span>
+        <span style="font-size:.9rem;">Anúncios</span>
+      </a>
+      {% endif %}
       {% if user.pode_gerar_link %}
       <a href="{% url 'analytics:gerar_link' %}" style="display:flex;align-items:center;gap:.6rem;padding:.55rem .5rem;border-radius:6px;text-decoration:none;color:inherit;transition:background .15s;" onmouseover="this.style.background='#f9f7f4'" onmouseout="this.style.background=''">
         <span style="width:26px;text-align:center;font-size:1rem;">&#128279;</span>

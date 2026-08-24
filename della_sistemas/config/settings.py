@@ -98,6 +98,14 @@ if _della_site_db_pw:
 SITE_URL = os.getenv("SITE_URL", "https://www.dellainstore.com")
 LINK_CURTO_SECRET = os.getenv("LINK_CURTO_SECRET", "")
 
+# Meta Marketing API (painel Site > Anúncios). Token de leitura das campanhas
+# (ads_read/ads_management) — não é o mesmo uso do token de Conversions API
+# do site_della, mas pode ser o mesmo valor gerado (o token de sistema tem
+# ambos os escopos).
+META_ADS_ACCOUNT_ID = os.getenv("META_ADS_ACCOUNT_ID", "")
+META_ADS_TOKEN = os.getenv("META_ADS_TOKEN", "")
+META_ADS_API_VERSION = os.getenv("META_ADS_API_VERSION", "v22.0")
+
 # Banco de dados do módulo produtos (SQLite — inclusoes.db)
 PRODUTOS_DB_PATH = os.getenv(
     "PRODUTOS_DB_PATH",

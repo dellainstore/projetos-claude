@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Anúncios | D'ELLA Sistemas{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block css_extra %}
+{% include "analytics/_estilos.html" %}
+{% include "analytics/_mapa_estilos.html" %}
+<style>
+  .an-camp-form { background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px;
+                  padding: 0.9rem 1rem; margin-bottom: 1.2rem; }
+  .an-camp-lista { max-height: 300px; overflow-y: auto; border: 1px solid var(--cinza-medio); border-radius: 8px;
+                   margin: 0.6rem 0; padding: 0.2rem 0.6rem; }
+  .an-camp-item { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.4rem 0.2rem;
+                  border-bottom: 1px solid var(--cinza-claro); font-size: 0.85rem; }
+  .an-camp-item:last-child { border-bottom: none; }
+  .an-camp-item input { margin-top: 0.2rem; }
+  .an-camp-item label { cursor: pointer; color: var(--preto); }
+  .an-camp-acoes { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  .an-camp-acoes button, .an-camp-acoes a.an-filtro-tab { font-size: 0.78rem; }
+  .an-camp-link-sel { background: none; border: none; color: var(--dourado); font-size: 0.78rem;
+                      cursor: pointer; padding: 0; text-decoration: underline; }
+  .an-camp-vazio { font-size: 0.82rem; color: var(--cinza-texto); padding: 0.6rem 0.2rem; }
+
+  .an-periodo-auto { font-size: 0.78rem; color: var(--cinza-texto); margin: 0.3rem 0 0.9rem; }
+
+  .an-funil { display: flex; flex-direction: column; gap: 0.7rem; margin-bottom: 1.2rem; }
+  .an-funil-etapa-topo { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.3rem; }
+  .an-funil-etapa-label { color: var(--preto); font-weight: 500; }
+  .an-funil-etapa-valor { color: var(--cinza-texto); font-variant-numeric: tabular-nums; }
+  .an-funil-pct { font-size: 0.72rem; color: var(--cinza-texto); margin-top: 0.25rem; }
+
+  /* Barra sutil, mesmo padrao usado em Vendas ("quanto do faturamento
+     sabemos de onde veio") — 8px. */
+  .an-barra-attr { height: 8px; background: var(--cinza-claro); border-radius: 4px; overflow: hidden; }
+  .an-barra-attr span { display: block; height: 100%; background: var(--dourado); border-radius: 4px; }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<h1 class="an-titulo">Anúncios</h1>
+
+{% if sem_config %}
+<div class="an-sem-config">
+  <h2>Conta de anúncios ainda não liberada</h2>
+  <p>
+    O ID da conta já está configurado, mas falta o token de leitura do Meta
+    (<code>META_ADS_TOKEN</code> no <code>.env</code>).
+  </p>
+</div>
+{% else %}
+
+<div class="an-filtro">
+  <span class="an-filtro-label">Período:</span>
+  <a href="?periodo=hoje&amp;status={{ status_filtro }}"  class="an-filtro-tab {% if filtro == 'hoje' %}ativo{% endif %}">Hoje</a>
+  <a href="?periodo=ontem&amp;status={{ status_filtro }}" class="an-filtro-tab {% if filtro == 'ontem' %}ativo{% endif %}">Ontem</a>
+  <a href="?periodo=7d&amp;status={{ status_filtro }}"    class="an-filtro-tab {% if filtro == '7d' %}ativo{% endif %}">Últimos 7 dias</a>
+  <a href="?periodo=30d&amp;status={{ status_filtro }}"   class="an-filtro-tab {% if filtro == '30d' %}ativo{% endif %}">Últimos 30 dias</a>
+  <button type="button" onclick="toggleCustomPeriodo(this)" class="an-filtro-tab {% if filtro == 'custom' %}ativo{% endif %}">Personalizado</button>
+</div>
+<form id="an-form-custom" class="an-custom-form{% if filtro != 'custom' %} oculto{% endif %}" method="get" action="">
+  <input type="hidden" name="periodo" value="custom">
+  <input type="hidden" name="status" value="{{ status_filtro }}">
+  <label class="an-data-label">De&nbsp;<input type="date" name="de" value="{{ de_val }}" class="an-data-input"></label>
+  <label class="an-data-label">Até&nbsp;<input type="date" name="ate" value="{{ ate_val }}" class="an-data-input"></label>
+  <button type="submit" class="an-filtro-tab ativo">Ver</button>
+</form>
+{% if filtro == 'auto' %}
+<p class="an-periodo-auto">Mostrando desde {{ periodo_inicio|date:"d/m/Y" }} (início da campanha ativa mais antiga) até hoje.</p>
+{% endif %}
+<script>
+function toggleCustomPeriodo(btn) {
+  var form = document.getElementById('an-form-custom');
+  var aberto = form.classList.toggle('oculto');
+  btn.classList.toggle('ativo', !aberto);
+}
+function marcarTodasCampanhas(marcar) {
+  document.querySelectorAll('.an-camp-checkbox').forEach(function(cb) { cb.checked = marcar; });
+}
+</script>
+
+<!-- SELETOR DE CAMPANHAS -->
+<div class="an-secao-titulo">Escolha a campanha (ou várias)</div>
+<form class="an-camp-form" method="get" action="">
+  <input type="hidden" name="periodo" value="{{ filtro }}">
+  <input type="hidden" name="de" value="{{ de_val }}">
+  <input type="hidden" name="ate" value="{{ ate_val }}">
+
+  <div class="an-camp-acoes">
+    <a href="?periodo={{ filtro }}&amp;de={{ de_val }}&amp;ate={{ ate_val }}&amp;status=ativas" class="an-filtro-tab {% if status_filtro == 'ativas' %}ativo{% endif %}">Ativas</a>
+    <a href="?periodo={{ filtro }}&amp;de={{ de_val }}&amp;ate={{ ate_val }}&amp;status=inativas" class="an-filtro-tab {% if status_filtro == 'inativas' %}ativo{% endif %}">Inativas / antigas</a>
+    <a href="?periodo={{ filtro }}&amp;de={{ de_val }}&amp;ate={{ ate_val }}&amp;status=todas" class="an-filtro-tab {% if status_filtro == 'todas' %}ativo{% endif %}">Todas</a>
+    <span style="flex:1;"></span>
+    <button type="button" class="an-camp-link-sel" onclick="marcarTodasCampanhas(true)">Marcar todas</button>
+    <button type="button" class="an-camp-link-sel" onclick="marcarTodasCampanhas(false)">Limpar</button>
+  </div>
+
+  <input type="hidden" name="status" value="{{ status_filtro }}">
+
+  <div class="an-camp-lista">
+    {% for c in campanhas_visiveis %}
+    <div class="an-camp-item">
+      <input type="checkbox" class="an-camp-checkbox" name="campanha" value="{{ c.id }}" id="camp-{{ c.id }}"
+             {% if c.id in campanha_ids_selecionadas %}checked{% endif %}>
+      <label for="camp-{{ c.id }}">{{ c.nome }}</label>
+    </div>
+    {% empty %}
+    <div class="an-camp-vazio">Nenhuma campanha {{ status_filtro }} encontrada.</div>
+    {% endfor %}
+  </div>
+
+  <button type="submit" class="an-filtro-tab ativo">Ver</button>
+</form>
+
+<!-- RESULTADOS -->
+{% if not funil.tem_dados %}
+<div class="an-sem-config">
+  <h2>Sem dados no período</h2>
+</div>
+{% else %}
+
+<div class="an-cards-grid">
+  <div class="an-card">
+    <div class="an-card-label">Orçamento diário da campanha</div>
+    {% if orcamento_diario is not None %}
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ orcamento_diario|brl }}</div>
+    {% else %}
+    <div class="an-card-valor" style="font-size:0.8rem;color:var(--cinza-texto);">Sem orçamento diário definido</div>
+    {% endif %}
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Investido</div>
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ funil.investido|brl }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Alcançados</div>
+    <div class="an-card-valor">{{ funil.alcance }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Cliques no link</div>
+    <div class="an-card-valor">{{ funil.cliques }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Custo por clique</div>
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ funil.custo_por_clique|brl }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Vendas</div>
+    <div class="an-card-valor">{{ funil.compras }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Custo por Compra</div>
+    {% if funil.custo_por_compra is not None %}
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ funil.custo_por_compra|brl }}</div>
+    {% else %}
+    <div class="an-card-valor" style="font-size:0.8rem;color:var(--cinza-texto);">Sem compras no período</div>
+    {% endif %}
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">Valor das vendas</div>
+    <div class="an-card-valor" style="font-size:1.1rem;">{{ funil.valor_compras|brl }}</div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-label">ROAS</div>
+    {% if funil.retorno is not None %}
+    <div class="an-card-valor">{{ funil.retorno|floatformat:2 }}x</div>
+    {% else %}
+    <div class="an-card-valor" style="font-size:0.85rem;color:var(--cinza-texto);">&mdash;</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="an-secao-titulo">Funil</div>
+<div class="an-funil">
+  {% for etapa in funil.funil %}
+  <div>
+    <div class="an-funil-etapa-topo">
+      <span class="an-funil-etapa-label">{{ etapa.label }}</span>
+      <span class="an-funil-etapa-valor">{{ etapa.valor }}</span>
+    </div>
+    <div class="an-barra-attr"><span style="width:{{ etapa.pct_barra|pct_css }}%"></span></div>
+    <div class="an-funil-pct">{{ etapa.pct_texto }}%{% if etapa.legenda %} {{ etapa.legenda }}{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endif %}
+{% endif %}
+{% endblock %}

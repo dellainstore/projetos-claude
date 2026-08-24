@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.analytics.views import ao_vivo as live_views
+from apps.analytics.views import anuncios as anuncios_views
 from apps.analytics.views import relatorio as rel_views
 from apps.analytics.views import vendas_painel as vendas_views
 from apps.analytics.views import visitas as visitas_views
@@ -16,6 +17,7 @@ urlpatterns = [
     path('visitas/', visitas_views.visitas, name='visitas'),
     path('vendas/', vendas_views.vendas, name='vendas'),
     path('vendas/exportar/', vendas_views.vendas_export, name='vendas_export'),
+    path('anuncios/', anuncios_views.anuncios, name='anuncios'),
 
     path('gerar-link/', visitas_views.gerar_link, name='gerar_link'),
     path('gerar-link/curto/', visitas_views.gerar_link_curto, name='gerar_link_curto'),
