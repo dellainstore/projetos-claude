@@ -160,3 +160,10 @@ class EventoSite(models.Model):
 
     def __str__(self):
         return f'{self.tipo} ({self.ocorrido_em})'
+
+
+# LinkGerado e um modelo GERENCIADO (tabela propria, diferente de tudo acima
+# nesta arquivo, que sao espelhos somente-leitura). Fica em arquivo separado
+# (models_link_curto.py) pra nao confundir com os managed=False; importado
+# aqui so para o Django encontrar na hora de gerar/aplicar migration.
+from apps.analytics.models_link_curto import LinkGerado  # noqa: E402,F401

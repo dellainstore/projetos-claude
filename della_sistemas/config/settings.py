@@ -91,6 +91,13 @@ if _della_site_db_pw:
     }
     DATABASE_ROUTERS = ["apps.analytics.router.DellaSiteRouter"]
 
+# Encurtador de link (Site > Gerar link). SITE_URL e o dominio publico do
+# site_della; LINK_CURTO_SECRET tem que ser IDENTICO ao configurado la
+# (apps/conteudo/views_link_curto.py), senao toda criacao de link curto
+# recebe 403 e o painel cai no fallback (link completo, sem encurtar).
+SITE_URL = os.getenv("SITE_URL", "https://www.dellainstore.com")
+LINK_CURTO_SECRET = os.getenv("LINK_CURTO_SECRET", "")
+
 # Banco de dados do módulo produtos (SQLite — inclusoes.db)
 PRODUTOS_DB_PATH = os.getenv(
     "PRODUTOS_DB_PATH",
