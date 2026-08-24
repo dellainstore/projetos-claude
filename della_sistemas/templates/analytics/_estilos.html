@@ -282,6 +282,9 @@
   .an-week-compara span { font-size: 0.68rem; font-weight: 400; color: var(--cinza-texto); }
   .an-week-compara.an-up { color: #059669; }
   .an-week-compara.an-down { color: #dc2626; }
+  /* Primeiras horas da semana: base pequena demais para comparar. Fica neutro,
+     sem seta nem cor de alerta, para nao parecer queda. */
+  .an-week-compara.an-week-inicio span { font-size: 0.72rem; font-style: italic; }
   @media (max-width: 560px) {
     .an-week-compara { margin-left: 0; width: 100%; }
   }

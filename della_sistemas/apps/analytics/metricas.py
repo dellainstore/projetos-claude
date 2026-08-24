@@ -517,13 +517,34 @@ def _calcular_trafico_semanal(seg_semana):
     hora_agg = [sum(por_dia_hora[d][h] for d in range(7)) for h in range(24)]
     pico_hora = hora_agg.index(max(hora_agg)) if any(hora_agg) else None
 
-    # Comparacao com a semana anterior. Se a semana ainda esta em curso, compara
-    # so o trecho ja decorrido (Seg ate hoje) contra os mesmos dias da anterior.
+    # Comparacao com a semana anterior.
+    #
+    # Com a semana em curso, o trecho comparavel vai ate o MESMO INSTANTE da
+    # semana anterior, e nao ate o fim do mesmo dia. Comparar por dia inteiro
+    # faz a segunda de madrugada (4 minutos de semana) ser confrontada com a
+    # segunda inteira da semana passada: dava "-100%" em vermelho toda semana,
+    # um alarme falso que aparecia justamente quando nao havia o que analisar.
     em_curso = seg_semana <= hoje <= seg_semana + timedelta(days=6)
+    comparacao_parcial = False
     if em_curso:
+        agora = timezone.localtime(timezone.now())
+        decorrido = agora - timezone.make_aware(_dt.combine(seg_semana, _dt.min.time()))
         n = (hoje - seg_semana).days + 1
         total_atual = sum(por_dia[:n])
-        total_anterior = sum(por_dia_anterior[:n])
+
+        seg_anterior = seg_semana - timedelta(days=7)
+        ini_ant = timezone.make_aware(_dt.combine(seg_anterior, _dt.min.time()))
+        if ini_ant < corte:
+            ini_ant = corte
+        total_anterior = (
+            EventoSite.objects
+            .filter(ocorrido_em__range=(ini_ant, ini_ant + decorrido),
+                    tipo='pagina_vista', sessao__in=_reais)
+            .count()
+        )
+        # Nas primeiras horas da semana a base e pequena demais para um
+        # percentual dizer alguma coisa; o template esconde o comparativo.
+        comparacao_parcial = decorrido < timedelta(hours=12)
     else:
         total_atual = sum(por_dia)
         total_anterior = sum(por_dia_anterior)
@@ -557,6 +578,7 @@ def _calcular_trafico_semanal(seg_semana):
         'total_anterior': total_anterior,
         'delta_pct': delta_pct,
         'delta_subiu': total_atual >= total_anterior,
+        'comparacao_parcial': comparacao_parcial,
     }
 
 

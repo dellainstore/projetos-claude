@@ -32,11 +32,17 @@
       <span class="an-week-btn an-week-btn--off">&#8594;</span>
     {% endif %}
 
+    {% if trafico.comparacao_parcial %}
+    <div class="an-week-compara an-week-inicio">
+      <span>semana comecando</span>
+    </div>
+    {% else %}
     <div class="an-week-compara {% if trafico.delta_subiu %}an-up{% else %}an-down{% endif %}">
       {% if trafico.delta_subiu %}&#9650;{% else %}&#9660;{% endif %}
       {{ trafico.delta_pct }}%
       <span>vs semana anterior{% if trafico.eh_semana_atual %} (mesmo periodo){% endif %}</span>
     </div>
+    {% endif %}
   </div>
 
   <div class="an-chart-header">
