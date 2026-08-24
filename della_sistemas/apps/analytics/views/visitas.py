@@ -18,11 +18,23 @@ from django.shortcuts import render
 
 from apps.core.decorators import perm_required
 
-from .dashboard import (
+from apps.analytics.metricas import (
     _calcular_ao_vivo, _calcular_funil, _calcular_produtos,
     _calcular_trafico_semanal, _db_disponivel, _resolver_periodo,
     _segunda_da_semana,
 )
+
+
+@perm_required("analytics.ver")
+def antiga_para_visitas(request: HttpRequest) -> HttpResponse:
+    """Rota da tela antiga "Analytics do Site", substituida em 2026-08-24.
+
+    Continua respondendo para nao quebrar link salvo ou favorito. Passa pela
+    mesma permissao das demais: sem ela, quem nao tem acesso nem descobre que
+    a rota existe.
+    """
+    from django.shortcuts import redirect
+    return redirect('analytics:visitas')
 
 
 @perm_required("analytics.ver")
@@ -90,4 +102,24 @@ def visitas(request: HttpRequest) -> HttpResponse:
         'funil': funil, 'produtos': produtos,
         'trafico': trafico, 'trafico_json': trafico_json,
         'db_ok': db_ok,
+    })
+
+
+@perm_required("analytics.ver")
+def htmx_trafico(request: HttpRequest) -> HttpResponse:
+    """Troca de semana no grafico de trafego, sem recarregar a pagina."""
+    if not _db_disponivel():
+        return HttpResponse('')
+    try:
+        trafico = _calcular_trafico_semanal(_segunda_da_semana(request))
+    except Exception:
+        trafico = None
+    trafico_json = json.dumps({
+        chave: trafico[chave] if trafico else []
+        for chave in ('labels', 'labels_full', 'datas', 'horas',
+                      'por_dia', 'por_dia_anterior', 'por_dia_hora')
+    }) if trafico else 'null'
+    return render(request, 'analytics/_trafico_card.html', {
+        'trafico': trafico,
+        'trafico_json': trafico_json,
     })

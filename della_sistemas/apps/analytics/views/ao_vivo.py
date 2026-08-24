@@ -11,7 +11,7 @@ def ao_vivo(request: HttpRequest) -> HttpResponse:
 
     if 'della_site' in settings.DATABASES:
         try:
-            from apps.analytics.views.dashboard import _calcular_ao_vivo
+            from apps.analytics.metricas import _calcular_ao_vivo
             dados = _calcular_ao_vivo()
         except Exception:
             pass

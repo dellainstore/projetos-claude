@@ -11,7 +11,7 @@ from django.shortcuts import render
 
 from apps.core.decorators import perm_required
 
-from .dashboard import _db_disponivel, _resolver_periodo
+from apps.analytics.metricas import _db_disponivel, _resolver_periodo
 
 
 @perm_required("analytics.ver")
@@ -24,7 +24,7 @@ def vendas(request: HttpRequest) -> HttpResponse:
 
     try:
         from apps.analytics import faturamento as F
-        from apps.analytics.views.dashboard import _calcular_carrinhos_recentes
+        from apps.analytics.metricas import _calcular_carrinhos_recentes
         from apps.analytics.vendas import eventos_itens
         from django.db.models import Count, Q, Sum
 

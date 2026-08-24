@@ -474,11 +474,6 @@
             <span class="ds-nav-icon">&#9670;</span>
             Vendas
           </a>
-          <a href="{% url 'analytics:dashboard' %}"
-             class="ds-nav-sublink {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.namespace == 'analytics' %}ativo{% endif %}">
-            <span class="ds-nav-icon">&#9636;</span>
-            Analytics do Site
-          </a>
           <a href="{% url 'analytics:relatorio_list' %}"
              class="ds-nav-sublink {% if request.resolver_match.url_name == 'relatorio_list' or request.resolver_match.url_name == 'relatorio_download' %}ativo{% endif %}">
             <span class="ds-nav-icon">&#9783;</span>

@@ -1,13 +1,16 @@
-import json
+"""Calculos compartilhados pelos paineis Visitas e Vendas e pelo PDF semanal.
+
+Ficavam em views/dashboard.py, junto da tela antiga "Analytics do Site".
+Quando essa tela saiu, as funcoes vieram para ca: nao sao views, e os dois
+paineis novos mais o relatorio semanal dependem delas.
+"""
+
 from datetime import timedelta
 
 from django.conf import settings
 from django.db.models import Count, Q, Sum
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
 from django.utils import timezone
 
-from apps.core.decorators import perm_required
 
 
 def _db_disponivel():
@@ -592,84 +595,3 @@ def _calcular_origens(inicio, fim):
         for k, v in sorted(agg.items(), key=lambda x: -x[1])
     ]
     return result[:8]
-
-
-@perm_required("analytics.ver")
-def htmx_trafico(request: HttpRequest) -> HttpResponse:
-    if not _db_disponivel():
-        return HttpResponse('')
-    try:
-        trafico = _calcular_trafico_semanal(_segunda_da_semana(request))
-    except Exception:
-        trafico = None
-    trafico_json = json.dumps({
-        'labels': trafico['labels'] if trafico else [],
-        'labels_full': trafico['labels_full'] if trafico else [],
-        'datas': trafico['datas'] if trafico else [],
-        'horas': trafico['horas'] if trafico else [],
-        'por_dia': trafico['por_dia'] if trafico else [],
-        'por_dia_anterior': trafico['por_dia_anterior'] if trafico else [],
-        'por_dia_hora': trafico['por_dia_hora'] if trafico else [],
-    }) if trafico else 'null'
-    return render(request, 'analytics/_trafico_card.html', {
-        'trafico': trafico,
-        'trafico_json': trafico_json,
-    })
-
-
-@perm_required("analytics.ver")
-def dashboard(request: HttpRequest) -> HttpResponse:
-    if not _db_disponivel():
-        return render(request, 'analytics/dashboard.html', {
-            'sem_config': True,
-            'filtro': '7d',
-        })
-
-    filtro, inicio, fim, de_val, ate_val = _resolver_periodo(request)
-
-    try:
-        ao_vivo   = _calcular_ao_vivo()
-        resumo    = _calcular_resumo(inicio, fim)
-        funil     = _calcular_funil(inicio, fim)
-        produtos  = _calcular_produtos(inicio, fim)
-        origens   = _calcular_origens(inicio, fim)
-        carrinhos = _calcular_carrinhos_recentes(inicio, fim)
-        trafico   = _calcular_trafico_semanal(_segunda_da_semana(request))
-        db_ok = True
-    except Exception:
-        ao_vivo   = {'visitantes': 0, 'paginas': []}
-        resumo    = {'visitas': 0, 'visitantes': 0, 'pedidos': 0, 'receita': 0,
-                     'aguardando': 0, 'aguardando_valor': 0,
-                     'itens_vendidos': 0, 'carrinhos_abandonados': 0,
-                     'checkouts_abandonados': 0, 'taxa': 0, 'media_paginas': 0}
-        funil     = []
-        produtos  = {'mais_vistos': [], 'mais_adicionados': [], 'mais_vendidos': []}
-        origens   = []
-        carrinhos = []
-        trafico   = None
-        db_ok = False
-
-    trafico_json = json.dumps({
-        'labels': trafico['labels'] if trafico else [],
-        'labels_full': trafico['labels_full'] if trafico else [],
-        'datas': trafico['datas'] if trafico else [],
-        'horas': trafico['horas'] if trafico else [],
-        'por_dia': trafico['por_dia'] if trafico else [],
-        'por_dia_anterior': trafico['por_dia_anterior'] if trafico else [],
-        'por_dia_hora': trafico['por_dia_hora'] if trafico else [],
-    }) if trafico else 'null'
-
-    return render(request, 'analytics/dashboard.html', {
-        'filtro': filtro,
-        'de_val': de_val,
-        'ate_val': ate_val,
-        'ao_vivo': ao_vivo,
-        'resumo': resumo,
-        'funil': funil,
-        'produtos': produtos,
-        'origens': origens,
-        'carrinhos': carrinhos,
-        'trafico': trafico,
-        'trafico_json': trafico_json,
-        'db_ok': db_ok,
-    })
