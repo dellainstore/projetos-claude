@@ -1,0 +1,141 @@
+{% if trafico %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var DOURADO     = '#c9a96e';
+  var DOURADO_HVR = '#b8924a';
+  var GRID_CLR    = '#f0ece4';
+  var TEXT_CLR    = '#666666';
+  var PRETO       = '#1a1a1a';
+  var RADIUS      = 5;
+
+  function tooltipOpts() {
+    return {
+      backgroundColor: PRETO, titleColor: '#fff', bodyColor: '#fff',
+      padding: 10, cornerRadius: 6, displayColors: false,
+      callbacks: { label: function (c) { return c.parsed.y + ' visita' + (c.parsed.y !== 1 ? 's' : ''); } }
+    };
+  }
+
+  function scaleOpts() {
+    return {
+      y: { beginAtZero: true, grid: { color: GRID_CLR },
+           ticks: { precision: 0, color: TEXT_CLR, font: { size: 11 } }, border: { color: '#eeede8' } },
+      x: { grid: { display: false },
+           ticks: { color: TEXT_CLR, font: { size: 11 } }, border: { color: '#eeede8' } }
+    };
+  }
+
+  function tooltipSemanal(dados) {
+    return {
+      backgroundColor: PRETO, titleColor: '#fff', bodyColor: '#fff',
+      padding: 10, cornerRadius: 6, displayColors: true,
+      callbacks: {
+        title: function (items) {
+          var i = items[0].dataIndex;
+          var d = (dados.datas && dados.datas[i]) ? ' (' + dados.datas[i] + ')' : '';
+          return (dados.labels_full[i] || '') + d;
+        },
+        label: function (c) {
+          var v = c.parsed.y;
+          if (v === null) return 'ainda nao aconteceu';
+          return (c.dataset.label || '') + ': ' + v + ' visita' + (v !== 1 ? 's' : '');
+        }
+      }
+    };
+  }
+
+  // Inicializa (ou reinicializa) o grafico com novos dados.
+  // Chamada na carga inicial e pelo listener htmx:afterSettle apos troca de semana.
+  window._initAnChart = function (dados) {
+    if (!dados || !dados.por_dia) return;
+
+    if (window._anChartSemanal) { window._anChartSemanal.destroy(); window._anChartSemanal = null; }
+    if (window._anChartHorario) { window._anChartHorario.destroy(); window._anChartHorario = null; }
+
+    var ctxS = document.getElementById('an-chart-semanal');
+    var ctxH = document.getElementById('an-chart-horario');
+    if (!ctxS) return;
+
+    window._anChartSemanal = new Chart(ctxS, {
+      type: 'bar',
+      data: {
+        labels: dados.labels,
+        datasets: [
+          { label: 'Esta semana', data: dados.por_dia,
+            backgroundColor: DOURADO, hoverBackgroundColor: DOURADO_HVR,
+            borderRadius: RADIUS, borderSkipped: false, order: 2 },
+          { label: 'Semana anterior', type: 'line', data: dados.por_dia_anterior,
+            borderColor: '#9b9b9b', backgroundColor: '#9b9b9b',
+            borderWidth: 2, borderDash: [5, 4], pointRadius: 3,
+            pointBackgroundColor: '#9b9b9b', tension: 0.3, order: 1 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'bottom',
+            labels: { boxWidth: 12, font: { size: 11 }, color: TEXT_CLR, usePointStyle: true } },
+          tooltip: tooltipSemanal(dados)
+        },
+        scales: scaleOpts(),
+        onClick: function (e, els) {
+          var bar = (els || []).find(function (x) { return x.datasetIndex === 0; });
+          if (bar) _mostrarHorario(dados, ctxS, ctxH, bar.index);
+        },
+        onHover: function (e, els) {
+          ctxS.style.cursor = (els || []).some(function (x) { return x.datasetIndex === 0; }) ? 'pointer' : 'default';
+        }
+      }
+    });
+  };
+
+  function _mostrarHorario(dados, ctxS, ctxH) {
+    var idx = arguments[3];
+    ctxS.style.display = 'none';
+    ctxH.style.display = 'block';
+    var lbl = document.getElementById('an-chart-titulo-label');
+    var btn = document.getElementById('an-chart-back-btn');
+    var hnt = document.getElementById('an-chart-hint');
+    if (lbl) lbl.textContent = 'Visitas por horario - ' + dados.labels_full[idx];
+    if (btn) btn.style.display = 'inline-block';
+    if (hnt) hnt.style.display = 'none';
+
+    if (window._anChartHorario) { window._anChartHorario.destroy(); window._anChartHorario = null; }
+    window._anChartHorario = new Chart(ctxH, {
+      type: 'bar',
+      data: { labels: dados.horas, datasets: [{ data: dados.por_dia_hora[idx],
+        backgroundColor: DOURADO, hoverBackgroundColor: DOURADO_HVR,
+        borderRadius: 4, borderSkipped: false }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: tooltipOpts() },
+        scales: scaleOpts() }
+    });
+  }
+
+  window.anVoltarSemana = function () {
+    var ctxS = document.getElementById('an-chart-semanal');
+    var ctxH = document.getElementById('an-chart-horario');
+    if (ctxH) ctxH.style.display = 'none';
+    if (ctxS) ctxS.style.display = 'block';
+    var lbl = document.getElementById('an-chart-titulo-label');
+    var btn = document.getElementById('an-chart-back-btn');
+    var hnt = document.getElementById('an-chart-hint');
+    if (lbl) lbl.textContent = 'Visitas por dia da semana';
+    if (btn) btn.style.display = 'none';
+    if (hnt) hnt.style.display = '';
+    if (window._anChartHorario) { window._anChartHorario.destroy(); window._anChartHorario = null; }
+  };
+
+  // Carga inicial
+  window._initAnChart({{ trafico_json|safe }});
+
+  // Reinicializa apos troca de semana via HTMX (sem reload de pagina)
+  document.addEventListener('htmx:afterSettle', function () {
+    var el = document.getElementById('an-trafico-dados');
+    if (!el) return;
+    try { window._initAnChart(JSON.parse(el.textContent)); } catch (ex) {}
+  });
+})();
+</script>
+{% endif %}

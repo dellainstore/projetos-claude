@@ -365,6 +365,22 @@ Importante: nao inclua titulo, cabecalho nem a data no inicio da resposta - essa
 Voce escreve esse relatorio toda semana e tem memoria das semanas anteriores (dados abaixo). Trate a operacao como algo continuo: aponte tendencias reais (ex: "e a terceira semana seguida de queda na conversao", "o pico de trafego de sexta se repete ha um mes", "carrinho abandonado caiu depois da mudanca da semana passada"), e nao comente a semana atual como um evento isolado. Ao mesmo tempo, NAO repita as mesmas frases, exemplos ou estrutura de paragrafo da analise anterior (colada abaixo) - varie a redacao mesmo quando o diagnostico for parecido. Se o historico for curto (menos de 3 semanas) ou os numeros muito instaveis, foque mais na semana atual e comente a tendencia com cautela.
 {bloco_historico}
 
+COMO LER OS NUMEROS (mudou em 24/08/2026, considere ao comparar com semanas anteriores):
+- "Visitante" agora e quem teve ATIVIDADE na semana, e nao quem criou a sessao nela.
+  Quem voltou ao site com o cookie de uma semana passada passou a contar.
+- O trafego automatizado que escapava do filtro de robo foi retirado da conta. Era
+  cerca de um terco do que antes aparecia como gente real, quase todo em computador
+  e sem nenhuma compra.
+- Por causa desses dois pontos, os numeros de visitantes das semanas ANTERIORES no
+  historico nao sao diretamente comparaveis com os desta: a base mudou. Compare
+  tendencia de conversao, receita e comportamento, e evite afirmar que o trafego
+  "caiu" ou "subiu" com base em semanas de antes dessa data. Se precisar mencionar,
+  diga que a forma de contar mudou.
+- As origens agora tem nome de gente ("Anuncio no Instagram", "Link da bio",
+  "Loja do Instagram", "Direto ou busca"). "Direto ou busca" reune quem digitou o
+  endereco, veio da busca do Google sem anuncio ou de link no WhatsApp: NAO trate
+  isso como trafego sem valor, porque costuma ser quem ja conhece a marca.
+
 DADOS DA SEMANA ({periodo_str}):
 - Visitantes unicos: {stats['visitantes']}
 - Paginas vistas: {stats['visitas']}

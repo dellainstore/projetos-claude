@@ -1,0 +1,87 @@
+<script>
+/* Mapa do Brasil: arrastar e aproximar.
+   Sem biblioteca: o SVG ja vem no HTML e so aplicamos transform no grupo. */
+(function () {
+  var palco = document.getElementById('an-mapa-palco');
+  var grupo = document.getElementById('an-mapa-g');
+  if (!palco || !grupo) return;
+
+  var escala = 1, tx = 0, ty = 0;
+  var ESC_MIN = 1, ESC_MAX = 12;
+
+  function aplicar(suave) {
+    grupo.classList.toggle('sem-transicao', !suave);
+    grupo.setAttribute('transform', 'translate(' + tx + ',' + ty + ') scale(' + escala + ')');
+  }
+
+  // Mantem o mapa dentro do palco: sem isso, arrastar longe demais some com ele
+  // e o usuario nao entende que precisa clicar em "Brasil" para voltar.
+  function limitar() {
+    var w = palco.clientWidth, h = palco.clientHeight;
+    var limX = w * (escala - 1), limY = h * (escala - 1);
+    tx = Math.min(0, Math.max(-limX, tx));
+    ty = Math.min(0, Math.max(-limY, ty));
+  }
+
+  window.mapaZoom = function (fator, cx, cy) {
+    var nova = Math.min(ESC_MAX, Math.max(ESC_MIN, escala * fator));
+    if (nova === escala) return;
+    var w = palco.clientWidth, h = palco.clientHeight;
+    // Ponto focal: sem centro informado, aproxima pelo meio do palco.
+    if (cx === undefined) { cx = w / 2; cy = h / 2; }
+    // Mantem sob o cursor o mesmo ponto do mapa antes e depois do zoom.
+    tx = cx - (cx - tx) * (nova / escala);
+    ty = cy - (cy - ty) * (nova / escala);
+    escala = nova;
+    limitar(); aplicar(true);
+  };
+
+  window.mapaReset = function () {
+    escala = 1; tx = 0; ty = 0; aplicar(true);
+  };
+
+  palco.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    var r = palco.getBoundingClientRect();
+    window.mapaZoom(e.deltaY < 0 ? 1.18 : 0.85, e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+
+  var arrastando = false, x0 = 0, y0 = 0;
+  palco.addEventListener('pointerdown', function (e) {
+    arrastando = true; x0 = e.clientX - tx; y0 = e.clientY - ty;
+    palco.classList.add('arrastando');
+    palco.setPointerCapture(e.pointerId);
+  });
+  palco.addEventListener('pointermove', function (e) {
+    if (!arrastando) return;
+    tx = e.clientX - x0; ty = e.clientY - y0;
+    limitar(); aplicar(false);
+  });
+  function soltar(e) {
+    if (!arrastando) return;
+    arrastando = false;
+    palco.classList.remove('arrastando');
+    try { palco.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+  palco.addEventListener('pointerup', soltar);
+  palco.addEventListener('pointercancel', soltar);
+
+  // Passar o mouse na linha da tabela destaca o estado no mapa, e vice-versa.
+  function destacar(uf, ligar) {
+    var p = grupo.querySelector('[data-uf="' + uf + '"]');
+    if (p) p.classList.toggle('destacado', ligar);
+    var tr = document.querySelector('tr[data-uf="' + uf + '"]');
+    if (tr) tr.style.background = ligar ? 'var(--cinza-claro)' : '';
+  }
+  document.querySelectorAll('tr[data-uf]').forEach(function (tr) {
+    var uf = tr.getAttribute('data-uf');
+    tr.addEventListener('mouseenter', function () { destacar(uf, true); });
+    tr.addEventListener('mouseleave', function () { destacar(uf, false); });
+  });
+  grupo.querySelectorAll('[data-uf]').forEach(function (p) {
+    var uf = p.getAttribute('data-uf');
+    p.addEventListener('mouseenter', function () { destacar(uf, true); });
+    p.addEventListener('mouseleave', function () { destacar(uf, false); });
+  });
+})();
+</script>

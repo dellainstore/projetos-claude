@@ -291,21 +291,21 @@ def _calcular_produtos(inicio, fim):
         .filter(periodo, tipo='produto_visualizado', produto_slug__gt='')
         .values('produto_slug', 'produto_nome')
         .annotate(total=Count('id'))
-        .order_by('-total')[:10]
+        .order_by('-total')[:25]
     )
     mais_adicionados = list(
         EventoSite.objects
         .filter(periodo, tipo='produto_adicionado', produto_slug__gt='')
         .values('produto_slug', 'produto_nome')
         .annotate(total=Count('id'))
-        .order_by('-total')[:10]
+        .order_by('-total')[:25]
     )
     # So itens de pedidos pagos (ver apps/analytics/vendas.py).
     mais_vendidos = list(
         eventos_itens(periodo)
         .values('produto_slug', 'produto_nome')
         .annotate(total=Count('id'), receita=Sum('valor_total'))
-        .order_by('-total')[:10]
+        .order_by('-total')[:25]
     )
 
     return {

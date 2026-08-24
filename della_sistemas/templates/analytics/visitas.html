@@ -97,9 +97,6 @@ function toggleCustomPeriodo(btn) {
         </td>
         <td class="num">{{ o.visitantes }}</td>
         <td class="num">{{ o.vendas }}</td>
-        {# floatformat (nao pct_css) porque aqui e texto lido por gente: com
-           LANGUAGE_CODE=pt-br sai com virgula. pct_css so serve para width em
-           style="", onde a virgula quebraria o CSS. #}
         <td class="num {% if o.conversao >= 2 %}an-conv-forte{% endif %}">
           {{ o.conversao|floatformat:2 }}
         </td>
@@ -112,16 +109,31 @@ function toggleCustomPeriodo(btn) {
   </table>
 </div>
 
-<!-- MAPA E CIDADES -->
+<!-- MAPA E ESTADOS -->
 <div class="an-secao-titulo">De que lugar do Brasil</div>
 <div class="an-geo">
-  <div class="an-mapa-wrap">
-    <div class="an-mapa">
-      {% for e in estados %}
-      <div class="an-uf an-uf-n{{ e.nivel }}"
-           style="grid-row:{{ e.linha }};grid-column:{{ e.coluna }};"
-           title="{{ e.nome }}: {{ e.total }} visitante{{ e.total|pluralize }}">{{ e.uf }}</div>
-      {% endfor %}
+  <div class="an-card-tabela an-mapa-card">
+    <div class="an-card-tabela-topo">
+      Visitantes por estado
+      <span class="an-mapa-ctrl">
+        <button type="button" onclick="mapaZoom(1.35)" title="Aproximar">+</button>
+        <button type="button" onclick="mapaZoom(0.74)" title="Afastar">&minus;</button>
+        <button type="button" onclick="mapaReset()" title="Voltar ao Brasil inteiro">Brasil</button>
+      </span>
+    </div>
+    <div class="an-card-tabela-corpo an-mapa-palco" id="an-mapa-palco">
+      <svg id="an-mapa-svg" viewBox="0 0 1000 938" preserveAspectRatio="xMidYMid meet"
+           role="img" aria-label="Mapa do Brasil com visitantes por estado">
+        <g id="an-mapa-g">
+          {% for e in estados %}
+          <path d="{{ e.path }}" class="an-uf-path an-uf-n{{ e.nivel }}"
+                data-uf="{{ e.uf }}" data-nome="{{ e.nome }}" data-total="{{ e.total }}">
+            <title>{{ e.nome }}: {{ e.total }} visitante{{ e.total|pluralize }}</title>
+          </path>
+          {% endfor %}
+        </g>
+      </svg>
+      <div class="an-mapa-dica">Arraste para mover. Role para aproximar.</div>
     </div>
     <div class="an-mapa-legenda">
       <span>menos</span>
@@ -135,7 +147,29 @@ function toggleCustomPeriodo(btn) {
     </div>
   </div>
 
-  <div class="an-mapa-wrap">
+  <div class="an-card-tabela">
+    <div class="an-card-tabela-topo">Estados</div>
+    <div class="an-card-tabela-corpo">
+      <table class="an-tabela an-tabela-compacta">
+        <tbody>
+          {% for e in estados %}{% if e.total %}
+          <tr data-uf="{{ e.uf }}">
+            <td>{{ e.nome }} <span class="an-cidade-uf">{{ e.uf }}</span></td>
+            <td class="num">{{ e.total }}</td>
+          </tr>
+          {% endif %}{% empty %}
+          <tr><td style="color:var(--cinza-texto);">Sem visitas no periodo.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- CIDADES -->
+<div class="an-secao-titulo">Cidades</div>
+<div class="an-card-tabela">
+  <div class="an-card-tabela-corpo" style="padding:1rem;">
     <div class="an-cidades">
       {% for c in cidades %}
       <div class="an-cidade-linha">
@@ -189,26 +223,48 @@ function toggleCustomPeriodo(btn) {
 
 <!-- PRODUTOS: INTERESSE -->
 <div class="an-secao-titulo">O que mais chamou atencao</div>
-<div class="an-produtos-grid">
-  <div class="an-produtos-col">
-    <div class="an-produtos-titulo">Mais vistos</div>
-    {% for p in produtos.mais_vistos %}
-    <div class="an-produto-linha">
-      <span class="an-produto-nome">{{ p.produto_nome|default:p.produto_slug }}</span>
-      <span class="an-produto-total">{{ p.total }}</span>
+<div class="an-duas-colunas">
+  <div class="an-card-tabela">
+    <div class="an-card-tabela-topo">Mais vistos</div>
+    <div class="an-card-tabela-corpo">
+      <table class="an-tabela an-tabela-compacta">
+        <tbody>
+          {% for p in produtos.mais_vistos %}
+          <tr>
+            <td>{{ p.produto_nome|default:p.produto_slug }}</td>
+            <td class="num">{{ p.total }}</td>
+          </tr>
+          {% empty %}
+          <tr><td style="color:var(--cinza-texto);">Sem dados no periodo.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    {% empty %}<div class="an-vazio">Sem dados no periodo.</div>{% endfor %}
   </div>
-  <div class="an-produtos-col">
-    <div class="an-produtos-titulo">Mais colocados no carrinho</div>
-    {% for p in produtos.mais_adicionados %}
-    <div class="an-produto-linha">
-      <span class="an-produto-nome">{{ p.produto_nome|default:p.produto_slug }}</span>
-      <span class="an-produto-total">{{ p.total }}</span>
+
+  <div class="an-card-tabela">
+    <div class="an-card-tabela-topo">Mais colocados no carrinho</div>
+    <div class="an-card-tabela-corpo">
+      <table class="an-tabela an-tabela-compacta">
+        <tbody>
+          {% for p in produtos.mais_adicionados %}
+          <tr>
+            <td>{{ p.produto_nome|default:p.produto_slug }}</td>
+            <td class="num">{{ p.total }}</td>
+          </tr>
+          {% empty %}
+          <tr><td style="color:var(--cinza-texto);">Sem dados no periodo.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    {% empty %}<div class="an-vazio">Sem dados no periodo.</div>{% endfor %}
   </div>
 </div>
 
 {% endif %}
+{% endblock %}
+
+{% block js_extra %}
+{% include "analytics/_trafico_js.html" %}
+{% include "analytics/_mapa_js.html" %}
 {% endblock %}
