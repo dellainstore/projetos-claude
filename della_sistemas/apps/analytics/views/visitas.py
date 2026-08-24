@@ -54,9 +54,17 @@ def visitas(request: HttpRequest) -> HttpResponse:
         from apps.analytics.trafego import base_trafego
         from django.db.models import Q
 
-        sessoes = base_trafego().filter(iniciada_em__range=(inicio, fim))
         periodo = Q(ocorrido_em__range=(inicio, fim),
                     sessao__in=base_trafego().values('pk'))
+
+        # Sessoes com ATIVIDADE no periodo, e nao iniciadas nele. A sessao vive
+        # muito mais que o periodo consultado (a do proprio dono do site comecou
+        # em 25/06 e seguia ativa em 24/08), entao filtrar por `iniciada_em`
+        # deixava de fora justamente quem esta navegando agora: o card dizia
+        # "1 visitante" enquanto origem, mapa, cidades e dispositivo apareciam
+        # vazios logo abaixo, na mesma tela.
+        ids_ativas = EventoSite.objects.filter(periodo).values('sessao_id')
+        sessoes = base_trafego().filter(pk__in=ids_ativas)
 
         visitantes = (
             EventoSite.objects.filter(periodo).values('sessao_id').distinct().count()

@@ -96,7 +96,11 @@ class Command(BaseCommand):
         # lados iguais, senao o PDF da semana diverge da tela que o gerou.
         from apps.analytics.trafego import base_trafego
         periodo   = Q(ocorrido_em__range=(inicio, fim), sessao__in=base_trafego().values('pk'))
-        sess_qs   = base_trafego().filter(iniciada_em__range=(inicio, fim))
+        # Sessoes com atividade na semana, nao iniciadas nela: a sessao vive
+        # muito mais que sete dias (ver a nota em views/visitas.py), e contar
+        # por inicio deixa de fora quem voltou com o cookie antigo.
+        _ativas   = EventoSite.objects.filter(periodo).values('sessao_id')
+        sess_qs   = base_trafego().filter(pk__in=_ativas)
         # Venda = pedido PAGO (regra unica em apps/analytics/vendas.py). Pedido
         # gerado e nao pago entra em "aguardando"; cancelado nao entra em nada.
         from apps.analytics.vendas import (
@@ -164,7 +168,7 @@ class Command(BaseCommand):
         from django.db.models import BooleanField, Case, Value, When
 
         sessoes_all = list(
-            base_trafego().filter(iniciada_em__range=(inicio, fim))
+            base_trafego().filter(pk__in=_ativas)
             .annotate(
                 tem_fbclid=Case(When(fbclid='', then=Value(False)),
                                 default=Value(True), output_field=BooleanField()),

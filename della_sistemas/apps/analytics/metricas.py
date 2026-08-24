@@ -591,9 +591,16 @@ def _calcular_origens(inicio, fim):
     # Agrupa por utm_source + presenca de click id (fbclid/gclid). Os click ids
     # entram apenas como BOOLEAN (tem/nao tem) para nao explodir o agrupamento --
     # o valor de cada fbclid e unico por clique.
+    # Sessoes com atividade no periodo, nao iniciadas nele (ver a nota em
+    # views/visitas.py: a sessao vive muito mais que a janela consultada).
+    from apps.analytics.models import EventoSite as _Evt
+    _ativas = _Evt.objects.filter(
+        ocorrido_em__range=(inicio, fim), sessao__in=base_trafego().values('pk')
+    ).values('sessao_id')
+
     sessoes = list(
         base_trafego()
-        .filter(iniciada_em__range=(inicio, fim))
+        .filter(pk__in=_ativas)
         .annotate(
             tem_fbclid=Case(When(fbclid='', then=Value(False)),
                             default=Value(True), output_field=BooleanField()),
