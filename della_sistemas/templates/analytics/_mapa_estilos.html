@@ -13,7 +13,23 @@
     border-radius: 10px; padding: 1rem;
   }
 
-  /* Mapa: contorno real dos estados (malha do IBGE), com arrastar e zoom. */
+  /* Mapa: contorno real dos estados (malha do IBGE), com arrastar e zoom.
+
+     A area do mapa usa aspect-ratio igual ao do viewBox (1000x938), e nao uma
+     altura fixa. Como o SVG desenha com preserveAspectRatio=meet, altura de
+     menos deixa o Brasil pequeno no meio de duas faixas vazias: num card de
+     360px ele ocupava so 52% da largura da coluna e saia da area visivel com
+     pouco zoom. Amarrando a altura a largura REAL do container (e nao a
+     viewport, que erra na faixa de tablet, onde a coluna e larga mas a tela
+     nao), o mapa preenche a largura em qualquer tamanho de tela. O card de
+     estados ao lado acompanha a altura porque o grid estica os irmaos. */
+  .an-geo .an-mapa-card { height: auto; }
+  .an-geo .an-mapa-palco {
+    flex: 0 0 auto;
+    aspect-ratio: 1000 / 938;
+    min-height: 260px;
+  }
+  .an-geo .an-card-tabela:not(.an-mapa-card) { height: auto; max-height: 680px; }
   .an-mapa-card { position: relative; }
   .an-mapa-palco {
     overflow: hidden; position: relative;
@@ -63,15 +79,13 @@
   }
   .an-mapa-ctrl button:hover { background: var(--cinza-claro); color: var(--preto); }
 
-  .an-mapa-dica {
-    position: absolute; left: 0; right: 0; bottom: 0.4rem;
-    text-align: center; font-size: 0.64rem; color: var(--cinza-texto);
-    pointer-events: none; opacity: 0.75;
-  }
+  /* A dica fica na faixa da legenda, e nao flutuando sobre o mapa: ali ela
+     cobria justamente o Sudeste, que e onde esta a maior parte do volume. */
+  .an-mapa-dica { font-size: 0.64rem; color: var(--cinza-texto); opacity: 0.8; }
 
   .an-mapa-legenda {
     display: flex; align-items: center; justify-content: center;
-    gap: 0.4rem; padding: 0.6rem; flex: 0 0 auto;
+    gap: 0.4rem 0.9rem; padding: 0.6rem; flex: 0 0 auto; flex-wrap: wrap;
     border-top: 1px solid var(--cinza-medio);
     font-size: 0.7rem; color: var(--cinza-texto);
   }
@@ -150,9 +164,11 @@
   /* ── Mobile ───────────────────────────────────────────────────────────── */
   @media (max-width: 640px) {
     /* Cards mais baixos: 360px numa tela de celular ocupa quase a dobra
-       inteira e a pessoa perde a nocao de que ha conteudo abaixo. */
+       inteira e a pessoa perde a nocao de que ha conteudo abaixo. Os cards
+       dentro de .an-geo (mapa e estados) ficam de fora desta regra de
+       proposito: sao regidos pelo clamp la em cima, que ja da a altura mais
+       baixa da faixa no celular, e o mapa precisa dela para caber inteiro. */
     .an-card-tabela { height: 300px; }
-    .an-mapa-card { height: 340px; }
     /* A sigla precisa crescer junto: o SVG encolhe com a tela e um texto de
        20px no viewBox vira um risco ilegivel no celular. */
     .an-uf-sigla { font-size: 26px; stroke-width: 4px; }
