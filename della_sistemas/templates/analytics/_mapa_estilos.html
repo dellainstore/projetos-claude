@@ -34,13 +34,25 @@
   .an-uf-path:hover { filter: brightness(0.92); }
   .an-uf-path.destacado { stroke: var(--preto); stroke-width: 2.6; }
 
-  /* Escala de intensidade sobre o dourado da marca. Aplicada como `fill` no
-     mapa e como `background` na legenda, por isso as duas propriedades. */
-  .an-uf-n0 { fill: #e6e2d8; background: var(--cinza-claro); color: #b9b3a4; }
-  .an-uf-n1 { fill: #f2e7cd; background: #f2e7cd; color: #7a6220; }
-  .an-uf-n2 { fill: #e3cd95; background: #e3cd95; color: #6a541a; }
-  .an-uf-n3 { fill: #cfae5c; background: #cfae5c; color: #3d3010; }
-  .an-uf-n4 { fill: #c9a96e; background: var(--dourado); color: var(--branco); }
+  /* Escala de intensidade: vai do dourado claro ao marrom escuro da marca, e
+     nao do dourado claro ao dourado medio. A escala anterior terminava em
+     #c9a96e, que sobre o cinza do fundo tinha contraste baixo demais para
+     distinguir os niveis. Aplicada como `fill` no mapa e como `background` na
+     legenda, por isso as duas propriedades em cada faixa. */
+  .an-uf-n0 { fill: #dedacf; background: #dedacf; color: #8f8a7c; }
+  .an-uf-n1 { fill: #ecd9a4; background: #ecd9a4; color: #6a541a; }
+  .an-uf-n2 { fill: #d8ab4a; background: #d8ab4a; color: #4a3a12; }
+  .an-uf-n3 { fill: #a3762a; background: #a3762a; color: #ffffff; }
+  .an-uf-n4 { fill: #5e441a; background: #5e441a; color: #ffffff; }
+
+  /* Siglas dentro do mapa */
+  .an-uf-sigla {
+    font-family: inherit; font-size: 20px; font-weight: 600;
+    fill: #2b2618; pointer-events: none; paint-order: stroke;
+    stroke: rgba(255,255,255,.85); stroke-width: 3px; stroke-linejoin: round;
+  }
+  .an-uf-sigla.claro { fill: #ffffff; stroke: rgba(0,0,0,.4); }
+  .an-uf-chamada { stroke: #9a9382; stroke-width: 1.2; }
 
   .an-mapa-ctrl { float: right; display: flex; gap: 0.25rem; }
   .an-mapa-ctrl button {
@@ -127,4 +139,32 @@
   .an-disp-rotulo { font-size: 0.7rem; color: var(--cinza-texto); margin-bottom: 0.2rem; }
   .an-disp-valor { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
   .an-disp-pct { font-size: 0.72rem; color: var(--cinza-texto); }
+
+  /* ── Mobile ───────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    /* Cards mais baixos: 360px numa tela de celular ocupa quase a dobra
+       inteira e a pessoa perde a nocao de que ha conteudo abaixo. */
+    .an-card-tabela { height: 300px; }
+    .an-mapa-card { height: 340px; }
+    /* A sigla precisa crescer junto: o SVG encolhe com a tela e um texto de
+       20px no viewBox vira um risco ilegivel no celular. */
+    .an-uf-sigla { font-size: 26px; stroke-width: 4px; }
+    .an-uf-path { stroke-width: 2; }
+
+    /* Tabelas: sem largura minima o corpo do card rola de lado junto com a
+       pagina. Aqui elas cabem na largura e so rolam na vertical. */
+    .an-tabela { min-width: 0; font-size: 0.8rem; }
+    .an-tabela thead th { padding: 0.5rem 0.6rem; font-size: 0.58rem; letter-spacing: 0.05em; }
+    .an-tabela tbody td { padding: 0.5rem 0.6rem; }
+    .an-tabela-compacta td { padding: 0.45rem 0.7rem; font-size: 0.78rem; }
+    .an-tag-paga { display: block; margin: 0.15rem 0 0; width: fit-content; }
+
+    .an-disp-item { flex: 1 1 100%; }
+    .an-mapa-ctrl button { padding: 0.25rem 0.5rem; font-size: 0.72rem; }
+    .an-mapa-dica { font-size: 0.6rem; }
+  }
+
+  /* Tabela larga (origens, pedidos) continua rolando de lado dentro do proprio
+     container em telas estreitas, sem arrastar a pagina junto. */
+  .an-tabela-wrap { -webkit-overflow-scrolling: touch; }
 </style>

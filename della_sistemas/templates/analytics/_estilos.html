@@ -48,12 +48,17 @@
   }
 
   /* Secoes */
+  /* O respiro ANTES do titulo e maior que o respiro depois dele, de proposito:
+     e o que faz o titulo pertencer visualmente ao bloco de baixo e nao ao card
+     que acabou de terminar acima. Sem a margem superior, "Celular ou
+     computador" parecia legenda da lista de cidades. */
   .an-secao-titulo {
     font-family: 'Playfair Display', Georgia, serif;
     font-size: 0.95rem; font-weight: 400; color: var(--preto);
-    margin-bottom: 0.65rem; padding-bottom: 0.3rem;
+    margin: 2.4rem 0 0.7rem; padding-bottom: 0.3rem;
     border-bottom: 1px solid var(--cinza-medio);
   }
+  .an-secao-titulo:first-of-type { margin-top: 0; }
 
   /* Ao Vivo */
   .an-ao-vivo-card {
@@ -100,9 +105,14 @@
   }
 
   /* Cards de resumo */
+  /* auto-fit (nao auto-fill): com auto-fill o grid cria colunas vazias na
+     tela larga e os cards ficam com a largura minima, alinhados a esquerda e
+     com um vao a direita. auto-fit descarta as colunas vazias e estica os
+     cards existentes, que e o que faz os 4 cards ocuparem a largura inteira,
+     todos do mesmo tamanho. */
   .an-cards-grid {
     display: grid; gap: 1rem;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     margin-bottom: 0.75rem;
   }
   .an-card {

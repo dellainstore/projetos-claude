@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load metas_extras %}
+{% load metas_extras l10n %}
 {% block titulo %}Visitas do Site | D'ELLA Sistemas{% endblock %}
 {% block content_title %}{% endblock %}
 
@@ -10,7 +10,6 @@
 
 {% block conteudo %}
 <h1 class="an-titulo">Visitas</h1>
-<p class="an-subtitulo">Quem chega ao site, de onde vem e de que lugar do Brasil.</p>
 
 {% if sem_config %}
 <div class="an-sem-config">
@@ -122,6 +121,10 @@ function toggleCustomPeriodo(btn) {
       </span>
     </div>
     <div class="an-card-tabela-corpo an-mapa-palco" id="an-mapa-palco">
+      {# localize off: com LANGUAGE_CODE=pt-br o Django escreve 607,4 no lugar
+         de 607.4 nas coordenadas, e a virgula invalida o SVG inteiro. Mesma
+         armadilha do filtro unlocalize usada nos data-* do site_della. #}
+      {% localize off %}
       <svg id="an-mapa-svg" viewBox="0 0 1000 938" preserveAspectRatio="xMidYMid meet"
            role="img" aria-label="Mapa do Brasil com visitantes por estado">
         <g id="an-mapa-g">
@@ -131,8 +134,19 @@ function toggleCustomPeriodo(btn) {
             <title>{{ e.nome }}: {{ e.total }} visitante{{ e.total|pluralize }}</title>
           </path>
           {% endfor %}
+          {% for e in estados %}
+          {% if e.linha_x %}
+          <line class="an-uf-chamada" x1="{{ e.linha_x }}" y1="{{ e.linha_y }}"
+                x2="{{ e.rot_x }}" y2="{{ e.rot_y }}"></line>
+          {% endif %}
+          <text class="an-uf-sigla {% if e.rotulo_claro and not e.linha_x %}claro{% endif %}"
+                x="{{ e.rot_x }}" y="{{ e.rot_y }}"
+                text-anchor="middle" dominant-baseline="central"
+                data-uf-sigla="{{ e.uf }}">{{ e.uf }}</text>
+          {% endfor %}
         </g>
       </svg>
+      {% endlocalize %}
       <div class="an-mapa-dica">Arraste para mover. Role para aproximar.</div>
     </div>
     <div class="an-mapa-legenda">

@@ -34,7 +34,7 @@ def visitantes_por_estado(sessoes_qs):
     real. Devolve tambem os estados zerados, que o mapa desenha em cinza: um
     estado ausente do mapa se confundiria com erro de renderizacao.
     """
-    from apps.analytics.mapa_brasil import PATHS_UF
+    from apps.analytics.mapa_brasil import PATHS_UF, ROTULOS_UF
 
     brutos = dict(
         sessoes_qs
@@ -48,6 +48,8 @@ def visitantes_por_estado(sessoes_qs):
     estados = []
     for uf in sorted(NOMES_UF):
         total = brutos.get(uf, 0)
+        x, y, fx, fy = ROTULOS_UF.get(uf, (0, 0, None, None))
+        nivel = 0 if not total or not maior else min(4, int((total / maior) ** 0.5 * 4) + 1)
         estados.append({
             'uf': uf,
             'nome': NOMES_UF[uf],
@@ -55,8 +57,18 @@ def visitantes_por_estado(sessoes_qs):
             # 0 a 4: faixa de cor. Escala pela raiz, e nao linear, para o
             # segundo colocado nao sumir quando Sao Paulo concentra a maior
             # parte do volume (354 de 1.111 visitantes em agosto/2026).
-            'nivel': 0 if not total or not maior else min(4, int((total / maior) ** 0.5 * 4) + 1),
+            'nivel': nivel,
             'path': PATHS_UF.get(uf, ''),
+            # Onde escrever a sigla. `rot_x/rot_y` e a posicao final do texto;
+            # quando o rotulo foi deslocado para fora (estados pequenos do
+            # litoral), `linha_*` marca de onde sai a linha de chamada.
+            'rot_x': fx if fx is not None else x,
+            'rot_y': fy if fy is not None else y,
+            'linha_x': x if fx is not None else None,
+            'linha_y': y if fx is not None else None,
+            # A partir do nivel 3 o preenchimento e escuro demais para texto
+            # preto; o template usa isso para virar a sigla para branco.
+            'rotulo_claro': nivel >= 3,
         })
     return sorted(estados, key=lambda e: -e['total'])
 
