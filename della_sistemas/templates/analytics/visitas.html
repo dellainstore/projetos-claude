@@ -39,7 +39,6 @@ function toggleCustomPeriodo(btn) {
   btn.classList.toggle('ativo', !aberto);
 }
 </script>
-<div style="margin-bottom:1.5rem;"></div>
 
 <!-- AO VIVO -->
 <div class="an-secao-titulo">Ao vivo agora</div>
@@ -121,9 +120,13 @@ function toggleCustomPeriodo(btn) {
       </span>
     </div>
     <div class="an-card-tabela-corpo an-mapa-palco" id="an-mapa-palco">
-      {# localize off: com LANGUAGE_CODE=pt-br o Django escreve 607,4 no lugar
-         de 607.4 nas coordenadas, e a virgula invalida o SVG inteiro. Mesma
-         armadilha do filtro unlocalize usada nos data-* do site_della. #}
+      {% comment %}
+        localize off: com LANGUAGE_CODE=pt-br o Django escreve 607,4 no lugar
+        de 607.4 nas coordenadas, e a virgula invalida o SVG inteiro. Mesma
+        armadilha do filtro unlocalize usada nos data-* do site_della.
+        Usar {% comment %} e nao {#...#}: a forma curta so vale para UMA linha,
+        e em varias linhas o texto vaza para a tela.
+      {% endcomment %}
       {% localize off %}
       <svg id="an-mapa-svg" viewBox="0 0 1000 938" preserveAspectRatio="xMidYMid meet"
            role="img" aria-label="Mapa do Brasil com visitantes por estado">
