@@ -22,7 +22,12 @@ class LinkGerado(models.Model):
     # Chave de reaproveitamento: gerar de novo o MESMO destino (pagina + canal
     # + nome opcional) devolve o link ja existente em vez de criar outro. E
     # assim que "perder o link e gerar de novo" recupera o mesmo endereco.
-    destino   = models.URLField('Destino', max_length=600, unique=True)
+    # E tambem o que o site_della usa como alvo do redirect /l/<codigo>/.
+    destino   = models.URLField('Destino (com UTM)', max_length=600, unique=True)
+    # So para exibir no historico: o link exatamente como a pessoa colou, sem
+    # a UTM anexada. `destino` (acima) e feio de ler numa lista ("Cris gerou
+    # PARA ONDE?") — ninguem quer ver query string, quer ver a pagina.
+    pagina    = models.URLField('Pagina (sem UTM)', max_length=600, blank=True)
     canal     = models.CharField('Canal', max_length=60)
     url_curta = models.URLField('Link curto', max_length=300, blank=True)
     criado_em = models.DateTimeField('Criado em', auto_now_add=True)

@@ -38,8 +38,12 @@ def _pedir_codigo_ao_site(destino: str) -> dict:
     return resp.json()
 
 
-def obter_ou_criar(usuario, destino: str, canal: str):
+def obter_ou_criar(usuario, destino: str, canal: str, pagina: str = ''):
     """Devolve (LinkGerado, criado_agora: bool).
+
+    `pagina` e o link exatamente como a pessoa colou, sem a UTM anexada — so
+    para exibir no historico (ver a nota em LinkGerado.pagina). O reaproveitamento
+    continua pela chave real, `destino` (pagina + canal + nome opcional).
 
     Levanta `LinkCurtoIndisponivel` se precisar criar e o site_della nao
     responder — quem chama decide se mostra o link completo como fallback.
@@ -57,7 +61,7 @@ def obter_ou_criar(usuario, destino: str, canal: str):
         raise LinkCurtoIndisponivel from e
 
     novo = LinkGerado.objects.create(
-        usuario=usuario, destino=destino, canal=canal,
+        usuario=usuario, destino=destino, pagina=pagina or destino, canal=canal,
         url_curta=dados.get('url', ''),
     )
     return novo, True

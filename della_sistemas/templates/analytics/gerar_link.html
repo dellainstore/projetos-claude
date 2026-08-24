@@ -29,12 +29,6 @@
   .gl-opcao-nome { font-size: 0.88rem; font-weight: 600; color: var(--preto); }
   .gl-opcao-dica { font-size: 0.72rem; color: var(--cinza-texto); }
 
-  .gl-preview {
-    font-family: ui-monospace, Menlo, monospace; font-size: 0.74rem;
-    color: var(--cinza-texto); word-break: break-all; margin-top: 0.5rem;
-    padding: 0.5rem 0.7rem; background: var(--cinza-claro); border-radius: 6px;
-  }
-
   .gl-gerar {
     font-family: inherit; font-size: 0.92rem; font-weight: 600; padding: 0.7rem 1.4rem;
     border-radius: 8px; border: 1px solid var(--dourado);
@@ -42,24 +36,20 @@
   }
   .gl-gerar:hover { filter: brightness(0.95); }
   .gl-gerar:disabled { opacity: 0.6; cursor: wait; }
+  /* Depois de gerado o mesmo botao vira "Copiar link": cor neutra, pra nao
+     parecer uma segunda acao de "gerar de novo" empilhada. */
+  .gl-gerar.gl-pronto {
+    background: var(--branco); color: var(--preto); border-color: var(--cinza-medio);
+  }
 
-  .gl-resultado { margin-top: 1.4rem; }
+  .gl-resultado { margin: 1rem 0 0.6rem; }
   .gl-saida {
     background: #1c1a12; color: #efeadb; border-radius: 10px;
     padding: 1rem 1.1rem; font-family: ui-monospace, Menlo, monospace;
-    font-size: 1rem; line-height: 1.5; word-break: break-all;
+    font-size: 1.05rem; line-height: 1.5; word-break: break-all;
   }
   .gl-saida.gl-saida-fallback { background: #4a3a12; }
-  .gl-acoes { display: flex; gap: 0.6rem; margin-top: 0.7rem; align-items: center; flex-wrap: wrap; }
-  .gl-btn {
-    font-family: inherit; font-size: 0.85rem; padding: 0.5rem 1rem;
-    border-radius: 8px; border: 1px solid var(--cinza-medio);
-    background: var(--branco); color: var(--preto); cursor: pointer; font-weight: 600;
-  }
-  .gl-btn:hover { background: var(--cinza-claro); }
-  .gl-ok { font-size: 0.8rem; color: #059669; opacity: 0; transition: opacity .2s; }
-  .gl-ok.ver { opacity: 1; }
-  .gl-aviso { font-size: 0.76rem; color: var(--cinza-texto); margin-top: 0.4rem; }
+  .gl-aviso { font-size: 0.76rem; color: var(--cinza-texto); margin-top: 0.5rem; }
   .gl-erro { font-size: 0.82rem; color: #b91c1c; margin-top: 0.6rem; }
 
   /* Historico (so superadmin) */
@@ -126,17 +116,10 @@
     <input type="text" id="gl-nome" class="gl-input" placeholder="ex: promocao dia das maes">
   </div>
 
-  <div class="gl-preview" id="gl-preview">https://www.dellainstore.com/</div>
-
   <button type="button" class="gl-gerar" id="gl-gerar">Gerar link</button>
 
   <div class="gl-resultado" id="gl-resultado" hidden>
-    <div class="an-secao-titulo" style="margin-top:0;">Link pronto</div>
     <div class="gl-saida" id="gl-saida"></div>
-    <div class="gl-acoes">
-      <button type="button" class="gl-btn" id="gl-copiar">Copiar link</button>
-      <span class="gl-ok" id="gl-ok">Copiado</span>
-    </div>
     <div class="gl-aviso" id="gl-aviso"></div>
   </div>
 
@@ -155,7 +138,7 @@
       {% if h.url_curta %}
       <button type="button" class="gl-hist-copiar" data-copiar="{{ h.url_curta }}">{{ h.url_curta }}</button>
       {% endif %}
-      <div class="gl-hist-destino" title="{{ h.destino }}">{{ h.destino|truncatechars:80 }}</div>
+      <div class="gl-hist-destino" title="{{ h.pagina|default:h.destino }}">{{ h.pagina|default:h.destino|truncatechars:80 }}</div>
     </div>
     {% empty %}
     <div class="gl-hist-linha" style="color:var(--cinza-texto);">Nenhum link gerado ainda.</div>
@@ -167,11 +150,9 @@
 {% endblock %}
 
 {% block js_extra %}
-<script>
 (function () {
   var destino  = document.getElementById('gl-destino');
   var nome     = document.getElementById('gl-nome');
-  var preview  = document.getElementById('gl-preview');
   var opcoes   = document.getElementById('gl-opcoes');
   var escolha  = opcoes.querySelector('.gl-opcao.ativa');
   var btnGerar = document.getElementById('gl-gerar');
@@ -181,38 +162,51 @@
   var erroBox  = document.getElementById('gl-erro');
   var csrf     = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
+  // 'idle': ainda nao gerou (ou os campos mudaram desde a ultima geracao).
+  // 'pronto': o link na tela corresponde exatamente ao que esta nos campos.
+  var estado = 'idle';
+  var linkAtual = '';
+
   /* Espaco e acento quebram a leitura do relatorio, entao o nome digitado vira
      um rotulo simples: minusculo, sem acento e com hifen no lugar do espaco. */
-  function limpar(txt) {
+  function limparNome(txt) {
     return (txt || '').trim().toLowerCase()
       .normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   }
 
-  function montarDestino() {
+  // Pagina exatamente como a pessoa colou (so normaliza o https://), sem
+  // nenhuma UTM. E o que vai pro historico -- ninguem quer ler query string
+  // numa lista de "quem gerou o que".
+  function paginaColada() {
     var url = (destino.value || '').trim();
     if (!url) return '';
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    return url;
+  }
 
+  // A mesma pagina, com a UTM do canal escolhido anexada. Nunca aparece na
+  // tela: so viaja pro servidor, que decide o link curto.
+  function destinoComUtm() {
+    var url = paginaColada();
+    if (!url) return '';
     var partes = url.split('#');
     var base = partes[0];
     var ancora = partes[1] ? '#' + partes[1] : '';
     var juncao = base.indexOf('?') === -1 ? '?' : '&';
-
     var params = 'utm_source=' + escolha.dataset.source +
                  '&utm_medium=' + escolha.dataset.medium;
-    var rotulo = limpar(nome.value);
+    var rotulo = limparNome(nome.value);
     if (rotulo) params += '&utm_campaign=' + rotulo;
-
     return base + juncao + params + ancora;
   }
 
-  function atualizarPreview() {
-    var url = montarDestino();
-    preview.textContent = url || '(cole o endereco da pagina acima)';
-    // Mudou algo: o link gerado anteriormente nao vale mais pro que esta
-    // na tela agora, esconde ate gerar de novo.
+  function voltarParaIdle() {
+    if (estado === 'idle') return;
+    estado = 'idle';
+    btnGerar.textContent = 'Gerar link';
+    btnGerar.classList.remove('gl-pronto');
     resultado.hidden = true;
     erroBox.hidden = true;
   }
@@ -223,10 +217,10 @@
     escolha.classList.remove('ativa');
     escolha = btn;
     btn.classList.add('ativa');
-    atualizarPreview();
+    voltarParaIdle();
   });
-  destino.addEventListener('input', atualizarPreview);
-  nome.addEventListener('input', atualizarPreview);
+  destino.addEventListener('input', voltarParaIdle);
+  nome.addEventListener('input', voltarParaIdle);
 
   function copiar(texto, aoCopiar) {
     if (navigator.clipboard && window.isSecureContext) {
@@ -239,8 +233,9 @@
     }
   }
 
-  btnGerar.addEventListener('click', function () {
-    var url = montarDestino();
+  function gerar() {
+    var pagina = paginaColada();
+    var url = destinoComUtm();
     if (!url) { destino.focus(); return; }
 
     btnGerar.disabled = true;
@@ -252,24 +247,30 @@
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
       body: JSON.stringify({
         destino: url,
+        pagina: pagina,
         canal: escolha.querySelector('.gl-opcao-nome').textContent,
       }),
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         btnGerar.disabled = false;
-        btnGerar.textContent = 'Gerar link';
         if (!res.ok) {
+          btnGerar.textContent = 'Gerar link';
           erroBox.textContent = res.d.erro || 'Nao foi possivel gerar o link.';
           erroBox.hidden = false;
           return;
         }
-        saida.textContent = res.d.url;
+        linkAtual = res.d.url;
+        saida.textContent = linkAtual;
         saida.classList.toggle('gl-saida-fallback', !!res.d.fallback);
         aviso.textContent = res.d.fallback
           ? 'Link curto indisponivel agora: use este link completo, o rastreio funciona igual.'
           : (res.d.reaproveitado ? 'Esse link ja existia (mesma pagina e mesmo canal) e foi reaproveitado.' : '');
         resultado.hidden = false;
+
+        estado = 'pronto';
+        btnGerar.textContent = 'Copiar link';
+        btnGerar.classList.add('gl-pronto');
       })
       .catch(function () {
         btnGerar.disabled = false;
@@ -277,14 +278,20 @@
         erroBox.textContent = 'Falha de conexao. Tente novamente.';
         erroBox.hidden = false;
       });
-  });
+  }
 
-  document.getElementById('gl-copiar').addEventListener('click', function () {
-    var okEl = document.getElementById('gl-ok');
-    copiar(saida.textContent, function () {
-      okEl.classList.add('ver');
-      setTimeout(function () { okEl.classList.remove('ver'); }, 1600);
-    });
+  btnGerar.addEventListener('click', function () {
+    if (estado === 'pronto') {
+      copiar(linkAtual, function () {
+        var original = btnGerar.textContent;
+        btnGerar.textContent = 'Copiado!';
+        setTimeout(function () {
+          if (estado === 'pronto') btnGerar.textContent = original;
+        }, 1400);
+      });
+      return;
+    }
+    gerar();
   });
 
   document.querySelectorAll('[data-copiar]').forEach(function (btn) {
@@ -296,8 +303,5 @@
       });
     });
   });
-
-  atualizarPreview();
 })();
-</script>
 {% endblock %}

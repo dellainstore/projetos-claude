@@ -170,13 +170,14 @@ def gerar_link_curto(request: HttpRequest) -> HttpResponse:
         return JsonResponse({'erro': 'corpo invalido'}, status=400)
 
     destino = str(payload.get('destino', '')).strip()
+    pagina = str(payload.get('pagina', ''))[:600].strip()
     canal = str(payload.get('canal', ''))[:60].strip() or 'Sem canal'
 
     if not destino or 'dellainstore.com' not in destino:
         return JsonResponse({'erro': 'cole um endereco do dellainstore.com'}, status=400)
 
     try:
-        link, criado = obter_ou_criar(request.user, destino, canal)
+        link, criado = obter_ou_criar(request.user, destino, canal, pagina=pagina)
     except LinkCurtoIndisponivel:
         # site_della fora do ar: devolve o link completo (com UTM) sem
         # encurtar, pra quem esta postando agora nao ficar sem nada. O
