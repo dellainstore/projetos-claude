@@ -25,7 +25,7 @@ from apps.analytics.metricas import (
 )
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.ver_visitas")
 def antiga_para_visitas(request: HttpRequest) -> HttpResponse:
     """Rota da tela antiga "Analytics do Site", substituida em 2026-08-24.
 
@@ -37,7 +37,7 @@ def antiga_para_visitas(request: HttpRequest) -> HttpResponse:
     return redirect('analytics:visitas')
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.ver_visitas")
 def visitas(request: HttpRequest) -> HttpResponse:
     if not _db_disponivel():
         return render(request, 'analytics/visitas.html',
@@ -113,7 +113,7 @@ def visitas(request: HttpRequest) -> HttpResponse:
     })
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.ver_visitas")
 def htmx_trafico(request: HttpRequest) -> HttpResponse:
     """Troca de semana no grafico de trafego, sem recarregar a pagina."""
     if not _db_disponivel():
@@ -133,7 +133,7 @@ def htmx_trafico(request: HttpRequest) -> HttpResponse:
     })
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.gerar_link")
 def gerar_link(request: HttpRequest) -> HttpResponse:
     """Monta o link etiquetado para postagem organica (story, post, WhatsApp).
 

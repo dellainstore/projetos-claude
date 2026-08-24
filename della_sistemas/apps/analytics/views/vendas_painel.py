@@ -14,7 +14,7 @@ from apps.core.decorators import perm_required
 from apps.analytics.metricas import _db_disponivel, _resolver_periodo
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.ver_vendas")
 def vendas(request: HttpRequest) -> HttpResponse:
     if not _db_disponivel():
         return render(request, 'analytics/vendas.html',
@@ -61,7 +61,7 @@ def vendas(request: HttpRequest) -> HttpResponse:
     })
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.ver_vendas")
 def vendas_export(request: HttpRequest) -> HttpResponse:
     """Exporta origens ou campanhas do periodo em CSV."""
     if not _db_disponivel():

@@ -9,7 +9,7 @@ from apps.analytics.models import RelatorioSemanal
 from apps.core.decorators import perm_required
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.ver_relatorio")
 def relatorio_list(request: HttpRequest) -> HttpResponse:
     relatorios = RelatorioSemanal.objects.all()
     return render(request, 'analytics/relatorio_list.html', {
@@ -17,7 +17,7 @@ def relatorio_list(request: HttpRequest) -> HttpResponse:
     })
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.ver_relatorio")
 def relatorio_download(request: HttpRequest, pk: int) -> FileResponse:
     rel = get_object_or_404(RelatorioSemanal, pk=pk)
     filepath = Path(settings.MEDIA_ROOT) / rel.arquivo

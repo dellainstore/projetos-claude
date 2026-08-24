@@ -87,9 +87,16 @@ PERMISSION_TREE = [
     },
     {
         "id": "analytics",
-        "label": "Analytics do Site",
+        "label": "Site",
         "perms": [
-            {"id": "ver", "label": "Ver painel de analytics do site"},
+            # Ate 2026-08-24 era um unico "ver" cobrindo tudo. Separado por
+            # submenu porque nem todo mundo que precisa gerar link de
+            # postagem deve enxergar visitas/vendas do site (dado sensivel de
+            # faturamento), e vice-versa: pedido explicito do dono.
+            {"id": "ver_visitas",   "label": "Ver Visitas (mapa, origem, funil)"},
+            {"id": "ver_vendas",    "label": "Ver Vendas (faturamento, campanhas)"},
+            {"id": "ver_relatorio", "label": "Ver Resumo Semanal (PDF)"},
+            {"id": "gerar_link",    "label": "Gerar link para postagem (Instagram, TikTok, WhatsApp)"},
         ],
     },
     {
@@ -133,7 +140,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "metas":      {"ver": True, "cadastrar": True, "ver_situacao": True},
         "pedidos":    {"ver": True, "baixar": True, "sync": True},
         "em_breve":   {"ver": True},
-        "analytics":  {"ver": True},
+        "analytics":  {"ver_visitas": True, "ver_vendas": True, "ver_relatorio": True, "gerar_link": True},
         "tarefas":    {"ver": True, "criar": True},
         "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": True},
         "admin":      {"usuarios": True},
@@ -149,7 +156,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "metas":      {"ver": True, "cadastrar": True, "ver_situacao": True},
         "pedidos":    {"ver": True, "baixar": True, "sync": False},
         "em_breve":   {"ver": False},
-        "analytics":  {"ver": True},
+        "analytics":  {"ver_visitas": True, "ver_vendas": True, "ver_relatorio": True, "gerar_link": True},
         "tarefas":    {"ver": True, "criar": True},
         "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": True},
         "admin":      {"usuarios": False},
@@ -165,7 +172,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "metas":      {"ver": True, "cadastrar": False, "ver_situacao": False},
         "pedidos":    {"ver": True, "baixar": False, "sync": False},
         "em_breve":   {"ver": False},
-        "analytics":  {"ver": False},
+        "analytics":  {"ver_visitas": False, "ver_vendas": False, "ver_relatorio": False, "gerar_link": True},
         "tarefas":    {"ver": True, "criar": True},
         "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": False},
         "admin":      {"usuarios": False},
@@ -180,7 +187,7 @@ DEFAULT_PERMS_BY_PAPEL = {
         "metas":      {"ver": True, "cadastrar": False, "ver_situacao": False},
         "pedidos":    {"ver": True, "baixar": False, "sync": False},
         "em_breve":   {"ver": False},
-        "analytics":  {"ver": False},
+        "analytics":  {"ver_visitas": False, "ver_vendas": False, "ver_relatorio": False, "gerar_link": True},
         "tarefas":    {"ver": True, "criar": True},
         "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": False},
         "admin":      {"usuarios": False},

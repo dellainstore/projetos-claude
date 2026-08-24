@@ -5,7 +5,7 @@ from django.shortcuts import render
 from apps.core.decorators import perm_required
 
 
-@perm_required("analytics.ver")
+@perm_required("analytics.ver_visitas")
 def ao_vivo(request: HttpRequest) -> HttpResponse:
     dados = {'visitantes': 0, 'paginas': []}
 

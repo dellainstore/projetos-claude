@@ -118,8 +118,30 @@ class User(AbstractUser):
         return self.tem_perm("pedidos.sync")
 
     @property
+    def pode_ver_visitas(self) -> bool:
+        return self.tem_perm("analytics.ver_visitas")
+
+    @property
+    def pode_ver_vendas(self) -> bool:
+        return self.tem_perm("analytics.ver_vendas")
+
+    @property
+    def pode_ver_relatorio_semanal(self) -> bool:
+        return self.tem_perm("analytics.ver_relatorio")
+
+    @property
+    def pode_gerar_link(self) -> bool:
+        return self.tem_perm("analytics.gerar_link")
+
+    @property
     def pode_ver_analytics(self) -> bool:
-        return self.tem_perm("analytics.ver")
+        """Algum acesso ao grupo 'Site' (visitas, vendas, relatorio ou gerar
+        link) — usado so para abrir/fechar o grupo inteiro no menu. Cada link
+        dentro do grupo checa a propria permissao especifica, nao esta."""
+        return (
+            self.pode_ver_visitas or self.pode_ver_vendas
+            or self.pode_ver_relatorio_semanal or self.pode_gerar_link
+        )
 
     @property
     def pode_ver_tarefas(self) -> bool:
