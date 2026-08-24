@@ -22,12 +22,11 @@ LOJA_INSTAGRAM    = 'Loja do Instagram'
 LINK_BIO          = 'Link da bio'
 STORY_INSTAGRAM   = 'Story do Instagram'
 REELS_INSTAGRAM   = 'Reels do Instagram'
-# Post organico: uma unica categoria para Instagram + Facebook, porque na
-# pratica o post sai identico nos dois ao mesmo tempo (cross-post da Meta) e
-# o link colado na legenda e o mesmo em ambos — nao ha como saber de qual dos
-# dois app a pessoa veio clicando. Separar em duas linhas daria uma precisao
-# que o dado nao tem.
-POST_ORGANICO     = 'Post (Instagram e Facebook)'
+# Post organico: rotulado como Instagram (a loja quase nao usa Facebook), mas
+# a etiqueta tambem cai aqui quando o post e feito la, porque na pratica sai
+# identico nos dois ao mesmo tempo (cross-post da Meta) com o mesmo link na
+# legenda — nao ha como saber de qual app a pessoa veio clicando.
+POST_ORGANICO     = 'Post do Instagram'
 STORY_TIKTOK      = 'Story do TikTok'
 POST_TIKTOK       = 'Post do TikTok'
 INSTAGRAM_PERFIL  = 'Instagram (perfil)'
