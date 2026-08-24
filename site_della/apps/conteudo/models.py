@@ -390,3 +390,31 @@ class InstagramPost(models.Model):
         if self.imagem_local:
             return self.imagem_local.url
         return ''
+
+
+class LinkCurto(models.Model):
+    """Redirecionador curto (dellainstore.com/l/<codigo>) para links etiquetados
+    gerados no painel della_sistemas (Site > Gerar link).
+
+    So existe pra encurtar o link colado em WhatsApp/story/etc — o rastreio em
+    si nao depende disso: o codigo redireciona (302) para `destino`, que ja
+    carrega a UTM, e a pagina de destino captura a atribuicao normalmente no
+    primeiro hit (ver apps/analytics/services.py). Sem evento extra, sem
+    duplicar nada no analytics.
+
+    Criado so pelo endpoint interno (`criar_link_curto`), protegido por
+    segredo compartilhado com o della_sistemas — nunca pelo publico.
+    """
+
+    codigo    = models.CharField('Codigo', max_length=12, unique=True, db_index=True)
+    destino   = models.URLField('Destino', max_length=600)
+    cliques   = models.PositiveIntegerField('Cliques', default=0)
+    criado_em = models.DateTimeField('Criado em', auto_now_add=True)
+
+    class Meta:
+        verbose_name        = 'Link Curto'
+        verbose_name_plural = 'Links Curtos'
+        ordering             = ['-criado_em']
+
+    def __str__(self):
+        return f'/l/{self.codigo} -> {self.destino[:60]}'

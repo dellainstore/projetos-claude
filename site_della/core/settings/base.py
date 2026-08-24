@@ -269,6 +269,12 @@ PAGSEGURO_SANDBOX = config('PAGSEGURO_SANDBOX', default=False, cast=bool)
 
 SITE_URL = config('SITE_URL', default='https://www.dellainstore.com')
 
+# Segredo compartilhado com o della_sistemas para criar link curto
+# (/l/<codigo>/, ver apps/conteudo/views_link_curto.py). So esse endpoint usa;
+# sem valor configurado, ele recusa qualquer chamada (_segredo_valido nega
+# quando settings.LINK_CURTO_SECRET esta vazio).
+LINK_CURTO_SECRET = config('LINK_CURTO_SECRET', default='')
+
 BLING_CLIENT_ID      = config('BLING_CLIENT_ID', default='')
 BLING_CLIENT_SECRET  = config('BLING_CLIENT_SECRET', default='')
 BLING_REDIRECT_URI   = config('BLING_REDIRECT_URI', default='https://www.dellainstore.com/bling/callback/')

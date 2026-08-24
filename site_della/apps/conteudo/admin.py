@@ -5,7 +5,7 @@ from django.shortcuts import redirect
 from django.contrib import messages
 from django.db import transaction
 from apps.core_utils.admin_mixin import DellaAdminMixin
-from .models import BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, ConfiguracaoLoja, InstagramPost, TarjaFrase, LinkBio, ContatoFormulario
+from .models import BannerPrincipal, MiniBanner, LookDaSemana, PaginaEstatica, ConfiguracaoLoja, InstagramPost, TarjaFrase, LinkBio, LinkCurto, ContatoFormulario
 
 
 @admin.register(BannerPrincipal)
@@ -698,3 +698,21 @@ class ContatoFormularioAdmin(admin.ModelAdmin):
     def telefone_exibido(self, obj):
         return obj.telefone or '—'
     telefone_exibido.short_description = 'Telefone'
+
+
+@admin.register(LinkCurto)
+class LinkCurtoAdmin(admin.ModelAdmin):
+    """Somente leitura: todo LinkCurto e criado pelo endpoint interno (Site >
+    Gerar link no della_sistemas), nunca a mao aqui. Serve so pra conferir
+    ou apagar um link que nao deve mais funcionar."""
+    list_display   = ('codigo', 'destino_curto', 'cliques', 'criado_em')
+    search_fields  = ('codigo', 'destino')
+    ordering       = ('-criado_em',)
+    readonly_fields = ('codigo', 'destino', 'cliques', 'criado_em')
+
+    def destino_curto(self, obj):
+        return obj.destino if len(obj.destino) <= 80 else obj.destino[:77] + '...'
+    destino_curto.short_description = 'Destino'
+
+    def has_add_permission(self, request):
+        return False

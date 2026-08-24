@@ -18,6 +18,7 @@ from apps.core_utils.health import readyz as _readyz
 from apps.core_utils import monitoramento_views
 from apps.produtos.views import feed_meta_xml
 from apps.produtos.views_sitemap import sitemap_xml, robots_txt
+from apps.conteudo.views_link_curto import criar_link_curto, abrir_link_curto
 
 admin.site.site_header = 'Della Instore: Administracao'
 admin.site.site_title = 'Della Instore'
@@ -31,6 +32,10 @@ def _healthz(_request):
 urlpatterns = [
     path('healthz', _healthz, name='healthz'),
     path('readyz', _readyz, name='readyz'),
+    # Encurtador de link (Site > Gerar link, no della_sistemas). Rota curta e
+    # memoravel de proposito, fora de /produtos/ ou /painel/.
+    path('l/<str:codigo>/', abrir_link_curto, name='link_curto_go'),
+    path('interno/link-curto/', criar_link_curto, name='criar_link_curto'),
     path('csp-report/', csp_report, name='csp_report'),
     path('painel/relatorio/', admin_relatorio, name='admin_relatorio'),
     path('painel/pedidos/dashboard/', admin_dashboard_pedidos, name='admin_dashboard_pedidos'),
