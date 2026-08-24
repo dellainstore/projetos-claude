@@ -150,6 +150,7 @@
 {% endblock %}
 
 {% block js_extra %}
+<script>
 (function () {
   var destino  = document.getElementById('gl-destino');
   var nome     = document.getElementById('gl-nome');
@@ -170,8 +171,13 @@
   /* Espaco e acento quebram a leitura do relatorio, entao o nome digitado vira
      um rotulo simples: minusculo, sem acento e com hifen no lugar do espaco. */
   function limparNome(txt) {
+    // ̀-ͯ (escape ASCII, nao caractere literal): faixa Unicode dos
+    // acentos combinantes que sobram depois do normalize('NFD'). Um acento
+    // literal colado direto no regex corrompeu ao salvar o arquivo antes
+    // (virou bytes invalidos), quebrando a sintaxe do script inteiro -- por
+    // isso a pagina ficava travada, nem os botoes de canal respondiam.
     return (txt || '').trim().toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
   }
@@ -304,4 +310,5 @@
     });
   });
 })();
+</script>
 {% endblock %}
