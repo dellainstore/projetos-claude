@@ -161,7 +161,8 @@ def webhook(request):
       • Bling v1 envia o header `X-Bling-Signature-256` mas NÃO validamos por
         enquanto — ações são idempotentes e não destrutivas (apenas re-sincroniza
         estoque via `consultar_estoque_produto`, fonte da verdade)
-      • Eventos disparam handlers: `order.*` → pedido, `stock.*` → estoque
+      • Eventos disparam handlers: `order.*` → pedido, `stock.*` → estoque,
+        `product.*` → preço (só sincroniza a variação pontual do evento)
       • Compatibilidade extra: também aceita formato aninhado `{event: {...}}`
         (visto em logs internos do suporte Bling, não em webhook real)
     """
@@ -241,6 +242,8 @@ def webhook(request):
                 _processar_webhook_pedido_v1(data, evento_tipo)
             elif evento_tipo.startswith('stock.'):
                 _processar_webhook_estoque_v1(data, evento_tipo)
+            elif evento_tipo.startswith('product.'):
+                _processar_webhook_produto_v1(data, evento_tipo)
         except Exception as exc:
             _registrar_falha_webhook(evento_tipo or 'v1', str(exc))
     else:
@@ -578,6 +581,57 @@ def _processar_webhook_estoque_v1(data: dict, evento: str):
         )
     except Exception as exc:
         logger.warning('Bling webhook v1 %s falhou: %s', evento, exc)
+
+
+def _processar_webhook_produto_v1(data: dict, evento: str):
+    """
+    Webhook v1 `product.created/updated/deleted` — mudança no cadastro do
+    produto no Bling, inclui alteração de preço varejo.
+
+    Sincroniza só a(s) variação(ões) do produto pontual do evento (1 chamada
+    GET /produtos/{id} via `sincronizar_preco_bling`), sem varrer as ~660
+    variações ativas — é isso que torna o webhook viável em tempo real onde
+    o cron completo não é (ver `_processar_webhook_estoque_v1` para o mesmo
+    raciocínio aplicado a estoque).
+
+    O cron diário de `sincronizar_preco_bling` continua existindo como rede
+    de segurança, caso este webhook falhe ou não seja entregue.
+    """
+    from apps.produtos.models import Variacao
+
+    produto_id = str(
+        (data.get('produto') or {}).get('id', '')
+        or data.get('idProduto', '')
+        or data.get('id', '')
+        or ''
+    ).strip()
+    if not produto_id:
+        logger.info(
+            'Bling webhook v1 %s: payload sem produto_id, ignorado (cron diário cobre).',
+            evento,
+        )
+        return
+
+    variacoes = Variacao.objects.filter(
+        bling_variacao_id=produto_id, usa_sync_preco_bling=True, ativa=True,
+    )
+    if not variacoes.exists():
+        logger.debug(
+            'Bling webhook v1 %s: produto %s sem variação com sync de preço ativo',
+            evento, produto_id,
+        )
+        return
+
+    try:
+        from apps.bling.services import sincronizar_preco_bling
+        resultado = sincronizar_preco_bling(variacoes)
+        logger.info(
+            'Bling webhook v1 %s: preço produto %s — %s', evento, produto_id, resultado
+        )
+    except Exception as exc:
+        logger.warning(
+            'Bling webhook v1 %s falhou (preço produto %s): %s', evento, produto_id, exc
+        )
 
 
 def _processar_webhook_nfe(data: dict):

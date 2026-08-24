@@ -14,6 +14,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
+import sqlite3
 import threading
 import time
 import uuid
@@ -26,6 +28,8 @@ from apps.produtos.services.bling.api import (
     bling_post,
     bling_request_raw,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -216,6 +220,7 @@ def _ensure_price_jobs_table() -> None:
         ("usuario", "TEXT"),
         ("fornecedor_custo", "TEXT"),
         ("atualizado_em", "INTEGER"),
+        ("tentativas", "INTEGER NOT NULL DEFAULT 0"),
     ):
         if coluna not in existentes:
             conn.execute(f"ALTER TABLE price_jobs ADD COLUMN {coluna} {tipo}")
@@ -247,6 +252,12 @@ def get_job(job_id: str) -> dict | None:
 
 
 def _atualizar_job(job_id: str, **kwargs) -> None:
+    """Grava progresso/estado do job. `get_conn()` já configura WAL +
+    busy_timeout=30s, mas sob escrita concorrente pesada (dois jobs de preço
+    rodando ao mesmo tempo) o SQLite ainda pode estourar "database is
+    locked" antes disso. Retenta algumas vezes com backoff curto antes de
+    desistir — quem chama (`_flush_progresso` em `aplicar_precos`) trata a
+    falha como não-fatal, então isso é defesa extra, não a única rede."""
     if not kwargs:
         return
     for k in ("erros", "avisos"):
@@ -254,10 +265,22 @@ def _atualizar_job(job_id: str, **kwargs) -> None:
             kwargs[k] = json.dumps(kwargs[k], ensure_ascii=False)
     sets = ", ".join(f"{k} = ?" for k in kwargs)
     vals = list(kwargs.values()) + [job_id]
-    conn = get_conn()
-    conn.execute(f"UPDATE price_jobs SET {sets} WHERE job_id = ?", vals)
-    conn.commit()
-    conn.close()
+
+    ultimo_erro: Exception | None = None
+    for tentativa in range(3):
+        try:
+            conn = get_conn()
+            conn.execute(f"UPDATE price_jobs SET {sets} WHERE job_id = ?", vals)
+            conn.commit()
+            conn.close()
+            return
+        except sqlite3.OperationalError as e:
+            ultimo_erro = e
+            if "locked" not in str(e).lower():
+                raise
+            time.sleep(0.3 * (tentativa + 1))
+    logger.warning("_atualizar_job: falha persistente ao gravar job %s: %s", job_id, ultimo_erro)
+    raise ultimo_erro
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -620,8 +643,21 @@ def aplicar_precos(
     ultimos_atacados = _fetch_ultimos_atacados_local(todos_skus) if atacado is not None else {}
 
     def _flush_progresso():
-        if job_id:
-            _atualizar_job(job_id, feitos=feitos, ok=ok_count, skip=skip_count, erros=erros, atualizado_em=_now())
+        if not job_id:
+            return
+        try:
+            _atualizar_job(
+                job_id, feitos=feitos, ok=ok_count, skip=skip_count,
+                erros=erros, avisos=avisos, atualizado_em=_now(),
+            )
+        except Exception as e:
+            # Não derruba o job: o SKU já foi processado (Bling atualizado),
+            # só o heartbeat de progresso não foi salvo desta vez. O próximo
+            # flush bem-sucedido cobre o estado real.
+            logger.warning(
+                'aplicar_precos: falha ao salvar progresso do job %s (processamento continua): %s',
+                job_id, e,
+            )
 
     for item in skus:
         bling_id = item["bling_id"]
@@ -639,16 +675,18 @@ def aplicar_precos(
             else:
                 try:
                     bling_patch(f"/produtos/{bling_id}", json={"preco": varejo}, timeout=15, retries=2)
-                    ok_count += 1
-                    conn = get_conn()
-                    conn.execute(
-                        "INSERT INTO price_history (base_name,color_key,sku,bling_id,tipo,valor_antes,valor_novo,usuario,alterado_em) VALUES (?,?,?,?,?,?,?,?,?)",
-                        (base_name.upper(), color, sku, bling_id, "varejo", antes.get("varejo"), varejo, usuario, now),
-                    )
-                    conn.commit()
-                    conn.close()
                 except Exception as e:
                     erros.append(f"SKU {sku} (varejo): {e}")
+                else:
+                    # A partir daqui o preço JÁ foi aplicado no Bling — conta
+                    # como ok independente do histórico local conseguir ser
+                    # gravado ou não (ver _registrar_historico_seguro).
+                    ok_count += 1
+                    _registrar_historico_seguro(
+                        base_name=base_name, color=color, sku=sku, bling_id=bling_id, tipo="varejo",
+                        valor_antes=antes.get("varejo"), valor_novo=varejo, usuario=usuario, now=now,
+                        avisos=avisos,
+                    )
             feitos += 1
             _flush_progresso()
 
@@ -664,13 +702,11 @@ def aplicar_precos(
                 # verdade — uma correção que só troca o fornecedor (custo
                 # igual ao que já estava) não é uma alteração de preço.
                 if not _prices_equal(custo, antes.get("custo")):
-                    conn = get_conn()
-                    conn.execute(
-                        "INSERT INTO price_history (base_name,color_key,sku,bling_id,tipo,valor_antes,valor_novo,usuario,alterado_em) VALUES (?,?,?,?,?,?,?,?,?)",
-                        (base_name.upper(), color, sku, bling_id, "custo", antes.get("custo"), custo, usuario, now),
+                    _registrar_historico_seguro(
+                        base_name=base_name, color=color, sku=sku, bling_id=bling_id, tipo="custo",
+                        valor_antes=antes.get("custo"), valor_novo=custo, usuario=usuario, now=now,
+                        avisos=avisos,
                     )
-                    conn.commit()
-                    conn.close()
             elif motivo == "erro_criar_fornecedor":
                 erros.append(f"SKU {sku}: falha ao vincular o fornecedor '{fornecedor_custo}' no Bling.")
             else:
@@ -692,13 +728,11 @@ def aplicar_precos(
                     "atacado": atacado,
                 })
                 ok_count += 1
-                conn = get_conn()
-                conn.execute(
-                    "INSERT INTO price_history (base_name,color_key,sku,bling_id,tipo,valor_antes,valor_novo,usuario,alterado_em) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (base_name.upper(), color, sku, bling_id, "atacado_local", antes.get("atacado"), atacado, usuario, now),
+                _registrar_historico_seguro(
+                    base_name=base_name, color=color, sku=sku, bling_id=bling_id, tipo="atacado_local",
+                    valor_antes=antes.get("atacado"), valor_novo=atacado, usuario=usuario, now=now,
+                    avisos=avisos,
                 )
-                conn.commit()
-                conn.close()
                 ultimos_atacados[(sku or "").upper()] = atacado
             feitos += 1
             _flush_progresso()
@@ -772,32 +806,49 @@ def iniciar_job_precos(
     return job_id
 
 
-def retomar_jobs_travados(stale_seconds: int = 120) -> list[str]:
+def retomar_jobs_travados(
+    stale_seconds: int = 120, max_tentativas: int = 3, max_idade_erro_horas: int = 48,
+) -> list[str]:
     """
-    Encontra jobs de preço "travados" (status pending/running sem progresso
-    há mais de `stale_seconds`) — sinal de que o worker que os processava
-    morreu no meio (ex.: `della restart admin` durante um job). Refaz o job
-    do zero de forma síncrona (sem thread) usando os parâmetros salvos.
+    Encontra jobs de preço "travados" ou que crasharam e refaz cada um do
+    zero (síncrono, sem thread) usando os parâmetros salvos. Reaplicar é
+    seguro: preços que já foram enviados ao Bling são apenas confirmados
+    (skip), nunca duplicados. Pensado para rodar via cron (management
+    command resume_price_jobs), não a partir de uma request HTTP.
 
-    Reaplicar é seguro: preços que já foram enviados ao Bling são apenas
-    confirmados (skip), nunca duplicados. Pensado para rodar via cron
-    (management command resume_price_jobs), não a partir de uma request HTTP.
+    Dois cenários cobertos:
+      1. status pending/running sem progresso há mais de `stale_seconds`
+         — o worker que processava morreu no meio (ex.: `della restart
+         admin` durante um job).
+      2. status='error' recente (últimas `max_idade_erro_horas` horas) e
+         ainda dentro de `max_tentativas` retentativas — o job terminou com
+         uma falha não fatal por si só (ex.: "database is locked" sob
+         escrita concorrente, incidente de 2026-08-24: um job travou e
+         alguns SKUs nunca chegaram a ser aplicados no Bling, exigindo
+         auditoria manual). Cada retomada incrementa o contador
+         `tentativas`; ao esgotar o limite o job fica marcado como erro
+         definitivo (mensagem indica que precisa de conferência manual) e
+         não é mais retomado automaticamente, evitando loop infinito num
+         erro persistente (ex.: fornecedor inválido).
 
     Retorna a lista de job_ids retomados.
     """
-    limite = _now() - stale_seconds
+    limite_stale = _now() - stale_seconds
+    limite_erro = _now() - (max_idade_erro_horas * 3600)
     conn = get_conn()
     travados = conn.execute(
-        """SELECT job_id, base_name, color_keys, varejo, custo, atacado, usuario, fornecedor_custo
+        """SELECT job_id, base_name, color_keys, varejo, custo, atacado, usuario,
+                  fornecedor_custo, COALESCE(tentativas, 0)
            FROM price_jobs
-           WHERE status IN ('pending','running')
-             AND COALESCE(atualizado_em, criado_em) < ?""",
-        (limite,)
+           WHERE (status IN ('pending','running') AND COALESCE(atualizado_em, criado_em) < ?)
+              OR (status = 'error' AND COALESCE(atualizado_em, criado_em) >= ?
+                  AND COALESCE(tentativas, 0) < ?)""",
+        (limite_stale, limite_erro, max_tentativas),
     ).fetchall()
     conn.close()
 
     retomados = []
-    for job_id, base_name, color_keys_json, varejo, custo, atacado, usuario, fornecedor_custo in travados:
+    for job_id, base_name, color_keys_json, varejo, custo, atacado, usuario, fornecedor_custo, tentativas_atual in travados:
         if not base_name or not color_keys_json:
             # Job antigo, criado antes desta migração — sem dados para retomar.
             _atualizar_job(
@@ -807,9 +858,10 @@ def retomar_jobs_travados(stale_seconds: int = 120) -> list[str]:
             continue
 
         color_keys = json.loads(color_keys_json)
+        nova_tentativa = tentativas_atual + 1
         _atualizar_job(
             job_id, status="running", feitos=0, ok=0, skip=0,
-            erros="[]", avisos="[]", atualizado_em=_now(),
+            erros="[]", avisos="[]", atualizado_em=_now(), tentativas=nova_tentativa,
         )
         try:
             aplicar_precos(
@@ -823,10 +875,40 @@ def retomar_jobs_travados(stale_seconds: int = 120) -> list[str]:
                 fornecedor_custo=fornecedor_custo,
             )
         except Exception as e:
-            _atualizar_job(job_id, status="error", erros=[str(e)], concluido_em=_now())
+            msg = str(e)
+            if nova_tentativa >= max_tentativas:
+                msg = f"{msg} (falhou {nova_tentativa}x — retentativa automática esgotada, precisa de conferência manual)"
+                logger.error("retomar_jobs_travados: job %s esgotou retentativas: %s", job_id, msg)
+            _atualizar_job(job_id, status="error", erros=[msg], concluido_em=_now())
         retomados.append(job_id)
 
     return retomados
+
+
+def _registrar_historico_seguro(
+    *, base_name: str, color: str, sku: str, bling_id: int, tipo: str,
+    valor_antes, valor_novo, usuario: str, now: int, avisos: list[str],
+) -> None:
+    """Grava uma linha em price_history. Falha aqui (ex.: lock momentâneo do
+    SQLite sob escrita concorrente) NUNCA deve derrubar o job inteiro: para
+    varejo/custo o valor já foi aplicado no Bling nesse ponto, e para atacado
+    já é o único lugar onde o valor mora. Vira aviso (auditoria incompleta),
+    não erro (que sugeriria que o valor não foi aplicado)."""
+    try:
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO price_history (base_name,color_key,sku,bling_id,tipo,valor_antes,valor_novo,usuario,alterado_em) VALUES (?,?,?,?,?,?,?,?,?)",
+            (base_name.upper(), color, sku, bling_id, tipo, valor_antes, valor_novo, usuario, now),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        avisos.append(
+            f"SKU {sku} ({tipo}): valor aplicado, mas falhou ao registrar no histórico local: {e}"
+        )
+        logger.warning(
+            "aplicar_precos: falha ao gravar price_history (SKU %s, tipo %s): %s", sku, tipo, e
+        )
 
 
 def _tentar_atualizar_atacado(bling_id: int, preco: float, lista_id: int | None) -> dict:
