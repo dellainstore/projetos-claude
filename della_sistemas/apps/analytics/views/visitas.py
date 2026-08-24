@@ -189,3 +189,23 @@ def gerar_link_curto(request: HttpRequest) -> HttpResponse:
         'fallback': not bool(link.url_curta),
         'reaproveitado': not criado,
     })
+
+
+@perm_required("admin.usuarios")
+def excluir_link_gerado(request: HttpRequest, pk: int) -> HttpResponse:
+    """Apaga uma linha do historico de links gerados.
+
+    So superadmin (`admin.usuarios`, nao `analytics.gerar_link`) — e visao
+    gerencial, pedido explicito de quem administra o sistema. Apaga so o
+    REGISTRO de historico aqui; o link curto continua funcionando no
+    site_della normalmente (pode estar colado em algum story/post ativo),
+    isso aqui nao mexe nele.
+    """
+    from django.shortcuts import redirect
+
+    from apps.analytics.models_link_curto import LinkGerado
+
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+    LinkGerado.objects.filter(pk=pk).delete()
+    return redirect('analytics:gerar_link')

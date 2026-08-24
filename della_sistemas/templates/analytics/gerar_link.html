@@ -53,7 +53,7 @@
   .gl-erro { font-size: 0.82rem; color: #b91c1c; margin-top: 0.6rem; }
 
   /* Historico (so superadmin) */
-  .gl-hist-linha { font-size: 0.82rem; padding: 0.55rem 0.9rem; }
+  .gl-hist-linha { font-size: 0.82rem; padding: 0.55rem 2.1rem 0.55rem 0.9rem; }
   .gl-hist-quem { font-weight: 600; color: var(--preto); }
   .gl-hist-quando { color: var(--cinza-texto); }
   .gl-hist-canal {
@@ -66,6 +66,16 @@
     font-size: 0.68rem; color: var(--dourado); background: none; border: none;
     cursor: pointer; font-family: inherit; padding: 0; text-decoration: underline;
   }
+  /* Apagar do historico: so superadmin ve esta secao inteira (gate no
+     template), mas o "X" fica discreto de proposito, no canto, pra nao
+     competir visualmente com o link e o resto da linha. */
+  .gl-hist-excluir-form { position: absolute; top: 0.5rem; right: 0.7rem; margin: 0; }
+  .gl-hist-excluir {
+    font-family: inherit; font-size: 0.9rem; line-height: 1; width: 1.4rem; height: 1.4rem;
+    border-radius: 50%; border: none; background: none; color: var(--cinza-texto);
+    cursor: pointer;
+  }
+  .gl-hist-excluir:hover { background: #fde2e1; color: #b91c1c; }
 </style>
 {% endblock %}
 
@@ -131,7 +141,13 @@
 <div class="an-card-tabela" style="height:420px;max-width:900px;">
   <div class="an-card-tabela-corpo">
     {% for h in historico %}
-    <div class="gl-hist-linha" style="border-bottom:1px solid var(--cinza-claro);">
+    <div class="gl-hist-linha" style="border-bottom:1px solid var(--cinza-claro);position:relative;">
+      <form method="post" action="{% url 'analytics:excluir_link_gerado' h.pk %}"
+            class="gl-hist-excluir-form"
+            onsubmit="return confirm('Apagar este link do historico? O link continua funcionando se estiver colado em algum post, so some da lista.');">
+        {% csrf_token %}
+        <button type="submit" class="gl-hist-excluir" title="Apagar do historico">&times;</button>
+      </form>
       <span class="gl-hist-quem">{{ h.usuario.get_full_name|default:h.usuario.username|default:"?" }}</span>
       <span class="gl-hist-quando">{{ h.criado_em|date:"d/m" }} as {{ h.criado_em|date:"H\hi" }}</span>
       &nbsp;<span class="gl-hist-canal">{{ h.canal }}</span>

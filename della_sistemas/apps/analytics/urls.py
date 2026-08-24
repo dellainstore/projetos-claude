@@ -19,6 +19,7 @@ urlpatterns = [
 
     path('gerar-link/', visitas_views.gerar_link, name='gerar_link'),
     path('gerar-link/curto/', visitas_views.gerar_link_curto, name='gerar_link_curto'),
+    path('gerar-link/<int:pk>/excluir/', visitas_views.excluir_link_gerado, name='excluir_link_gerado'),
 
     path('htmx/trafico/', visitas_views.htmx_trafico, name='htmx_trafico'),
     path('ao-vivo/', live_views.ao_vivo, name='ao_vivo'),
