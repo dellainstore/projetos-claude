@@ -13,7 +13,7 @@ aqui, "quanta gente cada canal trouxe"; la, "quanto cada canal faturou".
 
 import json
 
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
 from apps.core.decorators import perm_required
@@ -135,10 +135,56 @@ def htmx_trafico(request: HttpRequest) -> HttpResponse:
 
 @perm_required("analytics.gerar_link")
 def gerar_link(request: HttpRequest) -> HttpResponse:
-    """Monta o link etiquetado para postagem organica (story, post, WhatsApp).
+    """Monta o link etiquetado para postagem organica (story, post, WhatsApp)
+    e encurta em /l/<codigo>/, no proprio dominio, pra caber decente numa
+    mensagem de WhatsApp.
 
     Existe porque a etiqueta e digitada a mao nesses casos, e um espaco ou
     acento a mais faz a visita cair em "Direto ou busca" sem ninguem perceber.
     Anuncio pago nao usa isto: a Meta preenche sozinha.
+
+    O historico (quem gerou, quando, pra onde) so aparece pro superadmin —
+    pedido explicito: e visao gerencial, nao serve pra quem so usa a
+    ferramenta no dia a dia.
     """
-    return render(request, 'analytics/gerar_link.html', {})
+    contexto = {}
+    if request.user.is_superadmin:
+        from apps.analytics.link_curto import historico
+        contexto['is_superadmin'] = True
+        contexto['historico'] = historico(100)
+    return render(request, 'analytics/gerar_link.html', contexto)
+
+
+@perm_required("analytics.gerar_link")
+def gerar_link_curto(request: HttpRequest) -> HttpResponse:
+    """Endpoint chamado pela tela Gerar link (fetch JS) para criar ou
+    reaproveitar o link curto e registrar no historico."""
+    if request.method != 'POST':
+        return JsonResponse({'erro': 'metodo nao permitido'}, status=405)
+
+    from apps.analytics.link_curto import LinkCurtoIndisponivel, obter_ou_criar
+
+    try:
+        payload = json.loads(request.body or b'{}')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'erro': 'corpo invalido'}, status=400)
+
+    destino = str(payload.get('destino', '')).strip()
+    canal = str(payload.get('canal', ''))[:60].strip() or 'Sem canal'
+
+    if not destino or 'dellainstore.com' not in destino:
+        return JsonResponse({'erro': 'cole um endereco do dellainstore.com'}, status=400)
+
+    try:
+        link, criado = obter_ou_criar(request.user, destino, canal)
+    except LinkCurtoIndisponivel:
+        # site_della fora do ar: devolve o link completo (com UTM) sem
+        # encurtar, pra quem esta postando agora nao ficar sem nada. O
+        # rastreio funciona igual, so nao fica curto.
+        return JsonResponse({'url': destino, 'fallback': True, 'reaproveitado': False})
+
+    return JsonResponse({
+        'url': link.url_curta or destino,
+        'fallback': not bool(link.url_curta),
+        'reaproveitado': not criado,
+    })

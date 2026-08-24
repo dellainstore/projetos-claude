@@ -4,6 +4,7 @@
 
 {% block css_extra %}
 {% include "analytics/_estilos.html" %}
+{% include "analytics/_mapa_estilos.html" %}
 <style>
   .gl-wrap { max-width: 760px; }
   .gl-campo { margin-bottom: 1.1rem; }
@@ -11,12 +12,12 @@
     display: block; font-size: 0.8rem; color: var(--cinza-texto);
     margin-bottom: 0.35rem;
   }
-  .gl-input, .gl-select {
+  .gl-input {
     width: 100%; padding: 0.6rem 0.75rem; font-family: inherit; font-size: 0.9rem;
     border: 1px solid var(--cinza-medio); border-radius: 8px;
     background: var(--branco); color: var(--preto);
   }
-  .gl-input:focus, .gl-select:focus { outline: 2px solid var(--dourado); outline-offset: 1px; }
+  .gl-input:focus { outline: 2px solid var(--dourado); outline-offset: 1px; }
   .gl-opcoes { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .gl-opcao {
     border: 1px solid var(--cinza-medio); border-radius: 8px; padding: 0.7rem 0.8rem;
@@ -28,24 +29,52 @@
   .gl-opcao-nome { font-size: 0.88rem; font-weight: 600; color: var(--preto); }
   .gl-opcao-dica { font-size: 0.72rem; color: var(--cinza-texto); }
 
+  .gl-preview {
+    font-family: ui-monospace, Menlo, monospace; font-size: 0.74rem;
+    color: var(--cinza-texto); word-break: break-all; margin-top: 0.5rem;
+    padding: 0.5rem 0.7rem; background: var(--cinza-claro); border-radius: 6px;
+  }
+
+  .gl-gerar {
+    font-family: inherit; font-size: 0.92rem; font-weight: 600; padding: 0.7rem 1.4rem;
+    border-radius: 8px; border: 1px solid var(--dourado);
+    background: var(--dourado); color: var(--branco); cursor: pointer; margin-top: 0.4rem;
+  }
+  .gl-gerar:hover { filter: brightness(0.95); }
+  .gl-gerar:disabled { opacity: 0.6; cursor: wait; }
+
+  .gl-resultado { margin-top: 1.4rem; }
   .gl-saida {
     background: #1c1a12; color: #efeadb; border-radius: 10px;
     padding: 1rem 1.1rem; font-family: ui-monospace, Menlo, monospace;
-    font-size: 0.82rem; line-height: 1.6; word-break: break-all;
-    margin-top: 0.5rem;
+    font-size: 1rem; line-height: 1.5; word-break: break-all;
   }
-  .gl-acoes { display: flex; gap: 0.5rem; margin-top: 0.7rem; align-items: center; flex-wrap: wrap; }
+  .gl-saida.gl-saida-fallback { background: #4a3a12; }
+  .gl-acoes { display: flex; gap: 0.6rem; margin-top: 0.7rem; align-items: center; flex-wrap: wrap; }
   .gl-btn {
-    font-family: inherit; font-size: 0.85rem; padding: 0.55rem 1.1rem;
-    border-radius: 8px; border: 1px solid var(--dourado);
-    background: var(--dourado); color: var(--branco); cursor: pointer; font-weight: 600;
+    font-family: inherit; font-size: 0.85rem; padding: 0.5rem 1rem;
+    border-radius: 8px; border: 1px solid var(--cinza-medio);
+    background: var(--branco); color: var(--preto); cursor: pointer; font-weight: 600;
   }
-  .gl-btn:hover { filter: brightness(0.95); }
+  .gl-btn:hover { background: var(--cinza-claro); }
   .gl-ok { font-size: 0.8rem; color: #059669; opacity: 0; transition: opacity .2s; }
   .gl-ok.ver { opacity: 1; }
-  .gl-nota {
-    font-size: 0.8rem; color: var(--cinza-texto); background: var(--cinza-claro);
-    border-radius: 8px; padding: 0.7rem 0.9rem; margin-top: 1.4rem; line-height: 1.55;
+  .gl-aviso { font-size: 0.76rem; color: var(--cinza-texto); margin-top: 0.4rem; }
+  .gl-erro { font-size: 0.82rem; color: #b91c1c; margin-top: 0.6rem; }
+
+  /* Historico (so superadmin) */
+  .gl-hist-linha { font-size: 0.82rem; padding: 0.55rem 0.9rem; }
+  .gl-hist-quem { font-weight: 600; color: var(--preto); }
+  .gl-hist-quando { color: var(--cinza-texto); }
+  .gl-hist-canal {
+    display: inline-block; font-size: 0.68rem; padding: 0.08rem 0.4rem;
+    background: var(--cinza-claro); border-radius: 3px; color: var(--cinza-texto);
+  }
+  .gl-hist-destino { color: var(--cinza-texto); word-break: break-all; }
+  .gl-hist-link { font-family: ui-monospace, Menlo, monospace; font-size: 0.76rem; }
+  .gl-hist-copiar {
+    font-size: 0.68rem; color: var(--dourado); background: none; border: none;
+    cursor: pointer; font-family: inherit; padding: 0; text-decoration: underline;
   }
 </style>
 {% endblock %}
@@ -54,6 +83,8 @@
 <h1 class="an-titulo">Gerar link</h1>
 
 <div class="gl-wrap">
+  {% csrf_token %}
+
   <div class="an-secao-titulo">Para onde o link leva</div>
   <div class="gl-campo">
     <label class="gl-rotulo" for="gl-destino">Cole o endereco da pagina do site</label>
@@ -92,38 +123,63 @@
 
   <div class="gl-campo" style="margin-top:1.1rem;">
     <label class="gl-rotulo" for="gl-nome">Um nome para reconhecer depois (opcional)</label>
-    <input type="text" id="gl-nome" class="gl-input" placeholder="ex: story body cut out, promocao dia das maes">
+    <input type="text" id="gl-nome" class="gl-input" placeholder="ex: promocao dia das maes">
   </div>
 
-  <div class="an-secao-titulo">Link pronto</div>
-  <div class="gl-saida" id="gl-saida">https://www.dellainstore.com/</div>
-  <div class="gl-acoes">
-    <button type="button" class="gl-btn" id="gl-copiar">Copiar link</button>
-    <span class="gl-ok" id="gl-ok">Copiado</span>
+  <div class="gl-preview" id="gl-preview">https://www.dellainstore.com/</div>
+
+  <button type="button" class="gl-gerar" id="gl-gerar">Gerar link</button>
+
+  <div class="gl-resultado" id="gl-resultado" hidden>
+    <div class="an-secao-titulo" style="margin-top:0;">Link pronto</div>
+    <div class="gl-saida" id="gl-saida"></div>
+    <div class="gl-acoes">
+      <button type="button" class="gl-btn" id="gl-copiar">Copiar link</button>
+      <span class="gl-ok" id="gl-ok">Copiado</span>
+    </div>
+    <div class="gl-aviso" id="gl-aviso"></div>
   </div>
 
-  <div class="gl-nota">
-    Use este link no lugar do endereco normal quando for postar. Ele leva a
-    cliente para a mesma pagina, e faz a visita aparecer em Visitas e a venda
-    em Vendas com a origem certa. Sem ele, a visita cai em "Direto ou busca" e
-    nao da para saber o que funcionou.
-    <br><br>
-    <strong>Anuncio pago</strong> nao precisa disto: a Meta ja etiqueta
-    sozinha. <strong>O link fixo da bio</strong> tambem nao: a propria pagina
-    de links ja marca a origem automaticamente, e continua funcionando sem
-    passar por aqui.
+  <div class="gl-erro" id="gl-erro" hidden></div>
+</div>
+
+{% if is_superadmin %}
+<div class="an-secao-titulo">Historico de links gerados</div>
+<div class="an-card-tabela" style="height:420px;max-width:900px;">
+  <div class="an-card-tabela-corpo">
+    {% for h in historico %}
+    <div class="gl-hist-linha" style="border-bottom:1px solid var(--cinza-claro);">
+      <span class="gl-hist-quem">{{ h.usuario.get_full_name|default:h.usuario.username|default:"?" }}</span>
+      <span class="gl-hist-quando">{{ h.criado_em|date:"d/m" }} as {{ h.criado_em|date:"H\hi" }}</span>
+      &nbsp;<span class="gl-hist-canal">{{ h.canal }}</span>
+      {% if h.url_curta %}
+      <button type="button" class="gl-hist-copiar" data-copiar="{{ h.url_curta }}">{{ h.url_curta }}</button>
+      {% endif %}
+      <div class="gl-hist-destino" title="{{ h.destino }}">{{ h.destino|truncatechars:80 }}</div>
+    </div>
+    {% empty %}
+    <div class="gl-hist-linha" style="color:var(--cinza-texto);">Nenhum link gerado ainda.</div>
+    {% endfor %}
   </div>
 </div>
+{% endif %}
+
 {% endblock %}
 
 {% block js_extra %}
 <script>
 (function () {
-  var destino = document.getElementById('gl-destino');
-  var nome    = document.getElementById('gl-nome');
-  var saida   = document.getElementById('gl-saida');
-  var opcoes  = document.getElementById('gl-opcoes');
-  var escolha = opcoes.querySelector('.gl-opcao.ativa');
+  var destino  = document.getElementById('gl-destino');
+  var nome     = document.getElementById('gl-nome');
+  var preview  = document.getElementById('gl-preview');
+  var opcoes   = document.getElementById('gl-opcoes');
+  var escolha  = opcoes.querySelector('.gl-opcao.ativa');
+  var btnGerar = document.getElementById('gl-gerar');
+  var resultado = document.getElementById('gl-resultado');
+  var saida    = document.getElementById('gl-saida');
+  var aviso    = document.getElementById('gl-aviso');
+  var erroBox  = document.getElementById('gl-erro');
+  var csrf     = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
   /* Espaco e acento quebram a leitura do relatorio, entao o nome digitado vira
      um rotulo simples: minusculo, sem acento e com hifen no lugar do espaco. */
@@ -134,9 +190,9 @@
       .replace(/^-+|-+$/g, '');
   }
 
-  function montar() {
+  function montarDestino() {
     var url = (destino.value || '').trim();
-    if (!url) { saida.textContent = '(cole o endereco da pagina acima)'; return; }
+    if (!url) return '';
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
     var partes = url.split('#');
@@ -149,7 +205,16 @@
     var rotulo = limpar(nome.value);
     if (rotulo) params += '&utm_campaign=' + rotulo;
 
-    saida.textContent = base + juncao + params + ancora;
+    return base + juncao + params + ancora;
+  }
+
+  function atualizarPreview() {
+    var url = montarDestino();
+    preview.textContent = url || '(cole o endereco da pagina acima)';
+    // Mudou algo: o link gerado anteriormente nao vale mais pro que esta
+    // na tela agora, esconde ate gerar de novo.
+    resultado.hidden = true;
+    erroBox.hidden = true;
   }
 
   opcoes.addEventListener('click', function (e) {
@@ -158,30 +223,81 @@
     escolha.classList.remove('ativa');
     escolha = btn;
     btn.classList.add('ativa');
-    montar();
+    atualizarPreview();
   });
-  destino.addEventListener('input', montar);
-  nome.addEventListener('input', montar);
+  destino.addEventListener('input', atualizarPreview);
+  nome.addEventListener('input', atualizarPreview);
 
-  document.getElementById('gl-copiar').addEventListener('click', function () {
-    var texto = saida.textContent;
-    function avisar() {
-      var ok = document.getElementById('gl-ok');
-      ok.classList.add('ver');
-      setTimeout(function () { ok.classList.remove('ver'); }, 1600);
-    }
+  function copiar(texto, aoCopiar) {
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(texto).then(avisar);
+      navigator.clipboard.writeText(texto).then(aoCopiar);
     } else {
-      // Fallback para navegador antigo ou pagina sem HTTPS.
       var t = document.createElement('textarea');
       t.value = texto; document.body.appendChild(t); t.select();
-      try { document.execCommand('copy'); avisar(); } catch (_) {}
+      try { document.execCommand('copy'); aoCopiar(); } catch (_) {}
       document.body.removeChild(t);
     }
+  }
+
+  btnGerar.addEventListener('click', function () {
+    var url = montarDestino();
+    if (!url) { destino.focus(); return; }
+
+    btnGerar.disabled = true;
+    btnGerar.textContent = 'Gerando...';
+    erroBox.hidden = true;
+
+    fetch('{% url "analytics:gerar_link_curto" %}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({
+        destino: url,
+        canal: escolha.querySelector('.gl-opcao-nome').textContent,
+      }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        btnGerar.disabled = false;
+        btnGerar.textContent = 'Gerar link';
+        if (!res.ok) {
+          erroBox.textContent = res.d.erro || 'Nao foi possivel gerar o link.';
+          erroBox.hidden = false;
+          return;
+        }
+        saida.textContent = res.d.url;
+        saida.classList.toggle('gl-saida-fallback', !!res.d.fallback);
+        aviso.textContent = res.d.fallback
+          ? 'Link curto indisponivel agora: use este link completo, o rastreio funciona igual.'
+          : (res.d.reaproveitado ? 'Esse link ja existia (mesma pagina e mesmo canal) e foi reaproveitado.' : '');
+        resultado.hidden = false;
+      })
+      .catch(function () {
+        btnGerar.disabled = false;
+        btnGerar.textContent = 'Gerar link';
+        erroBox.textContent = 'Falha de conexao. Tente novamente.';
+        erroBox.hidden = false;
+      });
   });
 
-  montar();
+  document.getElementById('gl-copiar').addEventListener('click', function () {
+    var okEl = document.getElementById('gl-ok');
+    copiar(saida.textContent, function () {
+      okEl.classList.add('ver');
+      setTimeout(function () { okEl.classList.remove('ver'); }, 1600);
+    });
+  });
+
+  document.querySelectorAll('[data-copiar]').forEach(function (btn) {
+    var original = btn.textContent;
+    btn.addEventListener('click', function () {
+      copiar(btn.dataset.copiar, function () {
+        btn.textContent = 'Copiado';
+        setTimeout(function () { btn.textContent = original; }, 1400);
+      });
+    });
+  });
+
+  atualizarPreview();
 })();
 </script>
 {% endblock %}
