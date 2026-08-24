@@ -24,8 +24,8 @@
   }
   .an-mapa-palco.arrastando { cursor: grabbing; }
   .an-mapa-palco svg { width: 100%; height: 100%; display: block; touch-action: none; }
-  #an-mapa-g { transition: transform 0.12s ease-out; transform-origin: 0 0; }
-  #an-mapa-g.sem-transicao { transition: none; }
+  /* Linha da lista realcada quando o mouse passa pelo estado no mapa. */
+  .an-cidade-linha.realcada { background: var(--cinza-claro); border-radius: 4px; }
 
   .an-uf-path {
     stroke: var(--branco); stroke-width: 1.4; stroke-linejoin: round;
@@ -97,6 +97,13 @@
     color: var(--cinza-texto); background: var(--cinza-claro); flex: 0 0 auto;
   }
   .an-card-tabela-corpo { flex: 1 1 auto; overflow-y: auto; }
+
+  /* Carrinhos: mostra cerca de 15 linhas e rola o restante dentro do card.
+     O cabecalho fica preso no topo, senao quem rola perde a referencia das
+     colunas. */
+  .an-card-carrinhos { height: 620px; }
+  .an-card-carrinhos .an-card-tabela-corpo { overflow: auto; }
+  .an-card-carrinhos thead th { position: sticky; top: 0; z-index: 2; }
   .an-tabela-compacta { min-width: 0; }
   .an-tabela-compacta td { padding: 0.5rem 0.9rem; font-size: 0.82rem; }
   .an-tabela-compacta td.num { font-weight: 600; }

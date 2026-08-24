@@ -69,6 +69,8 @@ def visitantes_por_estado(sessoes_qs):
             # A partir do nivel 3 o preenchimento e escuro demais para texto
             # preto; o template usa isso para virar a sigla para branco.
             'rotulo_claro': nivel >= 3,
+            # Barra proporcional ao maior estado, igual a lista de cidades.
+            'pct_barra': round(total / maior * 100) if maior else 0,
         })
     return sorted(estados, key=lambda e: -e['total'])
 

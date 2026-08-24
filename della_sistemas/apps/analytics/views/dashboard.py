@@ -378,7 +378,7 @@ def _calcular_carrinhos_recentes(inicio, fim):
         )
         .order_by('-momento')
         .values('id', 'comprou', 'aguardando', 'foi_checkout', 'viu_popup',
-                'momento')[:20]
+                'momento')[:60]
     )
 
     if not sessoes:

@@ -1,61 +1,96 @@
 <script>
 /* Mapa do Brasil: arrastar e aproximar.
-   Sem biblioteca: o SVG ja vem no HTML e so aplicamos transform no grupo. */
+   Sem biblioteca. Move o viewBox do proprio SVG, e nao um transform no grupo
+   interno: com transform era preciso converter pixels da tela para unidades do
+   viewBox na mao, e a conta errada travava o arrasto perto do centro assim que
+   se dava zoom. Mexendo no viewBox tudo acontece na mesma unidade. */
 (function () {
   var palco = document.getElementById('an-mapa-palco');
-  var grupo = document.getElementById('an-mapa-g');
-  if (!palco || !grupo) return;
+  var svg   = document.getElementById('an-mapa-svg');
+  if (!palco || !svg) return;
 
-  var escala = 1, tx = 0, ty = 0;
-  var ESC_MIN = 1, ESC_MAX = 12;
+  var partes = (svg.getAttribute('viewBox') || '0 0 1000 938').split(/\s+/).map(Number);
+  var INICIAL = { x: partes[0], y: partes[1], w: partes[2], h: partes[3] };
+  var vb = { x: INICIAL.x, y: INICIAL.y, w: INICIAL.w, h: INICIAL.h };
 
-  function aplicar(suave) {
-    grupo.classList.toggle('sem-transicao', !suave);
-    grupo.setAttribute('transform', 'translate(' + tx + ',' + ty + ') scale(' + escala + ')');
+  var MIN_W = INICIAL.w / 14;   // aproximacao maxima
+  var MARGEM = INICIAL.w * 0.06; // folga para o mapa nao colar na borda
+
+  function aplicar() {
+    svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);
   }
 
-  // Mantem o mapa dentro do palco: sem isso, arrastar longe demais some com ele
-  // e o usuario nao entende que precisa clicar em "Brasil" para voltar.
+  /* Quantas unidades do viewBox valem 1 pixel da tela. Com
+     preserveAspectRatio="meet" o SVG usa a MENOR escala entre os dois eixos,
+     entao aqui o fator e o MAIOR dos dois divisores. */
+  function unidadesPorPixel() {
+    var r = svg.getBoundingClientRect();
+    if (!r.width || !r.height) return 1;
+    return Math.max(vb.w / r.width, vb.h / r.height);
+  }
+
+  /* Mantem o mapa alcancavel: quando ampliado, qualquer parte pode ser vista;
+     quando inteiro, volta a ficar centrado. */
   function limitar() {
-    var w = palco.clientWidth, h = palco.clientHeight;
-    var limX = w * (escala - 1), limY = h * (escala - 1);
-    tx = Math.min(0, Math.max(-limX, tx));
-    ty = Math.min(0, Math.max(-limY, ty));
+    if (vb.w >= INICIAL.w) { vb.x = INICIAL.x + (INICIAL.w - vb.w) / 2; }
+    else {
+      vb.x = Math.max(INICIAL.x - MARGEM, Math.min(vb.x, INICIAL.x + INICIAL.w - vb.w + MARGEM));
+    }
+    if (vb.h >= INICIAL.h) { vb.y = INICIAL.y + (INICIAL.h - vb.h) / 2; }
+    else {
+      vb.y = Math.max(INICIAL.y - MARGEM, Math.min(vb.y, INICIAL.y + INICIAL.h - vb.h + MARGEM));
+    }
   }
 
-  window.mapaZoom = function (fator, cx, cy) {
-    var nova = Math.min(ESC_MAX, Math.max(ESC_MIN, escala * fator));
-    if (nova === escala) return;
-    var w = palco.clientWidth, h = palco.clientHeight;
-    // Ponto focal: sem centro informado, aproxima pelo meio do palco.
-    if (cx === undefined) { cx = w / 2; cy = h / 2; }
-    // Mantem sob o cursor o mesmo ponto do mapa antes e depois do zoom.
-    tx = cx - (cx - tx) * (nova / escala);
-    ty = cy - (cy - ty) * (nova / escala);
-    escala = nova;
-    limitar(); aplicar(true);
-  };
+  /* Ponto do mapa (unidades do viewBox) sob um ponto da tela. getScreenCTM ja
+     leva em conta o viewBox atual e o preserveAspectRatio. */
+  function pontoNoMapa(clientX, clientY) {
+    var m = svg.getScreenCTM();
+    if (!m) return { x: vb.x + vb.w / 2, y: vb.y + vb.h / 2 };
+    var p = svg.createSVGPoint();
+    p.x = clientX; p.y = clientY;
+    return p.matrixTransform(m.inverse());
+  }
 
+  function zoom(fator, clientX, clientY) {
+    var novaW = Math.min(INICIAL.w, Math.max(MIN_W, vb.w / fator));
+    if (novaW === vb.w) return;
+    var razao = novaW / vb.w;
+    var r = svg.getBoundingClientRect();
+    if (clientX === undefined) { clientX = r.left + r.width / 2; clientY = r.top + r.height / 2; }
+    var alvo = pontoNoMapa(clientX, clientY);
+    // Mantem sob o cursor o mesmo ponto do mapa antes e depois do zoom.
+    vb.x = alvo.x - (alvo.x - vb.x) * razao;
+    vb.y = alvo.y - (alvo.y - vb.y) * razao;
+    vb.w = novaW;
+    vb.h = INICIAL.h * (novaW / INICIAL.w);
+    limitar(); aplicar();
+  }
+
+  window.mapaZoom  = function (f) { zoom(f); };
   window.mapaReset = function () {
-    escala = 1; tx = 0; ty = 0; aplicar(true);
+    vb = { x: INICIAL.x, y: INICIAL.y, w: INICIAL.w, h: INICIAL.h };
+    aplicar();
   };
 
   palco.addEventListener('wheel', function (e) {
     e.preventDefault();
-    var r = palco.getBoundingClientRect();
-    window.mapaZoom(e.deltaY < 0 ? 1.18 : 0.85, e.clientX - r.left, e.clientY - r.top);
+    zoom(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX, e.clientY);
   }, { passive: false });
 
-  var arrastando = false, x0 = 0, y0 = 0;
+  var arrastando = false, px = 0, py = 0, vx = 0, vy = 0;
   palco.addEventListener('pointerdown', function (e) {
-    arrastando = true; x0 = e.clientX - tx; y0 = e.clientY - ty;
+    arrastando = true;
+    px = e.clientX; py = e.clientY; vx = vb.x; vy = vb.y;
     palco.classList.add('arrastando');
     palco.setPointerCapture(e.pointerId);
   });
   palco.addEventListener('pointermove', function (e) {
     if (!arrastando) return;
-    tx = e.clientX - x0; ty = e.clientY - y0;
-    limitar(); aplicar(false);
+    var k = unidadesPorPixel();
+    vb.x = vx - (e.clientX - px) * k;
+    vb.y = vy - (e.clientY - py) * k;
+    limitar(); aplicar();
   });
   function soltar(e) {
     if (!arrastando) return;
@@ -66,19 +101,19 @@
   palco.addEventListener('pointerup', soltar);
   palco.addEventListener('pointercancel', soltar);
 
-  // Passar o mouse na linha da tabela destaca o estado no mapa, e vice-versa.
+  // Passar o mouse na lista destaca o estado no mapa, e vice-versa.
   function destacar(uf, ligar) {
-    var p = grupo.querySelector('[data-uf="' + uf + '"]');
+    var p = svg.querySelector('[data-uf="' + uf + '"]');
     if (p) p.classList.toggle('destacado', ligar);
-    var tr = document.querySelector('tr[data-uf="' + uf + '"]');
-    if (tr) tr.style.background = ligar ? 'var(--cinza-claro)' : '';
+    var linha = document.querySelector('.an-cidade-linha[data-uf="' + uf + '"]');
+    if (linha) linha.classList.toggle('realcada', ligar);
   }
-  document.querySelectorAll('tr[data-uf]').forEach(function (tr) {
-    var uf = tr.getAttribute('data-uf');
-    tr.addEventListener('mouseenter', function () { destacar(uf, true); });
-    tr.addEventListener('mouseleave', function () { destacar(uf, false); });
+  document.querySelectorAll('.an-cidade-linha[data-uf]').forEach(function (el) {
+    var uf = el.getAttribute('data-uf');
+    el.addEventListener('mouseenter', function () { destacar(uf, true); });
+    el.addEventListener('mouseleave', function () { destacar(uf, false); });
   });
-  grupo.querySelectorAll('[data-uf]').forEach(function (p) {
+  svg.querySelectorAll('[data-uf]').forEach(function (p) {
     var uf = p.getAttribute('data-uf');
     p.addEventListener('mouseenter', function () { destacar(uf, true); });
     p.addEventListener('mouseleave', function () { destacar(uf, false); });

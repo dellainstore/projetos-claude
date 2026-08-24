@@ -166,19 +166,18 @@ function toggleCustomPeriodo(btn) {
 
   <div class="an-card-tabela">
     <div class="an-card-tabela-topo">Estados</div>
-    <div class="an-card-tabela-corpo">
-      <table class="an-tabela an-tabela-compacta">
-        <tbody>
-          {% for e in estados %}{% if e.total %}
-          <tr data-uf="{{ e.uf }}">
-            <td>{{ e.nome }} <span class="an-cidade-uf">{{ e.uf }}</span></td>
-            <td class="num">{{ e.total }}</td>
-          </tr>
-          {% endif %}{% empty %}
-          <tr><td style="color:var(--cinza-texto);">Sem visitas no periodo.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div class="an-card-tabela-corpo" style="padding:1rem;">
+      <div class="an-cidades">
+        {% for e in estados %}{% if e.total %}
+        <div class="an-cidade-linha" data-uf="{{ e.uf }}">
+          <span class="an-cidade-nome">{{ e.nome }} <span class="an-cidade-uf">{{ e.uf }}</span></span>
+          <span class="an-cidade-total">{{ e.total }}</span>
+          <span class="an-cidade-barra"><span style="width:{{ e.pct_barra }}%"></span></span>
+        </div>
+        {% endif %}{% empty %}
+        <div style="font-size:0.82rem;color:var(--cinza-texto);">Sem visitas no periodo.</div>
+        {% endfor %}
+      </div>
     </div>
   </div>
 </div>
@@ -230,8 +229,8 @@ function toggleCustomPeriodo(btn) {
       <span class="an-funil-label">{{ etapa.label }}</span>
       <span class="an-funil-nums">{{ etapa.total }} pessoas &nbsp;({{ etapa.pct }}%)</span>
     </div>
-    <div class="an-funil-barra-fundo">
-      <div class="an-funil-barra{% if forloop.first %} primeira{% endif %}" style="width:{{ etapa.pct|pct_css }}%"></div>
+    <div class="an-funil-barra-bg">
+      <div class="an-funil-barra-fill" style="width:{{ etapa.pct|pct_css }}%"></div>
     </div>
   </div>
   {% endfor %}

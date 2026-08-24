@@ -94,9 +94,7 @@ function toggleCustomPeriodo(btn) {
   <div class="an-attr-legenda">
     {{ qualidade.com_origem }} pedido{{ qualidade.com_origem|pluralize }} com origem conhecida
     ({{ qualidade.receita_com|brl }}) &nbsp;·&nbsp;
-    {{ qualidade.sem_origem }} sem etiqueta ({{ qualidade.receita_sem|brl }}).
-    Se este numero cair de repente, quase sempre e etiqueta quebrada no anuncio,
-    nao mudanca de comportamento da cliente.
+    {{ qualidade.sem_origem }} sem etiqueta ({{ qualidade.receita_sem|brl }})
   </div>
 </div>
 
@@ -217,27 +215,36 @@ function toggleCustomPeriodo(btn) {
 <!-- CARRINHOS -->
 {% if carrinhos %}
 <div class="an-secao-titulo">Carrinhos recentes</div>
-<div class="an-tabela-wrap">
-  <table class="an-tabela">
-    <thead>
-      <tr><th>Quando</th><th>Produtos</th><th class="num">Itens</th><th class="num">Valor</th><th>Status</th></tr>
-    </thead>
-    <tbody>
-      {% for c in carrinhos %}
-      <tr>
-        <td style="white-space:nowrap;">{{ c.ultima_acao|date:"d/m H\hi" }}</td>
-        <td>{% for i in c.itens %}{{ i.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
-        <td class="num">{{ c.total_itens }}</td>
-        <td class="num">{{ c.valor_total|brl }}</td>
-        <td>
-          {% if c.comprou %}<span class="an-status-pill" style="background:#e4ede2;color:#2e7d32;">Comprou</span>
-          {% elif c.aguardando %}<span class="an-status-pill" style="background:#f2e7cd;color:#7a6220;">Aguardando</span>
-          {% else %}<span class="an-status-pill">Abandonou</span>{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="an-card-tabela an-card-carrinhos">
+  <div class="an-card-tabela-corpo">
+    <table class="an-tabela">
+      <thead>
+        <tr>
+          <th>Quando</th><th>Produtos</th><th class="num">Itens</th>
+          <th class="num">Valor</th><th>Pop-up saida</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in carrinhos %}
+        <tr>
+          <td style="white-space:nowrap;">{{ c.ultima_acao|date:"d/m H\hi" }}</td>
+          <td>{% for i in c.itens %}{{ i.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+          <td class="num">{{ c.total_itens }}</td>
+          <td class="num">{{ c.valor_total|brl }}</td>
+          <td>
+            {% if c.viu_popup %}<span class="an-status-pill" style="background:#e7edf6;color:#2b5a9e;">Apareceu</span>
+            {% else %}<span class="an-status-pill">Nao apareceu</span>{% endif %}
+          </td>
+          <td>
+            {% if c.comprou %}<span class="an-status-pill" style="background:#e4ede2;color:#2e7d32;">Comprou</span>
+            {% elif c.aguardando %}<span class="an-status-pill" style="background:#f2e7cd;color:#7a6220;">Aguardando</span>
+            {% else %}<span class="an-status-pill">Abandonou</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
 
