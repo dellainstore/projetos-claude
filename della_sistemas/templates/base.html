@@ -479,6 +479,11 @@
             <span class="ds-nav-icon">&#9783;</span>
             Resumo Semanal
           </a>
+          <a href="{% url 'analytics:gerar_link' %}"
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'gerar_link' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#128279;</span>
+            Gerar link
+          </a>
         </div>
       </div>
       {% endif %}

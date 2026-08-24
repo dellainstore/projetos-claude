@@ -20,6 +20,10 @@ ANUNCIO_THREADS   = 'Anúncio no Threads'
 ANUNCIO_META      = 'Anúncio da Meta'
 LOJA_INSTAGRAM    = 'Loja do Instagram'
 LINK_BIO          = 'Link da bio'
+STORY_INSTAGRAM   = 'Story do Instagram'
+POST_INSTAGRAM    = 'Post do Instagram'
+REELS_INSTAGRAM   = 'Reels do Instagram'
+POST_FACEBOOK     = 'Post do Facebook'
 INSTAGRAM_PERFIL  = 'Instagram (perfil)'
 FACEBOOK_PERFIL   = 'Facebook (perfil)'
 WHATSAPP          = 'WhatsApp'
@@ -55,10 +59,23 @@ def label_origem(source: str, tem_fbclid: bool = False, tem_gclid: bool = False,
             return ANUNCIO_INSTAGRAM
         if m == 'bio':
             return LINK_BIO
+        # Postagens organicas etiquetadas a mao (ver o gerador de links em
+        # Site > Gerar link). Separar story de post e de reels responde qual
+        # formato faz a cliente sair do Instagram e vir comprar.
+        if m in ('story', 'stories'):
+            return STORY_INSTAGRAM
+        if m in ('post', 'feed'):
+            return POST_INSTAGRAM
+        if m in ('reels', 'reel'):
+            return REELS_INSTAGRAM
         return INSTAGRAM_PERFIL
 
     if s in ('fb', 'facebook') or 'facebook' in s:
-        return ANUNCIO_FACEBOOK if pago else FACEBOOK_PERFIL
+        if pago:
+            return ANUNCIO_FACEBOOK
+        if m in ('post', 'feed'):
+            return POST_FACEBOOK
+        return FACEBOOK_PERFIL
 
     # "th" e o Threads: a Meta preenche a origem sozinha com a sigla da rede
     # onde o anuncio foi entregue (ig, fb, th, msg) via {{site_source_name}}.

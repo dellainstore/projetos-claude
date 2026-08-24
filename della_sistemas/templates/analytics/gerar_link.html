@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block titulo %}Gerar link | D'ELLA Sistemas{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block css_extra %}
+{% include "analytics/_estilos.html" %}
+<style>
+  .gl-wrap { max-width: 760px; }
+  .gl-campo { margin-bottom: 1.1rem; }
+  .gl-rotulo {
+    display: block; font-size: 0.8rem; color: var(--cinza-texto);
+    margin-bottom: 0.35rem;
+  }
+  .gl-input, .gl-select {
+    width: 100%; padding: 0.6rem 0.75rem; font-family: inherit; font-size: 0.9rem;
+    border: 1px solid var(--cinza-medio); border-radius: 8px;
+    background: var(--branco); color: var(--preto);
+  }
+  .gl-input:focus, .gl-select:focus { outline: 2px solid var(--dourado); outline-offset: 1px; }
+  .gl-opcoes { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .gl-opcao {
+    border: 1px solid var(--cinza-medio); border-radius: 8px; padding: 0.7rem 0.8rem;
+    cursor: pointer; background: var(--branco); text-align: left; font-family: inherit;
+    display: flex; flex-direction: column; gap: 0.15rem; transition: border-color .15s, background .15s;
+  }
+  .gl-opcao:hover { background: var(--cinza-claro); }
+  .gl-opcao.ativa { border-color: var(--dourado); background: #fdf9f0; }
+  .gl-opcao-nome { font-size: 0.88rem; font-weight: 600; color: var(--preto); }
+  .gl-opcao-dica { font-size: 0.72rem; color: var(--cinza-texto); }
+
+  .gl-saida {
+    background: #1c1a12; color: #efeadb; border-radius: 10px;
+    padding: 1rem 1.1rem; font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.82rem; line-height: 1.6; word-break: break-all;
+    margin-top: 0.5rem;
+  }
+  .gl-acoes { display: flex; gap: 0.5rem; margin-top: 0.7rem; align-items: center; flex-wrap: wrap; }
+  .gl-btn {
+    font-family: inherit; font-size: 0.85rem; padding: 0.55rem 1.1rem;
+    border-radius: 8px; border: 1px solid var(--dourado);
+    background: var(--dourado); color: var(--branco); cursor: pointer; font-weight: 600;
+  }
+  .gl-btn:hover { filter: brightness(0.95); }
+  .gl-ok { font-size: 0.8rem; color: #059669; opacity: 0; transition: opacity .2s; }
+  .gl-ok.ver { opacity: 1; }
+  .gl-nota {
+    font-size: 0.8rem; color: var(--cinza-texto); background: var(--cinza-claro);
+    border-radius: 8px; padding: 0.7rem 0.9rem; margin-top: 1.4rem; line-height: 1.55;
+  }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<h1 class="an-titulo">Gerar link</h1>
+
+<div class="gl-wrap">
+  <div class="an-secao-titulo">Para onde o link leva</div>
+  <div class="gl-campo">
+    <label class="gl-rotulo" for="gl-destino">Cole o endereco da pagina do site</label>
+    <input type="text" id="gl-destino" class="gl-input"
+           placeholder="https://www.dellainstore.com/produto/body-cut-out/"
+           value="https://www.dellainstore.com/">
+  </div>
+
+  <div class="an-secao-titulo">Onde voce vai postar</div>
+  <div class="gl-opcoes" id="gl-opcoes">
+    <button type="button" class="gl-opcao ativa" data-source="instagram" data-medium="story">
+      <span class="gl-opcao-nome">Story do Instagram</span>
+      <span class="gl-opcao-dica">figurinha de link no story</span>
+    </button>
+    <button type="button" class="gl-opcao" data-source="instagram" data-medium="post">
+      <span class="gl-opcao-nome">Post do Instagram</span>
+      <span class="gl-opcao-dica">legenda de publicacao no feed</span>
+    </button>
+    <button type="button" class="gl-opcao" data-source="instagram" data-medium="reels">
+      <span class="gl-opcao-nome">Reels do Instagram</span>
+      <span class="gl-opcao-dica">legenda do reels</span>
+    </button>
+    <button type="button" class="gl-opcao" data-source="instagram" data-medium="bio">
+      <span class="gl-opcao-nome">Link da bio</span>
+      <span class="gl-opcao-dica">o link fixo do perfil</span>
+    </button>
+    <button type="button" class="gl-opcao" data-source="whatsapp" data-medium="mensagem">
+      <span class="gl-opcao-nome">WhatsApp</span>
+      <span class="gl-opcao-dica">conversa ou lista de transmissao</span>
+    </button>
+    <button type="button" class="gl-opcao" data-source="facebook" data-medium="post">
+      <span class="gl-opcao-nome">Post do Facebook</span>
+      <span class="gl-opcao-dica">publicacao na pagina</span>
+    </button>
+  </div>
+
+  <div class="gl-campo" style="margin-top:1.1rem;">
+    <label class="gl-rotulo" for="gl-nome">Um nome para reconhecer depois (opcional)</label>
+    <input type="text" id="gl-nome" class="gl-input" placeholder="ex: story body cut out, promocao dia das maes">
+  </div>
+
+  <div class="an-secao-titulo">Link pronto</div>
+  <div class="gl-saida" id="gl-saida">https://www.dellainstore.com/</div>
+  <div class="gl-acoes">
+    <button type="button" class="gl-btn" id="gl-copiar">Copiar link</button>
+    <span class="gl-ok" id="gl-ok">Copiado</span>
+  </div>
+
+  <div class="gl-nota">
+    Use este link no lugar do endereco normal quando for postar. Ele leva a
+    cliente para a mesma pagina, e faz a visita aparecer em Visitas e a venda
+    em Vendas com a origem certa. Sem ele, a visita cai em "Direto ou busca" e
+    nao da para saber o que funcionou. Anuncios pagos nao precisam disto: a
+    Meta ja etiqueta sozinha.
+  </div>
+</div>
+{% endblock %}
+
+{% block js_extra %}
+<script>
+(function () {
+  var destino = document.getElementById('gl-destino');
+  var nome    = document.getElementById('gl-nome');
+  var saida   = document.getElementById('gl-saida');
+  var opcoes  = document.getElementById('gl-opcoes');
+  var escolha = opcoes.querySelector('.gl-opcao.ativa');
+
+  /* Espaco e acento quebram a leitura do relatorio, entao o nome digitado vira
+     um rotulo simples: minusculo, sem acento e com hifen no lugar do espaco. */
+  function limpar(txt) {
+    return (txt || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  function montar() {
+    var url = (destino.value || '').trim();
+    if (!url) { saida.textContent = '(cole o endereco da pagina acima)'; return; }
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+    var partes = url.split('#');
+    var base = partes[0];
+    var ancora = partes[1] ? '#' + partes[1] : '';
+    var juncao = base.indexOf('?') === -1 ? '?' : '&';
+
+    var params = 'utm_source=' + escolha.dataset.source +
+                 '&utm_medium=' + escolha.dataset.medium;
+    var rotulo = limpar(nome.value);
+    if (rotulo) params += '&utm_campaign=' + rotulo;
+
+    saida.textContent = base + juncao + params + ancora;
+  }
+
+  opcoes.addEventListener('click', function (e) {
+    var btn = e.target.closest('.gl-opcao');
+    if (!btn) return;
+    escolha.classList.remove('ativa');
+    escolha = btn;
+    btn.classList.add('ativa');
+    montar();
+  });
+  destino.addEventListener('input', montar);
+  nome.addEventListener('input', montar);
+
+  document.getElementById('gl-copiar').addEventListener('click', function () {
+    var texto = saida.textContent;
+    function avisar() {
+      var ok = document.getElementById('gl-ok');
+      ok.classList.add('ver');
+      setTimeout(function () { ok.classList.remove('ver'); }, 1600);
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(texto).then(avisar);
+    } else {
+      // Fallback para navegador antigo ou pagina sem HTTPS.
+      var t = document.createElement('textarea');
+      t.value = texto; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); avisar(); } catch (_) {}
+      document.body.removeChild(t);
+    }
+  });
+
+  montar();
+})();
+</script>
+{% endblock %}

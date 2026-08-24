@@ -123,3 +123,14 @@ def htmx_trafico(request: HttpRequest) -> HttpResponse:
         'trafico': trafico,
         'trafico_json': trafico_json,
     })
+
+
+@perm_required("analytics.ver")
+def gerar_link(request: HttpRequest) -> HttpResponse:
+    """Monta o link etiquetado para postagem organica (story, post, WhatsApp).
+
+    Existe porque a etiqueta e digitada a mao nesses casos, e um espaco ou
+    acento a mais faz a visita cair em "Direto ou busca" sem ninguem perceber.
+    Anuncio pago nao usa isto: a Meta preenche sozinha.
+    """
+    return render(request, 'analytics/gerar_link.html', {})
