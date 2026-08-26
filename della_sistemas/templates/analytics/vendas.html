@@ -31,12 +31,12 @@
 
 <div class="an-filtro">
   <span class="an-filtro-label">Periodo:</span>
-  <a href="?periodo=hoje"  class="an-filtro-tab {% if filtro == 'hoje' %}ativo{% endif %}">Hoje</a>
-  <a href="?periodo=ontem" class="an-filtro-tab {% if filtro == 'ontem' %}ativo{% endif %}">Ontem</a>
-  <a href="?periodo=7d"    class="an-filtro-tab {% if filtro == '7d' %}ativo{% endif %}">Ultimos 7 dias</a>
-  <a href="?periodo=30d"   class="an-filtro-tab {% if filtro == '30d' %}ativo{% endif %}">Ultimos 30 dias</a>
-  <a href="?periodo=mes_atual"   class="an-filtro-tab {% if filtro == 'mes_atual' %}ativo{% endif %}">Este mes</a>
-  <a href="?periodo=mes_passado" class="an-filtro-tab {% if filtro == 'mes_passado' %}ativo{% endif %}">Mes passado</a>
+  <a href="?periodo=hoje"  class="an-filtro-tab {% if filtro == 'hoje' %}ativo{% endif %}" data-selected="{% if filtro == 'hoje' %}1{% endif %}">Hoje</a>
+  <a href="?periodo=ontem" class="an-filtro-tab {% if filtro == 'ontem' %}ativo{% endif %}" data-selected="{% if filtro == 'ontem' %}1{% endif %}">Ontem</a>
+  <a href="?periodo=7d"    class="an-filtro-tab {% if filtro == '7d' %}ativo{% endif %}" data-selected="{% if filtro == '7d' %}1{% endif %}">Ultimos 7 dias</a>
+  <a href="?periodo=30d"   class="an-filtro-tab {% if filtro == '30d' %}ativo{% endif %}" data-selected="{% if filtro == '30d' %}1{% endif %}">Ultimos 30 dias</a>
+  <a href="?periodo=mes_atual"   class="an-filtro-tab {% if filtro == 'mes_atual' %}ativo{% endif %}" data-selected="{% if filtro == 'mes_atual' %}1{% endif %}">Este mes</a>
+  <a href="?periodo=mes_passado" class="an-filtro-tab {% if filtro == 'mes_passado' %}ativo{% endif %}" data-selected="{% if filtro == 'mes_passado' %}1{% endif %}">Mes passado</a>
   <button type="button" onclick="toggleCustomPeriodo(this)" class="an-filtro-tab {% if filtro == 'custom' %}ativo{% endif %}">Personalizado</button>
 </div>
 <form id="an-form-custom" class="an-custom-form{% if filtro != 'custom' %} oculto{% endif %}" method="get" action="">
@@ -47,9 +47,18 @@
 </form>
 <script>
 function toggleCustomPeriodo(btn) {
+  // Abrir o Personalizado nao muda o filtro real (so muda quando o form e
+  // enviado) -- mas visualmente precisa desmarcar o atalho rapido que estava
+  // ativo, senao os dois ficam destacados ao mesmo tempo. Ao fechar sem
+  // enviar, restaura o atalho que de fato esta selecionado (data-selected,
+  // gravado pelo Django no carregamento da pagina).
   var form = document.getElementById('an-form-custom');
-  var aberto = form.classList.toggle('oculto');
-  btn.classList.toggle('ativo', !aberto);
+  var abrindo = form.classList.contains('oculto');
+  form.classList.toggle('oculto', !abrindo);
+  btn.classList.toggle('ativo', abrindo);
+  document.querySelectorAll('.an-filtro a.an-filtro-tab').forEach(function(a) {
+    a.classList.toggle('ativo', !abrindo && a.dataset.selected === '1');
+  });
 }
 </script>
 
