@@ -125,6 +125,37 @@ class PedidoSite(models.Model):
         return f'{self.numero} ({self.status})'
 
 
+class ItemPedidoSite(models.Model):
+    """Espelho somente-leitura de pedidos_itempedido no banco della_site.
+
+    Fonte para "pecas mais vendidas": existe desde o primeiro pedido do site
+    (22/05/2026), diferente do evento `pedido_finalizado` de item, que so
+    comecou a ser gravado em 07/07/2026 -- meses antes disso ficavam sem
+    nenhum item registrado no analytics mesmo com o pedido pago existindo.
+    """
+
+    pedido = models.ForeignKey(
+        PedidoSite, on_delete=models.DO_NOTHING,
+        related_name='itens', db_constraint=False,
+    )
+    nome_produto = models.CharField(max_length=200)
+    sku = models.CharField(max_length=80, blank=True)
+    variacao_desc = models.CharField(max_length=100, blank=True)
+    preco_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    quantidade = models.PositiveIntegerField()
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        app_label = 'analytics_site'
+        db_table = 'pedidos_itempedido'
+        managed = False
+        verbose_name = 'Item de Pedido do Site'
+        verbose_name_plural = 'Itens de Pedido do Site'
+
+    def __str__(self):
+        return f'{self.quantidade}x {self.nome_produto}'
+
+
 class EventoSite(models.Model):
     """Espelho somente-leitura de analytics_eventoanalytics no banco della_site."""
 

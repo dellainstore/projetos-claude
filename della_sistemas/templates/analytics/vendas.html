@@ -183,7 +183,7 @@ function toggleCustomPeriodo(btn) {
     <tbody>
       {% for p in mais_vendidos %}
       <tr>
-        <td>{{ p.produto_nome|default:p.produto_slug }}</td>
+        <td>{{ p.nome_produto }}</td>
         <td class="num">{{ p.total }}</td>
         <td class="num">{{ p.receita|brl }}</td>
       </tr>

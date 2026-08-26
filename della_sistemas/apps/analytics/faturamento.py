@@ -15,7 +15,7 @@ compra existe, e a heuristica de bot ja marcou cliente real por engano.
 
 from decimal import Decimal
 
-from django.db.models import Avg, Count, Min, Q, Sum
+from django.db.models import Avg, Count, Min, Sum
 
 from apps.analytics.attribution import ORIGENS_PAGAS, label_origem, nome_campanha
 from apps.analytics.vendas import STATUS_AGUARDANDO, STATUS_PAGOS
@@ -26,11 +26,24 @@ def _pedidos(inicio, fim, status=STATUS_PAGOS):
     return PedidoSite.objects.filter(criado_em__range=(inicio, fim), status__in=status)
 
 
+def itens_pagos(inicio, fim):
+    """Itens (pecas) dos pedidos pagos no periodo -- fonte de "pecas mais vendidas".
+
+    Le direto do espelho `ItemPedidoSite` (pedidos_itempedido), nao do evento
+    de analytics: o evento `pedido_finalizado` por item so comecou a ser
+    gravado em 07/07/2026 (ver nota em apps/analytics/models.py::ItemPedidoSite),
+    entao maio e junho ficavam sem nenhuma peca vendida ali mesmo com pedidos
+    pagos reais. `pedidos_itempedido` existe desde o 1o pedido do site
+    (22/05/2026).
+    """
+    from apps.analytics.models import ItemPedidoSite
+    return ItemPedidoSite.objects.filter(
+        pedido__criado_em__range=(inicio, fim), pedido__status__in=STATUS_PAGOS,
+    )
+
+
 def resumo(inicio, fim):
     """Cards do topo do painel Vendas."""
-    from apps.analytics.models import EventoSite
-    from apps.analytics.vendas import eventos_itens
-
     pagos = _pedidos(inicio, fim)
     agg = pagos.aggregate(vendas=Count('id'), receita=Sum('total'), ticket=Avg('total'))
 
@@ -38,9 +51,7 @@ def resumo(inicio, fim):
         n=Count('id'), valor=Sum('total')
     )
 
-    itens = eventos_itens(
-        Q(ocorrido_em__range=(inicio, fim))
-    ).aggregate(t=Sum('quantidade'))['t'] or 0
+    itens = itens_pagos(inicio, fim).aggregate(t=Sum('quantidade'))['t'] or 0
 
     return {
         'vendas': agg['vendas'] or 0,

@@ -27,8 +27,7 @@ def vendas(request: HttpRequest) -> HttpResponse:
     try:
         from apps.analytics import faturamento as F
         from apps.analytics.metricas import _calcular_carrinhos_recentes
-        from apps.analytics.vendas import eventos_itens
-        from django.db.models import Count, Q, Sum
+        from django.db.models import Sum
 
         resumo     = F.resumo(inicio, fim)
         origens    = F.por_origem(inicio, fim)
@@ -38,10 +37,13 @@ def vendas(request: HttpRequest) -> HttpResponse:
         pedidos    = F.ultimos_pedidos(inicio, fim)
         carrinhos  = _calcular_carrinhos_recentes(inicio, fim)
 
+        # Pecas dos pedidos pagos, direto de ItemPedidoSite (nao do evento de
+        # analytics -- ver nota em F.itens_pagos). E o que faz maio/junho
+        # aparecerem aqui mesmo sem nenhum evento de item gravado naqueles meses.
         mais_vendidos = list(
-            eventos_itens(Q(ocorrido_em__range=(inicio, fim)))
-            .values('produto_slug', 'produto_nome')
-            .annotate(total=Count('id'), receita=Sum('valor_total'))
+            F.itens_pagos(inicio, fim)
+            .values('nome_produto')
+            .annotate(total=Sum('quantidade'), receita=Sum('subtotal'))
             .order_by('-total')[:10]
         )
         db_ok = True
