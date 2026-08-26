@@ -120,19 +120,22 @@ def _gerar_grafico(linhas):
     ax1.grid(axis='y', color=grade, linewidth=0.7, zorder=0)
     ax1.set_axisbelow(True)
 
-    # Rotulo de valor em cima de cada barra -- facilita ler no celular sem
-    # precisar medir a altura contra o eixo.
+    # Rotulo de valor em cima de cada barra e ao lado de cada ponto da linha
+    # -- facilita ler no celular sem precisar medir a altura contra o eixo.
+    # Os dois ficam lado a lado (faturamento p/ esquerda, vendas p/ direita
+    # do centro do mes), nao empilhados, senao colidem quando a linha passa
+    # perto do topo da barra (ex.: Ago/2026).
     maior = max(faturamento) if faturamento else 0
     for i, v in enumerate(faturamento):
         if v > 0:
             ax1.text(i, v + maior * 0.02, f'R$ {v:,.0f}'.replace(',', '.'),
-                      ha='center', va='bottom', fontsize=7.5, color=preto)
+                      ha='right', va='bottom', fontsize=7.5, color=preto)
 
     ax2 = ax1.twinx()
     ax2.plot(x, vendas, color=preto, marker='o', linewidth=2, markersize=5, zorder=3, label='Vendas (qtd)')
     for i, v in enumerate(vendas):
-        ax2.annotate(str(v), (i, v), textcoords='offset points', xytext=(0, 8),
-                     ha='center', fontsize=7.5, color=preto, fontweight='bold')
+        ax2.annotate(str(v), (i, v), textcoords='offset points', xytext=(7, 6),
+                     ha='left', fontsize=7.5, color=preto, fontweight='bold')
     ax2.set_ylim(bottom=0)
     ax2.tick_params(axis='y', labelsize=8.5, colors=cinza)
     ax2.spines['top'].set_visible(False)
@@ -163,7 +166,7 @@ def gerar_pdf():
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import cm
     from reportlab.platypus import (HRFlowable, Image, Paragraph, SimpleDocTemplate,
-                                     Spacer, Table, TableStyle)
+                                     Table, TableStyle)
 
     linhas = dados_mensais()
 
@@ -266,13 +269,6 @@ def gerar_pdf():
     buf_grafico.seek(0)
     elementos.append(Image(buf_grafico, width=largura_disponivel,
                             height=largura_disponivel * proporcao))
-
-    elementos.append(Spacer(1, 0.4 * cm))
-    elementos.append(Paragraph(
-        f"Novos e recorrentes somados batem sempre com a quantidade de vendas "
-        f"do mês (mesma base de pedidos pagos).",
-        nota_st,
-    ))
 
     doc.build(elementos)
     buf_pdf.seek(0)
