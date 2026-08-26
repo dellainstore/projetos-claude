@@ -8,6 +8,7 @@ import csv
 
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
+from django.utils import timezone
 
 from apps.core.decorators import perm_required
 
@@ -105,4 +106,21 @@ def vendas_export(request: HttpRequest) -> HttpResponse:
     escritor = csv.writer(resposta, delimiter=';')
     escritor.writerow(cabecalho)
     escritor.writerows(linhas)
+    return resposta
+
+
+@perm_required("analytics.ver_vendas")
+def vendas_relatorio_mensal(request: HttpRequest) -> HttpResponse:
+    """PDF com 1 linha por mes (desde a abertura do site) + grafico de progressao."""
+    if not _db_disponivel():
+        return HttpResponse('Banco do site nao configurado.', status=503)
+
+    from apps.analytics.relatorio_mensal import gerar_pdf
+
+    buf = gerar_pdf()
+    hoje = timezone.localtime(timezone.now())
+    resposta = HttpResponse(buf.getvalue(), content_type='application/pdf')
+    resposta['Content-Disposition'] = (
+        f'attachment; filename="relatorio_mensal_vendas_{hoje:%Y%m%d}.pdf"'
+    )
     return resposta

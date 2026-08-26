@@ -17,6 +17,7 @@ urlpatterns = [
     path('visitas/', visitas_views.visitas, name='visitas'),
     path('vendas/', vendas_views.vendas, name='vendas'),
     path('vendas/exportar/', vendas_views.vendas_export, name='vendas_export'),
+    path('vendas/relatorio-mensal/', vendas_views.vendas_relatorio_mensal, name='vendas_relatorio_mensal'),
     path('anuncios/', anuncios_views.anuncios, name='anuncios'),
 
     path('gerar-link/', visitas_views.gerar_link, name='gerar_link'),

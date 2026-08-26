@@ -16,6 +16,19 @@
   .an-export a:hover { background: var(--cinza-claro); color: var(--preto); }
   .an-status-pill { font-size: 0.66rem; padding: 0.1rem 0.4rem; border-radius: 3px;
                     background: var(--cinza-claro); color: var(--cinza-texto); white-space: nowrap; }
+
+  /* Filtro mensal discreto, em cima do filtro de periodo -- so uma linha
+     fina com o botao do PDF, sem caixa/borda propria, pra nao inflar a
+     altura do cabecalho da pagina. */
+  .an-relatorio-mensal-linha { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; flex-wrap: wrap; }
+  .an-btn-pdf-mensal {
+    display: inline-flex; align-items: center; gap: 0.32rem;
+    background: var(--preto); color: var(--branco); text-decoration: none;
+    padding: 0.28rem 0.65rem; border-radius: 6px;
+    font-size: 0.72rem; font-weight: 600; white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .an-btn-pdf-mensal:hover { background: var(--dourado); }
 </style>
 {% endblock %}
 
@@ -28,6 +41,13 @@
   <p>Para ativar o painel, configure o acesso ao banco do site no <strong>.env</strong>.</p>
 </div>
 {% else %}
+
+<div class="an-relatorio-mensal-linha">
+  <span class="an-filtro-label">Relatorio mensal:</span>
+  <a href="{% url 'analytics:vendas_relatorio_mensal' %}" class="an-btn-pdf-mensal">
+    &#128196; Gerar PDF (desde mai/2026)
+  </a>
+</div>
 
 <div class="an-filtro">
   <span class="an-filtro-label">Periodo:</span>
