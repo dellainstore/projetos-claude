@@ -61,6 +61,7 @@ def dados_mensais():
         clientes = F.novos_x_recorrentes(inicio, fim)
 
         linhas.append({
+            'ano': ano, 'mes': mes,
             'label': f'{MESES_PT[mes]}/{ano}',
             'em_andamento': em_andamento,
             'faturamento': resumo['receita'],
@@ -112,9 +113,7 @@ def _gerar_grafico(linhas):
     ax1.bar(x, faturamento, color=dourado, width=0.55, zorder=2, label='Faturamento')
     ax1.set_xticks(list(x))
     ax1.set_xticklabels(labels, fontsize=9.5, color=preto)
-    # Folga extra nas pontas: o rotulo da 1a barra desloca pra esquerda (ver
-    # abaixo) e sem isso encosta nos numeros do eixo Y.
-    ax1.set_xlim(-0.7, len(labels) - 1 + 0.7)
+    ax1.set_xlim(-0.7, len(labels) - 1 + 0.7)  # folga nas pontas do grafico
     ax1.tick_params(axis='y', labelsize=8.5, colors=cinza)
     ax1.yaxis.set_major_formatter(FuncFormatter(lambda v, _p: f'R$ {v:,.0f}'.replace(',', '.')))
     ax1.set_ylim(bottom=0, top=(maior_fat := (max(faturamento) if faturamento else 0)) * 1.22 or 1)
@@ -125,14 +124,14 @@ def _gerar_grafico(linhas):
     ax1.grid(axis='y', color=grade, linewidth=0.7, zorder=0)
     ax1.set_axisbelow(True)
 
-    # Rotulo de valor em cima de cada barra (R$ 0.000,00, igual a tabela) e
-    # ao lado de cada ponto da linha -- facilita ler no celular sem precisar
-    # medir a altura contra o eixo. Fundo branco semi-opaco atras dos dois
-    # pra continuar legivel quando a linha passa por cima (ex.: Jun/2026).
+    # Valor de faturamento (R$ 0.000,00, igual a tabela) DENTRO da barra, no
+    # pe (perto do zero), centralizado -- assim nunca cruza com a linha de
+    # vendas (que fica mais pra cima), nao importa quantos meses o grafico
+    # tenha. Texto preto direto sobre o dourado, sem caixa.
     for i, v in enumerate(faturamento):
         if v > 0:
-            ax1.text(i - 0.06, v + maior_fat * 0.03, _brl(v), ha='right', va='bottom',
-                      fontsize=7.3, color=preto, bbox=caixa_rotulo, zorder=4)
+            ax1.text(i, maior_fat * 0.015, _brl(v), ha='center', va='bottom',
+                      fontsize=7.3, color=preto, zorder=4)
 
     ax2 = ax1.twinx()
     ax2.plot(x, vendas, color=preto, marker='o', linewidth=2, markersize=5, zorder=3, label='Vendas (qtd)')
@@ -270,15 +269,26 @@ def gerar_pdf():
             nota_st,
         ))
 
-    elementos.append(Paragraph('Faturamento e vendas mês a mês', secao_st))
-    buf_grafico = _gerar_grafico(linhas)
+    # Um grafico POR ANO (maximo 12 barras cada) em vez de 1 grafico continuo
+    # crescendo pra sempre -- passado o 1o ano de site (mai-dez/2026), o
+    # continuo ficaria cada vez mais espremido. Layout do grafico (largura de
+    # barra, fonte, posicao dos rotulos) e fixo por mes, entao ja fica
+    # alinhado quando um ano futuro chegar aos 12 meses cheios.
+    from itertools import groupby
     largura_disponivel = doc.width
     from PIL import Image as PILImage
-    with PILImage.open(buf_grafico) as im:
-        proporcao = im.height / im.width
-    buf_grafico.seek(0)
-    elementos.append(Image(buf_grafico, width=largura_disponivel,
-                            height=largura_disponivel * proporcao))
+    for ano, grupo in groupby(linhas, key=lambda l: l['ano']):
+        linhas_ano = list(grupo)
+        titulo_grafico = 'Faturamento e vendas mês a mês'
+        if len({l['ano'] for l in linhas}) > 1:
+            titulo_grafico += f' — {ano}'
+        elementos.append(Paragraph(titulo_grafico, secao_st))
+        buf_grafico = _gerar_grafico(linhas_ano)
+        with PILImage.open(buf_grafico) as im:
+            proporcao = im.height / im.width
+        buf_grafico.seek(0)
+        elementos.append(Image(buf_grafico, width=largura_disponivel,
+                                height=largura_disponivel * proporcao))
 
     doc.build(elementos)
     buf_pdf.seek(0)
