@@ -47,6 +47,9 @@ def dados_mensais():
     finge que ele ja fechou.
     """
     from apps.analytics import faturamento as F
+    from apps.analytics import meta_ads
+
+    ads_ok = meta_ads.configurado()
 
     agora = timezone.localtime(timezone.now())
     linhas = []
@@ -60,6 +63,14 @@ def dados_mensais():
         resumo = F.resumo(inicio, fim)
         clientes = F.novos_x_recorrentes(inicio, fim)
 
+        # Gasto de Ads (Meta) do mes inteiro, conta toda (nao por campanha --
+        # ver nota em gerar_pdf). Mesma funcao do painel Anuncios.
+        gasto_ads = None
+        if ads_ok:
+            funil = meta_ads.funil_periodo(inicio, fim)
+            if funil.get('tem_dados'):
+                gasto_ads = funil.get('investido') or 0
+
         linhas.append({
             'ano': ano, 'mes': mes,
             'label': f'{MESES_PT[mes]}/{ano}',
@@ -70,6 +81,7 @@ def dados_mensais():
             'ticket': resumo['ticket'],
             'novos': clientes['novos'],
             'recorrentes': clientes['recorrentes'],
+            'gasto_ads': gasto_ads,
         })
     return linhas
 
@@ -93,7 +105,14 @@ def _gerar_grafico(linhas):
     import matplotlib
     matplotlib.use('Agg')
     from matplotlib.ticker import FuncFormatter
+    import matplotlib.patheffects as pe
     import matplotlib.pyplot as plt
+
+    # Contorno branco fino em volta da letra (nao uma caixa/fundo) -- so pra
+    # continuar legivel nos meses em que a linha passa bem perto do rotulo
+    # (ex.: Jun/2026, onde o ponto da linha fica quase na altura do topo da
+    # barra).
+    contorno = [pe.withStroke(linewidth=5, foreground='white')]
 
     labels = [l['label'] for l in linhas]
     faturamento = [float(l['faturamento']) for l in linhas]
@@ -107,8 +126,6 @@ def _gerar_grafico(linhas):
     largura = max(6.8, len(labels) * 0.85)
     fig, ax1 = plt.subplots(figsize=(largura, 3.4), dpi=200)
     x = range(len(labels))
-
-    caixa_rotulo = dict(boxstyle='round,pad=0.18', facecolor='white', edgecolor='none', alpha=0.85)
 
     ax1.bar(x, faturamento, color=dourado, width=0.55, zorder=2, label='Faturamento')
     ax1.set_xticks(list(x))
@@ -124,26 +141,41 @@ def _gerar_grafico(linhas):
     ax1.grid(axis='y', color=grade, linewidth=0.7, zorder=0)
     ax1.set_axisbelow(True)
 
-    # Valor de faturamento (R$ 0.000,00, igual a tabela) DENTRO da barra, no
-    # pe (perto do zero), centralizado -- assim nunca cruza com a linha de
-    # vendas (que fica mais pra cima), nao importa quantos meses o grafico
-    # tenha. Texto preto direto sobre o dourado, sem caixa.
-    for i, v in enumerate(faturamento):
-        if v > 0:
-            ax1.text(i, maior_fat * 0.015, _brl(v), ha='center', va='bottom',
-                      fontsize=7.3, color=preto, zorder=4)
-
     ax2 = ax1.twinx()
     ax2.plot(x, vendas, color=preto, marker='o', linewidth=2, markersize=5, zorder=3, label='Vendas (qtd)')
     maior_venda = max(vendas) if vendas else 0
     ax2.set_ylim(bottom=0, top=maior_venda * 1.28 or 1)
-    for i, v in enumerate(vendas):
-        ax2.annotate(str(v), (i, v), textcoords='offset points', xytext=(10, 8),
-                     ha='left', fontsize=7.8, color=preto, fontweight='bold',
-                     bbox=caixa_rotulo, zorder=5)
     ax2.tick_params(axis='y', labelsize=8.5, colors=cinza)
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_color(cinza)
+
+    # Valor de faturamento (R$ 0.000,00, igual a tabela) EM CIMA da barra,
+    # centralizado. Valor de vendas (linha) EMBAIXO de cada ponto,
+    # centralizado. Texto preto direto, sem caixa/fundo -- os dois ficam em
+    # lados opostos (um sobe, o outro desce) e normalmente nao colidem.
+    #
+    # Os dois rotulos sao desenhados no eixo ax2 (nao ax1): com twinx(), o
+    # ax2 inteiro e pintado por cima do ax1 inteiro, entao um texto do ax1
+    # (zorder alto ou nao) sempre ficava ATRAS do marcador/linha do ax2 --
+    # era por isso que o ponto de vendas cortava o numero do faturamento
+    # mesmo com zorder maior. Desenhando os dois no ax2, o zorder passa a
+    # valer de verdade dentro do mesmo eixo.
+    # Fonte encolhe um pouco a partir do 7o mes no mesmo grafico -- com 12
+    # barras (ano cheio) o texto "R$ 0.000,00" no tamanho normal esbarra no
+    # vizinho quando dois meses seguidos tem faturamento parecido.
+    fs_fat = max(6.0, 7.3 - max(0, len(labels) - 6) * 0.14)
+    for i, v in enumerate(faturamento):
+        if v > 0:
+            y1 = v + maior_fat * 0.03
+            y2 = ax2.transData.inverted().transform(ax1.transData.transform((i, y1)))[1]
+            txt = ax2.text(i, y2, _brl(v), ha='center', va='bottom',
+                            fontsize=fs_fat, color=preto, fontweight='bold', zorder=6)
+            txt.set_path_effects(contorno)
+
+    for i, v in enumerate(vendas):
+        txt = ax2.annotate(str(v), (i, v), textcoords='offset points', xytext=(0, -13),
+                            ha='center', va='top', fontsize=7.8, color=preto, fontweight='bold', zorder=6)
+        txt.set_path_effects(contorno)
 
     ax1.set_ylabel('Faturamento', fontsize=9, color=preto)
     ax2.set_ylabel('Vendas (qtd)', fontsize=9, color=preto)
@@ -221,10 +253,16 @@ def gerar_pdf():
         buf_pdf.seek(0)
         return buf_pdf
 
+    # Coluna de Ads so aparece se a conta do Meta estiver configurada e algum
+    # mes tiver retornado dado -- sem isso, viraria uma coluna inteira vazia.
+    tem_ads = any(l.get('gasto_ads') is not None for l in linhas)
+
     cabecalho = ['Mês', 'Faturamento', 'Vendas', 'Peças', 'Ticket médio', 'Novos', 'Recorr.']
+    if tem_ads:
+        cabecalho.append('Gasto Ads')
     dados_tabela = [cabecalho]
     for l in linhas:
-        dados_tabela.append([
+        linha_tabela = [
             l['label'] + (' *' if l['em_andamento'] else ''),
             _brl(l['faturamento']),
             str(l['vendas']),
@@ -232,13 +270,35 @@ def gerar_pdf():
             _brl(l['ticket']),
             str(l['novos']),
             str(l['recorrentes']),
-        ])
+        ]
+        if tem_ads:
+            linha_tabela.append(_brl(l['gasto_ads']) if l.get('gasto_ads') is not None else '')
+        dados_tabela.append(linha_tabela)
 
-    tabela = Table(
-        dados_tabela,
-        colWidths=[2.3 * cm, 3.0 * cm, 1.7 * cm, 1.7 * cm, 2.7 * cm, 1.7 * cm, 1.9 * cm],
-        repeatRows=1,
-    )
+    # Linha de total: soma em tudo, MEDIA (nao soma) no ticket -- pedido do
+    # usuario, "media do ticket nos meses mostrados", nao um novo ticket
+    # recalculado a partir do total.
+    n_meses = len(linhas)
+    ticket_medio_geral = sum(float(l['ticket']) for l in linhas) / n_meses if n_meses else 0
+    linha_total = [
+        'Total',
+        _brl(sum(float(l['faturamento']) for l in linhas)),
+        str(sum(l['vendas'] for l in linhas)),
+        str(sum(l['pecas'] for l in linhas)),
+        _brl(ticket_medio_geral),
+        str(sum(l['novos'] for l in linhas)),
+        str(sum(l['recorrentes'] for l in linhas)),
+    ]
+    if tem_ads:
+        linha_total.append(_brl(sum(float(l['gasto_ads'] or 0) for l in linhas)))
+    dados_tabela.append(linha_total)
+    linha_total_idx = len(dados_tabela) - 1
+
+    largura_mes = 2.3 * cm
+    larguras = [largura_mes, 2.7 * cm, 1.5 * cm, 1.4 * cm, 2.4 * cm, 1.4 * cm, 1.6 * cm]
+    if tem_ads:
+        larguras.append(2.4 * cm)
+    tabela = Table(dados_tabela, colWidths=larguras, repeatRows=1)
     estilo_tabela = [
         ('BACKGROUND', (0, 0), (-1, 0), preto),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -249,12 +309,16 @@ def gerar_pdf():
         ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
         ('ALIGN', (0, 0), (0, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, cinza_claro]),
+        ('ROWBACKGROUNDS', (0, 1), (-1, linha_total_idx - 1), [colors.white, cinza_claro]),
         ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#dddddd')),
         ('TOPPADDING', (0, 0), (-1, -1), 5.5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5.5),
         ('LEFTPADDING', (0, 0), (-1, -1), 5),
         ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        # Linha de total: destacada, separada do resto por um filete dourado.
+        ('FONTNAME', (0, linha_total_idx), (-1, linha_total_idx), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, linha_total_idx), (-1, linha_total_idx), cinza_claro),
+        ('LINEABOVE', (0, linha_total_idx), (-1, linha_total_idx), 1.1, dourado),
     ]
     for i, l in enumerate(linhas, start=1):
         if l['em_andamento']:
