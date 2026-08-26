@@ -107,12 +107,17 @@ def _gerar_grafico(linhas):
     fig, ax1 = plt.subplots(figsize=(largura, 3.4), dpi=200)
     x = range(len(labels))
 
+    caixa_rotulo = dict(boxstyle='round,pad=0.18', facecolor='white', edgecolor='none', alpha=0.85)
+
     ax1.bar(x, faturamento, color=dourado, width=0.55, zorder=2, label='Faturamento')
     ax1.set_xticks(list(x))
     ax1.set_xticklabels(labels, fontsize=9.5, color=preto)
+    # Folga extra nas pontas: o rotulo da 1a barra desloca pra esquerda (ver
+    # abaixo) e sem isso encosta nos numeros do eixo Y.
+    ax1.set_xlim(-0.7, len(labels) - 1 + 0.7)
     ax1.tick_params(axis='y', labelsize=8.5, colors=cinza)
     ax1.yaxis.set_major_formatter(FuncFormatter(lambda v, _p: f'R$ {v:,.0f}'.replace(',', '.')))
-    ax1.set_ylim(bottom=0)
+    ax1.set_ylim(bottom=0, top=(maior_fat := (max(faturamento) if faturamento else 0)) * 1.22 or 1)
     ax1.spines['top'].set_visible(False)
     ax1.spines['right'].set_visible(False)
     ax1.spines['left'].set_color(cinza)
@@ -120,23 +125,23 @@ def _gerar_grafico(linhas):
     ax1.grid(axis='y', color=grade, linewidth=0.7, zorder=0)
     ax1.set_axisbelow(True)
 
-    # Rotulo de valor em cima de cada barra e ao lado de cada ponto da linha
-    # -- facilita ler no celular sem precisar medir a altura contra o eixo.
-    # Os dois ficam lado a lado (faturamento p/ esquerda, vendas p/ direita
-    # do centro do mes), nao empilhados, senao colidem quando a linha passa
-    # perto do topo da barra (ex.: Ago/2026).
-    maior = max(faturamento) if faturamento else 0
+    # Rotulo de valor em cima de cada barra (R$ 0.000,00, igual a tabela) e
+    # ao lado de cada ponto da linha -- facilita ler no celular sem precisar
+    # medir a altura contra o eixo. Fundo branco semi-opaco atras dos dois
+    # pra continuar legivel quando a linha passa por cima (ex.: Jun/2026).
     for i, v in enumerate(faturamento):
         if v > 0:
-            ax1.text(i, v + maior * 0.02, f'R$ {v:,.0f}'.replace(',', '.'),
-                      ha='right', va='bottom', fontsize=7.5, color=preto)
+            ax1.text(i - 0.06, v + maior_fat * 0.03, _brl(v), ha='right', va='bottom',
+                      fontsize=7.3, color=preto, bbox=caixa_rotulo, zorder=4)
 
     ax2 = ax1.twinx()
     ax2.plot(x, vendas, color=preto, marker='o', linewidth=2, markersize=5, zorder=3, label='Vendas (qtd)')
+    maior_venda = max(vendas) if vendas else 0
+    ax2.set_ylim(bottom=0, top=maior_venda * 1.28 or 1)
     for i, v in enumerate(vendas):
-        ax2.annotate(str(v), (i, v), textcoords='offset points', xytext=(7, 6),
-                     ha='left', fontsize=7.5, color=preto, fontweight='bold')
-    ax2.set_ylim(bottom=0)
+        ax2.annotate(str(v), (i, v), textcoords='offset points', xytext=(10, 8),
+                     ha='left', fontsize=7.8, color=preto, fontweight='bold',
+                     bbox=caixa_rotulo, zorder=5)
     ax2.tick_params(axis='y', labelsize=8.5, colors=cinza)
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_color(cinza)
@@ -144,13 +149,18 @@ def _gerar_grafico(linhas):
     ax1.set_ylabel('Faturamento', fontsize=9, color=preto)
     ax2.set_ylabel('Vendas (qtd)', fontsize=9, color=preto)
 
+    # Legenda fora do grafico, embaixo, os dois itens lado a lado (nao
+    # empilhados e nao por cima dos dados).
     h1, l1 = ax1.get_legend_handles_labels()
     h2, l2 = ax2.get_legend_handles_labels()
-    ax1.legend(h1 + h2, l1 + l2, loc='upper left', fontsize=8.5, frameon=False)
+    ax1.legend(h1 + h2, l1 + l2, loc='upper center', bbox_to_anchor=(0.5, -0.14),
+               ncol=2, fontsize=8.8, frameon=False)
 
     fig.tight_layout()
     buf = BytesIO()
-    fig.savefig(buf, format='png', dpi=200)
+    # bbox_inches='tight': a legenda agora fica ABAIXO dos eixos (fora da
+    # area de plot), sem isso ela e cortada na exportacao.
+    fig.savefig(buf, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
     buf.seek(0)
     return buf
