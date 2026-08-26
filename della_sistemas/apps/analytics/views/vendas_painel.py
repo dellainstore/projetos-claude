@@ -20,7 +20,9 @@ def vendas(request: HttpRequest) -> HttpResponse:
         return render(request, 'analytics/vendas.html',
                       {'sem_config': True, 'filtro': '7d'})
 
-    filtro, inicio, fim, de_val, ate_val = _resolver_periodo(request)
+    # corte_bot=False: venda paga nunca e filtrada por corte de bot/scan (ver
+    # nota em _resolver_periodo e em apps/analytics/faturamento.py).
+    filtro, inicio, fim, de_val, ate_val = _resolver_periodo(request, corte_bot=False)
 
     try:
         from apps.analytics import faturamento as F
@@ -69,7 +71,7 @@ def vendas_export(request: HttpRequest) -> HttpResponse:
 
     from apps.analytics import faturamento as F
 
-    _, inicio, fim, _, _ = _resolver_periodo(request)
+    _, inicio, fim, _, _ = _resolver_periodo(request, corte_bot=False)
     tipo = request.GET.get('tipo', 'origem')
 
     def _num(valor):

@@ -86,16 +86,19 @@ class Command(BaseCommand):
             datetime.combine(semana_fim, datetime.max.time().replace(microsecond=0)), tz
         )
 
-        # Oculta dados anteriores ao corte (28/06/2026 — remoção de bots/scans).
+        # Oculta trafego anterior ao corte (28/06/2026 — remocao de bots/scans)
+        # SO das metricas de trafego. Nao aplicar em `inicio`/`fim`: essas
+        # variaveis tambem alimentam `periodo_venda` abaixo, e venda paga e
+        # pedido real, nunca poluicao de bot (mesma regra de
+        # apps/analytics/faturamento.py) -- clampar aqui escondia vendas
+        # legitimas de semanas antes do corte.
         from apps.analytics.constants import inicio_corte_aware
-        corte = inicio_corte_aware()
-        if inicio < corte:
-            inicio = corte
+        inicio_trafego = max(inicio, inicio_corte_aware())
         # Mesma regra de trafego do painel (apps/analytics/trafego.py): alem do
         # is_bot da coleta, tira o scraper que passa por ele. Manter os dois
         # lados iguais, senao o PDF da semana diverge da tela que o gerou.
         from apps.analytics.trafego import base_trafego
-        periodo   = Q(ocorrido_em__range=(inicio, fim), sessao__in=base_trafego().values('pk'))
+        periodo   = Q(ocorrido_em__range=(inicio_trafego, fim), sessao__in=base_trafego().values('pk'))
         # Sessoes com atividade na semana, nao iniciadas nela: a sessao vive
         # muito mais que sete dias (ver a nota em views/visitas.py), e contar
         # por inicio deixa de fora quem voltou com o cookie antigo.

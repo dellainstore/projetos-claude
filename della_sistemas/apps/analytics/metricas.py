@@ -17,7 +17,17 @@ def _db_disponivel():
     return 'della_site' in settings.DATABASES
 
 
-def _resolver_periodo(request):
+def _resolver_periodo(request, corte_bot=True):
+    """Resolve o periodo (filtro, inicio, fim) a partir da querystring.
+
+    `corte_bot=True` (padrao) empurra `inicio` para nao passar de antes de
+    28/06/2026 -- corte de remocao de bots/scans do trafego (ver
+    `apps/analytics/constants.py`). O painel Vendas chama com
+    `corte_bot=False`: venda paga e um pedido real, nunca poluicao de bot, e
+    aplicar o corte aqui escondia vendas legitimas de maio/junho (pedidos
+    2026-0001 a 2026-0007) mesmo com um periodo customizado cobrindo essas
+    datas -- ver a mesma regra em apps/analytics/faturamento.py.
+    """
     from datetime import datetime as dt
     filtro = request.GET.get('periodo', '7d')
     agora = timezone.now()
@@ -41,6 +51,15 @@ def _resolver_periodo(request):
         # a nota sobre a janela de "7d" no bloco final desta funcao.
         inicio = hoje_inicio - timedelta(days=29)
         fim = agora
+    elif filtro == 'mes_atual':
+        inicio = hoje_inicio.replace(day=1)
+        fim = agora
+    elif filtro == 'mes_passado':
+        primeiro_dia_atual = hoje_inicio.replace(day=1)
+        # Ultimo instante do mes passado, arredondado para 23:59:59 (nao
+        # microssegundo) para o `date.max.time()` do filtro custom bater igual.
+        fim = primeiro_dia_atual - timedelta(seconds=1)
+        inicio = fim.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif filtro == 'custom' and de_val and ate_val:
         try:
             de_date = dt.strptime(de_val, '%Y-%m-%d').date()
@@ -67,11 +86,12 @@ def _resolver_periodo(request):
         inicio = hoje_inicio - timedelta(days=6)
         fim = agora
 
-    # Oculta dados anteriores ao corte (28/06/2026 — remoção de bots/scans).
-    from apps.analytics.constants import inicio_corte_aware
-    corte = inicio_corte_aware()
-    if inicio < corte:
-        inicio = corte
+    if corte_bot:
+        # Oculta dados anteriores ao corte (28/06/2026 — remoção de bots/scans).
+        from apps.analytics.constants import inicio_corte_aware
+        corte = inicio_corte_aware()
+        if inicio < corte:
+            inicio = corte
 
     return filtro, inicio, fim, de_val, ate_val
 

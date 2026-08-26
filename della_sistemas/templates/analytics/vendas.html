@@ -35,6 +35,8 @@
   <a href="?periodo=ontem" class="an-filtro-tab {% if filtro == 'ontem' %}ativo{% endif %}">Ontem</a>
   <a href="?periodo=7d"    class="an-filtro-tab {% if filtro == '7d' %}ativo{% endif %}">Ultimos 7 dias</a>
   <a href="?periodo=30d"   class="an-filtro-tab {% if filtro == '30d' %}ativo{% endif %}">Ultimos 30 dias</a>
+  <a href="?periodo=mes_atual"   class="an-filtro-tab {% if filtro == 'mes_atual' %}ativo{% endif %}">Este mes</a>
+  <a href="?periodo=mes_passado" class="an-filtro-tab {% if filtro == 'mes_passado' %}ativo{% endif %}">Mes passado</a>
   <button type="button" onclick="toggleCustomPeriodo(this)" class="an-filtro-tab {% if filtro == 'custom' %}ativo{% endif %}">Personalizado</button>
 </div>
 <form id="an-form-custom" class="an-custom-form{% if filtro != 'custom' %} oculto{% endif %}" method="get" action="">
