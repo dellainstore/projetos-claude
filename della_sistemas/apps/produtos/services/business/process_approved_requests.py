@@ -7,6 +7,7 @@ from apps.produtos.services.db import get_conn
 from apps.produtos.services.business.pricing import extract_prices
 from apps.produtos.services.business.suppliers import normalize_supplier_name
 from apps.produtos.services.precos import _atualizar_custo_bling_detalhado
+from apps.produtos.services.config import BLING_DEPOSITO_ID
 
 
 def _vincular_custo_bling(bling_id: int, price_custo: float, supplier_name: str) -> bool:
@@ -227,14 +228,16 @@ def _enqueue_stock_move(
     price_varejo: float | None = None,
     price_custo: float | None = None,
     price_atacado: float | None = None,
+    deposito_id: int | None = None,
+    deposito_nome: str | None = None,
 ) -> None:
     cur.execute(
         """
         INSERT INTO stock_moves
         (sku, qty_delta, status, created_by, created_at, result_json,
          base_name, color_key, size_key, supplier_name, requested_at, bling_product_id,
-         price_varejo, price_custo, price_atacado)
-        VALUES (?, ?, 'PENDING', 'SYSTEM', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         price_varejo, price_custo, price_atacado, deposito_id, deposito_nome)
+        VALUES (?, ?, 'PENDING', 'SYSTEM', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             sku or "",
@@ -249,6 +252,8 @@ def _enqueue_stock_move(
             float(price_varejo) if price_varejo is not None else None,
             float(price_custo) if price_custo is not None else None,
             float(price_atacado) if price_atacado is not None else None,
+            int(deposito_id) if deposito_id else None,
+            deposito_nome,
         ),
     )
 
@@ -347,6 +352,10 @@ def processar_requests_aprovados(limit: int = 10) -> dict[str, Any]:
                 color = str(it.get("color") or "").strip().upper()
                 size = str(it.get("size") or "").strip().upper()
                 qty = int(it.get("qty", 0))
+                # Requests antigos (anteriores à escolha de depósito) não têm
+                # deposito_id no payload — cai no padrão (Show Room - Della).
+                deposito_id = it.get("deposito_id") or (int(BLING_DEPOSITO_ID) if BLING_DEPOSITO_ID else None)
+                deposito_nome = it.get("deposito_nome")
                 supplier_name = normalize_supplier_name(it.get("supplier_name") or "") or "NAO INFORMADA"
                 if not color or not size or qty <= 0:
                     continue
@@ -438,6 +447,8 @@ def processar_requests_aprovados(limit: int = 10) -> dict[str, Any]:
                     price_varejo=template_prices.get("price_varejo"),
                     price_custo=template_prices.get("price_custo"),
                     price_atacado=template_prices.get("price_atacado"),
+                    deposito_id=deposito_id,
+                    deposito_nome=deposito_nome,
                 )
                 move_count += 1
                 stats["created_stock_moves"] += 1

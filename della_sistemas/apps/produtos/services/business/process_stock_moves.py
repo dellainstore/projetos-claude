@@ -23,7 +23,7 @@ def processar_stock_moves(
 
     sql = """
         SELECT move_id, sku, qty_delta, bling_product_id, base_name, color_key, size_key, supplier_name,
-               price_varejo, price_custo, price_atacado,
+               price_varejo, price_custo, price_atacado, deposito_id,
                COALESCE(requested_at, created_at) as req_ts
         FROM stock_moves
         WHERE status = 'PENDING'
@@ -47,7 +47,7 @@ def processar_stock_moves(
     done_moves = []
     error_moves = []
 
-    for move_id, sku, qty_delta, bling_product_id, base_name, color_key, size_key, supplier_name, price_varejo, price_custo, price_atacado, req_ts in rows:
+    for move_id, sku, qty_delta, bling_product_id, base_name, color_key, size_key, supplier_name, price_varejo, price_custo, price_atacado, deposito_id, req_ts in rows:
         # Claim atômico: evita que duas chamadas concorrentes (ex.: aprovações
         # clicadas em sequência rápida) apliquem o mesmo lançamento duas vezes
         # no Bling. Se outra chamada já pegou este move_id, pula.
@@ -83,6 +83,7 @@ def processar_stock_moves(
                 quantidade=quantidade,
                 tipo_operacao=tipo,
                 observacoes=obs,
+                id_deposito=int(deposito_id) if deposito_id else None,
             )
 
             bling_id = None

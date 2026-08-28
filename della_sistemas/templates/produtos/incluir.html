@@ -53,9 +53,22 @@
     <input type="hidden" name="supplier_name" id="hid-supplier">
   </div>
 
+  <!-- Depósito -->
+  <div class="step-card">
+    <div class="ds-form-section-titulo">2. Depósito de Entrada</div>
+    <div class="ds-form-group">
+      <label class="ds-label">Selecionar depósito</label>
+      <select class="ds-select" name="deposito_id" id="sel-deposito">
+        {% for d in depositos %}
+        <option value="{{ d.id }}" {% if d.id == deposito_padrao_id %}selected{% endif %}>{{ d.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
   <!-- Tipo de inclusão -->
   <div class="step-card" id="step-modo" style="display:none;">
-    <div class="ds-form-section-titulo">2. Tipo de Inclusão</div>
+    <div class="ds-form-section-titulo">3. Tipo de Inclusão</div>
     <div style="display:flex;gap:1rem;">
       <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
         <input type="radio" name="modo" value="existente" checked onchange="onModoChange(this.value)">
@@ -70,7 +83,7 @@
 
   <!-- Modelo -->
   <div class="step-card" id="step-modelo" style="display:none;">
-    <div class="ds-form-section-titulo">3. Modelo</div>
+    <div class="ds-form-section-titulo">4. Modelo</div>
     <div class="ds-form-group">
       <label class="ds-label" id="lbl-base">Buscar modelo</label>
       <div class="campo-wrapper">
@@ -98,7 +111,7 @@
 
   <!-- Cor -->
   <div class="step-card" id="step-cor" style="display:none;">
-    <div class="ds-form-section-titulo">4. Cor</div>
+    <div class="ds-form-section-titulo">5. Cor</div>
     <div id="cores-container"
          hx-get="{% url 'produtos:htmx_cores' %}"
          hx-trigger="revealed"
@@ -128,7 +141,7 @@
 
   <!-- Tamanhos e quantidades -->
   <div class="step-card" id="step-tamanhos" style="display:none;">
-    <div class="ds-form-section-titulo">5. Quantidades por Tamanho</div>
+    <div class="ds-form-section-titulo">7. Quantidades por Tamanho</div>
     <div id="cor-selecionada-label" style="display:none;margin-bottom:0.75rem;font-size:0.85rem;font-weight:600;color:var(--dourado);"></div>
     <div id="tamanhos-container"></div>
   </div>

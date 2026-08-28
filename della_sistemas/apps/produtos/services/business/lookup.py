@@ -162,6 +162,8 @@ def upsert_pending_variant_request(
     template_product_id: int | None = None,
     created_by: str = "OP",
     conn=None,
+    deposito_id: int | None = None,
+    deposito_nome: str | None = None,
 ) -> dict:
     owns_conn = conn is None
     if owns_conn:
@@ -198,6 +200,7 @@ def upsert_pending_variant_request(
                 str(item.get("color") or "").strip().upper() == color
                 and str(item.get("size") or "").strip().upper() == size
                 and normalize_supplier_name(item.get("supplier_name") or "") == supplier_name
+                and item.get("deposito_id") == deposito_id
             ):
                 item["qty"] = int(item.get("qty") or 0) + qty
                 now = int(time.time())
@@ -231,6 +234,8 @@ def upsert_pending_variant_request(
                 "size": size,
                 "qty": qty,
                 "supplier_name": supplier_name,
+                "deposito_id": deposito_id,
+                "deposito_nome": deposito_nome,
             }
         )
         payload["base"] = base
@@ -268,6 +273,8 @@ def upsert_pending_variant_request(
                 "size": size,
                 "qty": qty,
                 "supplier_name": supplier_name,
+                "deposito_id": deposito_id,
+                "deposito_nome": deposito_nome,
             }
         ],
     }

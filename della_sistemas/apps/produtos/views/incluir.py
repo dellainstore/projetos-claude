@@ -45,6 +45,7 @@ def view_incluir(request: HttpRequest) -> HttpResponse:
         return redirect("core:home")
 
     from apps.produtos.services.db import get_conn
+    from apps.produtos.services.config import DEPOSITOS_DISPONIVEIS, BLING_DEPOSITO_ID
     with get_conn() as conn:
         suppliers = _get_suppliers(conn)
         pendentes = _get_pendentes_usuario(conn, request.user.username)
@@ -53,6 +54,8 @@ def view_incluir(request: HttpRequest) -> HttpResponse:
         "suppliers": suppliers,
         "flash": request.session.pop("incluir_flash", None),
         "pendentes": pendentes,
+        "depositos": DEPOSITOS_DISPONIVEIS,
+        "deposito_padrao_id": int(BLING_DEPOSITO_ID) if BLING_DEPOSITO_ID else None,
     }
     return render(request, "produtos/incluir.html", ctx)
 
@@ -149,11 +152,21 @@ def view_incluir_submit(request: HttpRequest) -> HttpResponse:
     from apps.produtos.services.business.product_map import get_id_produto_by_sku
     from apps.produtos.services.business.process_stock_moves import processar_stock_moves
     from apps.produtos.services.business.pricing import get_product_prices_by_id
+    from apps.produtos.services.config import DEPOSITOS_DISPONIVEIS, BLING_DEPOSITO_ID
 
     supplier_name = request.POST.get("supplier_name", "").strip().upper()
     if not supplier_name:
         messages.error(request, "Informe o fornecedor.")
         return redirect("produtos:incluir")
+
+    # Depósito escolhido — cai no padrão (Show Room - Della) se vier vazio
+    # ou algum valor fora da lista conhecida (ex.: form adulterado).
+    depositos_por_id = {d["id"]: d["nome"] for d in DEPOSITOS_DISPONIVEIS}
+    deposito_id_raw = request.POST.get("deposito_id", "").strip()
+    deposito_id = int(deposito_id_raw) if deposito_id_raw.isdigit() else None
+    if deposito_id not in depositos_por_id:
+        deposito_id = int(BLING_DEPOSITO_ID) if BLING_DEPOSITO_ID else None
+    deposito_nome = depositos_por_id.get(deposito_id)
 
     modo = request.POST.get("modo", "existente")
     base = request.POST.get("base", "").strip().upper()
@@ -202,12 +215,13 @@ def view_incluir_submit(request: HttpRequest) -> HttpResponse:
                     INSERT INTO stock_moves
                     (sku, qty_delta, status, created_by, created_at, result_json,
                      base_name, color_key, size_key, supplier_name, requested_at, bling_product_id,
-                     price_varejo, price_custo, price_atacado)
-                    VALUES (?, ?, 'PENDING', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     price_varejo, price_custo, price_atacado, deposito_id, deposito_nome)
+                    VALUES (?, ?, 'PENDING', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sku, q, username, now, base, cor, tam, supplier_name, now, bling_product_id,
                         prices.get("price_varejo"), prices.get("price_custo"), prices.get("price_atacado"),
+                        deposito_id, deposito_nome,
                     ),
                 )
                 move_ids.append(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
@@ -222,6 +236,8 @@ def view_incluir_submit(request: HttpRequest) -> HttpResponse:
                     template_product_id=template_id,
                     created_by=username,
                     conn=conn,
+                    deposito_id=deposito_id,
+                    deposito_nome=deposito_nome,
                 )
                 approval_count += 1
 

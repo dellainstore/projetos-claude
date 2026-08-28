@@ -24,6 +24,15 @@ BLING_DEPOSITO_ID: str = (
     or os.getenv("DEPOSITO_ID", "").strip()
 )
 
+# Depósitos Bling disponíveis para escolha na tela "Incluir Estoque".
+# IDs confirmados via GET /depositos da API Bling em 2026-08-28.
+# O primeiro (Show Room - Della) é o padrão — mesmo ID de BLING_DEPOSITO_ID.
+DEPOSITOS_DISPONIVEIS: list[dict] = [
+    {"id": 7521173180, "nome": "Show Room - Della"},
+    {"id": 14558196633, "nome": "Loja Anacã - São Paulo"},
+    {"id": 9360683985, "nome": "Show Room - Londrina"},
+]
+
 DEFAULT_SUPPLIERS = [
     "MARIA EDENE",
     "IVONEIDE",

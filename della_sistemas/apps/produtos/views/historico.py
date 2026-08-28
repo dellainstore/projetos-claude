@@ -72,7 +72,8 @@ def _buscar_inclusoes(request: HttpRequest) -> tuple[list[dict], list[dict], lis
                sm.status,
                sm.price_varejo,
                sm.price_custo,
-               sm.result_json
+               sm.result_json,
+               sm.deposito_nome
         FROM stock_moves sm
         LEFT JOIN variants_cache vc
           ON vc.base_name = sm.base_name
@@ -91,8 +92,17 @@ def _buscar_inclusoes(request: HttpRequest) -> tuple[list[dict], list[dict], lis
             sql += f" AND sm.status IN ({','.join(['?']*len(status_filtro))})"
             params.extend(status_filtro)
         if produto_like:
-            sql += " AND UPPER(COALESCE(sm.base_name,'')) LIKE ?"
-            params.append(f"%{produto_like.upper()}%")
+            # Uma única busca cobrindo produto, SKU (do move ou do catálogo), cor
+            # e fornecedor — mesmos campos que o filtro instantâneo antigo cobria
+            # no navegador, agora aplicado no servidor (entra no PDF também).
+            termo = f"%{produto_like.upper()}%"
+            sql += """ AND (
+                UPPER(COALESCE(sm.base_name, '')) LIKE ?
+                OR UPPER(COALESCE(NULLIF(sm.sku, ''), vc.sku, '')) LIKE ?
+                OR UPPER(COALESCE(sm.color_key, '')) LIKE ?
+                OR UPPER(COALESCE(sm.supplier_name, '')) LIKE ?
+            )"""
+            params.extend([termo, termo, termo, termo])
 
         sql += " ORDER BY ts DESC LIMIT 5000"
         rows = conn.execute(sql, params).fetchall()
@@ -121,6 +131,7 @@ def _buscar_inclusoes(request: HttpRequest) -> tuple[list[dict], list[dict], lis
             "status": row["status"],
             "varejo": row["price_varejo"],
             "custo": row["price_custo"],
+            "deposito": row["deposito_nome"] or "Show Room - Della",
             "erro": erro,
         })
 
@@ -203,16 +214,21 @@ def view_historico_pdf(request: HttpRequest) -> HttpResponse:
         Spacer(1, 0.4 * cm),
     ]
 
-    cabecalho = ["Data/Hora", "SKU", "Nome do Produto", "Cor", "Tamanho", "Quantidade", "Fornecedor"]
+    cabecalho = ["Data/Hora", "SKU", "Nome do Produto", "Cor", "Tamanho", "Quantidade", "Fornecedor", "Depósito"]
     linhas = [cabecalho]
+    total_qty = 0
     for r in tabela:
         linhas.append([
-            r["data"], r["sku"], r["produto"], r["cor"], r["tamanho"], str(r["qty"]), r["fornecedor"],
+            r["data"], r["sku"], r["produto"], r["cor"], r["tamanho"], str(r["qty"]), r["fornecedor"], r["deposito"],
         ])
+        total_qty += r["qty"]
 
     if len(linhas) == 1:
         elementos.append(Paragraph("Nenhum registro para o período/filtro selecionado.", styles["Normal"]))
     else:
+        linha_total_idx = len(linhas)
+        linhas.append(["", "", "", "", "Total", str(total_qty), "", ""])
+
         tabela_pdf = Table(linhas, repeatRows=1)
         tabela_pdf.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#c9a96e")),
@@ -222,6 +238,9 @@ def view_historico_pdf(request: HttpRequest) -> HttpResponse:
             ("ALIGN", (5, 0), (5, -1), "CENTER"),
             ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#faf8f5")),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BACKGROUND", (0, linha_total_idx), (-1, linha_total_idx), colors.HexColor("#e8ddc7")),
+            ("FONTNAME", (0, linha_total_idx), (-1, linha_total_idx), "Helvetica-Bold"),
+            ("ALIGN", (4, linha_total_idx), (4, linha_total_idx), "RIGHT"),
         ]))
         elementos.append(tabela_pdf)
 
