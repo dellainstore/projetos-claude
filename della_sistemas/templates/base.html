@@ -98,7 +98,7 @@
           {% endif %}
           {% if user.pode_aprovar %}
           <a href="{% url 'produtos:aprovacoes' %}"
-             class="ds-nav-sublink {% if request.resolver_match.url_name == 'aprovacoes' %}ativo{% endif %}">
+             class="ds-nav-sublink {% if request.resolver_match.url_name == 'aprovacoes' and request.resolver_match.namespace == 'produtos' %}ativo{% endif %}">
             <span class="ds-nav-icon">&#10003;</span>
             Aprovações
           </a>
@@ -433,7 +433,7 @@
                 Jornada de Ponto
               </a>
               <a href="{% url 'rh:aprovacoes' %}"
-                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'aprovacoes' %}ativo{% endif %}">
+                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'aprovacoes' and request.resolver_match.namespace == 'rh' %}ativo{% endif %}">
                 <span class="ds-nav-icon">&#10004;</span>
                 Aprovações
               </a>
