@@ -94,6 +94,23 @@ def view_aprovar(request: HttpRequest, request_id: int) -> HttpResponse:
     except (ValueError, TypeError):
         pass
 
+    # Itens originais (na mesma ordem em que foram renderizados no form) —
+    # preciso deles só para não perder o depósito escolhido na inclusão: o
+    # form de edição não tem campo de depósito, então reconstruir os itens
+    # só com color/size/qty/supplier apagava deposito_id/deposito_nome e o
+    # lançamento caía no padrão (Show Room - Della) mesmo quando outro
+    # depósito tinha sido escolhido. Bug real: SKU 8767 em 2026-08-28.
+    itens_originais = []
+    with get_conn() as conn:
+        row_original = conn.execute(
+            "SELECT payload_json FROM requests WHERE request_id=?", (request_id,)
+        ).fetchone()
+    if row_original:
+        try:
+            itens_originais = json.loads(row_original["payload_json"] or "{}").get("items", [])
+        except Exception:
+            itens_originais = []
+
     items_editados = []
     for i in range(item_count):
         color = request.POST.get(f"item_color_{i}", "").strip().upper()
@@ -104,7 +121,15 @@ def view_aprovar(request: HttpRequest, request_id: int) -> HttpResponse:
         except (ValueError, TypeError):
             qty = 0
         if qty > 0 and color and size:
-            items_editados.append({"color": color, "size": size, "qty": qty, "supplier_name": supplier})
+            original = itens_originais[i] if i < len(itens_originais) else {}
+            items_editados.append({
+                "color": color,
+                "size": size,
+                "qty": qty,
+                "supplier_name": supplier,
+                "deposito_id": original.get("deposito_id"),
+                "deposito_nome": original.get("deposito_nome"),
+            })
 
     items_override = items_editados if items_editados else None
 
