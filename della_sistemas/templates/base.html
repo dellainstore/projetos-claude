@@ -210,31 +210,11 @@
             Dashboard Faturamento
           </a>
           {% if user.pode_ver_private_label %}
-          <!-- Private Label (nested) -->
-          <div class="ds-nav-group">
-            <div class="ds-nav-sublink ds-nav-group-toggle {% if 'pl_' in request.resolver_match.url_name|default:'' %}ativo{% endif %}"
-                 onclick="toggleNav('private-label')">
-              <span class="ds-nav-icon">&#9670;</span>
-              Private Label
-              <span class="ds-nav-chevron" id="chv-nav-private-label">&#9658;</span>
-            </div>
-            <div class="ds-nav-subitens" id="sub-private-label">
-              {% if user.pode_ver_private_label_lancamentos %}
-              <a href="{% url 'financeiro:pl_lancamentos' %}"
-                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'pl_lancamentos' %}ativo{% endif %}">
-                <span class="ds-nav-icon">&#36;</span>
-                Lançamentos
-              </a>
-              {% endif %}
-              {% if user.pode_configurar_private_label %}
-              <a href="{% url 'financeiro:pl_configuracoes' %}"
-                 class="ds-nav-sublink {% if request.resolver_match.url_name == 'pl_configuracoes' %}ativo{% endif %}">
-                <span class="ds-nav-icon">&#9881;</span>
-                Configurações
-              </a>
-              {% endif %}
-            </div>
-          </div>
+          <a href="{% url 'financeiro:pl_home' %}"
+             class="ds-nav-sublink {% if 'pl_' in request.resolver_match.url_name|default:'' %}ativo{% endif %}">
+            <span class="ds-nav-icon">&#9670;</span>
+            Private Label
+          </a>
           {% endif %}
         </div>
       </div>
