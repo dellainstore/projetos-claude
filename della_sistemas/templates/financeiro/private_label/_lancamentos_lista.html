@@ -24,7 +24,7 @@
           </td>
           <td>{{ lanc.get_tipo_display }}</td>
           <td>
-            <a href="#" hx-get="{% url 'financeiro:pl_htmx_lancamento_detalhe' lanc.pk %}" hx-target="#modal-container" style="color:var(--preto);text-decoration:none;font-weight:600;">
+            <a href="#" hx-get="{% url 'financeiro:pl_htmx_lancamento_detalhe' lanc.pk %}" hx-target="#modal-container" style="color:var(--preto);text-decoration:underline dotted;text-underline-offset:2px;font-weight:600;cursor:pointer;" title="Ver detalhes e baixas">
               {{ lanc.descricao }}
             </a>
             {% if lanc.parcelas.count > 1 %}<span class="text-muted" style="font-size:.76rem;"> ({{ parcela.numero }}/{{ lanc.parcelas.count }})</span>{% endif %}
@@ -33,12 +33,13 @@
           <td>{{ parcela.conta_prevista_efetiva.nome }}</td>
           <td>
             <span class="{% if lanc.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ parcela.valor|brl }}</span>
-            {% if sit == "parcial" %}<br><span class="text-muted" style="font-size:.74rem;">restam {{ parcela.saldo_restante|brl }}</span>{% endif %}
+            {% if parcela.estado_estrutural == "parcial" %}<br><span class="text-muted" style="font-size:.74rem;">pago {{ parcela.valor_baixado_principal|brl }}, restam {{ parcela.saldo_restante|brl }}</span>{% endif %}
           </td>
           <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
           <td><span class="pl-badge pl-badge--{{ sit }}">{% rotulo_situacao_tag lanc.tipo sit %}</span></td>
           <td class="pl-col-acoes">
             <div class="pl-acoes">
+              <button type="button" class="pl-icon-btn" hx-get="{% url 'financeiro:pl_htmx_lancamento_detalhe' lanc.pk %}" hx-target="#modal-container" title="Ver detalhes e baixas">&#128065;</button>
               {% if sit != "quitado" and sit != "cancelado" %}
               <button type="button" class="pl-icon-btn pl-icon-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_baixa_form' parcela.pk %}" hx-target="#modal-container" title="{% if lanc.tipo == 'despesa' %}Marcar como pago{% else %}Marcar como recebido{% endif %}">&#10003;</button>
               {% endif %}

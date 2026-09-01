@@ -962,3 +962,51 @@ class ContaPrevistaPorParcelaTests(BaseFinanceiroTestCase):
         self.assertIn(f'value="{p1.pk}"'.encode(), resp_conta2.content)
         for p in parcelas[1:]:
             self.assertNotIn(f'value="{p.pk}"'.encode(), resp_conta2.content)
+
+
+class BaixaParcialVisivelNaListaTests(BaseFinanceiroTestCase):
+    """Bug relatado pelo dono (2026-09-02): "onde aparece essa baixa
+    parcial? não consigo ver ela em lugar nenhum!" — a lista comparava a
+    SITUAÇÃO TEMPORAL (que nunca vale "parcial" — só aberto/vencido/
+    pendente/previsto/quitado/cancelado) em vez do ESTADO ESTRUTURAL da
+    parcela, então o aviso "restam R$ X" nunca aparecia."""
+
+    def setUp(self):
+        super().setUp()
+        self.superadmin = get_user_model().objects.create_user(
+            username="_teste_superadmin_baixa_parcial", password="x", papel="superadmin", is_superuser=True,
+        )
+        self.client_superadmin = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_superadmin.force_login(self.superadmin)
+
+    def test_parcela_com_baixa_parcial_mostra_quanto_falta_na_lista(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Compra parcial visível",
+            valor_original=Decimal("350.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        parcela = lancamento.parcelas.first()
+        dar_baixa(parcela=parcela, valor_principal=Decimal("38.89"), data=date.today(), conta=self.conta)
+        parcela.refresh_from_db()
+        self.assertEqual(parcela.estado_estrutural, ESTADO_PARCIAL)
+
+        resp = self.client_superadmin.get("/financeiro/private-label/htmx/lancamentos/lista/")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("pago R$ 38,89", body)
+        self.assertIn("restam R$ 311,11", body)
+
+    def test_botao_ver_detalhes_abre_modal_com_baixas(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Compra com baixa pra ver detalhe",
+            valor_original=Decimal("350.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        parcela = lancamento.parcelas.first()
+        dar_baixa(parcela=parcela, valor_principal=Decimal("100.00"), data=date.today(), conta=self.conta)
+
+        resp = self.client_superadmin.get(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/detalhe/")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("R$ 100,00", body)
+        self.assertIn(self.conta.nome, body)
