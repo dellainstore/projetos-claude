@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
+from django.db import models
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -39,7 +40,7 @@ from apps.financeiro.services.private_label.lancamentos import (
 )
 from apps.financeiro.services.private_label.operacao import obter_operacao_padrao
 from apps.financeiro.services.private_label.recorrencias import verificar_lazy
-from apps.financeiro.services.private_label.transferencias import transferir
+from apps.financeiro.services.private_label.transferencias import estornar_transferencia, transferir
 
 
 def _evento(nome_evento: str) -> HttpResponse:
@@ -56,6 +57,8 @@ def _decimal(valor, default="0"):
 
 
 def pl_home(request):
+    if request.user.pode_ver_private_label_dashboard:
+        return redirect("financeiro:pl_dashboard")
     if request.user.pode_ver_private_label_lancamentos:
         return redirect("financeiro:pl_lancamentos")
     if request.user.pode_configurar_private_label:
@@ -122,13 +125,61 @@ def _parcelas_filtradas(request, operacao):
     return qs.order_by("data_vencimento", "lancamento_id", "numero")
 
 
+def _transferencias_filtradas(request, operacao):
+    """Transferências não são LancamentoFinanceiro (nunca entram em
+    receita/despesa/DRE — ver plano), mas o usuário precisa VER que
+    aconteceram na tela de Lançamentos, senão "some" sem deixar rastro
+    visível. Mesclada na listagem como linha própria (kind="transferencia"),
+    sem contar nos totais de gasto/recebido."""
+    tipo = request.GET.get("tipo")
+    if tipo and tipo != "transferencia":
+        return Transferencia.objects.none()
+
+    situacao = request.GET.get("situacao", "")
+    if situacao in ("vencido", "aberto", "parcial"):
+        # esses estados não existem pra transferência (é sempre imediata)
+        return Transferencia.objects.none()
+
+    qs = Transferencia.objects.filter(operacao=operacao).select_related("conta_origem", "conta_destino")
+    qs = qs.filter(estornada=(situacao == "cancelado"))
+
+    conta = request.GET.get("conta")
+    if conta:
+        qs = qs.filter(models.Q(conta_origem_id=conta) | models.Q(conta_destino_id=conta))
+    busca = request.GET.get("q", "").strip()
+    if busca:
+        qs = qs.filter(observacao__icontains=busca)
+    data_de = request.GET.get("data_de")
+    if data_de:
+        qs = qs.filter(data__gte=data_de)
+    data_ate = request.GET.get("data_ate")
+    if data_ate:
+        qs = qs.filter(data__lte=data_ate)
+    return qs.order_by("data")
+
+
+def _linhas_lancamentos(request, operacao):
+    """Lista unificada e ordenada por data: parcelas de LancamentoFinanceiro
+    + Transferências, cada uma como uma linha com `kind` próprio pro
+    template distinguir. Corta em 300 linhas no total (não 300+300)."""
+    linhas = [
+        {"kind": "lancamento", "data": p.data_vencimento, "parcela": p}
+        for p in _parcelas_filtradas(request, operacao)
+    ]
+    linhas += [
+        {"kind": "transferencia", "data": t.data, "transferencia": t}
+        for t in _transferencias_filtradas(request, operacao)
+    ]
+    linhas.sort(key=lambda linha: linha["data"])
+    return linhas[:300]
+
+
 @perm_required("private_label.ver_lancamentos")
 def pl_lancamentos(request):
     verificar_lazy()
     operacao = obter_operacao_padrao()
-    parcelas = _parcelas_filtradas(request, operacao)[:300]
     contexto = {
-        "parcelas": parcelas,
+        "linhas": _linhas_lancamentos(request, operacao),
         "querystring": request.GET.urlencode(),
         **_opcoes_cadastro(operacao),
     }
@@ -138,8 +189,9 @@ def pl_lancamentos(request):
 @perm_required("private_label.ver_lancamentos")
 def pl_htmx_lancamentos_lista(request):
     operacao = obter_operacao_padrao()
-    parcelas = _parcelas_filtradas(request, operacao)[:300]
-    return render(request, "financeiro/private_label/_lancamentos_lista.html", {"parcelas": parcelas})
+    return render(request, "financeiro/private_label/_lancamentos_lista.html", {
+        "linhas": _linhas_lancamentos(request, operacao),
+    })
 
 
 # ── Novo / editar lançamento ─────────────────────────────────────────────
@@ -401,6 +453,17 @@ def pl_htmx_transferencia_salvar(request):
         )
     except ValueError as e:
         return render(request, "financeiro/private_label/_transferencia_form.html", {"contas": contas, "erro": str(e)})
+    return _evento("pl:lancamentos-mudou")
+
+
+@perm_required("private_label.lancar")
+def pl_htmx_transferencia_estornar(request, pk):
+    operacao = obter_operacao_padrao()
+    transferencia = get_object_or_404(Transferencia, pk=pk, operacao=operacao)
+    try:
+        estornar_transferencia(transferencia, usuario=request.user, motivo=request.POST.get("motivo", "Estorno manual"))
+    except ValueError as e:
+        messages.error(request, str(e))
     return _evento("pl:lancamentos-mudou")
 
 

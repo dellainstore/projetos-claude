@@ -67,6 +67,10 @@ urlpatterns = [
     # Transferências
     path("private-label/htmx/transferencias/form/", views.pl_htmx_transferencia_form, name="pl_htmx_transferencia_form"),
     path("private-label/htmx/transferencias/salvar/", views.pl_htmx_transferencia_salvar, name="pl_htmx_transferencia_salvar"),
+    path("private-label/htmx/transferencias/<int:pk>/estornar/", views.pl_htmx_transferencia_estornar, name="pl_htmx_transferencia_estornar"),
+
+    # Dashboard
+    path("private-label/dashboard/", views.pl_dashboard, name="pl_dashboard"),
 
     # Ajuste de saldo (ação sensível)
     path("private-label/htmx/ajuste-saldo/form/", views.pl_htmx_ajuste_saldo_form, name="pl_htmx_ajuste_saldo_form"),

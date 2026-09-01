@@ -39,6 +39,8 @@ from .private_label_lancamentos import (
     pl_htmx_baixa_lote_form,
     pl_htmx_transferencia_form,
     pl_htmx_transferencia_salvar,
+    pl_htmx_transferencia_estornar,
     pl_htmx_ajuste_saldo_form,
     pl_htmx_ajuste_saldo_salvar,
 )
+from .private_label_dashboard import pl_dashboard

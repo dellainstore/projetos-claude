@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}Private Label · Dashboard | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+{% include "financeiro/private_label/_estilos.html" %}
+<style>
+  .pl-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .9rem; margin-bottom: 1.3rem; }
+  .pl-card {
+    background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px;
+    padding: 1rem 1.1rem;
+  }
+  .pl-card-label { font-size: .78rem; color: var(--cinza-texto); margin-bottom: .3rem; }
+  .pl-card-valor { font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--preto); }
+  .pl-card--consolidado { border-color: var(--dourado); background: rgba(201,169,110,.08); }
+  .pl-card--gasto .pl-card-valor { color: var(--vermelho); }
+  .pl-card--recebido .pl-card-valor { color: var(--verde); }
+  .pl-card--resultado.negativo .pl-card-valor { color: var(--vermelho); }
+  .pl-card--resultado.positivo .pl-card-valor { color: var(--verde); }
+  .pl-secao-titulo { font-size: .95rem; font-weight: 700; color: var(--preto); margin: 1.5rem 0 .6rem; }
+  .pl-periodo { display: flex; gap: .4rem; margin-bottom: 1rem; }
+  .pl-periodo a { padding: .35rem .75rem; border-radius: 999px; font-size: .8rem; text-decoration: none; color: var(--cinza-texto); background: var(--cinza-claro); }
+  .pl-periodo a.ativa { background: var(--dourado); color: var(--branco); font-weight: 600; }
+  tfoot td { font-weight: 700; border-top: 2px solid var(--cinza-medio); }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="pl-topo">
+  <div>
+    <h1 class="ds-page-titulo">Financeiro Private Label</h1>
+  </div>
+  {% if user.pode_lancar_private_label %}
+  <div class="pl-topo-acoes">
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_lancamento_form' %}" hx-target="#modal-container">+ Novo lançamento</button>
+  </div>
+  {% endif %}
+</div>
+
+{% include "financeiro/private_label/_abas.html" %}
+
+<div class="pl-periodo">
+  <a href="?periodo=atual" class="{% if periodo == 'atual' %}ativa{% endif %}">Mês atual</a>
+  <a href="?periodo=anterior" class="{% if periodo == 'anterior' %}ativa{% endif %}">Mês anterior</a>
+  <a href="?periodo=tudo" class="{% if periodo == 'tudo' %}ativa{% endif %}">Todo o período</a>
+</div>
+
+<div class="pl-cards">
+  <div class="pl-card pl-card--consolidado">
+    <div class="pl-card-label">Saldo consolidado</div>
+    <div class="pl-card-valor">{{ saldo_consolidado|brl }}</div>
+  </div>
+  {% for conta in contas %}
+  <div class="pl-card">
+    <div class="pl-card-label">{{ conta.nome }}</div>
+    <div class="pl-card-valor" style="font-size:1.1rem;">{{ conta.saldo|brl }}</div>
+  </div>
+  {% endfor %}
+  <div class="pl-card pl-card--gasto">
+    <div class="pl-card-label">Gasto no período</div>
+    <div class="pl-card-valor">{{ total_gasto|brl }}</div>
+  </div>
+  <div class="pl-card pl-card--recebido">
+    <div class="pl-card-label">Recebido no período</div>
+    <div class="pl-card-valor">{{ total_recebido|brl }}</div>
+  </div>
+  <div class="pl-card pl-card--resultado {% if resultado < 0 %}negativo{% else %}positivo{% endif %}">
+    <div class="pl-card-label">Resultado do período</div>
+    <div class="pl-card-valor">{{ resultado|brl }}</div>
+  </div>
+</div>
+
+<div class="pl-secao-titulo">Gasto por categoria</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Categoria</th><th>Total</th></tr></thead>
+    <tbody>
+      {% for linha in gasto_por_categoria %}
+      <tr>
+        <td>{{ linha.parcela__lancamento__categoria__icone }} {{ linha.parcela__lancamento__categoria__nome|default:"Sem categoria" }}</td>
+        <td>{{ linha.total|brl }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="2" class="text-muted">Nenhum gasto no período.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if gasto_por_categoria %}
+    <tfoot><tr><td>Total</td><td>{{ total_gasto|brl }}</td></tr></tfoot>
+    {% endif %}
+  </table>
+</div>
+
+<div class="pl-secao-titulo">Recebimentos por forma de pagamento</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Forma de pagamento</th><th>Total</th></tr></thead>
+    <tbody>
+      {% for linha in recebido_por_forma %}
+      <tr>
+        <td>{{ linha.forma_pagamento__nome|default:"Não informada" }}</td>
+        <td>{{ linha.total|brl }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="2" class="text-muted">Nenhum recebimento no período.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if recebido_por_forma %}
+    <tfoot><tr><td>Total</td><td>{{ total_recebido|brl }}</td></tr></tfoot>
+    {% endif %}
+  </table>
+</div>
+
+<div class="pl-secao-titulo">Contas parceladas</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Descrição</th><th>Categoria</th><th>Total</th><th>Saldo restante</th><th>Próxima parcela</th></tr></thead>
+    <tbody>
+      {% for linha in linhas_parceladas %}
+      <tr>
+        <td>
+          <a href="#" hx-get="{% url 'financeiro:pl_htmx_lancamento_detalhe' linha.lancamento.pk %}" hx-target="#modal-container" style="color:var(--preto);text-decoration:none;font-weight:600;">
+            {{ linha.lancamento.descricao }}
+          </a>
+        </td>
+        <td>{{ linha.lancamento.categoria.icone }} {{ linha.lancamento.categoria.nome|default:"" }}</td>
+        <td>{{ linha.lancamento.valor_original|brl }}</td>
+        <td>{{ linha.saldo_restante|brl }}</td>
+        <td>
+          {% if linha.proxima_parcela %}
+            {{ linha.proxima_parcela.valor|brl }} em {{ linha.proxima_parcela.data_vencimento|date:"d/m/Y" }}
+          {% else %}
+            <span class="pl-badge pl-badge--quitado">Quitada</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="text-muted">Nenhuma conta parcelada em aberto.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if linhas_parceladas %}
+    <tfoot><tr><td>Total</td><td></td><td>{{ total_parcelados|brl }}</td><td>{{ total_parcelados_restante|brl }}</td><td></td></tr></tfoot>
+    {% endif %}
+  </table>
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}

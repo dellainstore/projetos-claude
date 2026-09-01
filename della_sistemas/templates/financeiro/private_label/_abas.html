@@ -6,6 +6,9 @@ E cuja permissão o usuário tem — nunca aba "em construção".
 {% endcomment %}
 <div class="pl-abas">
   <div class="pl-abas-desktop">
+    {% if user.pode_ver_private_label_dashboard %}
+    <a href="{% url 'financeiro:pl_dashboard' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_dashboard' %}ativa{% endif %}">Dashboard</a>
+    {% endif %}
     {% if user.pode_ver_private_label_lancamentos %}
     <a href="{% url 'financeiro:pl_lancamentos' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_lancamentos' %}ativa{% endif %}">Lançamentos</a>
     {% endif %}
@@ -14,6 +17,9 @@ E cuja permissão o usuário tem — nunca aba "em construção".
     {% endif %}
   </div>
   <select class="pl-abas-mobile ds-input" onchange="if(this.value) location.href=this.value">
+    {% if user.pode_ver_private_label_dashboard %}
+    <option value="{% url 'financeiro:pl_dashboard' %}" {% if request.resolver_match.url_name == 'pl_dashboard' %}selected{% endif %}>Dashboard</option>
+    {% endif %}
     {% if user.pode_ver_private_label_lancamentos %}
     <option value="{% url 'financeiro:pl_lancamentos' %}" {% if request.resolver_match.url_name == 'pl_lancamentos' %}selected{% endif %}>Lançamentos</option>
     {% endif %}

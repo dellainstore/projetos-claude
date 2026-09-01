@@ -35,6 +35,7 @@
       {% for valor, label in tipos_lancamento %}
       <option value="{{ valor }}" {% if request.GET.tipo == valor %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
+      <option value="transferencia" {% if request.GET.tipo == "transferencia" %}selected{% endif %}>Transferência</option>
     </select>
   </div>
   <div class="pl-form-campo">

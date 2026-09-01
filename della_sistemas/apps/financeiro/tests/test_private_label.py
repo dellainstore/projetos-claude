@@ -6,8 +6,9 @@ idempotência de recorrência e de eventos do razão."""
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import Client, TestCase
 
 from apps.financeiro.models import (
     ESTADO_CANCELADO,
@@ -350,3 +351,62 @@ class OperacaoUnicaTests(BaseFinanceiroTestCase):
         from apps.financeiro.services.private_label.operacao import obter_operacao_padrao
         with self.assertRaises(RuntimeError):
             obter_operacao_padrao()
+
+
+class DashboardETransferenciaNaListaTests(BaseFinanceiroTestCase):
+    """Cobre o pedido do dono de 2026-09-01: dashboard com saldo/gasto/
+    recebido/parcelados, e transferência precisa aparecer em Lançamentos
+    mesmo não contando pro gasto x recebido."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = get_user_model().objects.create_user(
+            username="_teste_dashboard", password="x", papel="superadmin", is_superuser=True,
+        )
+        self.client = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client.force_login(self.user)
+
+    def test_dashboard_soma_gasto_recebido_e_lista_parcelados(self):
+        hoje = date.today()
+        despesa = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Aluguel", valor_original=Decimal("300.00"),
+            data_competencia=hoje, primeiro_vencimento=hoje, categoria=self.categoria,
+        )
+        dar_baixa(parcela=despesa.parcelas.first(), valor_principal=Decimal("300.00"), data=hoje, conta=self.conta)
+        receita = criar_lancamento(
+            operacao=self.operacao, tipo="receita", descricao="Venda", valor_original=Decimal("500.00"),
+            data_competencia=hoje, primeiro_vencimento=hoje, categoria=self.categoria_receita,
+        )
+        dar_baixa(parcela=receita.parcelas.first(), valor_principal=Decimal("500.00"), data=hoje, conta=self.conta)
+        criar_lancamento(
+            operacao=self.operacao, tipo="conta_pagar", descricao="Compra parcelada", valor_original=Decimal("900.00"),
+            data_competencia=hoje, primeiro_vencimento=hoje, categoria=self.categoria, parcelas_qtd=3,
+        )
+
+        resp = self.client.get("/financeiro/private-label/dashboard/")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Compra parcelada", body)
+        self.assertIn(self.categoria.nome, body)  # despesa aparece agrupada na categoria
+        self.assertIn("R$ 300,00", body)  # total gasto
+        self.assertIn("R$ 500,00", body)  # total recebido
+        self.assertIn("R$ 900,00", body)  # total da conta parcelada
+
+    def test_transferencia_aparece_na_lista_de_lancamentos_mesmo_fora_do_dre(self):
+        transferir(operacao=self.operacao, conta_origem=self.conta, conta_destino=self.conta2,
+                   valor=Decimal("50.00"), data=date.today(), observacao="teste visibilidade")
+        resp = self.client.get("/financeiro/private-label/lancamentos/?situacao=todas")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(self.conta.nome, body)
+        self.assertIn(self.conta2.nome, body)
+        self.assertIn("teste visibilidade", body)
+
+    def test_transferencia_estornada_pela_tela_recompoe_saldo(self):
+        t = transferir(operacao=self.operacao, conta_origem=self.conta, conta_destino=self.conta2,
+                        valor=Decimal("50.00"), data=date.today())
+        resp = self.client.post(f"/financeiro/private-label/htmx/transferencias/{t.pk}/estornar/", {})
+        self.assertEqual(resp.status_code, 200)
+        t.refresh_from_db()
+        self.assertTrue(t.estornada)
+        self.assertEqual(self.conta2.saldo_atual(), Decimal("0.00"))
