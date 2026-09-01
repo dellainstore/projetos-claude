@@ -11,7 +11,7 @@
         <th>Valor</th>
         <th>Vencimento</th>
         <th>Situação</th>
-        <th></th>
+        <th class="pl-col-acoes"></th>
       </tr>
     </thead>
     <tbody>
@@ -39,7 +39,7 @@
           </td>
           <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
           <td><span class="pl-badge pl-badge--{{ sit }}">{% rotulo_situacao_tag lanc.tipo sit %}</span></td>
-          <td>
+          <td class="pl-col-acoes">
             <div class="pl-acoes">
               {% if sit != "quitado" and sit != "cancelado" %}
               <button type="button" class="pl-icon-btn pl-icon-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_baixa_form' parcela.pk %}" hx-target="#modal-container" title="{% if lanc.tipo == 'despesa' %}Marcar como pago{% else %}Marcar como recebido{% endif %}">&#10003;</button>
@@ -77,7 +77,7 @@
             {% if t.estornada %}<span class="pl-badge pl-badge--cancelado">Estornada</span>
             {% else %}<span class="pl-badge pl-badge--quitado">Concluída</span>{% endif %}
           </td>
-          <td>
+          <td class="pl-col-acoes" style="background:#f6f5f4;">
             {% if not t.estornada %}
             <div class="pl-acoes">
               <button type="button" class="pl-icon-btn pl-icon-btn--perigo" hx-post="{% url 'financeiro:pl_htmx_transferencia_estornar' t.pk %}" hx-confirm="Estornar esta transferência de {{ t.valor|brl }}?" title="Estornar">&#8634;</button>
