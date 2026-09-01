@@ -504,3 +504,77 @@ class TipoUnicoEAutoBaixaTests(BaseFinanceiroTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"ds-modal-erro", resp.content)
         self.assertFalse(LancamentoFinanceiro.objects.filter(descricao="Errado de propósito").exists())
+
+
+class DeletarEEditarPermissaoTests(BaseFinanceiroTestCase):
+    """Pedido do dono (2026-09-02): botão de deletar só pro superadmin;
+    editar é liberado pra quem criou também (além do superadmin)."""
+
+    def setUp(self):
+        super().setUp()
+        self.superadmin = get_user_model().objects.create_user(
+            username="_teste_superadmin", password="x", papel="superadmin", is_superuser=True,
+        )
+        # Usuário comum, sem ser superadmin, mas com acesso liberado ao
+        # módulo (simula um futuro colega com `private_label.lancar`).
+        self.colaborador = get_user_model().objects.create_user(
+            username="_teste_colaborador", password="x", papel="operador",
+            permissoes={"private_label": {"lancar": True, "ver_lancamentos": True}},
+        )
+        self.outro_colaborador = get_user_model().objects.create_user(
+            username="_teste_outro_colaborador", password="x", papel="operador",
+            permissoes={"private_label": {"lancar": True, "ver_lancamentos": True}},
+        )
+        self.client_superadmin = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_superadmin.force_login(self.superadmin)
+        self.client_colaborador = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_colaborador.force_login(self.colaborador)
+        self.client_outro = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_outro.force_login(self.outro_colaborador)
+
+    def _criar_lancamento_de(self, usuario, descricao="Lançamento do teste"):
+        return criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao=descricao, valor_original=Decimal("40.00"),
+            data_competencia=date.today(), primeiro_vencimento=date.today(), categoria=self.categoria,
+            usuario=usuario,
+        )
+
+    def test_quem_criou_pode_abrir_form_de_edicao(self):
+        lancamento = self._criar_lancamento_de(self.colaborador)
+        resp = self.client_colaborador.get(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/form/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(b"ds-modal-erro", resp.content)
+
+    def test_outro_usuario_nao_pode_editar_lancamento_alheio(self):
+        lancamento = self._criar_lancamento_de(self.colaborador)
+        resp = self.client_outro.get(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/form/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ds-modal-erro", resp.content)
+
+    def test_superadmin_pode_editar_lancamento_de_qualquer_um(self):
+        lancamento = self._criar_lancamento_de(self.colaborador)
+        resp = self.client_superadmin.get(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/form/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(b"ds-modal-erro", resp.content)
+
+    def test_deletar_sem_baixa_remove_de_verdade(self):
+        lancamento = self._criar_lancamento_de(self.superadmin)
+        pk = lancamento.pk
+        resp = self.client_superadmin.post(f"/financeiro/private-label/htmx/lancamentos/{pk}/deletar/", {})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(LancamentoFinanceiro.objects.filter(pk=pk).exists())
+
+    def test_deletar_com_baixa_e_bloqueado_mesmo_pro_superadmin(self):
+        lancamento = self._criar_lancamento_de(self.superadmin)
+        dar_baixa(parcela=lancamento.parcelas.first(), valor_principal=Decimal("40.00"), data=date.today(), conta=self.conta)
+        resp = self.client_superadmin.post(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/deletar/", {})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ds-modal-erro", resp.content)
+        self.assertTrue(LancamentoFinanceiro.objects.filter(pk=lancamento.pk).exists())
+
+    def test_colaborador_nao_superadmin_nao_pode_deletar_mesmo_o_proprio(self):
+        lancamento = self._criar_lancamento_de(self.colaborador)
+        resp = self.client_colaborador.post(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/deletar/", {})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ds-modal-erro", resp.content)
+        self.assertTrue(LancamentoFinanceiro.objects.filter(pk=lancamento.pk).exists())

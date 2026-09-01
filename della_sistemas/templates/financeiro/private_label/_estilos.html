@@ -69,6 +69,25 @@ projeto de CSS local por página (ex.: templates/tarefas/).
   .pl-badge--quitado   { background: rgba(45,158,110,.14); color: var(--verde); }
   .pl-badge--cancelado { background: rgba(107,107,107,.18); color: var(--cinza-texto); text-decoration: line-through; }
 
+  /* Botões de ação em ícone (bolinha + símbolo), tooltip nativo via title=
+     no hover (desktop). Sem lib nova. Em mobile o hover não existe — o
+     símbolo por si só (com bom contraste/tamanho de toque ~30px) precisa
+     ser reconhecível sozinho; a tabela já rola na horizontal em telas
+     pequenas (padrão do projeto), então a coluna de ações nunca é cortada. */
+  .pl-acoes { display: flex; gap: .3rem; flex-wrap: nowrap; }
+  .pl-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; min-width: 30px; border-radius: 50%;
+    border: 1px solid var(--cinza-medio); background: var(--branco);
+    color: var(--cinza-texto); font-size: .9rem; line-height: 1; cursor: pointer;
+    padding: 0; transition: background .15s, color .15s, border-color .15s;
+  }
+  .pl-icon-btn:hover { background: var(--cinza-claro); color: var(--preto); }
+  .pl-icon-btn--dourado { border-color: var(--dourado); color: var(--dourado); }
+  .pl-icon-btn--dourado:hover { background: var(--dourado); color: var(--branco); }
+  .pl-icon-btn--perigo { border-color: var(--vermelho); color: var(--vermelho); }
+  .pl-icon-btn--perigo:hover { background: var(--vermelho); color: var(--branco); }
+
   /* Filtros */
   .pl-filtros {
     display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap;

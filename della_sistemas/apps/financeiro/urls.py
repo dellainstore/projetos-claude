@@ -53,6 +53,7 @@ urlpatterns = [
     path("private-label/htmx/lancamentos/salvar/", views.pl_htmx_lancamento_salvar, name="pl_htmx_lancamento_salvar"),
     path("private-label/htmx/lancamentos/<int:pk>/duplicar/", views.pl_htmx_lancamento_duplicar, name="pl_htmx_lancamento_duplicar"),
     path("private-label/htmx/lancamentos/<int:pk>/cancelar/", views.pl_htmx_lancamento_cancelar, name="pl_htmx_lancamento_cancelar"),
+    path("private-label/htmx/lancamentos/<int:pk>/deletar/", views.pl_htmx_lancamento_deletar, name="pl_htmx_lancamento_deletar"),
     path("private-label/htmx/lancamentos/<int:pk>/detalhe/", views.pl_htmx_lancamento_detalhe, name="pl_htmx_lancamento_detalhe"),
     path("private-label/htmx/lancamentos/<int:pk>/anexo/", views.pl_htmx_anexo_upload, name="pl_htmx_anexo_upload"),
     path("private-label/anexos/<int:pk>/", views.pl_anexo_download, name="pl_anexo_download"),

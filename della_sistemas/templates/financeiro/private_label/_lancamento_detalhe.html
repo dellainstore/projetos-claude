@@ -1,5 +1,5 @@
 {% load core_extras financeiro_extras %}
-<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+<div class="ds-modal-fundo">
   <div class="ds-modal ds-modal--largo">
     <div class="ds-modal-titulo">
       <span>{{ lancamento.descricao }}</span>
@@ -33,11 +33,11 @@
             <td>
               {% for baixa in parcela.baixas.all %}
                 {% if not baixa.estornada %}
-                <div style="margin-bottom:.25rem;">
-                  {{ baixa.valor_movimentado|brl }} em {{ baixa.data|date:"d/m/Y" }} ({{ baixa.conta.nome }})
-                  <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" style="padding:.1rem .4rem;font-size:.7rem;"
+                <div style="margin-bottom:.25rem;display:flex;align-items:center;gap:.4rem;">
+                  <span>{{ baixa.valor_movimentado|brl }} em {{ baixa.data|date:"d/m/Y" }} ({{ baixa.conta.nome }})</span>
+                  <button type="button" class="pl-icon-btn pl-icon-btn--perigo" style="width:24px;height:24px;min-width:24px;font-size:.75rem;"
                           hx-post="{% url 'financeiro:pl_htmx_baixa_estornar' baixa.pk %}" hx-target="#modal-container"
-                          hx-confirm="Estornar esta baixa de {{ baixa.valor_movimentado|brl }}?">Estornar</button>
+                          hx-confirm="Estornar esta baixa de {{ baixa.valor_movimentado|brl }}?" title="Estornar">&#8634;</button>
                 </div>
                 {% endif %}
               {% empty %}

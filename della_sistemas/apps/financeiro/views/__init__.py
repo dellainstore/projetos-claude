@@ -29,6 +29,7 @@ from .private_label_lancamentos import (
     pl_htmx_lancamento_salvar,
     pl_htmx_lancamento_duplicar,
     pl_htmx_lancamento_cancelar,
+    pl_htmx_lancamento_deletar,
     pl_htmx_lancamento_detalhe,
     pl_htmx_anexo_upload,
     pl_anexo_download,

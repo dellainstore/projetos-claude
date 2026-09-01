@@ -39,17 +39,24 @@
           </td>
           <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
           <td><span class="pl-badge pl-badge--{{ sit }}">{% rotulo_situacao_tag lanc.tipo sit %}</span></td>
-          <td style="white-space:nowrap;">
-            {% if sit != "quitado" and sit != "cancelado" %}
-            <button type="button" class="ds-btn ds-btn--dourado ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_baixa_form' parcela.pk %}" hx-target="#modal-container">{% if lanc.tipo == "despesa" %}Pagar{% else %}Receber{% endif %}</button>
-            {% endif %}
-            {% if sit == "aberto" and parcela.numero == 1 %}
-            <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_lancamento_form_editar' lanc.pk %}" hx-target="#modal-container">Editar</button>
-            {% endif %}
-            <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-post="{% url 'financeiro:pl_htmx_lancamento_duplicar' lanc.pk %}">Duplicar</button>
-            {% if sit != "cancelado" and sit != "quitado" %}
-            <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-post="{% url 'financeiro:pl_htmx_lancamento_cancelar' lanc.pk %}" hx-confirm="Cancelar este lançamento? A ação fica registrada no histórico.">Cancelar</button>
-            {% endif %}
+          <td>
+            <div class="pl-acoes">
+              {% if sit != "quitado" and sit != "cancelado" %}
+              <button type="button" class="pl-icon-btn pl-icon-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_baixa_form' parcela.pk %}" hx-target="#modal-container" title="{% if lanc.tipo == 'despesa' %}Marcar como pago{% else %}Marcar como recebido{% endif %}">&#10003;</button>
+              {% endif %}
+              {% if sit == "aberto" and parcela.numero == 1 %}
+                {% if user.is_superadmin or lanc.criado_por_id == user.id %}
+                <button type="button" class="pl-icon-btn" hx-get="{% url 'financeiro:pl_htmx_lancamento_form_editar' lanc.pk %}" hx-target="#modal-container" title="Editar">&#9998;</button>
+                {% endif %}
+              {% endif %}
+              <button type="button" class="pl-icon-btn" hx-post="{% url 'financeiro:pl_htmx_lancamento_duplicar' lanc.pk %}" title="Duplicar">&#10697;</button>
+              {% if sit != "cancelado" and sit != "quitado" %}
+              <button type="button" class="pl-icon-btn pl-icon-btn--perigo" hx-post="{% url 'financeiro:pl_htmx_lancamento_cancelar' lanc.pk %}" hx-confirm="Cancelar este lançamento? A ação fica registrada no histórico." title="Cancelar">&#10005;</button>
+              {% endif %}
+              {% if user.is_superadmin %}
+              <button type="button" class="pl-icon-btn pl-icon-btn--perigo" hx-post="{% url 'financeiro:pl_htmx_lancamento_deletar' lanc.pk %}" hx-target="#modal-container" hx-confirm="Excluir DEFINITIVAMENTE este lançamento? Só funciona se ele nunca teve baixa. Não dá pra desfazer." title="Excluir definitivamente (superadmin)">&#128465;</button>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endwith %}
@@ -70,9 +77,11 @@
             {% if t.estornada %}<span class="pl-badge pl-badge--cancelado">Estornada</span>
             {% else %}<span class="pl-badge pl-badge--quitado">Concluída</span>{% endif %}
           </td>
-          <td style="white-space:nowrap;">
+          <td>
             {% if not t.estornada %}
-            <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-post="{% url 'financeiro:pl_htmx_transferencia_estornar' t.pk %}" hx-confirm="Estornar esta transferência de {{ t.valor|brl }}?">Estornar</button>
+            <div class="pl-acoes">
+              <button type="button" class="pl-icon-btn pl-icon-btn--perigo" hx-post="{% url 'financeiro:pl_htmx_transferencia_estornar' t.pk %}" hx-confirm="Estornar esta transferência de {{ t.valor|brl }}?" title="Estornar">&#8634;</button>
+            </div>
             {% endif %}
           </td>
         </tr>

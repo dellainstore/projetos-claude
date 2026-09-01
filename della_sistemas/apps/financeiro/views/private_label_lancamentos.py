@@ -36,6 +36,7 @@ from apps.financeiro.services.private_label.baixas import dar_baixa, dar_baixa_e
 from apps.financeiro.services.private_label.lancamentos import (
     cancelar_lancamento,
     criar_lancamento,
+    deletar_lancamento,
     duplicar_lancamento,
     editar_lancamento,
 )
@@ -197,10 +198,21 @@ def pl_htmx_lancamentos_lista(request):
 
 # ── Novo / editar lançamento ─────────────────────────────────────────────
 
+def _pode_editar_lancamento(user, lancamento) -> bool:
+    """Quem criou o lançamento pode editá-lo; superadmin pode editar
+    qualquer um. Deletar (definitivo) é só superadmin — ver
+    `pl_htmx_lancamento_deletar`."""
+    return user.is_superadmin or lancamento.criado_por_id == user.id
+
+
 @perm_required("private_label.lancar")
 def pl_htmx_lancamento_form(request, pk=None):
     operacao = obter_operacao_padrao()
     lancamento = get_object_or_404(LancamentoFinanceiro, pk=pk, operacao=operacao) if pk else None
+    if lancamento and not _pode_editar_lancamento(request.user, lancamento):
+        return render(request, "financeiro/private_label/_erro_generico_modal.html", {
+            "erro": "Você só pode editar lançamentos que você mesmo criou (ou ser superadmin).",
+        })
     contexto = {"lancamento": lancamento, **_opcoes_cadastro(operacao)}
     if lancamento:
         contexto["tags_atuais"] = ", ".join(lancamento.tags.values_list("nome", flat=True))
@@ -213,6 +225,13 @@ def pl_htmx_lancamento_salvar(request):
         return redirect("financeiro:pl_lancamentos")
     operacao = obter_operacao_padrao()
     pk = request.POST.get("pk")
+
+    if pk:
+        lancamento_existente = get_object_or_404(LancamentoFinanceiro, pk=pk, operacao=operacao)
+        if not _pode_editar_lancamento(request.user, lancamento_existente):
+            return render(request, "financeiro/private_label/_erro_generico_modal.html", {
+                "erro": "Você só pode editar lançamentos que você mesmo criou (ou ser superadmin).",
+            })
 
     tipo = request.POST.get("tipo", "despesa")
     categoria_id = request.POST.get("categoria")
@@ -292,6 +311,24 @@ def pl_htmx_lancamento_cancelar(request, pk):
         cancelar_lancamento(lancamento, usuario=request.user)
     except ValueError as e:
         messages.error(request, str(e))
+    return _evento("pl:lancamentos-mudou")
+
+
+@perm_required("private_label.lancar")
+def pl_htmx_lancamento_deletar(request, pk):
+    """Exclusão definitiva — só superadmin, e só quando o lançamento nunca
+    teve baixa (ver `deletar_lancamento`). "Cancelar" continua sendo a via
+    normal (lógica, preserva histórico) para quem criou."""
+    operacao = obter_operacao_padrao()
+    lancamento = get_object_or_404(LancamentoFinanceiro, pk=pk, operacao=operacao)
+    if not request.user.is_superadmin:
+        return render(request, "financeiro/private_label/_erro_generico_modal.html", {
+            "erro": "Só o superadmin pode excluir definitivamente um lançamento.",
+        })
+    try:
+        deletar_lancamento(lancamento, usuario=request.user)
+    except ValueError as e:
+        return render(request, "financeiro/private_label/_erro_generico_modal.html", {"erro": str(e)})
     return _evento("pl:lancamentos-mudou")
 
 

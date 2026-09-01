@@ -16,6 +16,7 @@ from apps.financeiro.models import (
     ESTADO_ABERTO,
     ESTADO_CANCELADO,
     ESTADO_QUITADO,
+    Baixa,
     LancamentoFinanceiro,
     Parcela,
 )
@@ -143,6 +144,29 @@ def cancelar_lancamento(lancamento: LancamentoFinanceiro, *, usuario=None) -> La
         acao="cancelamento", usuario=usuario,
     )
     return lancamento
+
+
+@transaction.atomic
+def deletar_lancamento(lancamento: LancamentoFinanceiro, *, usuario=None) -> None:
+    """Exclusão DEFINITIVA — só para superadmin (checagem de permissão é
+    responsabilidade da view). Só permitida quando o lançamento nunca teve
+    nenhuma baixa (nem estornada) — se já mexeu no razão financeiro, a
+    integridade do audit trail vem na frente: o caminho passa a ser
+    `cancelar_lancamento`, não apagar. `Baixa.parcela` é PROTECT no banco,
+    então essa regra também seria barrada na marra pelo banco — aqui só
+    devolvemos um erro claro em vez de deixar estourar um IntegrityError."""
+    if Baixa.objects.filter(parcela__lancamento=lancamento).exists():
+        raise ValueError(
+            "Este lançamento já teve baixa registrada (mesmo estornada) — não pode ser excluído "
+            "definitivamente, só cancelado (preserva o histórico)."
+        )
+    registrar_log(
+        operacao=lancamento.operacao, entidade="lancamento", objeto_id=lancamento.id,
+        acao="exclusao", usuario=usuario, valor_de=lancamento.descricao,
+    )
+    for anexo in lancamento.anexos.all():
+        anexo.arquivo.delete(save=False)
+    lancamento.delete()
 
 
 @transaction.atomic

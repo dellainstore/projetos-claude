@@ -771,6 +771,7 @@ class LogAuditoriaFinanceiro(models.Model):
         ("estorno", "Estorno"),
         ("ajuste", "Ajuste"),
         ("conciliacao", "Conciliação"),
+        ("exclusao", "Exclusão definitiva"),
     ]
 
     operacao = models.ForeignKey(OperacaoFinanceira, on_delete=models.PROTECT, related_name="logs_auditoria")
