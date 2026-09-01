@@ -10,6 +10,7 @@ novo, mantendo o razão sempre coerente com o que realmente aconteceu.
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 
 from apps.financeiro.models import (
@@ -121,6 +122,102 @@ def editar_lancamento(lancamento: LancamentoFinanceiro, *, usuario=None, tags=No
         lancamento.save(update_fields=alterados + ["atualizado_em"])
     if tags is not None:
         lancamento.tags.set(tags)
+    return lancamento
+
+
+@transaction.atomic
+def editar_parcela(parcela: Parcela, *, usuario=None, valor=None, data_vencimento=None) -> Parcela:
+    """Edita SÓ esta parcela — pedido do dono (2026-09-02): "quando eu clico
+    na parcela gerada eu consigo editar apenas aquela parcela e não todas".
+    `valor` só pode mudar enquanto a parcela não tiver nenhuma baixa (senão
+    corromperia o dinheiro já registrado — estorne antes). `data_vencimento`
+    pode mudar sempre. Depois de mudar, `lancamento.valor_original` é
+    recalculado como a soma de todas as parcelas — ele é sempre um espelho
+    da soma, nunca editado direto."""
+    if parcela.estado_estrutural == ESTADO_CANCELADO:
+        raise ValueError("Parcela cancelada não pode ser editada.")
+    alterou = []
+    if valor is not None:
+        valor = Decimal(valor)
+        if valor <= 0:
+            raise ValueError("Valor da parcela deve ser maior que zero.")
+        if valor != parcela.valor:
+            if parcela.valor_baixado_principal > 0:
+                raise ValueError(
+                    "Esta parcela já tem baixa registrada — não dá pra mudar o valor. "
+                    "Estorne a baixa primeiro, ou reparcele a série inteira se nenhuma outra parcela tiver baixa."
+                )
+            registrar_log(
+                operacao=parcela.lancamento.operacao, entidade="parcela", objeto_id=parcela.id,
+                acao="edicao", usuario=usuario, campo="valor", valor_de=parcela.valor, valor_para=valor,
+            )
+            parcela.valor = valor
+            alterou.append("valor")
+    if data_vencimento is not None:
+        data_vencimento = normalizar_data(data_vencimento)
+        if data_vencimento != parcela.data_vencimento:
+            registrar_log(
+                operacao=parcela.lancamento.operacao, entidade="parcela", objeto_id=parcela.id,
+                acao="edicao", usuario=usuario, campo="data_vencimento",
+                valor_de=parcela.data_vencimento, valor_para=data_vencimento,
+            )
+            parcela.data_vencimento = data_vencimento
+            alterou.append("data_vencimento")
+    if alterou:
+        parcela.save(update_fields=alterou)
+        lancamento = parcela.lancamento
+        novo_total = lancamento.parcelas.aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
+        if novo_total != lancamento.valor_original:
+            lancamento.valor_original = novo_total
+            lancamento.save(update_fields=["valor_original", "atualizado_em"])
+    return parcela
+
+
+@transaction.atomic
+def reparcelar(
+    lancamento: LancamentoFinanceiro, *, usuario=None, novo_valor_total, novas_parcelas_qtd,
+    primeiro_vencimento=None, frequencia_parcelas="mensal",
+) -> LancamentoFinanceiro:
+    """Reparcela a série INTEIRA — pedido do dono: opção de "alterar todas
+    as parcelas". Só permitido quando NENHUMA parcela ainda tem baixa
+    (nada de dinheiro se moveu ainda); com qualquer baixa registrada, o
+    caminho é `editar_parcela` uma a uma, ou estornar antes. Apaga as
+    parcelas atuais (nenhuma tem baixa, então `Baixa.parcela=PROTECT` não
+    bloqueia) e gera novas do zero com o novo total/quantidade."""
+    if Baixa.objects.filter(parcela__lancamento=lancamento).exists():
+        raise ValueError(
+            "Esta série já tem baixa registrada em alguma parcela — não dá pra reparcelar tudo de uma vez. "
+            "Edite parcela por parcela, ou estorne as baixas antes."
+        )
+    if lancamento.estado_estrutural == ESTADO_CANCELADO:
+        raise ValueError("Lançamento cancelado não pode ser reparcelado.")
+    novo_valor_total = Decimal(novo_valor_total)
+    if novo_valor_total <= 0:
+        raise ValueError("Valor total deve ser maior que zero.")
+    novas_parcelas_qtd = int(novas_parcelas_qtd)
+    if novas_parcelas_qtd < 1:
+        raise ValueError("Quantidade de parcelas deve ser pelo menos 1.")
+
+    primeira_parcela_atual = lancamento.parcelas.order_by("numero").first()
+    vencimento = normalizar_data(primeiro_vencimento) if primeiro_vencimento else primeira_parcela_atual.data_vencimento
+    valor_de = f"R$ {lancamento.valor_original} em {lancamento.parcelas.count()}x"
+
+    lancamento.parcelas.all().delete()
+    lancamento.valor_original = novo_valor_total
+    lancamento.data_vencimento = vencimento
+    lancamento.save(update_fields=["valor_original", "data_vencimento", "atualizado_em"])
+
+    valores = gerar_valores_parcelas(novo_valor_total, novas_parcelas_qtd)
+    data_parcela = vencimento
+    for numero, valor in enumerate(valores, start=1):
+        Parcela.objects.create(lancamento=lancamento, numero=numero, valor=valor, data_vencimento=data_parcela)
+        data_parcela = somar_periodo(data_parcela, frequencia_parcelas)
+
+    registrar_log(
+        operacao=lancamento.operacao, entidade="lancamento", objeto_id=lancamento.id, acao="edicao",
+        usuario=usuario, campo="reparcelamento", valor_de=valor_de,
+        valor_para=f"R$ {novo_valor_total} em {novas_parcelas_qtd}x",
+    )
     return lancamento
 
 

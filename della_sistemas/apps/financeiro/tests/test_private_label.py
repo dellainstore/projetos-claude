@@ -28,7 +28,9 @@ from apps.financeiro.services.private_label.lancamentos import (
     cancelar_lancamento,
     cancelar_parcela,
     criar_lancamento,
+    editar_parcela,
     gerar_valores_parcelas,
+    reparcelar,
 )
 from apps.financeiro.services.private_label.recorrencias import (
     criar_regra_recorrencia,
@@ -595,3 +597,94 @@ class DeletarEEditarPermissaoTests(BaseFinanceiroTestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
         self.assertIn(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/form/", body)
+
+
+class EditarParcelaEReparcelarTests(BaseFinanceiroTestCase):
+    """Pedido do dono (2026-09-02): corrigir um lançamento de 7.000 em 9x
+    lançado errado, com a 1ª parcela já paga pelo Santander e o resto a
+    pagar pelo Itaú — editar só uma parcela, ou reparcelar tudo."""
+
+    def test_editar_valor_de_uma_parcela_recalcula_total_do_lancamento(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Compra parcelada errada",
+            valor_original=Decimal("900.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria, parcelas_qtd=3,
+        )
+        p1, p2, p3 = lancamento.parcelas.order_by("numero")
+        editar_parcela(p2, valor=Decimal("500.00"))
+        p2.refresh_from_db()
+        lancamento.refresh_from_db()
+        self.assertEqual(p2.valor, Decimal("500.00"))
+        # 300 (p1) + 500 (p2 editada) + 300 (p3) = 1100
+        self.assertEqual(lancamento.valor_original, Decimal("1100.00"))
+
+    def test_nao_deixa_editar_valor_de_parcela_ja_baixada(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Com baixa",
+            valor_original=Decimal("300.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        parcela = lancamento.parcelas.first()
+        dar_baixa(parcela=parcela, valor_principal=Decimal("300.00"), data=date.today(), conta=self.conta)
+        with self.assertRaises(ValueError):
+            editar_parcela(parcela, valor=Decimal("500.00"))
+
+    def test_editar_vencimento_de_parcela_funciona_mesmo_ja_baixada(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Com baixa, só data",
+            valor_original=Decimal("300.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        parcela = lancamento.parcelas.first()
+        dar_baixa(parcela=parcela, valor_principal=Decimal("300.00"), data=date.today(), conta=self.conta)
+        nova_data = date.today() + timedelta(days=10)
+        editar_parcela(parcela, data_vencimento=nova_data)
+        parcela.refresh_from_db()
+        self.assertEqual(parcela.data_vencimento, nova_data)
+
+    def test_reparcelar_toda_a_serie_sem_baixa_nenhuma(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="7 mil errado",
+            valor_original=Decimal("777.78"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria, parcelas_qtd=9,
+        )
+        reparcelar(lancamento, novo_valor_total=Decimal("7000.00"), novas_parcelas_qtd=9)
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.valor_original, Decimal("7000.00"))
+        self.assertEqual(lancamento.parcelas.count(), 9)
+        self.assertEqual(sum(p.valor for p in lancamento.parcelas.all()), Decimal("7000.00"))
+
+    def test_reparcelar_bloqueado_se_qualquer_parcela_ja_tem_baixa(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="1ª parcela paga pelo Santander",
+            valor_original=Decimal("777.78"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria, parcelas_qtd=9,
+        )
+        p1 = lancamento.parcelas.order_by("numero").first()
+        dar_baixa(parcela=p1, valor_principal=p1.valor, data=date.today(), conta=self.conta)
+        with self.assertRaises(ValueError):
+            reparcelar(lancamento, novo_valor_total=Decimal("7000.00"), novas_parcelas_qtd=9)
+        # nada mudou
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.parcelas.count(), 9)
+
+    def test_cenario_real_estornar_depois_editar_parcelas_restantes(self):
+        """O caminho que resolve o caso real: estorna a baixa da 1ª parcela
+        (paga errada pelo Santander), corrige o valor dela e das demais uma
+        a uma (já que reparcelar tudo de uma vez exige zero baixas)."""
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="7 mil em 9x, 1ª já paga errado",
+            valor_original=Decimal("777.78"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria, parcelas_qtd=9,
+        )
+        p1 = lancamento.parcelas.order_by("numero").first()
+        baixa = dar_baixa(parcela=p1, valor_principal=p1.valor, data=date.today(), conta=self.conta2)  # Santander
+        estornar_baixa(baixa, motivo="valor errado")
+        editar_parcela(p1, valor=Decimal("7000.00"))
+        p1.refresh_from_db()
+        self.assertEqual(p1.valor, Decimal("7000.00"))
+        self.assertEqual(p1.saldo_restante, Decimal("7000.00"))
+        # agora dá pra baixar de novo, dessa vez certo, pelo Santander
+        dar_baixa(parcela=p1, valor_principal=Decimal("7000.00"), data=date.today(), conta=self.conta2)
+        p1.refresh_from_db()
+        self.assertEqual(p1.estado_estrutural, ESTADO_QUITADO)

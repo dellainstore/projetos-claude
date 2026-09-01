@@ -39,6 +39,8 @@ from apps.financeiro.services.private_label.lancamentos import (
     deletar_lancamento,
     duplicar_lancamento,
     editar_lancamento,
+    editar_parcela,
+    reparcelar,
 )
 from apps.financeiro.services.private_label.operacao import obter_operacao_padrao
 from apps.financeiro.services.private_label.recorrencias import verificar_lazy
@@ -205,6 +207,21 @@ def _pode_editar_lancamento(user, lancamento) -> bool:
     return user.is_superadmin or lancamento.criado_por_id == user.id
 
 
+def _contexto_edicao(lancamento, parcela_pk=None):
+    """Monta o contexto extra do modo edição: qual parcela está no foco
+    (pra "editar só esta parcela") e se a série já tem baixa em algum
+    lugar (trava a opção "reparcelar tudo")."""
+    parcela = None
+    if parcela_pk:
+        parcela = lancamento.parcelas.filter(pk=parcela_pk).first()
+    if parcela is None:
+        parcela = lancamento.parcelas.order_by("numero").first()
+    return {
+        "parcela": parcela,
+        "lancamento_tem_baixa": Baixa.objects.filter(parcela__lancamento=lancamento).exists(),
+    }
+
+
 @perm_required("private_label.lancar")
 def pl_htmx_lancamento_form(request, pk=None):
     operacao = obter_operacao_padrao()
@@ -216,6 +233,7 @@ def pl_htmx_lancamento_form(request, pk=None):
     contexto = {"lancamento": lancamento, **_opcoes_cadastro(operacao)}
     if lancamento:
         contexto["tags_atuais"] = ", ".join(lancamento.tags.values_list("nome", flat=True))
+        contexto.update(_contexto_edicao(lancamento, request.GET.get("parcela")))
     return render(request, "financeiro/private_label/_lancamento_form.html", contexto)
 
 
@@ -237,7 +255,6 @@ def pl_htmx_lancamento_salvar(request):
     categoria_id = request.POST.get("categoria")
     categoria = CategoriaFinanceira.objects.filter(pk=categoria_id, operacao=operacao).first() if categoria_id else None
     descricao = request.POST.get("descricao", "").strip()
-    valor = _decimal(request.POST.get("valor_original"))
     contato = ContatoFinanceiro.objects.filter(pk=request.POST.get("contato"), operacao=operacao).first() if request.POST.get("contato") else None
     centro_custo = CentroCusto.objects.filter(pk=request.POST.get("centro_custo"), operacao=operacao).first() if request.POST.get("centro_custo") else None
     conta_prevista = ContaBancaria.objects.filter(pk=request.POST.get("conta_prevista"), operacao=operacao).first() if request.POST.get("conta_prevista") else None
@@ -254,17 +271,21 @@ def pl_htmx_lancamento_salvar(request):
         erro = "Descrição é obrigatória."
     elif not categoria:
         erro = "Categoria é obrigatória."
-    elif valor <= 0:
+    elif not pk and _decimal(request.POST.get("valor_original")) <= 0:
         erro = "Valor deve ser maior que zero."
     elif categoria.natureza not in naturezas_permitidas(tipo):
         # nunca confia só no filtro do <select> feito em JS — revalida aqui
         erro = f"A categoria \"{categoria.nome}\" não é compatível com {'despesa' if tipo == 'despesa' else 'receita'}."
 
+    def _erro_com_contexto(lancamento, mensagem):
+        contexto = {"lancamento": lancamento, "erro": mensagem, **_opcoes_cadastro(operacao)}
+        if lancamento:
+            contexto.update(_contexto_edicao(lancamento, request.POST.get("parcela_pk")))
+        return render(request, "financeiro/private_label/_lancamento_form.html", contexto)
+
     if erro:
         lancamento = get_object_or_404(LancamentoFinanceiro, pk=pk, operacao=operacao) if pk else None
-        return render(request, "financeiro/private_label/_lancamento_form.html", {
-            "lancamento": lancamento, "erro": erro, **_opcoes_cadastro(operacao),
-        })
+        return _erro_com_contexto(lancamento, erro)
 
     if pk:
         lancamento = get_object_or_404(LancamentoFinanceiro, pk=pk, operacao=operacao)
@@ -274,6 +295,31 @@ def pl_htmx_lancamento_salvar(request):
             forma_pagamento=forma_pagamento, numero_documento=request.POST.get("numero_documento", "").strip(),
             observacoes=request.POST.get("observacoes", "").strip(),
         )
+        # Pedido do dono (2026-09-02): dá pra corrigir o valor de UMA
+        # parcela só, ou reparcelar a série inteira (só quando nenhuma
+        # parcela tem baixa ainda) — nunca as duas coisas ao mesmo tempo.
+        escopo_valor = request.POST.get("escopo_valor", "parcela")
+        try:
+            if escopo_valor == "todas":
+                reparcelar(
+                    lancamento, usuario=request.user,
+                    novo_valor_total=_decimal(request.POST.get("novo_valor_total")),
+                    novas_parcelas_qtd=int(request.POST.get("novas_parcelas_qtd") or 1),
+                    primeiro_vencimento=request.POST.get("novo_primeiro_vencimento") or None,
+                    frequencia_parcelas=request.POST.get("nova_frequencia_parcelas", "mensal"),
+                )
+            else:
+                parcela_pk = request.POST.get("parcela_pk")
+                if parcela_pk:
+                    parcela = get_object_or_404(Parcela, pk=parcela_pk, lancamento=lancamento)
+                    novo_valor = request.POST.get("parcela_valor")
+                    editar_parcela(
+                        parcela, usuario=request.user,
+                        valor=novo_valor if novo_valor else None,
+                        data_vencimento=request.POST.get("parcela_vencimento") or None,
+                    )
+        except ValueError as e:
+            return _erro_com_contexto(lancamento, str(e))
     else:
         parcelas_qtd = int(request.POST.get("parcelas_qtd") or 1)
         # Um campo de data só no formulário (menos confuso pro usuário) —
@@ -284,7 +330,7 @@ def pl_htmx_lancamento_salvar(request):
         data_informada = request.POST.get("data_vencimento") or timezone.localdate()
         criar_lancamento(
             operacao=operacao, tipo=tipo, descricao=descricao,
-            valor_original=valor, data_competencia=data_informada,
+            valor_original=_decimal(request.POST.get("valor_original")), data_competencia=data_informada,
             primeiro_vencimento=data_informada,
             categoria=categoria, contato=contato, centro_custo=centro_custo, conta_prevista=conta_prevista,
             forma_pagamento=forma_pagamento, numero_documento=request.POST.get("numero_documento", "").strip(),
