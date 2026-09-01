@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block titulo %}Private Label · Lançamentos | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+{% include "financeiro/private_label/_estilos.html" %}
+{% endblock %}
+
+{% block conteudo %}
+<div class="pl-topo">
+  <div>
+    <h1 class="ds-page-titulo">Financeiro — Private Label</h1>
+    <p class="ds-page-subtitulo">Lançamentos</p>
+  </div>
+  <div class="pl-topo-acoes">
+    {% if user.pode_ver_private_label_fluxo_caixa or user.pode_ajustar_saldo_private_label %}
+    <button type="button" class="ds-btn ds-btn--outline" hx-get="{% url 'financeiro:pl_htmx_transferencia_form' %}" hx-target="#modal-container">&#8646; Transferência</button>
+    {% endif %}
+    {% if user.pode_ajustar_saldo_private_label %}
+    <button type="button" class="ds-btn ds-btn--outline" hx-get="{% url 'financeiro:pl_htmx_ajuste_saldo_form' %}" hx-target="#modal-container">Ajustar saldo</button>
+    {% endif %}
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_lancamento_form' %}" hx-target="#modal-container">+ Novo lançamento</button>
+  </div>
+</div>
+
+{% include "financeiro/private_label/_abas.html" %}
+
+<form class="pl-filtros" method="get" hx-get="{% url 'financeiro:pl_htmx_lancamentos_lista' %}" hx-target="#pl-lancamentos-lista" hx-trigger="change, submit" hx-push-url="true">
+  <div class="pl-form-campo">
+    <label>Buscar</label>
+    <input class="ds-input" type="text" name="q" value="{{ request.GET.q }}" placeholder="Descrição...">
+  </div>
+  <div class="pl-form-campo">
+    <label>Tipo</label>
+    <select class="ds-select" name="tipo">
+      <option value="">Todos</option>
+      {% for valor, label in tipos_lancamento %}
+      <option value="{{ valor }}" {% if request.GET.tipo == valor %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="pl-form-campo">
+    <label>Situação</label>
+    <select class="ds-select" name="situacao">
+      <option value="">Em aberto (padrão)</option>
+      <option value="vencido" {% if request.GET.situacao == "vencido" %}selected{% endif %}>Vencidas</option>
+      <option value="aberto" {% if request.GET.situacao == "aberto" %}selected{% endif %}>Abertas</option>
+      <option value="parcial" {% if request.GET.situacao == "parcial" %}selected{% endif %}>Parciais</option>
+      <option value="quitado" {% if request.GET.situacao == "quitado" %}selected{% endif %}>Quitadas</option>
+      <option value="cancelado" {% if request.GET.situacao == "cancelado" %}selected{% endif %}>Canceladas</option>
+      <option value="todas" {% if request.GET.situacao == "todas" %}selected{% endif %}>Todas</option>
+    </select>
+  </div>
+  <div class="pl-form-campo">
+    <label>Categoria</label>
+    <select class="ds-select" name="categoria">
+      <option value="">Todas</option>
+      {% for c in categorias %}<option value="{{ c.pk }}" {% if request.GET.categoria == c.pk|stringformat:"s" %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="pl-form-campo">
+    <label>Conta</label>
+    <select class="ds-select" name="conta">
+      <option value="">Todas</option>
+      {% for c in contas %}<option value="{{ c.pk }}" {% if request.GET.conta == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="pl-form-campo">
+    <label>Vencimento de</label>
+    <input class="ds-input" type="date" name="data_de" value="{{ request.GET.data_de }}">
+  </div>
+  <div class="pl-form-campo">
+    <label>até</label>
+    <input class="ds-input" type="date" name="data_ate" value="{{ request.GET.data_ate }}">
+  </div>
+  <button type="submit" class="ds-btn ds-btn--outline ds-btn--sm">Filtrar</button>
+</form>
+
+<div class="pl-lote-barra" id="pl-lote-barra">
+  <span id="pl-lote-contagem">0 selecionadas</span>
+  <button type="button" class="ds-btn ds-btn--dourado ds-btn--sm" onclick="plAbrirBaixaLote()">Baixar selecionadas</button>
+  <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" onclick="plLimparSelecao()">Limpar seleção</button>
+</div>
+
+<div id="pl-lancamentos-lista" hx-get="{% url 'financeiro:pl_htmx_lancamentos_lista' %}" hx-trigger="pl:lancamentos-mudou from:body" hx-swap="innerHTML">
+  {% include "financeiro/private_label/_lancamentos_lista.html" %}
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}
+
+{% block js_extra %}
+<script>
+function plParcelasSelecionadas() {
+  return Array.from(document.querySelectorAll('.pl-check-parcela:checked')).map(el => el.value);
+}
+function plAtualizarBarraLote() {
+  const sel = plParcelasSelecionadas();
+  const barra = document.getElementById('pl-lote-barra');
+  document.getElementById('pl-lote-contagem').textContent = sel.length + ' selecionada' + (sel.length === 1 ? '' : 's');
+  barra.classList.toggle('visivel', sel.length > 0);
+}
+function plLimparSelecao() {
+  document.querySelectorAll('.pl-check-parcela:checked').forEach(el => el.checked = false);
+  plAtualizarBarraLote();
+}
+function plAbrirBaixaLote() {
+  const ids = plParcelasSelecionadas().join(',');
+  if (!ids) return;
+  htmx.ajax('GET', "{% url 'financeiro:pl_htmx_baixa_lote_form' %}?ids=" + encodeURIComponent(ids), {target: '#modal-container'});
+}
+document.body.addEventListener('change', function(e) {
+  if (e.target.classList.contains('pl-check-parcela') || e.target.id === 'pl-check-todas') {
+    if (e.target.id === 'pl-check-todas') {
+      document.querySelectorAll('.pl-check-parcela').forEach(el => el.checked = e.target.checked);
+    }
+    plAtualizarBarraLote();
+  }
+});
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (e.target.id === 'pl-lancamentos-lista') plAtualizarBarraLote();
+});
+</script>
+{% endblock %}

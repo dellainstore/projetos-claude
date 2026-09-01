@@ -1,0 +1,33 @@
+{% load core_extras %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Descrição</th><th>Tipo</th><th>Valor</th><th>Frequência</th><th>Ocorrências geradas</th><th>Janela gerada até</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for regra in regras %}
+      <tr>
+        <td>{{ regra.descricao }}</td>
+        <td>{{ regra.get_tipo_lancamento_display }}</td>
+        <td>{{ regra.valor|brl }}</td>
+        <td>{{ regra.get_frequencia_display }}</td>
+        <td>{{ regra.ocorrencias.count }}</td>
+        <td>{{ regra.janela_gerada_ate|date:"d/m/Y"|default:"—" }}</td>
+        <td>
+          {% if not regra.ativa %}<span class="pl-badge pl-badge--cancelado">Encerrada</span>
+          {% elif regra.pausada %}<span class="pl-badge pl-badge--pendente">Pausada</span>
+          {% else %}<span class="pl-badge pl-badge--quitado">Ativa</span>{% endif %}
+        </td>
+        <td>
+          <button type="button" class="ds-btn ds-btn--outline ds-btn--sm"
+                  hx-post="{% url 'financeiro:pl_htmx_recorrencia_pausar' regra.pk %}"
+                  hx-target="#pl-recorrencias-lista" hx-swap="innerHTML"
+                  hx-confirm="{% if regra.pausada %}Retomar esta recorrência?{% else %}Pausar esta recorrência? Nenhuma nova ocorrência será gerada até retomar.{% endif %}">
+            {% if regra.pausada %}Retomar{% else %}Pausar{% endif %}
+          </button>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="text-muted">Nenhuma recorrência cadastrada ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

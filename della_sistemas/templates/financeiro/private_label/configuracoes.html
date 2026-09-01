@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block titulo %}Private Label · Configurações | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+{% include "financeiro/private_label/_estilos.html" %}
+{% endblock %}
+
+{% block conteudo %}
+<div class="pl-topo">
+  <div>
+    <h1 class="ds-page-titulo">Financeiro — Private Label</h1>
+    <p class="ds-page-subtitulo">Configurações do módulo</p>
+  </div>
+</div>
+
+{% include "financeiro/private_label/_abas.html" %}
+
+<div class="pl-subabas">
+  <a href="?aba=contas" class="pl-subaba {% if aba == 'contas' %}ativa{% endif %}">Contas Bancárias</a>
+  <a href="?aba=categorias" class="pl-subaba {% if aba == 'categorias' %}ativa{% endif %}">Categorias</a>
+  <a href="?aba=centros-custo" class="pl-subaba {% if aba == 'centros-custo' %}ativa{% endif %}">Centros de Custo</a>
+  <a href="?aba=contatos" class="pl-subaba {% if aba == 'contatos' %}ativa{% endif %}">Contatos</a>
+  <a href="?aba=formas-pagamento" class="pl-subaba {% if aba == 'formas-pagamento' %}ativa{% endif %}">Formas de Pagamento</a>
+  <a href="?aba=recorrencias" class="pl-subaba {% if aba == 'recorrencias' %}ativa{% endif %}">Recorrências</a>
+</div>
+
+{% if aba == "contas" %}
+  <div class="pl-topo">
+    <span class="text-muted">Contas usadas nos lançamentos e baixas do Private Label.</span>
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_conta_form' %}" hx-target="#modal-container">+ Nova conta</button>
+  </div>
+  <div id="pl-contas-lista" hx-get="{% url 'financeiro:pl_htmx_contas_lista' %}" hx-trigger="pl:contas-mudou from:body" hx-swap="innerHTML">{% include "financeiro/private_label/_contas_lista.html" %}</div>
+
+{% elif aba == "categorias" %}
+  <div class="pl-topo">
+    <span class="text-muted">Cada categoria já define se entra no DRE e em qual grupo.</span>
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_categoria_form' %}" hx-target="#modal-container">+ Nova categoria</button>
+  </div>
+  <div id="pl-categorias-lista" hx-get="{% url 'financeiro:pl_htmx_categorias_lista' %}" hx-trigger="pl:categorias-mudou from:body" hx-swap="innerHTML">{% include "financeiro/private_label/_categorias_lista.html" %}</div>
+
+{% elif aba == "centros-custo" %}
+  <div class="pl-topo">
+    <span class="text-muted">Opcional em cada lançamento — útil para segmentar dentro da operação.</span>
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_centro_custo_form' %}" hx-target="#modal-container">+ Novo centro de custo</button>
+  </div>
+  <div id="pl-centros-custo-lista" hx-get="{% url 'financeiro:pl_htmx_centros_custo_lista' %}" hx-trigger="pl:centros-custo-mudou from:body" hx-swap="innerHTML">{% include "financeiro/private_label/_centros_custo_lista.html" %}</div>
+
+{% elif aba == "contatos" %}
+  <div class="pl-topo">
+    <span class="text-muted">Clientes e fornecedores desta operação — cadastro local, sem integração.</span>
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_contato_form' %}" hx-target="#modal-container">+ Novo contato</button>
+  </div>
+  <div id="pl-contatos-lista" hx-get="{% url 'financeiro:pl_htmx_contatos_lista' %}" hx-trigger="pl:contatos-mudou from:body" hx-swap="innerHTML">{% include "financeiro/private_label/_contatos_lista.html" %}</div>
+
+{% elif aba == "formas-pagamento" %}
+  <div class="pl-topo">
+    <span class="text-muted">Aparecem no lançamento e na baixa.</span>
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_forma_pagamento_form' %}" hx-target="#modal-container">+ Nova forma</button>
+  </div>
+  <div id="pl-formas-pagamento-lista" hx-get="{% url 'financeiro:pl_htmx_formas_pagamento_lista' %}" hx-trigger="pl:formas-pagamento-mudou from:body" hx-swap="innerHTML">{% include "financeiro/private_label/_formas_pagamento_lista.html" %}</div>
+
+{% elif aba == "recorrencias" %}
+  <div class="pl-topo">
+    <span class="text-muted">Aluguel, assinaturas, salários — gera as próximas ocorrências automaticamente.</span>
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_recorrencia_form' %}" hx-target="#modal-container">+ Nova recorrência</button>
+  </div>
+  <div id="pl-recorrencias-lista" hx-get="{% url 'financeiro:pl_htmx_recorrencias_lista' %}" hx-trigger="pl:recorrencias-mudou from:body" hx-swap="innerHTML">{% include "financeiro/private_label/_recorrencias_lista.html" %}</div>
+{% endif %}
+
+<div id="modal-container"></div>
+{% endblock %}

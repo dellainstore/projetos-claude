@@ -1,0 +1,30 @@
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>{% if forma %}Editar forma de pagamento{% else %}Nova forma de pagamento{% endif %}</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_forma_pagamento_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      {% if forma %}<input type="hidden" name="pk" value="{{ forma.pk }}">{% endif %}
+      <div class="pl-form-campo">
+        <label>Nome</label>
+        <input class="ds-input" type="text" name="nome" required value="{{ forma.nome|default:'' }}" autofocus>
+      </div>
+      <div class="pl-form-grid" style="margin-top:.75rem;">
+        <div class="pl-form-campo">
+          <label>Ordem</label>
+          <input class="ds-input" type="number" name="ordem" value="{{ forma.ordem|default:0 }}">
+        </div>
+        <div class="pl-form-campo" style="justify-content:center;">
+          <label class="pl-form-check"><input type="checkbox" name="ativo" {% if forma.ativo|default:True %}checked{% endif %}> Ativa</label>
+        </div>
+      </div>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,36 @@
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>Ajuste manual de saldo</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <p class="text-muted" style="font-size:.8rem;margin-bottom:.75rem;">
+      Ação sensível e auditada — use só para corrigir uma divergência real de saldo (ex.: erro de saldo inicial). Não é lançamento de receita/despesa.
+    </p>
+    <form hx-post="{% url 'financeiro:pl_htmx_ajuste_saldo_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      <div class="pl-form-grid">
+        <div class="pl-form-campo">
+          <label>Conta</label>
+          <select class="ds-select" name="conta" required>
+            <option value="">Selecione</option>
+            {% for conta in contas %}<option value="{{ conta.pk }}">{{ conta.nome }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="pl-form-campo">
+          <label>Valor (positivo ou negativo)</label>
+          <input class="ds-input" type="number" step="0.01" name="valor" required placeholder="Ex.: -50.00">
+        </div>
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Motivo (obrigatório)</label>
+          <textarea class="ds-textarea" name="motivo" rows="2" required></textarea>
+        </div>
+      </div>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Confirmar ajuste</button>
+      </div>
+    </form>
+  </div>
+</div>

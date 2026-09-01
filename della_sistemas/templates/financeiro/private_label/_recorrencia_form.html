@@ -1,0 +1,84 @@
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>Nova recorrência</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_recorrencia_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      <div class="pl-form-grid">
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Descrição</label>
+          <input class="ds-input" type="text" name="descricao" required placeholder="Ex.: Aluguel, Assinatura de sistema..." autofocus>
+        </div>
+        <div class="pl-form-campo">
+          <label>Tipo</label>
+          <select class="ds-select" name="tipo_lancamento">
+            {% for valor, label in tipos_lancamento %}
+            <option value="{{ valor }}" {% if valor == "despesa" %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="pl-form-campo">
+          <label>Categoria</label>
+          <select class="ds-select" name="categoria" required>
+            <option value="">Selecione</option>
+            {% for categoria in categorias_todas %}
+            <option value="{{ categoria.pk }}">{{ categoria }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="pl-form-campo">
+          <label>Valor (R$)</label>
+          <input class="ds-input" type="number" step="0.01" min="0.01" name="valor" required>
+        </div>
+        <div class="pl-form-campo">
+          <label>Frequência</label>
+          <select class="ds-select" name="frequencia">
+            {% for valor, label in frequencias %}
+            <option value="{{ valor }}" {% if valor == "mensal" %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="pl-form-campo">
+          <label>Data inicial</label>
+          <input class="ds-input" type="date" name="data_inicial" value="{% now 'Y-m-d' %}" required>
+        </div>
+      </div>
+      <details class="pl-mais-opcoes" open>
+        <summary>Mais opções</summary>
+        <div class="pl-form-grid pl-form-grid--3">
+          <div class="pl-form-campo">
+            <label>Conta prevista</label>
+            <select class="ds-select" name="conta_prevista">
+              <option value="">—</option>
+              {% for conta in contas_todas %}
+              <option value="{{ conta.pk }}">{{ conta.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="pl-form-campo">
+            <label>Data final (opcional)</label>
+            <input class="ds-input" type="date" name="data_final">
+          </div>
+          <div class="pl-form-campo">
+            <label>Qtd. de ocorrências (opcional)</label>
+            <input class="ds-input" type="number" min="1" name="quantidade_ocorrencias">
+          </div>
+          <div class="pl-form-campo pl-form-campo--full">
+            <label>Janela de geração sem fim definido (meses à frente)</label>
+            <input class="ds-input" type="number" min="1" max="60" name="janela_meses" value="12">
+          </div>
+        </div>
+      </details>
+      <p class="text-muted" style="font-size:.78rem;margin-top:.5rem;">
+        Se não informar data final nem quantidade, as ocorrências são geradas dentro da janela acima e estendidas automaticamente conforme o tempo passa.
+      </p>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Criar recorrência</button>
+      </div>
+    </form>
+  </div>
+</div>

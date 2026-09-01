@@ -1,0 +1,67 @@
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>{% if conta %}Editar conta{% else %}Nova conta{% endif %}</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_conta_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      {% if conta %}<input type="hidden" name="pk" value="{{ conta.pk }}">{% endif %}
+      <div class="pl-form-grid">
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Nome da conta</label>
+          <input class="ds-input" type="text" name="nome" required value="{{ conta.nome|default:'' }}" autofocus>
+        </div>
+        <div class="pl-form-campo">
+          <label>Banco</label>
+          <input class="ds-input" type="text" name="banco" value="{{ conta.banco|default:'' }}">
+        </div>
+        <div class="pl-form-campo">
+          <label>Tipo</label>
+          <select class="ds-select" name="tipo_conta">
+            <option value="corrente" {% if conta.tipo_conta == "corrente" %}selected{% endif %}>Conta Corrente</option>
+            <option value="poupanca" {% if conta.tipo_conta == "poupanca" %}selected{% endif %}>Poupança</option>
+            <option value="carteira_digital" {% if conta.tipo_conta == "carteira_digital" %}selected{% endif %}>Carteira Digital</option>
+            <option value="caixa" {% if conta.tipo_conta == "caixa" %}selected{% endif %}>Caixa / Dinheiro</option>
+          </select>
+        </div>
+        {% if not conta %}
+        <div class="pl-form-campo">
+          <label>Saldo inicial (R$)</label>
+          <input class="ds-input" type="number" step="0.01" min="0" name="saldo_inicial" value="0.00">
+        </div>
+        <div class="pl-form-campo">
+          <label>Data do saldo inicial</label>
+          <input class="ds-input" type="date" name="data_saldo_inicial" value="{% now 'Y-m-d' %}">
+        </div>
+        {% endif %}
+      </div>
+      <details class="pl-mais-opcoes">
+        <summary>Mais opções</summary>
+        <div class="pl-form-grid">
+          <div class="pl-form-campo">
+            <label>Agência</label>
+            <input class="ds-input" type="text" name="agencia" value="{{ conta.agencia|default:'' }}">
+          </div>
+          <div class="pl-form-campo">
+            <label>Conta (mascarada)</label>
+            <input class="ds-input" type="text" name="conta_mascarada" placeholder="****-1234" value="{{ conta.conta_mascarada|default:'' }}">
+          </div>
+          <div class="pl-form-campo">
+            <label>Cor</label>
+            <input class="ds-input" type="color" name="cor" value="{{ conta.cor|default:'#c9a96e' }}" style="height:2.4rem;">
+          </div>
+          <div class="pl-form-campo" style="justify-content:center;">
+            <label class="pl-form-check"><input type="checkbox" name="ativa" {% if conta.ativa|default:True %}checked{% endif %}> Ativa</label>
+            <label class="pl-form-check"><input type="checkbox" name="incluir_consolidado" {% if conta.incluir_consolidado|default:True %}checked{% endif %}> Incluir no saldo consolidado</label>
+          </div>
+        </div>
+      </details>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>

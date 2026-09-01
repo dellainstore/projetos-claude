@@ -106,6 +106,65 @@ class User(AbstractUser):
         return self.tem_perm("financeiro.ver")
 
     @property
+    def pode_ver_private_label_dashboard(self) -> bool:
+        return self.tem_perm("private_label.ver_dashboard")
+
+    @property
+    def pode_ver_private_label_lancamentos(self) -> bool:
+        return self.tem_perm("private_label.ver_lancamentos")
+
+    @property
+    def pode_lancar_private_label(self) -> bool:
+        return self.tem_perm("private_label.lancar")
+
+    @property
+    def pode_ver_private_label_fluxo_caixa(self) -> bool:
+        return self.tem_perm("private_label.ver_fluxo_caixa")
+
+    @property
+    def pode_ver_private_label_cartoes(self) -> bool:
+        return self.tem_perm("private_label.ver_cartoes")
+
+    @property
+    def pode_ver_private_label_dre(self) -> bool:
+        return self.tem_perm("private_label.ver_dre")
+
+    @property
+    def pode_ver_private_label_investimentos(self) -> bool:
+        return self.tem_perm("private_label.ver_investimentos")
+
+    @property
+    def pode_configurar_private_label(self) -> bool:
+        return self.tem_perm("private_label.configurar")
+
+    @property
+    def pode_ajustar_saldo_private_label(self) -> bool:
+        return self.tem_perm("private_label.ajustar_saldo")
+
+    @property
+    def pode_baixar_valor_maior_private_label(self) -> bool:
+        return self.tem_perm("private_label.baixar_valor_maior")
+
+    @property
+    def pode_conciliar_private_label(self) -> bool:
+        return self.tem_perm("private_label.conciliar")
+
+    @property
+    def pode_ver_private_label(self) -> bool:
+        """Algum acesso ao grupo Private Label — só para abrir/fechar o
+        submenu inteiro no menu lateral. Cada link dentro checa a própria
+        permissão específica (mesmo padrão de `pode_ver_analytics`)."""
+        return (
+            self.pode_ver_private_label_lancamentos
+            or self.pode_configurar_private_label
+            or self.pode_ver_private_label_dashboard
+            or self.pode_ver_private_label_fluxo_caixa
+            or self.pode_ver_private_label_cartoes
+            or self.pode_ver_private_label_dre
+            or self.pode_ver_private_label_investimentos
+        )
+
+    @property
     def pode_ver_pedidos(self) -> bool:
         return self.tem_perm("pedidos.ver")
 

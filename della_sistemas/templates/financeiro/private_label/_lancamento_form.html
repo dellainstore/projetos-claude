@@ -1,0 +1,123 @@
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal ds-modal--largo">
+    <div class="ds-modal-titulo">
+      <span>{% if lancamento %}Editar lançamento{% else %}Novo lançamento{% endif %}</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_lancamento_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+      {% csrf_token %}
+      {% if lancamento %}<input type="hidden" name="pk" value="{{ lancamento.pk }}">{% endif %}
+      <div class="pl-form-grid">
+        <div class="pl-form-campo">
+          <label>Tipo</label>
+          <select class="ds-select" name="tipo" {% if lancamento %}disabled{% endif %} required>
+            {% for valor, label in tipos_lancamento %}
+            <option value="{{ valor }}" {% if lancamento.tipo == valor %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if lancamento %}<input type="hidden" name="tipo" value="{{ lancamento.tipo }}">{% endif %}
+        </div>
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Descrição</label>
+          <input class="ds-input" type="text" name="descricao" required value="{{ lancamento.descricao|default:'' }}" autofocus>
+        </div>
+        <div class="pl-form-campo">
+          <label>Categoria</label>
+          <select class="ds-select" name="categoria" required>
+            <option value="">Selecione</option>
+            {% for categoria in categorias %}
+            <option value="{{ categoria.pk }}" {% if lancamento.categoria_id == categoria.pk %}selected{% endif %}>{{ categoria }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="pl-form-campo">
+          <label>Valor {% if lancamento %}(não editável — cancele e lance de novo para mudar valor/parcelamento){% endif %}</label>
+          <input class="ds-input" type="number" step="0.01" min="0.01" name="valor_original" required
+                 value="{{ lancamento.valor_original|default:'' }}" {% if lancamento %}readonly{% endif %}>
+        </div>
+        {% if not lancamento %}
+        <div class="pl-form-campo">
+          <label>Data de competência</label>
+          <input class="ds-input" type="date" name="data_competencia" value="{% now 'Y-m-d' %}" required>
+        </div>
+        <div class="pl-form-campo">
+          <label>1º vencimento</label>
+          <input class="ds-input" type="date" name="data_vencimento" value="{% now 'Y-m-d' %}" required>
+        </div>
+        <div class="pl-form-campo">
+          <label>Parcelas</label>
+          <input class="ds-input" type="number" min="1" max="360" name="parcelas_qtd" value="1">
+        </div>
+        <div class="pl-form-campo">
+          <label>Frequência das parcelas</label>
+          <select class="ds-select" name="frequencia_parcelas">
+            <option value="mensal" selected>Mensal</option>
+            <option value="semanal">Semanal</option>
+            <option value="trimestral">Trimestral</option>
+            <option value="semestral">Semestral</option>
+            <option value="anual">Anual</option>
+          </select>
+        </div>
+        {% endif %}
+      </div>
+      <details class="pl-mais-opcoes" {% if lancamento %}open{% endif %}>
+        <summary>Mais opções</summary>
+        <div class="pl-form-grid">
+          <div class="pl-form-campo">
+            <label>Contato (cliente/fornecedor)</label>
+            <select class="ds-select" name="contato">
+              <option value="">—</option>
+              {% for contato in contatos %}
+              <option value="{{ contato.pk }}" {% if lancamento.contato_id == contato.pk %}selected{% endif %}>{{ contato.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="pl-form-campo">
+            <label>Centro de custo</label>
+            <select class="ds-select" name="centro_custo">
+              <option value="">—</option>
+              {% for centro in centros_custo %}
+              <option value="{{ centro.pk }}" {% if lancamento.centro_custo_id == centro.pk %}selected{% endif %}>{{ centro.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="pl-form-campo">
+            <label>Conta prevista (opcional)</label>
+            <select class="ds-select" name="conta_prevista">
+              <option value="">—</option>
+              {% for conta in contas %}
+              <option value="{{ conta.pk }}" {% if lancamento.conta_prevista_id == conta.pk %}selected{% endif %}>{{ conta.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="pl-form-campo">
+            <label>Forma de pagamento</label>
+            <select class="ds-select" name="forma_pagamento">
+              <option value="">—</option>
+              {% for forma in formas_pagamento %}
+              <option value="{{ forma.pk }}" {% if lancamento.forma_pagamento_id == forma.pk %}selected{% endif %}>{{ forma.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="pl-form-campo">
+            <label>Nº do documento</label>
+            <input class="ds-input" type="text" name="numero_documento" value="{{ lancamento.numero_documento|default:'' }}">
+          </div>
+          <div class="pl-form-campo">
+            <label>Tags (separadas por vírgula)</label>
+            <input class="ds-input" type="text" name="tags" value="{{ tags_atuais|default:'' }}">
+          </div>
+          <div class="pl-form-campo pl-form-campo--full">
+            <label>Observações</label>
+            <textarea class="ds-textarea" name="observacoes" rows="2">{{ lancamento.observacoes|default:'' }}</textarea>
+          </div>
+        </div>
+      </details>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>

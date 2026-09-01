@@ -1,0 +1,23 @@
+{% load core_extras %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Nome</th><th>Banco</th><th>Tipo</th><th>Saldo atual</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for conta in contas %}
+      <tr>
+        <td><span style="display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:{{ conta.cor }};margin-right:.4rem;"></span>{{ conta.nome }}</td>
+        <td>{{ conta.banco|default:"" }}</td>
+        <td>{{ conta.get_tipo_conta_display }}</td>
+        <td>{{ conta.saldo_atual|brl }}</td>
+        <td>
+          {% if conta.ativa %}<span class="pl-badge pl-badge--quitado">Ativa</span>{% else %}<span class="pl-badge pl-badge--cancelado">Inativa</span>{% endif %}
+          {% if not conta.incluir_consolidado %}<span class="pl-badge pl-badge--previsto">Fora do consolidado</span>{% endif %}
+        </td>
+        <td><button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_conta_form_editar' conta.pk %}" hx-target="#modal-container">Editar</button></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">Nenhuma conta cadastrada ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

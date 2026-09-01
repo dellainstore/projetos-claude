@@ -1,0 +1,16 @@
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for forma in formas_pagamento %}
+      <tr>
+        <td>{{ forma.nome }}</td>
+        <td>{% if forma.ativo %}<span class="pl-badge pl-badge--quitado">Ativa</span>{% else %}<span class="pl-badge pl-badge--cancelado">Inativa</span>{% endif %}</td>
+        <td><button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_forma_pagamento_form_editar' forma.pk %}" hx-target="#modal-container">Editar</button></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3" class="text-muted">Nenhuma forma de pagamento cadastrada ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,81 @@
+{% load core_extras %}
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal ds-modal--largo">
+    <div class="ds-modal-titulo">
+      <span>{{ lancamento.descricao }}</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+
+    <div class="pl-form-grid" style="margin-bottom:1rem;font-size:.85rem;">
+      <div><strong>Tipo:</strong> {{ lancamento.get_tipo_display }}</div>
+      <div><strong>Valor original:</strong> {{ lancamento.valor_original|brl }}</div>
+      <div><strong>Categoria:</strong> {{ lancamento.categoria.icone }} {{ lancamento.categoria.nome|default:"—" }}</div>
+      <div><strong>Centro de custo:</strong> {{ lancamento.centro_custo.nome|default:"—" }}</div>
+      <div><strong>Contato:</strong> {{ lancamento.contato.nome|default:"—" }}</div>
+      <div><strong>Conta prevista:</strong> {{ lancamento.conta_prevista.nome|default:"—" }}</div>
+      <div><strong>Competência:</strong> {{ lancamento.data_competencia|date:"d/m/Y" }}</div>
+      <div><strong>Situação:</strong> <span class="pl-badge pl-badge--{{ lancamento.situacao_temporal }}">{{ lancamento.situacao_temporal|capfirst }}</span></div>
+      {% if lancamento.data_quitacao %}<div><strong>Quitado em:</strong> {{ lancamento.data_quitacao|date:"d/m/Y" }}</div>{% endif %}
+      {% if lancamento.tags.all %}<div class="pl-form-campo--full"><strong>Tags:</strong> {% for t in lancamento.tags.all %}{{ t.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+      {% if lancamento.observacoes %}<div class="pl-form-campo--full"><strong>Observações:</strong> {{ lancamento.observacoes }}</div>{% endif %}
+    </div>
+
+    <h3 style="font-size:.9rem;margin-bottom:.5rem;">Parcelas e baixas</h3>
+    <div class="ds-table-wrapper" style="margin-bottom:1.1rem;">
+      <table class="ds-table">
+        <thead><tr><th>#</th><th>Valor</th><th>Vencimento</th><th>Situação</th><th>Baixas</th></tr></thead>
+        <tbody>
+          {% for parcela in lancamento.parcelas.all %}
+          <tr>
+            <td>{{ parcela.numero }}</td>
+            <td>{{ parcela.valor|brl }}</td>
+            <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+            <td><span class="pl-badge pl-badge--{{ parcela.situacao_temporal }}">{{ parcela.situacao_temporal|capfirst }}</span></td>
+            <td>
+              {% for baixa in parcela.baixas.all %}
+                {% if not baixa.estornada %}
+                <div style="margin-bottom:.25rem;">
+                  {{ baixa.valor_movimentado|brl }} em {{ baixa.data|date:"d/m/Y" }} ({{ baixa.conta.nome }})
+                  <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" style="padding:.1rem .4rem;font-size:.7rem;"
+                          hx-post="{% url 'financeiro:pl_htmx_baixa_estornar' baixa.pk %}" hx-target="#modal-container"
+                          hx-confirm="Estornar esta baixa de {{ baixa.valor_movimentado|brl }}?">Estornar</button>
+                </div>
+                {% endif %}
+              {% empty %}
+              <span class="text-muted">—</span>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:.9rem;margin-bottom:.5rem;">Anexos</h3>
+    <ul style="font-size:.82rem;margin-bottom:.6rem;padding-left:1.1rem;">
+      {% for anexo in lancamento.anexos.all %}
+      <li><a href="{% url 'financeiro:pl_anexo_download' anexo.pk %}">{{ anexo.nome_original }}</a> <span class="text-muted">({{ anexo.tamanho|filesizeformat }})</span></li>
+      {% empty %}
+      <li class="text-muted">Nenhum anexo.</li>
+      {% endfor %}
+    </ul>
+    <form hx-post="{% url 'financeiro:pl_htmx_anexo_upload' lancamento.pk %}" hx-target="#modal-container" hx-encoding="multipart/form-data" style="display:flex;gap:.5rem;margin-bottom:1.1rem;">
+      {% csrf_token %}
+      <input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.ofx" required>
+      <button type="submit" class="ds-btn ds-btn--outline ds-btn--sm">Anexar</button>
+    </form>
+
+    <h3 style="font-size:.9rem;margin-bottom:.5rem;">Histórico</h3>
+    <ul style="font-size:.78rem;color:var(--cinza-texto);padding-left:1.1rem;max-height:140px;overflow-y:auto;">
+      {% for log in logs %}
+      <li>{{ log.criado_em|date:"d/m/Y H:i" }} — {{ log.get_acao_display }}{% if log.usuario %} por {{ log.usuario }}{% endif %}{% if log.valor_para %}: {{ log.valor_para }}{% endif %}</li>
+      {% empty %}
+      <li class="text-muted">Sem histórico.</li>
+      {% endfor %}
+    </ul>
+
+    <div class="pl-form-acoes">
+      <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Fechar</button>
+    </div>
+  </div>
+</div>

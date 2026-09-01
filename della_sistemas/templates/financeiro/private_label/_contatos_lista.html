@@ -1,0 +1,18 @@
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Nome</th><th>Tipo</th><th>Documento</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for contato in contatos %}
+      <tr>
+        <td>{{ contato.nome }}</td>
+        <td>{{ contato.get_tipo_display }}</td>
+        <td>{{ contato.documento|default:"" }}</td>
+        <td>{% if contato.ativo %}<span class="pl-badge pl-badge--quitado">Ativo</span>{% else %}<span class="pl-badge pl-badge--cancelado">Inativo</span>{% endif %}</td>
+        <td><button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_contato_form_editar' contato.pk %}" hx-target="#modal-container">Editar</button></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="text-muted">Nenhum contato cadastrado ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

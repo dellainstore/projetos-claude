@@ -1,0 +1,93 @@
+{% comment %}
+Estilos compartilhados por todas as telas do Private Label. Incluído via
+include dentro do bloco css_extra de cada página — segue o padrão do
+projeto de CSS local por página (ex.: templates/tarefas/).
+{% endcomment %}
+<style>
+  /* Navegação interna "abas" do submenu Private Label */
+  .pl-abas { margin-bottom: 1.25rem; border-bottom: 1px solid var(--cinza-medio); }
+  .pl-abas-desktop { display: flex; gap: .25rem; }
+  .pl-aba {
+    padding: .6rem 1rem; font-size: .86rem; font-weight: 600; color: var(--cinza-texto);
+    text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .pl-aba:hover { color: var(--preto); }
+  .pl-aba.ativa { color: var(--dourado); border-bottom-color: var(--dourado); }
+  .pl-abas-mobile { display: none; width: 100%; margin-bottom: .75rem; }
+  @media (max-width: 768px) {
+    .pl-abas-desktop { display: none; }
+    .pl-abas-mobile { display: block; }
+    .pl-abas { border-bottom: none; }
+  }
+
+  /* Sub-abas de Configurações (contas/categorias/...) */
+  .pl-subabas { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .pl-subaba {
+    padding: .4rem .8rem; font-size: .8rem; font-weight: 600; border-radius: 999px;
+    text-decoration: none; color: var(--cinza-texto); background: var(--cinza-claro);
+  }
+  .pl-subaba.ativa { color: var(--branco); background: var(--dourado); }
+
+  /* Modal (mesmo padrão de templates/tarefas/) */
+  #modal-container:empty { display: none; }
+  .ds-modal-fundo {
+    position: fixed; inset: 0; background: rgba(10,10,10,.5); display: flex;
+    align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
+  }
+  .ds-modal {
+    background: var(--branco); border-radius: 12px; padding: 1.5rem; width: 100%;
+    max-width: 560px; max-height: 90vh; overflow-y: auto;
+  }
+  .ds-modal--largo { max-width: 720px; }
+  .ds-modal-titulo {
+    font-family: 'Playfair Display', serif; font-size: 1.2rem; color: var(--preto);
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;
+  }
+  .ds-modal-fechar { border: none; background: none; font-size: 1.3rem; cursor: pointer; color: var(--cinza-texto); line-height: 1; }
+  .ds-modal-erro {
+    background: rgba(217,79,79,.1); color: var(--vermelho); padding: .55rem .75rem;
+    border-radius: 6px; font-size: .82rem; margin-bottom: .9rem;
+  }
+
+  /* Form */
+  .pl-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .pl-form-grid--3 { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 560px) { .pl-form-grid, .pl-form-grid--3 { grid-template-columns: 1fr; } }
+  .pl-form-campo { display: flex; flex-direction: column; gap: .25rem; font-size: .82rem; color: var(--cinza-texto); }
+  .pl-form-campo--full { grid-column: 1 / -1; }
+  .pl-form-check { display: flex; align-items: center; gap: .4rem; font-size: .82rem; font-weight: 400; }
+  .pl-mais-opcoes { margin-top: .5rem; }
+  .pl-mais-opcoes summary { cursor: pointer; font-size: .82rem; color: var(--dourado); font-weight: 600; margin-bottom: .6rem; }
+  .pl-form-acoes { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.1rem; }
+
+  /* Status badges */
+  .pl-badge { display: inline-block; padding: .18rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+  .pl-badge--previsto  { background: rgba(107,107,107,.12); color: var(--cinza-texto); }
+  .pl-badge--pendente  { background: rgba(212,160,23,.15); color: var(--amarelo); }
+  .pl-badge--parcial   { background: rgba(212,160,23,.22); color: #8a6a10; }
+  .pl-badge--vencido   { background: rgba(217,79,79,.14); color: var(--vermelho); }
+  .pl-badge--quitado   { background: rgba(45,158,110,.14); color: var(--verde); }
+  .pl-badge--cancelado { background: rgba(107,107,107,.18); color: var(--cinza-texto); text-decoration: line-through; }
+
+  /* Filtros */
+  .pl-filtros {
+    display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap;
+    background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px;
+    padding: .8rem .9rem; margin-bottom: 1.1rem;
+  }
+  .pl-filtros .pl-form-campo { min-width: 140px; }
+
+  /* Barra de ações em lote */
+  .pl-lote-barra {
+    display: none; align-items: center; gap: .75rem; background: rgba(201,169,110,.12);
+    border: 1px solid var(--dourado); border-radius: 8px; padding: .6rem .9rem; margin-bottom: .8rem;
+    font-size: .85rem;
+  }
+  .pl-lote-barra.visivel { display: flex; }
+
+  .pl-topo {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: .75rem; margin-bottom: 1.1rem;
+  }
+  .pl-topo-acoes { display: flex; gap: .6rem; flex-wrap: wrap; }
+</style>

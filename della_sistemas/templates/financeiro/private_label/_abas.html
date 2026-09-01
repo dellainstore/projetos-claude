@@ -1,0 +1,24 @@
+{% comment %}
+Navegação interna do submenu Private Label — cada aba é uma rota própria
+(funciona com F5), aba ativa por url_name. Em telas <=768px vira <select>
+(sem lib nova de JS), conforme pedido. Só linka abas cuja tela já existe
+E cuja permissão o usuário tem — nunca aba "em construção".
+{% endcomment %}
+<div class="pl-abas">
+  <div class="pl-abas-desktop">
+    {% if user.pode_ver_private_label_lancamentos %}
+    <a href="{% url 'financeiro:pl_lancamentos' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_lancamentos' %}ativa{% endif %}">Lançamentos</a>
+    {% endif %}
+    {% if user.pode_configurar_private_label %}
+    <a href="{% url 'financeiro:pl_configuracoes' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_configuracoes' %}ativa{% endif %}">Configurações</a>
+    {% endif %}
+  </div>
+  <select class="pl-abas-mobile ds-input" onchange="if(this.value) location.href=this.value">
+    {% if user.pode_ver_private_label_lancamentos %}
+    <option value="{% url 'financeiro:pl_lancamentos' %}" {% if request.resolver_match.url_name == 'pl_lancamentos' %}selected{% endif %}>Lançamentos</option>
+    {% endif %}
+    {% if user.pode_configurar_private_label %}
+    <option value="{% url 'financeiro:pl_configuracoes' %}" {% if request.resolver_match.url_name == 'pl_configuracoes' %}selected{% endif %}>Configurações</option>
+    {% endif %}
+  </select>
+</div>

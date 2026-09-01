@@ -1,0 +1,60 @@
+{% load core_extras %}
+<div class="ds-table-wrapper">
+  <table class="ds-table" style="min-width:1000px;">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="pl-check-todas"></th>
+        <th>Tipo</th>
+        <th>Descrição</th>
+        <th>Categoria</th>
+        <th>Conta prevista</th>
+        <th>Valor</th>
+        <th>Vencimento</th>
+        <th>Situação</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for parcela in parcelas %}
+      {% with lanc=parcela.lancamento sit=parcela.situacao_temporal %}
+      <tr>
+        <td>
+          {% if sit != "quitado" and sit != "cancelado" %}
+          <input type="checkbox" class="pl-check-parcela" value="{{ parcela.pk }}">
+          {% endif %}
+        </td>
+        <td>{{ lanc.get_tipo_display }}</td>
+        <td>
+          <a href="#" hx-get="{% url 'financeiro:pl_htmx_lancamento_detalhe' lanc.pk %}" hx-target="#modal-container" style="color:var(--preto);text-decoration:none;font-weight:600;">
+            {{ lanc.descricao }}
+          </a>
+          {% if lanc.parcelas.count > 1 %}<span class="text-muted" style="font-size:.76rem;"> ({{ parcela.numero }}/{{ lanc.parcelas.count }})</span>{% endif %}
+        </td>
+        <td>{{ lanc.categoria.icone }} {{ lanc.categoria.nome|default:"" }}</td>
+        <td>{{ lanc.conta_prevista.nome|default:"—" }}</td>
+        <td>
+          {{ parcela.valor|brl }}
+          {% if sit == "parcial" %}<br><span class="text-muted" style="font-size:.74rem;">restam {{ parcela.saldo_restante|brl }}</span>{% endif %}
+        </td>
+        <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
+        <td><span class="pl-badge pl-badge--{{ sit }}">{{ sit|capfirst }}</span></td>
+        <td style="white-space:nowrap;">
+          {% if sit != "quitado" and sit != "cancelado" %}
+          <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_baixa_form' parcela.pk %}" hx-target="#modal-container">Baixar</button>
+          {% endif %}
+          {% if sit == "aberto" and parcela.numero == 1 %}
+          <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_lancamento_form_editar' lanc.pk %}" hx-target="#modal-container">Editar</button>
+          {% endif %}
+          <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-post="{% url 'financeiro:pl_htmx_lancamento_duplicar' lanc.pk %}">Duplicar</button>
+          {% if sit != "cancelado" and sit != "quitado" %}
+          <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-post="{% url 'financeiro:pl_htmx_lancamento_cancelar' lanc.pk %}" hx-confirm="Cancelar este lançamento? A ação fica registrada no histórico.">Cancelar</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endwith %}
+      {% empty %}
+      <tr><td colspan="9" class="text-muted">Nenhum lançamento encontrado com esses filtros.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

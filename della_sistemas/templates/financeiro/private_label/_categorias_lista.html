@@ -1,0 +1,18 @@
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Categoria</th><th>Natureza</th><th>Entra no DRE</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for categoria in categorias %}
+      <tr>
+        <td>{{ categoria.icone }} {{ categoria }}</td>
+        <td>{{ categoria.get_natureza_display }}</td>
+        <td>{% if categoria.entra_dre %}<span class="pl-badge pl-badge--quitado">Sim</span>{% else %}<span class="pl-badge pl-badge--cancelado">Não</span>{% endif %}</td>
+        <td>{% if categoria.ativa %}<span class="pl-badge pl-badge--quitado">Ativa</span>{% else %}<span class="pl-badge pl-badge--cancelado">Inativa</span>{% endif %}</td>
+        <td><button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_categoria_form_editar' categoria.pk %}" hx-target="#modal-container">Editar</button></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="text-muted">Nenhuma categoria cadastrada ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,55 @@
+<div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>{% if contato %}Editar contato{% else %}Novo contato{% endif %}</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_contato_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      {% if contato %}<input type="hidden" name="pk" value="{{ contato.pk }}">{% endif %}
+      <div class="pl-form-grid">
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Nome</label>
+          <input class="ds-input" type="text" name="nome" required value="{{ contato.nome|default:'' }}" autofocus>
+        </div>
+        <div class="pl-form-campo">
+          <label>Tipo</label>
+          <select class="ds-select" name="tipo">
+            <option value="fornecedor" {% if contato.tipo == "fornecedor" %}selected{% endif %}>Fornecedor</option>
+            <option value="cliente" {% if contato.tipo == "cliente" %}selected{% endif %}>Cliente</option>
+            <option value="ambos" {% if contato.tipo == "ambos" %}selected{% endif %}>Cliente e Fornecedor</option>
+          </select>
+        </div>
+        <div class="pl-form-campo">
+          <label>CPF/CNPJ (opcional)</label>
+          <input class="ds-input" type="text" name="documento" value="{{ contato.documento|default:'' }}">
+        </div>
+      </div>
+      <details class="pl-mais-opcoes">
+        <summary>Mais opções</summary>
+        <div class="pl-form-grid">
+          <div class="pl-form-campo">
+            <label>Telefone</label>
+            <input class="ds-input" type="text" name="telefone" value="{{ contato.telefone|default:'' }}">
+          </div>
+          <div class="pl-form-campo">
+            <label>E-mail</label>
+            <input class="ds-input" type="email" name="email" value="{{ contato.email|default:'' }}">
+          </div>
+          <div class="pl-form-campo pl-form-campo--full">
+            <label>Observações</label>
+            <textarea class="ds-textarea" name="observacoes" rows="2">{{ contato.observacoes|default:'' }}</textarea>
+          </div>
+          <div class="pl-form-campo">
+            <label class="pl-form-check"><input type="checkbox" name="ativo" {% if contato.ativo|default:True %}checked{% endif %}> Ativo</label>
+          </div>
+        </div>
+      </details>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
