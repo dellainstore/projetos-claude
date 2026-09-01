@@ -257,10 +257,16 @@ def pl_htmx_lancamento_salvar(request):
         )
     else:
         parcelas_qtd = int(request.POST.get("parcelas_qtd") or 1)
+        # Um campo de data só no formulário (menos confuso pro usuário) —
+        # a "competência" (usada no DRE por regime de competência, Fase 1C)
+        # é sempre igual à data informada. Continuam sendo 2 campos no
+        # model porque servem a propósitos diferentes lá na frente, mas
+        # aqui na criação simples viram a mesma coisa.
+        data_informada = request.POST.get("data_vencimento") or timezone.localdate()
         criar_lancamento(
             operacao=operacao, tipo=tipo, descricao=descricao,
-            valor_original=valor, data_competencia=request.POST.get("data_competencia") or timezone.localdate(),
-            primeiro_vencimento=request.POST.get("data_vencimento") or timezone.localdate(),
+            valor_original=valor, data_competencia=data_informada,
+            primeiro_vencimento=data_informada,
             categoria=categoria, contato=contato, centro_custo=centro_custo, conta_prevista=conta_prevista,
             forma_pagamento=forma_pagamento, numero_documento=request.POST.get("numero_documento", "").strip(),
             observacoes=request.POST.get("observacoes", "").strip(), tags=tags,

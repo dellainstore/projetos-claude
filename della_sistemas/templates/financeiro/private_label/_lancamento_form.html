@@ -38,11 +38,7 @@
         </div>
         {% if not lancamento %}
         <div class="pl-form-campo">
-          <label>Data de competência</label>
-          <input class="ds-input" type="date" name="data_competencia" value="{% now 'Y-m-d' %}" required>
-        </div>
-        <div class="pl-form-campo">
-          <label>1º vencimento</label>
+          <label>Data</label>
           <input class="ds-input" type="date" name="data_vencimento" value="{% now 'Y-m-d' %}" required>
         </div>
         <div class="pl-form-campo">
@@ -58,12 +54,6 @@
             <option value="semestral">Semestral</option>
             <option value="anual">Anual</option>
           </select>
-        </div>
-        <div class="pl-form-campo pl-form-campo--full">
-          <span class="text-muted" style="font-size:.78rem;">
-            Vencimento antes de hoje + conta informada = já entra como pago/recebido automaticamente.
-            Vencimento de hoje em diante fica "a pagar"/"a receber" até você baixar.
-          </span>
         </div>
         {% endif %}
       </div>

@@ -13,7 +13,6 @@
       <div><strong>Centro de custo:</strong> {{ lancamento.centro_custo.nome|default:"—" }}</div>
       <div><strong>Contato:</strong> {{ lancamento.contato.nome|default:"—" }}</div>
       <div><strong>Conta prevista:</strong> {{ lancamento.conta_prevista.nome|default:"—" }}</div>
-      <div><strong>Competência:</strong> {{ lancamento.data_competencia|date:"d/m/Y" }}</div>
       <div><strong>Situação:</strong> <span class="pl-badge pl-badge--{{ lancamento.situacao_temporal }}">{% rotulo_situacao_tag lancamento.tipo lancamento.situacao_temporal %}</span></div>
       {% if lancamento.data_quitacao %}<div><strong>Quitado em:</strong> {{ lancamento.data_quitacao|date:"d/m/Y" }}</div>{% endif %}
       {% if lancamento.tags.all %}<div class="pl-form-campo--full"><strong>Tags:</strong> {% for t in lancamento.tags.all %}{{ t.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
