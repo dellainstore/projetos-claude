@@ -43,9 +43,9 @@
     <select class="ds-select" name="situacao">
       <option value="">Em aberto (padrão)</option>
       <option value="vencido" {% if request.GET.situacao == "vencido" %}selected{% endif %}>Vencidas</option>
-      <option value="aberto" {% if request.GET.situacao == "aberto" %}selected{% endif %}>Abertas</option>
+      <option value="aberto" {% if request.GET.situacao == "aberto" %}selected{% endif %}>A pagar / A receber</option>
       <option value="parcial" {% if request.GET.situacao == "parcial" %}selected{% endif %}>Parciais</option>
-      <option value="quitado" {% if request.GET.situacao == "quitado" %}selected{% endif %}>Quitadas</option>
+      <option value="quitado" {% if request.GET.situacao == "quitado" %}selected{% endif %}>Pagas / Recebidas</option>
       <option value="cancelado" {% if request.GET.situacao == "cancelado" %}selected{% endif %}>Canceladas</option>
       <option value="todas" {% if request.GET.situacao == "todas" %}selected{% endif %}>Todas</option>
     </select>

@@ -28,6 +28,7 @@ from apps.financeiro.models import (
     TIPO_LANCAMENTO_CHOICES,
     TagFinanceira,
     Transferencia,
+    naturezas_permitidas,
 )
 from apps.financeiro.services.private_label.ajustes import ajustar_saldo
 from apps.financeiro.services.private_label.auditoria import registrar_log
@@ -213,6 +214,7 @@ def pl_htmx_lancamento_salvar(request):
     operacao = obter_operacao_padrao()
     pk = request.POST.get("pk")
 
+    tipo = request.POST.get("tipo", "despesa")
     categoria_id = request.POST.get("categoria")
     categoria = CategoriaFinanceira.objects.filter(pk=categoria_id, operacao=operacao).first() if categoria_id else None
     descricao = request.POST.get("descricao", "").strip()
@@ -235,6 +237,9 @@ def pl_htmx_lancamento_salvar(request):
         erro = "Categoria é obrigatória."
     elif valor <= 0:
         erro = "Valor deve ser maior que zero."
+    elif categoria.natureza not in naturezas_permitidas(tipo):
+        # nunca confia só no filtro do <select> feito em JS — revalida aqui
+        erro = f"A categoria \"{categoria.nome}\" não é compatível com {'despesa' if tipo == 'despesa' else 'receita'}."
 
     if erro:
         lancamento = get_object_or_404(LancamentoFinanceiro, pk=pk, operacao=operacao) if pk else None
@@ -253,7 +258,7 @@ def pl_htmx_lancamento_salvar(request):
     else:
         parcelas_qtd = int(request.POST.get("parcelas_qtd") or 1)
         criar_lancamento(
-            operacao=operacao, tipo=request.POST.get("tipo", "despesa"), descricao=descricao,
+            operacao=operacao, tipo=tipo, descricao=descricao,
             valor_original=valor, data_competencia=request.POST.get("data_competencia") or timezone.localdate(),
             primeiro_vencimento=request.POST.get("data_vencimento") or timezone.localdate(),
             categoria=categoria, contato=contato, centro_custo=centro_custo, conta_prevista=conta_prevista,

@@ -20,6 +20,7 @@ from apps.financeiro.models import (
     Parcela,
 )
 from .auditoria import registrar_log
+from .baixas import dar_baixa
 from .datas import normalizar_data, somar_periodo
 
 
@@ -73,6 +74,23 @@ def criar_lancamento(
         operacao=operacao, entidade="lancamento", objeto_id=lancamento.id, acao="criacao",
         usuario=usuario, valor_para=f"R$ {valor_original} em {parcelas_qtd}x",
     )
+
+    # Pedido do dono (2026-09-02): lançamento com data no passado é
+    # histórico (já aconteceu), não uma pendência — já entra como
+    # pago/recebido automaticamente, sem precisar dar baixa manual depois.
+    # Data de hoje ou futura continua "a pagar"/"a receber" até baixar.
+    # Só dá pra baixar automaticamente quando há uma conta informada (baixa
+    # exige conta real) — sem conta, fica em aberto mesmo com data passada
+    # (aparece como "Vencido"; o usuário informa a conta na hora de baixar).
+    if conta_prevista is not None:
+        hoje = timezone.localdate()
+        for parcela in lancamento.parcelas.all():
+            if parcela.data_vencimento < hoje:
+                dar_baixa(
+                    parcela=parcela, valor_principal=parcela.valor, data=parcela.data_vencimento,
+                    conta=conta_prevista, forma_pagamento=forma_pagamento, usuario=usuario,
+                )
+
     return lancamento
 
 

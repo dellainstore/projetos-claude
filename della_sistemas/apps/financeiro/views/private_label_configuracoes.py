@@ -20,6 +20,7 @@ from apps.financeiro.models import (
     NATUREZA_CHOICES,
     RegraRecorrencia,
     FREQUENCIA_CHOICES,
+    naturezas_permitidas,
     TIPO_LANCAMENTO_CHOICES,
 )
 from apps.financeiro.services.private_label.operacao import obter_operacao_padrao
@@ -298,14 +299,18 @@ def pl_htmx_recorrencia_salvar(request):
     operacao = obter_operacao_padrao()
     descricao = request.POST.get("descricao", "").strip()
     categoria_id = request.POST.get("categoria")
+    tipo_lancamento = request.POST.get("tipo_lancamento", "despesa")
     valor = _decimal(request.POST.get("valor"))
+    categoria = CategoriaFinanceira.objects.filter(pk=categoria_id, operacao=operacao).first() if categoria_id else None
     erro = None
     if not descricao:
         erro = "Descrição é obrigatória."
-    elif not categoria_id:
+    elif not categoria:
         erro = "Categoria é obrigatória."
     elif valor <= 0:
         erro = "Valor deve ser maior que zero."
+    elif categoria.natureza not in naturezas_permitidas(tipo_lancamento):
+        erro = f"A categoria \"{categoria.nome}\" não é compatível com {'despesa' if tipo_lancamento == 'despesa' else 'receita'}."
     if erro:
         return render(request, "financeiro/private_label/_recorrencia_form.html", {
             "categorias_todas": CategoriaFinanceira.objects.filter(operacao=operacao, ativa=True).order_by("nome"),
@@ -316,7 +321,7 @@ def pl_htmx_recorrencia_salvar(request):
     quantidade = request.POST.get("quantidade_ocorrencias") or None
     criar_regra_recorrencia(
         operacao=operacao, usuario=request.user,
-        descricao=descricao, tipo_lancamento=request.POST.get("tipo_lancamento", "despesa"),
+        descricao=descricao, tipo_lancamento=tipo_lancamento,
         categoria_id=categoria_id, centro_custo_id=request.POST.get("centro_custo") or None,
         conta_prevista_id=request.POST.get("conta_prevista") or None,
         contato_id=request.POST.get("contato") or None, valor=valor,

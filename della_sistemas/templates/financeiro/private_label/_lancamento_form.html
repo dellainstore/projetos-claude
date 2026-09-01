@@ -5,13 +5,13 @@
       <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
     </div>
     {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
-    <form hx-post="{% url 'financeiro:pl_htmx_lancamento_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+    <form id="pl-lancamento-form" hx-post="{% url 'financeiro:pl_htmx_lancamento_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML" hx-encoding="multipart/form-data">
       {% csrf_token %}
       {% if lancamento %}<input type="hidden" name="pk" value="{{ lancamento.pk }}">{% endif %}
       <div class="pl-form-grid">
         <div class="pl-form-campo">
           <label>Tipo</label>
-          <select class="ds-select" name="tipo" {% if lancamento %}disabled{% endif %} required>
+          <select class="ds-select" name="tipo" id="pl-select-tipo" {% if lancamento %}disabled{% endif %} required>
             {% for valor, label in tipos_lancamento %}
             <option value="{{ valor }}" {% if lancamento.tipo == valor %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -24,10 +24,10 @@
         </div>
         <div class="pl-form-campo">
           <label>Categoria</label>
-          <select class="ds-select" name="categoria" required>
+          <select class="ds-select" name="categoria" id="pl-select-categoria" required>
             <option value="">Selecione</option>
             {% for categoria in categorias %}
-            <option value="{{ categoria.pk }}" {% if lancamento.categoria_id == categoria.pk %}selected{% endif %}>{{ categoria }}</option>
+            <option value="{{ categoria.pk }}" data-natureza="{{ categoria.natureza }}" {% if lancamento.categoria_id == categoria.pk %}selected{% endif %}>{{ categoria }}</option>
             {% endfor %}
           </select>
         </div>
@@ -59,6 +59,12 @@
             <option value="anual">Anual</option>
           </select>
         </div>
+        <div class="pl-form-campo pl-form-campo--full">
+          <span class="text-muted" style="font-size:.78rem;">
+            Vencimento antes de hoje + conta informada = já entra como pago/recebido automaticamente.
+            Vencimento de hoje em diante fica "a pagar"/"a receber" até você baixar.
+          </span>
+        </div>
         {% endif %}
       </div>
       <details class="pl-mais-opcoes" {% if lancamento %}open{% endif %}>
@@ -83,7 +89,7 @@
             </select>
           </div>
           <div class="pl-form-campo">
-            <label>Conta prevista (opcional)</label>
+            <label>Conta {% if not lancamento %}(informe se já foi paga/recebida){% else %}prevista{% endif %}</label>
             <select class="ds-select" name="conta_prevista">
               <option value="">—</option>
               {% for conta in contas %}
@@ -121,3 +127,42 @@
     </form>
   </div>
 </div>
+<script>
+(function () {
+  // Filtra a Categoria conforme o Tipo selecionado (Despesa/Receita) — só
+  // esconde/mostra no cliente; o servidor SEMPRE revalida de novo (nunca
+  // confia só nisso aqui). Roda na hora que o modal é inserido no DOM
+  // (htmx executa <script> do conteúdo trocado) e de novo a cada troca de
+  // Tipo.
+  var NATUREZAS_DESPESA = ["custo", "despesa_operacional", "despesa_financeira", "deducao"];
+  var NATUREZAS_RECEITA = ["receita", "receita_financeira"];
+
+  var form = document.getElementById("pl-lancamento-form");
+  if (!form) return;
+  var tipoSelect = form.querySelector("#pl-select-tipo");
+  var tipoHidden = form.querySelector('input[type="hidden"][name="tipo"]');
+  var categoriaSelect = form.querySelector("#pl-select-categoria");
+
+  function tipoAtual() {
+    if (tipoSelect && !tipoSelect.disabled) return tipoSelect.value;
+    return tipoHidden ? tipoHidden.value : "despesa";
+  }
+
+  function filtrarCategorias() {
+    if (!categoriaSelect) return;
+    var permitidas = tipoAtual() === "receita" ? NATUREZAS_RECEITA : NATUREZAS_DESPESA;
+    var valorAtual = categoriaSelect.value;
+    var aindaValida = false;
+    Array.from(categoriaSelect.options).forEach(function (opt) {
+      if (!opt.value) return; // "Selecione" sempre visível
+      var ok = permitidas.indexOf(opt.dataset.natureza) !== -1;
+      opt.hidden = !ok;
+      if (ok && opt.value === valorAtual) aindaValida = true;
+    });
+    if (!aindaValida) categoriaSelect.value = "";
+  }
+
+  filtrarCategorias();
+  if (tipoSelect) tipoSelect.addEventListener("change", filtrarCategorias);
+})();
+</script>

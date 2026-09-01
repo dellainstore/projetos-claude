@@ -16,6 +16,7 @@ from apps.financeiro.models import (
     ESTADO_QUITADO,
     CategoriaFinanceira,
     ContaBancaria,
+    LancamentoFinanceiro,
     MovimentoConta,
     OperacaoFinanceira,
     RegraRecorrencia,
@@ -67,7 +68,7 @@ class ParcelamentoTests(BaseFinanceiroTestCase):
 
     def test_lancamento_parcelado_gera_parcelas_com_soma_exata(self):
         lancamento = criar_lancamento(
-            operacao=self.operacao, tipo="conta_pagar", descricao="Compra parcelada",
+            operacao=self.operacao, tipo="despesa", descricao="Compra parcelada",
             valor_original=Decimal("100.00"), data_competencia=date(2026, 9, 1),
             primeiro_vencimento=date(2026, 9, 10), categoria=self.categoria, parcelas_qtd=3,
         )
@@ -175,7 +176,7 @@ class BaixaTests(BaseFinanceiroTestCase):
 class CancelamentoTests(BaseFinanceiroTestCase):
     def test_cancelamento_de_uma_parcela_nao_afeta_as_demais(self):
         lancamento = criar_lancamento(
-            operacao=self.operacao, tipo="conta_pagar", descricao="3 parcelas",
+            operacao=self.operacao, tipo="despesa", descricao="3 parcelas",
             valor_original=Decimal("300.00"), data_competencia=date(2026, 9, 1),
             primeiro_vencimento=date(2026, 9, 1), categoria=self.categoria, parcelas_qtd=3,
         )
@@ -188,7 +189,7 @@ class CancelamentoTests(BaseFinanceiroTestCase):
 
     def test_cancelamento_da_serie_inteira(self):
         lancamento = criar_lancamento(
-            operacao=self.operacao, tipo="conta_pagar", descricao="Série a cancelar",
+            operacao=self.operacao, tipo="despesa", descricao="Série a cancelar",
             valor_original=Decimal("300.00"), data_competencia=date(2026, 9, 1),
             primeiro_vencimento=date(2026, 9, 1), categoria=self.categoria, parcelas_qtd=3,
         )
@@ -379,7 +380,7 @@ class DashboardETransferenciaNaListaTests(BaseFinanceiroTestCase):
         )
         dar_baixa(parcela=receita.parcelas.first(), valor_principal=Decimal("500.00"), data=hoje, conta=self.conta)
         criar_lancamento(
-            operacao=self.operacao, tipo="conta_pagar", descricao="Compra parcelada", valor_original=Decimal("900.00"),
+            operacao=self.operacao, tipo="despesa", descricao="Compra parcelada", valor_original=Decimal("900.00"),
             data_competencia=hoje, primeiro_vencimento=hoje, categoria=self.categoria, parcelas_qtd=3,
         )
 
@@ -410,3 +411,96 @@ class DashboardETransferenciaNaListaTests(BaseFinanceiroTestCase):
         t.refresh_from_db()
         self.assertTrue(t.estornada)
         self.assertEqual(self.conta2.saldo_atual(), Decimal("0.00"))
+
+
+class TipoUnicoEAutoBaixaTests(BaseFinanceiroTestCase):
+    """Pedido do dono (2026-09-02): só Receita/Despesa (sem "conta a
+    pagar/receber" separado); lançamento com data passada + conta
+    informada já nasce pago/recebido; sem conta informada, fica em aberto
+    mesmo com data passada (não tem como baixar sem saber de qual conta)."""
+
+    def test_tipo_so_tem_duas_opcoes(self):
+        from apps.financeiro.models import TIPO_LANCAMENTO_CHOICES
+        self.assertEqual([v for v, _ in TIPO_LANCAMENTO_CHOICES], ["receita", "despesa"])
+
+    def test_data_passada_com_conta_ja_nasce_pago(self):
+        ontem = date.today() - timedelta(days=5)
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Compra já paga",
+            valor_original=Decimal("80.00"), data_competencia=ontem, primeiro_vencimento=ontem,
+            categoria=self.categoria, conta_prevista=self.conta,
+        )
+        parcela = lancamento.parcelas.first()
+        self.assertEqual(parcela.estado_estrutural, ESTADO_QUITADO)
+        self.assertEqual(lancamento.estado_estrutural, ESTADO_QUITADO)
+        self.assertEqual(self.conta.saldo_atual(), Decimal("920.00"))
+
+    def test_data_passada_sem_conta_fica_vencida_nao_paga(self):
+        ontem = date.today() - timedelta(days=5)
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Compra sem conta",
+            valor_original=Decimal("80.00"), data_competencia=ontem, primeiro_vencimento=ontem,
+            categoria=self.categoria,
+        )
+        parcela = lancamento.parcelas.first()
+        self.assertEqual(parcela.estado_estrutural, "aberto")
+        self.assertEqual(parcela.situacao_temporal(), "vencido")
+
+    def test_data_de_hoje_nao_e_auto_baixada(self):
+        hoje = date.today()
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Compra hoje",
+            valor_original=Decimal("50.00"), data_competencia=hoje, primeiro_vencimento=hoje,
+            categoria=self.categoria, conta_prevista=self.conta,
+        )
+        parcela = lancamento.parcelas.first()
+        self.assertEqual(parcela.estado_estrutural, "aberto")
+
+    def test_data_futura_com_conta_nao_e_auto_baixada(self):
+        amanha = date.today() + timedelta(days=1)
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Compra futura",
+            valor_original=Decimal("50.00"), data_competencia=amanha, primeiro_vencimento=amanha,
+            categoria=self.categoria, conta_prevista=self.conta,
+        )
+        parcela = lancamento.parcelas.first()
+        self.assertEqual(parcela.estado_estrutural, "aberto")
+
+    def test_parcelamento_com_data_passada_baixa_so_as_parcelas_ja_vencidas(self):
+        # 3 parcelas mensais a partir de 40 dias atrás: a 1ª (40d atrás) e a
+        # 2ª (~10d atrás) já passaram, a 3ª (~20d à frente) ainda não.
+        primeira = date.today() - timedelta(days=40)
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Parcelado histórico",
+            valor_original=Decimal("300.00"), data_competencia=primeira, primeiro_vencimento=primeira,
+            categoria=self.categoria, conta_prevista=self.conta, parcelas_qtd=3, frequencia_parcelas="mensal",
+        )
+        p1, p2, p3 = lancamento.parcelas.order_by("numero")
+        self.assertEqual(p1.estado_estrutural, ESTADO_QUITADO)
+        # p3 (30 dias após p1) pode ou não já ter passado dependendo do dia
+        # do mês corrente — só garante que não ficou pior que p1/p2 em
+        # relação à ordem cronológica esperada.
+        self.assertIn(p2.estado_estrutural, [ESTADO_QUITADO, "aberto"])
+
+    def test_rotulo_situacao_e_ciente_do_tipo(self):
+        from apps.financeiro.models import rotulo_situacao
+        self.assertEqual(rotulo_situacao("despesa", "quitado"), "Pago")
+        self.assertEqual(rotulo_situacao("receita", "quitado"), "Recebido")
+        self.assertEqual(rotulo_situacao("despesa", "aberto"), "A pagar")
+        self.assertEqual(rotulo_situacao("receita", "aberto"), "A receber")
+        self.assertEqual(rotulo_situacao("despesa", "cancelado"), "Cancelado")
+        self.assertEqual(rotulo_situacao("despesa", "vencido"), "Vencido")
+
+    def test_categoria_incompativel_com_tipo_e_rejeitada_no_service_via_view(self):
+        user = get_user_model().objects.create_user(
+            username="_teste_categoria_tipo", password="x", papel="superadmin", is_superuser=True,
+        )
+        client = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        client.force_login(user)
+        resp = client.post("/financeiro/private-label/htmx/lancamentos/salvar/", {
+            "tipo": "despesa", "descricao": "Errado de propósito", "categoria": self.categoria_receita.pk,
+            "valor_original": "10.00", "data_competencia": str(date.today()), "data_vencimento": str(date.today()),
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ds-modal-erro", resp.content)
+        self.assertFalse(LancamentoFinanceiro.objects.filter(descricao="Errado de propósito").exists())

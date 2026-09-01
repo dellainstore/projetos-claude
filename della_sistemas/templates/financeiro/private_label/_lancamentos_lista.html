@@ -1,4 +1,4 @@
-{% load core_extras %}
+{% load core_extras financeiro_extras %}
 <div class="ds-table-wrapper">
   <table class="ds-table" style="min-width:1000px;">
     <thead>
@@ -38,10 +38,10 @@
             {% if sit == "parcial" %}<br><span class="text-muted" style="font-size:.74rem;">restam {{ parcela.saldo_restante|brl }}</span>{% endif %}
           </td>
           <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
-          <td><span class="pl-badge pl-badge--{{ sit }}">{{ sit|capfirst }}</span></td>
+          <td><span class="pl-badge pl-badge--{{ sit }}">{% rotulo_situacao_tag lanc.tipo sit %}</span></td>
           <td style="white-space:nowrap;">
             {% if sit != "quitado" and sit != "cancelado" %}
-            <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_baixa_form' parcela.pk %}" hx-target="#modal-container">Baixar</button>
+            <button type="button" class="ds-btn ds-btn--dourado ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_baixa_form' parcela.pk %}" hx-target="#modal-container">{% if lanc.tipo == "despesa" %}Pagar{% else %}Receber{% endif %}</button>
             {% endif %}
             {% if sit == "aberto" and parcela.numero == 1 %}
             <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_lancamento_form_editar' lanc.pk %}" hx-target="#modal-container">Editar</button>

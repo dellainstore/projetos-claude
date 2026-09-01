@@ -47,18 +47,32 @@ ESTADO_ESTRUTURAL_CHOICES = [
 TIPO_LANCAMENTO_CHOICES = [
     ("receita", "Receita"),
     ("despesa", "Despesa"),
-    ("conta_pagar", "Conta a pagar"),
-    ("conta_receber", "Conta a receber"),
 ]
 
-TIPOS_SAIDA = {"despesa", "conta_pagar"}
-TIPOS_ENTRADA = {"receita", "conta_receber"}
+TIPOS_SAIDA = {"despesa"}
+TIPOS_ENTRADA = {"receita"}
 
 
 def sinal_movimento(tipo: str) -> int:
-    """-1 para tipos de saída (despesa/conta a pagar), +1 para entrada
-    (receita/conta a receber). Usado ao criar o MovimentoConta de uma baixa."""
+    """-1 para despesa (saída), +1 para receita (entrada). Usado ao criar o
+    MovimentoConta de uma baixa."""
     return -1 if tipo in TIPOS_SAIDA else 1
+
+
+def rotulo_situacao(tipo: str, situacao: str) -> str:
+    """Rótulo de status ciente do tipo — pedido do dono (2026-09-02): nada
+    de "conta a pagar" separado de "despesa" (é a mesma coisa, só muda se
+    já foi baixado ou não). "Pendente"/"previsto" viram um único "A pagar"/
+    "A receber"; "quitado" vira "Pago"/"Recebido"."""
+    if situacao == "cancelado":
+        return "Cancelado"
+    if situacao == "vencido":
+        return "Vencido"
+    if situacao == "parcial":
+        return "Parcial"
+    if situacao == "quitado":
+        return "Pago" if tipo == "despesa" else "Recebido"
+    return "A pagar" if tipo == "despesa" else "A receber"
 
 NATUREZA_CHOICES = [
     ("receita", "Receita"),
@@ -69,6 +83,17 @@ NATUREZA_CHOICES = [
     ("despesa_financeira", "Despesa financeira"),
     ("fora_do_dre", "Fora do DRE"),
 ]
+
+# Quais naturezas de categoria aparecem pra cada tipo de lançamento — usado
+# no filtro do formulário (JS) E validado de novo no servidor (nunca confia
+# só no frontend). "Dedução" entra do lado da despesa porque, na prática,
+# é dinheiro saindo (imposto sobre venda), mesmo classificada à parte no DRE.
+NATUREZAS_DESPESA = {"custo", "despesa_operacional", "despesa_financeira", "deducao"}
+NATUREZAS_RECEITA = {"receita", "receita_financeira"}
+
+
+def naturezas_permitidas(tipo: str) -> set[str]:
+    return NATUREZAS_DESPESA if tipo == "despesa" else NATUREZAS_RECEITA
 
 FREQUENCIA_CHOICES = [
     ("semanal", "Semanal"),

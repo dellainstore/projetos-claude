@@ -26,8 +26,8 @@ from apps.financeiro.models import (
 from apps.financeiro.services.private_label.operacao import obter_operacao_padrao
 from apps.financeiro.services.private_label.recorrencias import verificar_lazy
 
-TIPOS_SAIDA = ["despesa", "conta_pagar"]
-TIPOS_ENTRADA = ["receita", "conta_receber"]
+TIPOS_SAIDA = ["despesa"]
+TIPOS_ENTRADA = ["receita"]
 
 
 def _periodo(request):

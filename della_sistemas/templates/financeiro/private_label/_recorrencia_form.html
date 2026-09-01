@@ -5,7 +5,7 @@
       <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
     </div>
     {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
-    <form hx-post="{% url 'financeiro:pl_htmx_recorrencia_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+    <form id="pl-recorrencia-form" hx-post="{% url 'financeiro:pl_htmx_recorrencia_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
       {% csrf_token %}
       <div class="pl-form-grid">
         <div class="pl-form-campo pl-form-campo--full">
@@ -14,7 +14,7 @@
         </div>
         <div class="pl-form-campo">
           <label>Tipo</label>
-          <select class="ds-select" name="tipo_lancamento">
+          <select class="ds-select" name="tipo_lancamento" id="pl-select-tipo">
             {% for valor, label in tipos_lancamento %}
             <option value="{{ valor }}" {% if valor == "despesa" %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -22,10 +22,10 @@
         </div>
         <div class="pl-form-campo">
           <label>Categoria</label>
-          <select class="ds-select" name="categoria" required>
+          <select class="ds-select" name="categoria" id="pl-select-categoria" required>
             <option value="">Selecione</option>
             {% for categoria in categorias_todas %}
-            <option value="{{ categoria.pk }}">{{ categoria }}</option>
+            <option value="{{ categoria.pk }}" data-natureza="{{ categoria.natureza }}">{{ categoria }}</option>
             {% endfor %}
           </select>
         </div>
@@ -82,3 +82,28 @@
     </form>
   </div>
 </div>
+<script>
+(function () {
+  var NATUREZAS_DESPESA = ["custo", "despesa_operacional", "despesa_financeira", "deducao"];
+  var NATUREZAS_RECEITA = ["receita", "receita_financeira"];
+  var form = document.getElementById("pl-recorrencia-form");
+  if (!form) return;
+  var tipoSelect = form.querySelector("#pl-select-tipo");
+  var categoriaSelect = form.querySelector("#pl-select-categoria");
+  function filtrarCategorias() {
+    if (!categoriaSelect || !tipoSelect) return;
+    var permitidas = tipoSelect.value === "receita" ? NATUREZAS_RECEITA : NATUREZAS_DESPESA;
+    var valorAtual = categoriaSelect.value;
+    var aindaValida = false;
+    Array.from(categoriaSelect.options).forEach(function (opt) {
+      if (!opt.value) return;
+      var ok = permitidas.indexOf(opt.dataset.natureza) !== -1;
+      opt.hidden = !ok;
+      if (ok && opt.value === valorAtual) aindaValida = true;
+    });
+    if (!aindaValida) categoriaSelect.value = "";
+  }
+  filtrarCategorias();
+  if (tipoSelect) tipoSelect.addEventListener("change", filtrarCategorias);
+})();
+</script>

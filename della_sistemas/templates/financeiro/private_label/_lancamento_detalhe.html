@@ -1,4 +1,4 @@
-{% load core_extras %}
+{% load core_extras financeiro_extras %}
 <div class="ds-modal-fundo" onclick="if(event.target===this) this.remove()">
   <div class="ds-modal ds-modal--largo">
     <div class="ds-modal-titulo">
@@ -14,7 +14,7 @@
       <div><strong>Contato:</strong> {{ lancamento.contato.nome|default:"—" }}</div>
       <div><strong>Conta prevista:</strong> {{ lancamento.conta_prevista.nome|default:"—" }}</div>
       <div><strong>Competência:</strong> {{ lancamento.data_competencia|date:"d/m/Y" }}</div>
-      <div><strong>Situação:</strong> <span class="pl-badge pl-badge--{{ lancamento.situacao_temporal }}">{{ lancamento.situacao_temporal|capfirst }}</span></div>
+      <div><strong>Situação:</strong> <span class="pl-badge pl-badge--{{ lancamento.situacao_temporal }}">{% rotulo_situacao_tag lancamento.tipo lancamento.situacao_temporal %}</span></div>
       {% if lancamento.data_quitacao %}<div><strong>Quitado em:</strong> {{ lancamento.data_quitacao|date:"d/m/Y" }}</div>{% endif %}
       {% if lancamento.tags.all %}<div class="pl-form-campo--full"><strong>Tags:</strong> {% for t in lancamento.tags.all %}{{ t.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
       {% if lancamento.observacoes %}<div class="pl-form-campo--full"><strong>Observações:</strong> {{ lancamento.observacoes }}</div>{% endif %}
@@ -30,7 +30,7 @@
             <td>{{ parcela.numero }}</td>
             <td>{{ parcela.valor|brl }}</td>
             <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
-            <td><span class="pl-badge pl-badge--{{ parcela.situacao_temporal }}">{{ parcela.situacao_temporal|capfirst }}</span></td>
+            <td><span class="pl-badge pl-badge--{{ parcela.situacao_temporal }}">{% rotulo_situacao_tag lancamento.tipo parcela.situacao_temporal %}</span></td>
             <td>
               {% for baixa in parcela.baixas.all %}
                 {% if not baixa.estornada %}
