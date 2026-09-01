@@ -1010,3 +1010,58 @@ class BaixaParcialVisivelNaListaTests(BaseFinanceiroTestCase):
         body = resp.content.decode()
         self.assertIn("R$ 100,00", body)
         self.assertIn(self.conta.nome, body)
+
+
+class ContaRealVsPrevistaTests(BaseFinanceiroTestCase):
+    """Bug relatado pelo dono (2026-09-02, 2x seguidas): editar "conta
+    prevista" DEPOIS que a parcela já tinha baixa dava a falsa impressão de
+    que o dinheiro tinha saído dali — mas a baixa (já feita) continuava na
+    conta antiga de verdade. `conta_real` deve refletir a baixa, não a
+    previsão, assim que existir baixa ativa."""
+
+    def _lancamento_pago(self, conta_prevista, conta_da_baixa):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Pagamento Maquina Costura",
+            valor_original=Decimal("350.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria, conta_prevista=conta_prevista,
+        )
+        parcela = lancamento.parcelas.first()
+        dar_baixa(parcela=parcela, valor_principal=Decimal("350.00"), data=date.today(), conta=conta_da_baixa)
+        return lancamento, parcela
+
+    def test_conta_real_segue_a_baixa_mesmo_apos_mudar_a_prevista(self):
+        # baixa foi feita na conta A (self.conta); depois o dono edita a
+        # "prevista" do lançamento pra conta B (self.conta2) — a real não
+        # pode mudar junto, é fato já acontecido.
+        from apps.financeiro.services.private_label.lancamentos import editar_lancamento
+        lancamento, parcela = self._lancamento_pago(conta_prevista=self.conta, conta_da_baixa=self.conta)
+        editar_lancamento(lancamento, conta_prevista=self.conta2)
+        parcela.refresh_from_db()
+        self.assertEqual(parcela.conta_real, self.conta)          # o que de fato aconteceu
+        self.assertEqual(parcela.conta_prevista_efetiva, self.conta2)  # só a previsão mudou
+
+    def test_sem_baixa_conta_real_e_none_e_lista_mostra_a_prevista(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Ainda não paga",
+            valor_original=Decimal("100.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria, conta_prevista=self.conta,
+        )
+        parcela = lancamento.parcelas.first()
+        self.assertIsNone(parcela.conta_real)
+        self.assertEqual(parcela.conta_prevista_efetiva, self.conta)
+
+    def test_filtro_por_conta_usa_a_conta_real_quando_ja_tem_baixa(self):
+        superadmin = get_user_model().objects.create_user(
+            username="_teste_superadmin_conta_real", password="x", papel="superadmin", is_superuser=True,
+        )
+        client = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        client.force_login(superadmin)
+        # prevista=conta2, mas pago de fato na conta A — filtrar pela conta A
+        # deve achar, filtrar pela conta2 (só previsão) não deve.
+        lancamento, parcela = self._lancamento_pago(conta_prevista=self.conta2, conta_da_baixa=self.conta)
+
+        resp_a = client.get("/financeiro/private-label/htmx/lancamentos/lista/", {"conta": self.conta.pk})
+        self.assertIn(f'value="{parcela.pk}"'.encode(), resp_a.content)
+
+        resp_b = client.get("/financeiro/private-label/htmx/lancamentos/lista/", {"conta": self.conta2.pk})
+        self.assertNotIn(f'value="{parcela.pk}"'.encode(), resp_b.content)

@@ -7,7 +7,7 @@
         <th>Tipo</th>
         <th>Descrição</th>
         <th>Categoria</th>
-        <th>Conta prevista</th>
+        <th>Conta</th>
         <th>Valor</th>
         <th>Vencimento</th>
         <th>Situação</th>
@@ -30,7 +30,11 @@
             {% if lanc.parcelas.count > 1 %}<span class="text-muted" style="font-size:.76rem;"> ({{ parcela.numero }}/{{ lanc.parcelas.count }})</span>{% endif %}
           </td>
           <td>{{ lanc.categoria.icone }} {{ lanc.categoria.nome|default:"" }}</td>
-          <td>{{ parcela.conta_prevista_efetiva.nome }}</td>
+          <td>
+            {% if parcela.conta_real %}{{ parcela.conta_real.nome }}
+            {% else %}{{ parcela.conta_prevista_efetiva.nome }}<span class="text-muted" style="font-size:.74rem;"> (prevista)</span>
+            {% endif %}
+          </td>
           <td>
             <span class="{% if lanc.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ parcela.valor|brl }}</span>
             {% if parcela.estado_estrutural == "parcial" %}<br><span class="text-muted" style="font-size:.74rem;">pago {{ parcela.valor_baixado_principal|brl }}, restam {{ parcela.saldo_restante|brl }}</span>{% endif %}

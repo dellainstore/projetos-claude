@@ -100,13 +100,23 @@ def _parcelas_filtradas(request, operacao):
         qs = qs.filter(lancamento__centro_custo_id=centro_custo)
     conta = request.GET.get("conta")
     if conta:
-        # Conta EFETIVA da parcela: a dela própria se tiver, senão a do
-        # lançamento (mesma regra de `conta_prevista_efetiva`) — filtrar só
-        # por `lancamento__conta_prevista_id` ignorava o override por
-        # parcela e misturava contas diferentes no mesmo lançamento.
+        # Conta de EXIBIÇÃO da parcela: se já tem baixa ativa, é a conta
+        # real de onde o dinheiro saiu (mesma regra de `Parcela.conta_real`)
+        # — senão cai na prevista (dela própria, ou a do lançamento). Antes
+        # filtrava só por `lancamento__conta_prevista_id`, que ignorava o
+        # override por parcela E a conta real de quem já foi baixado.
+        baixa_ativa_na_conta = models.Exists(
+            Baixa.objects.filter(parcela=models.OuterRef("pk"), estornada=False, conta_id=conta)
+        )
+        sem_baixa_ativa = ~models.Exists(
+            Baixa.objects.filter(parcela=models.OuterRef("pk"), estornada=False)
+        )
         qs = qs.filter(
-            models.Q(conta_prevista_id=conta)
-            | models.Q(conta_prevista_id__isnull=True, lancamento__conta_prevista_id=conta)
+            baixa_ativa_na_conta
+            | (sem_baixa_ativa & (
+                models.Q(conta_prevista_id=conta)
+                | models.Q(conta_prevista_id__isnull=True, lancamento__conta_prevista_id=conta)
+            ))
         )
     busca = request.GET.get("q", "").strip()
     if busca:

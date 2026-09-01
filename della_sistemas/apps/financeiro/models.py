@@ -495,6 +495,20 @@ class Parcela(models.Model):
         return self.conta_prevista or self.lancamento.conta_prevista
 
     @property
+    def conta_real(self):
+        """Conta de onde o dinheiro realmente saiu/entrou, olhando as
+        baixas ATIVAS desta parcela — `None` se ainda não tem baixa, ou se
+        (caso raro) as baixas ativas estão em contas diferentes entre si.
+        Existe porque "conta prevista" é só previsão: editar ela depois que
+        a parcela já foi baixada não muda o que já aconteceu de verdade,
+        mas mostrar só a prevista pra quem já pagou dá a falsa impressão de
+        que foi dali que o dinheiro saiu (bug real, 2026-09-01)."""
+        contas = {b.conta_id: b.conta for b in self.baixas.all() if not b.estornada}
+        if len(contas) == 1:
+            return next(iter(contas.values()))
+        return None
+
+    @property
     def valor_baixado_principal(self) -> Decimal:
         total = self.baixas.filter(estornada=False).aggregate(
             total=models.Sum("valor_principal"),
