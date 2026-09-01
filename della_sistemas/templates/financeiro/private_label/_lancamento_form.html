@@ -87,6 +87,15 @@
           <label>Vencimento desta parcela</label>
           <input class="ds-input" type="date" name="parcela_vencimento" value="{{ parcela.data_vencimento|date:'Y-m-d' }}">
         </div>
+        <div class="pl-form-campo">
+          <label>Conta desta parcela</label>
+          <select class="ds-select" name="parcela_conta_prevista">
+            <option value="">Nenhuma (usa a conta padrão do lançamento)</option>
+            {% for conta in contas %}
+            <option value="{{ conta.pk }}" {% if parcela.conta_prevista_id == conta.pk %}selected{% endif %}>{{ conta.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
 
       <div id="pl-bloco-todas" class="pl-form-grid" style="margin-top:.6rem;display:none;">
@@ -139,7 +148,11 @@
             </select>
           </div>
           <div class="pl-form-campo">
-            <label>Conta {% if not lancamento %}(informe se já foi paga/recebida){% else %}prevista{% endif %}</label>
+            <label>
+              {% if not lancamento %}Conta (informe se já foi paga/recebida)
+              {% elif lancamento.parcelas.count > 1 %}Conta padrão do lançamento (usada quando a parcela não tem uma própria)
+              {% else %}Conta prevista{% endif %}
+            </label>
             <select class="ds-select" name="conta_prevista">
               <option value="">Nenhuma</option>
               {% for conta in contas %}

@@ -30,7 +30,7 @@
             {% if lanc.parcelas.count > 1 %}<span class="text-muted" style="font-size:.76rem;"> ({{ parcela.numero }}/{{ lanc.parcelas.count }})</span>{% endif %}
           </td>
           <td>{{ lanc.categoria.icone }} {{ lanc.categoria.nome|default:"" }}</td>
-          <td>{{ lanc.conta_prevista.nome }}</td>
+          <td>{{ parcela.conta_prevista_efetiva.nome }}</td>
           <td>
             <span class="{% if lanc.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ parcela.valor|brl }}</span>
             {% if sit == "parcial" %}<br><span class="text-muted" style="font-size:.74rem;">restam {{ parcela.saldo_restante|brl }}</span>{% endif %}

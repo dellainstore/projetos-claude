@@ -23,7 +23,7 @@
           <select class="ds-select" name="conta" required>
             <option value="">Selecione</option>
             {% for conta in contas %}
-            <option value="{{ conta.pk }}" {% if parcela.lancamento.conta_prevista_id == conta.pk %}selected{% endif %}>{{ conta.nome }}</option>
+            <option value="{{ conta.pk }}" {% if parcela.conta_prevista_efetiva.pk == conta.pk %}selected{% endif %}>{{ conta.nome }}</option>
             {% endfor %}
           </select>
         </div>

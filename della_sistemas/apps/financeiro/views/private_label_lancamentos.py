@@ -86,7 +86,7 @@ def _opcoes_cadastro(operacao):
 def _parcelas_filtradas(request, operacao):
     qs = Parcela.objects.filter(lancamento__operacao=operacao).select_related(
         "lancamento", "lancamento__categoria", "lancamento__contato",
-        "lancamento__centro_custo", "lancamento__conta_prevista",
+        "lancamento__centro_custo", "lancamento__conta_prevista", "conta_prevista",
     ).prefetch_related("baixas")
 
     tipo = request.GET.get("tipo")
@@ -334,11 +334,24 @@ def pl_htmx_lancamento_salvar(request):
                 if parcela_pk:
                     parcela = get_object_or_404(Parcela, pk=parcela_pk, lancamento=lancamento)
                     novo_valor = request.POST.get("parcela_valor")
+                    # Conta prevista é por parcela — "manter" quando o campo
+                    # nem veio no POST (form antigo em cache), senão aplica o
+                    # que veio (inclusive vazio = limpar, cai no fallback do
+                    # lançamento). Nunca mexe na conta das OUTRAS parcelas.
+                    if "parcela_conta_prevista" in request.POST:
+                        conta_parcela_id = request.POST.get("parcela_conta_prevista")
+                        nova_conta_parcela = (
+                            ContaBancaria.objects.filter(pk=conta_parcela_id, operacao=operacao).first()
+                            if conta_parcela_id else None
+                        )
+                    else:
+                        nova_conta_parcela = "__manter__"
                     editar_parcela(
                         parcela, usuario=request.user,
                         valor=novo_valor if novo_valor else None,
                         ignorar_baixa=request.user.is_superadmin,
                         data_vencimento=request.POST.get("parcela_vencimento") or None,
+                        conta_prevista=nova_conta_parcela,
                     )
         except ValueError as e:
             return _erro_com_contexto(lancamento, str(e))

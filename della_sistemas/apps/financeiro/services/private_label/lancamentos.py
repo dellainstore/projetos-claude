@@ -66,6 +66,12 @@ def criar_lancamento(
     if tags:
         lancamento.tags.set(tags)
 
+    # Parcela.conta_prevista fica em branco na criação — ela só existe pra
+    # override pontual de UMA parcela (ver `editar_parcela`). Enquanto em
+    # branco, `conta_prevista_efetiva` cai no `conta_prevista` do
+    # lançamento (este, sim, o "padrão" de fato), então mudar o padrão do
+    # lançamento depois continua valendo pra toda parcela que não foi
+    # ajustada individualmente.
     valores = gerar_valores_parcelas(valor_original, parcelas_qtd)
     vencimento = primeiro_vencimento
     for numero, valor in enumerate(valores, start=1):
@@ -136,19 +142,34 @@ def editar_lancamento(lancamento: LancamentoFinanceiro, *, usuario=None, tags=No
 
 @transaction.atomic
 def editar_parcela(
-    parcela: Parcela, *, usuario=None, valor=None, data_vencimento=None, ignorar_baixa=False,
+    parcela: Parcela, *, usuario=None, valor=None, data_vencimento=None, conta_prevista="__manter__",
+    ignorar_baixa=False,
 ) -> Parcela:
     """Edita SÓ esta parcela. `valor` só pode mudar enquanto a parcela não
     tiver nenhuma baixa, a menos que `ignorar_baixa=True` (reservado a
     superadmin, checado na view) — útil pra corrigir um valor errado que já
     foi baixado, sem precisar estornar antes; o saldo restante passa a
     refletir a diferença automaticamente. `data_vencimento` pode mudar
-    sempre. Depois de mudar, `lancamento.valor_original` é recalculado como
-    a soma de todas as parcelas — ele é sempre um espelho da soma, nunca
-    editado direto."""
+    sempre. `conta_prevista` é a conta prevista DESTA parcela (não a do
+    lançamento inteiro — cada parcela tem a sua própria, pra permitir por
+    exemplo "parcela 1 sai do Santander, as demais do Itaú" sem afetar as
+    outras); passar `None` explicitamente limpa (cai no fallback do
+    lançamento), e o sentinela default (não passar o argumento) mantém o
+    valor atual sem mexer. Depois de mudar valor, `lancamento.valor_original`
+    é recalculado como a soma de todas as parcelas — ele é sempre um espelho
+    da soma, nunca editado direto."""
     if parcela.estado_estrutural == ESTADO_CANCELADO:
         raise ValueError("Parcela cancelada não pode ser editada.")
     alterou = []
+    if conta_prevista != "__manter__":
+        if conta_prevista != parcela.conta_prevista:
+            registrar_log(
+                operacao=parcela.lancamento.operacao, entidade="parcela", objeto_id=parcela.id,
+                acao="edicao", usuario=usuario, campo="conta_prevista",
+                valor_de=parcela.conta_prevista, valor_para=conta_prevista,
+            )
+            parcela.conta_prevista = conta_prevista
+            alterou.append("conta_prevista")
     if valor is not None:
         valor = Decimal(valor)
         if valor <= 0:

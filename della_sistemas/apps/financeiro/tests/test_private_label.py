@@ -859,3 +859,81 @@ class ReparcelarMantendoParcelasTests(BaseFinanceiroTestCase):
         lancamento.refresh_from_db()
         self.assertEqual(lancamento.valor_original, Decimal("7000.00"))
         self.assertEqual(lancamento.parcelas.count(), 9)
+
+
+class ContaPrevistaPorParcelaTests(BaseFinanceiroTestCase):
+    """Bug relatado pelo dono (2026-09-02): "quando entrei na parcela 1 para
+    ajustar somente ela para sair do santander e o resto do itau ela mudou
+    todos para o santander". Causa: `conta_prevista` só existia no
+    LANÇAMENTO (campo compartilhado por todas as parcelas). Agora cada
+    `Parcela` tem sua própria `conta_prevista`, com fallback pro campo do
+    lançamento quando em branco."""
+
+    def setUp(self):
+        super().setUp()
+        self.superadmin = get_user_model().objects.create_user(
+            username="_teste_superadmin_conta", password="x", papel="superadmin", is_superuser=True,
+        )
+        self.client_superadmin = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_superadmin.force_login(self.superadmin)
+
+    def _lancamento_9x(self):
+        return criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Máquina de costura 9x",
+            valor_original=Decimal("3150.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria, parcelas_qtd=9, conta_prevista=self.conta,
+        )
+
+    def test_sem_conta_propria_a_parcela_usa_a_do_lancamento(self):
+        lancamento = self._lancamento_9x()
+        p1 = lancamento.parcelas.order_by("numero").first()
+        self.assertIsNone(p1.conta_prevista)
+        self.assertEqual(p1.conta_prevista_efetiva, self.conta)
+
+    def test_editar_conta_de_uma_parcela_nao_afeta_as_outras(self):
+        lancamento = self._lancamento_9x()
+        parcelas = list(lancamento.parcelas.order_by("numero"))
+        p1 = parcelas[0]
+        editar_parcela(p1, conta_prevista=self.conta2)
+        p1.refresh_from_db()
+        self.assertEqual(p1.conta_prevista, self.conta2)
+        self.assertEqual(p1.conta_prevista_efetiva, self.conta2)
+        # as demais 8 continuam sem conta própria — herdam a do lançamento
+        for p in parcelas[1:]:
+            p.refresh_from_db()
+            self.assertIsNone(p.conta_prevista)
+            self.assertEqual(p.conta_prevista_efetiva, self.conta)
+
+    def test_view_edita_conta_de_uma_parcela_sem_mexer_nas_outras(self):
+        lancamento = self._lancamento_9x()
+        parcelas = list(lancamento.parcelas.order_by("numero"))
+        p1 = parcelas[0]
+        resp = self.client_superadmin.post("/financeiro/private-label/htmx/lancamentos/salvar/", {
+            "pk": lancamento.pk, "parcela_pk": p1.pk, "tipo": "despesa", "descricao": lancamento.descricao,
+            "categoria": self.categoria.pk, "escopo_valor": "parcela",
+            "conta_prevista": self.conta.pk,  # "Conta padrão" do lançamento, como o form sempre envia
+            "parcela_conta_prevista": self.conta2.pk,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(b"ds-modal-erro", resp.content)
+        p1.refresh_from_db()
+        self.assertEqual(p1.conta_prevista, self.conta2)
+        for p in parcelas[1:]:
+            p.refresh_from_db()
+            self.assertIsNone(p.conta_prevista)
+            self.assertEqual(p.conta_prevista_efetiva, self.conta)
+
+    def test_nao_enviar_o_campo_mantem_a_conta_da_parcela_como_estava(self):
+        lancamento = self._lancamento_9x()
+        p1 = lancamento.parcelas.order_by("numero").first()
+        editar_parcela(p1, conta_prevista=self.conta2)
+        # POST antigo (sem o campo parcela_conta_prevista) não deve apagar o
+        # que já foi definido para a parcela.
+        resp = self.client_superadmin.post("/financeiro/private-label/htmx/lancamentos/salvar/", {
+            "pk": lancamento.pk, "parcela_pk": p1.pk, "tipo": "despesa", "descricao": lancamento.descricao,
+            "categoria": self.categoria.pk, "escopo_valor": "parcela",
+            "conta_prevista": self.conta.pk,
+        })
+        self.assertEqual(resp.status_code, 200)
+        p1.refresh_from_db()
+        self.assertEqual(p1.conta_prevista, self.conta2)

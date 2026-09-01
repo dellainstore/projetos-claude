@@ -458,6 +458,16 @@ class Parcela(models.Model):
     numero = models.PositiveIntegerField()
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     data_vencimento = models.DateField()
+    # Conta PREVISTA desta parcela específica — pedido do dono (2026-09-02):
+    # "quando entrei na parcela 1 para ajustar só ela, mudou todas pra
+    # Santander" — o campo antigo (LancamentoFinanceiro.conta_prevista) é
+    # compartilhado por todas as parcelas do mesmo lançamento, então editar
+    # numa mudava em todas. Cada parcela agora tem a sua própria (opcional
+    # — cai no fallback do lançamento via `conta_prevista_efetiva` quando
+    # em branco, então lançamentos antigos continuam funcionando).
+    conta_prevista = models.ForeignKey(
+        ContaBancaria, on_delete=models.PROTECT, null=True, blank=True, related_name="parcelas_previstas",
+    )
     estado_estrutural = models.CharField(
         max_length=10, choices=ESTADO_ESTRUTURAL_CHOICES, default=ESTADO_ABERTO,
     )
@@ -476,6 +486,13 @@ class Parcela(models.Model):
 
     def __str__(self) -> str:
         return f"{self.lancamento.descricao} — parcela {self.numero}"
+
+    @property
+    def conta_prevista_efetiva(self):
+        """Conta prevista desta parcela, ou a do lançamento se a parcela
+        não tiver uma própria definida (compatibilidade com lançamentos
+        criados antes deste campo existir)."""
+        return self.conta_prevista or self.lancamento.conta_prevista
 
     @property
     def valor_baixado_principal(self) -> Decimal:
