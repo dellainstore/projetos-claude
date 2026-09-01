@@ -937,3 +937,28 @@ class ContaPrevistaPorParcelaTests(BaseFinanceiroTestCase):
         self.assertEqual(resp.status_code, 200)
         p1.refresh_from_db()
         self.assertEqual(p1.conta_prevista, self.conta2)
+
+    def test_filtro_por_conta_respeita_override_por_parcela(self):
+        """Bug relatado pelo dono: filtrar só pelo Santander mostrava
+        parcelas do Itaú junto — o filtro usava só a conta do lançamento,
+        ignorando o override por parcela."""
+        lancamento = self._lancamento_9x()  # conta_prevista do lançamento = self.conta
+        parcelas = list(lancamento.parcelas.order_by("numero"))
+        p1 = parcelas[0]
+        editar_parcela(p1, conta_prevista=self.conta2)  # só a 1ª vai pra conta2
+
+        resp_conta1 = self.client_superadmin.get(
+            "/financeiro/private-label/htmx/lancamentos/lista/", {"conta": self.conta.pk}
+        )
+        self.assertEqual(resp_conta1.status_code, 200)
+        self.assertNotIn(f'value="{p1.pk}"'.encode(), resp_conta1.content)
+        for p in parcelas[1:]:
+            self.assertIn(f'value="{p.pk}"'.encode(), resp_conta1.content)
+
+        resp_conta2 = self.client_superadmin.get(
+            "/financeiro/private-label/htmx/lancamentos/lista/", {"conta": self.conta2.pk}
+        )
+        self.assertEqual(resp_conta2.status_code, 200)
+        self.assertIn(f'value="{p1.pk}"'.encode(), resp_conta2.content)
+        for p in parcelas[1:]:
+            self.assertNotIn(f'value="{p.pk}"'.encode(), resp_conta2.content)

@@ -100,7 +100,14 @@ def _parcelas_filtradas(request, operacao):
         qs = qs.filter(lancamento__centro_custo_id=centro_custo)
     conta = request.GET.get("conta")
     if conta:
-        qs = qs.filter(lancamento__conta_prevista_id=conta)
+        # Conta EFETIVA da parcela: a dela própria se tiver, senão a do
+        # lançamento (mesma regra de `conta_prevista_efetiva`) — filtrar só
+        # por `lancamento__conta_prevista_id` ignorava o override por
+        # parcela e misturava contas diferentes no mesmo lançamento.
+        qs = qs.filter(
+            models.Q(conta_prevista_id=conta)
+            | models.Q(conta_prevista_id__isnull=True, lancamento__conta_prevista_id=conta)
+        )
     busca = request.GET.get("q", "").strip()
     if busca:
         qs = qs.filter(lancamento__descricao__icontains=busca)
