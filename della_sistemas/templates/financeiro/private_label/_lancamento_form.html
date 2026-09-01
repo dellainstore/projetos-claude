@@ -62,17 +62,19 @@
         {% endif %}
       </div>
 
-      {% if lancamento and lancamento.parcelas.count > 1 and not lancamento_tem_baixa %}
-      <div class="pl-form-campo pl-form-campo--full" style="margin-top:.9rem;">
-        <label>Alterar valor/parcelamento</label>
-        <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.3rem;">
-          <label class="pl-form-check"><input type="radio" name="escopo_valor" value="parcela" id="pl-escopo-parcela" checked onchange="plAlternarEscopoValor()"> Somente esta parcela ({{ parcela.numero }}/{{ lancamento.parcelas.count }})</label>
-          <label class="pl-form-check">
-            <input type="radio" name="escopo_valor" value="todas" id="pl-escopo-todas" onchange="plAlternarEscopoValor()">
-            Todas as parcelas (reparcelar)
-          </label>
+      {% if lancamento and lancamento.parcelas.count > 1 %}
+        {% if not lancamento_tem_baixa or user.is_superadmin %}
+        <div class="pl-form-campo pl-form-campo--full" style="margin-top:.9rem;">
+          <label>Alterar valor/parcelamento</label>
+          <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.3rem;">
+            <label class="pl-form-check"><input type="radio" name="escopo_valor" value="parcela" id="pl-escopo-parcela" checked onchange="plAlternarEscopoValor()"> Somente esta parcela ({{ parcela.numero }}/{{ lancamento.parcelas.count }})</label>
+            <label class="pl-form-check">
+              <input type="radio" name="escopo_valor" value="todas" id="pl-escopo-todas" onchange="plAlternarEscopoValor()">
+              Todas as parcelas (reparcelar)
+            </label>
+          </div>
         </div>
-      </div>
+        {% endif %}
       {% endif %}
 
       {% if lancamento %}
@@ -89,9 +91,10 @@
 
       <div id="pl-bloco-todas" class="pl-form-grid" style="margin-top:.6rem;display:none;">
         <div class="pl-form-campo">
-          <label>Novo valor total</label>
+          <label>Novo valor total ({{ lancamento.parcelas.count }} parcelas)</label>
           <input class="ds-input" type="number" step="0.01" min="0.01" name="novo_valor_total" value="{{ lancamento.valor_original|unlocalize }}">
         </div>
+        {% if not lancamento_tem_baixa %}
         <div class="pl-form-campo">
           <label>Quantidade de parcelas</label>
           <input class="ds-input" type="number" min="1" max="360" name="novas_parcelas_qtd" value="{{ lancamento.parcelas.count }}">
@@ -110,6 +113,7 @@
             <option value="anual">Anual</option>
           </select>
         </div>
+        {% endif %}
       </div>
       {% endif %}
 

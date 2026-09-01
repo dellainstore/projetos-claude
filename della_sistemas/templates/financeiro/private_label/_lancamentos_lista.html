@@ -20,9 +20,7 @@
         {% with parcela=linha.parcela lanc=linha.parcela.lancamento sit=linha.parcela.situacao_temporal %}
         <tr>
           <td>
-            {% if sit != "quitado" and sit != "cancelado" %}
             <input type="checkbox" class="pl-check-parcela" value="{{ parcela.pk }}">
-            {% endif %}
           </td>
           <td>{{ lanc.get_tipo_display }}</td>
           <td>

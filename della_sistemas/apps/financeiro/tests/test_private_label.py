@@ -756,3 +756,106 @@ class EditarParcelaEReparcelarTests(BaseFinanceiroTestCase):
         editar_lancamento(lancamento, categoria=self.categoria_receita, tipo="receita")
         lancamento.refresh_from_db()
         self.assertEqual(lancamento.tipo, "receita")
+
+
+class ReparcelarMantendoParcelasTests(BaseFinanceiroTestCase):
+    """Pedido do dono (2026-09-02): "preciso alterar o valor de todas as
+    parcelas, mesmo as pagas, e não quero deletar tudo" — reproduz o caso
+    real da máquina de costura: 9x, 1ª parcela já paga com valor errado."""
+
+    def setUp(self):
+        super().setUp()
+        self.superadmin = get_user_model().objects.create_user(
+            username="_teste_superadmin_rep", password="x", papel="superadmin", is_superuser=True,
+        )
+        self.colaborador = get_user_model().objects.create_user(
+            username="_teste_colaborador_rep", password="x", papel="operador",
+            permissoes={"private_label": {"lancar": True, "ver_lancamentos": True}},
+        )
+        self.client_superadmin = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_superadmin.force_login(self.superadmin)
+        self.client_colaborador = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_colaborador.force_login(self.colaborador)
+
+    def _criar_lancamento_de(self, usuario, descricao="Lançamento do teste"):
+        return criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao=descricao, valor_original=Decimal("40.00"),
+            data_competencia=date.today(), primeiro_vencimento=date.today(), categoria=self.categoria,
+            usuario=usuario,
+        )
+
+    def _lancamento_9x(self):
+        # Total errado de R$ 7.000 em 9x (~R$ 777,78 cada) — o real deveria
+        # ser R$ 63.000 (R$ 7.000 cada parcela), igual ao caso de verdade.
+        return criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Máquina 9x errado",
+            valor_original=Decimal("7000.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria, parcelas_qtd=9,
+        )
+
+    def test_bloqueado_para_usuario_comum_quando_ha_baixa(self):
+        from apps.financeiro.services.private_label.lancamentos import reparcelar_mantendo_parcelas
+        lancamento = self._lancamento_9x()
+        p1 = lancamento.parcelas.order_by("numero").first()
+        dar_baixa(parcela=p1, valor_principal=p1.valor, data=date.today(), conta=self.conta)
+        with self.assertRaises(ValueError):
+            reparcelar_mantendo_parcelas(lancamento, novo_valor_total=Decimal("63000.00"), ignorar_baixa=False)
+        # nada mudou
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.parcelas.count(), 9)
+        p1.refresh_from_db()
+        self.assertEqual(p1.valor, Decimal("777.78"))
+
+    def test_superadmin_corrige_todas_as_parcelas_sem_apagar_nenhuma(self):
+        from apps.financeiro.services.private_label.lancamentos import reparcelar_mantendo_parcelas
+        lancamento = self._lancamento_9x()
+        parcelas_antes = list(lancamento.parcelas.order_by("numero").values_list("pk", flat=True))
+        p1 = lancamento.parcelas.order_by("numero").first()
+        dar_baixa(parcela=p1, valor_principal=p1.valor, data=date.today(), conta=self.conta)
+        p1.refresh_from_db()
+        self.assertEqual(p1.estado_estrutural, ESTADO_QUITADO)
+
+        reparcelar_mantendo_parcelas(lancamento, novo_valor_total=Decimal("63000.00"), ignorar_baixa=True)
+
+        lancamento.refresh_from_db()
+        parcelas_depois = list(lancamento.parcelas.order_by("numero").values_list("pk", flat=True))
+        self.assertEqual(parcelas_antes, parcelas_depois)  # mesmas 9 linhas, nada apagado/recriado
+        self.assertEqual(lancamento.parcelas.count(), 9)
+        self.assertEqual(lancamento.valor_original, Decimal("63000.00"))
+        self.assertEqual(sum(p.valor for p in lancamento.parcelas.all()), Decimal("63000.00"))
+
+        p1.refresh_from_db()
+        self.assertEqual(p1.valor, Decimal("7000.00"))  # 63000/9, divide exato
+        self.assertEqual(p1.valor_baixado_principal, Decimal("777.78"))  # a baixa original nao mudou
+        # agora falta 6222,22 nessa parcela (7000 - 777,78 já pago) — parcial, nao mais quitada
+        self.assertEqual(p1.estado_estrutural, ESTADO_PARCIAL)
+        self.assertEqual(p1.saldo_restante, Decimal("6222.22"))
+
+    def test_view_permite_reparcelar_mantendo_para_superadmin_e_bloqueia_comum(self):
+        lancamento = self._criar_lancamento_de(self.superadmin, descricao="Máquina 9x via view")
+        # transforma em parcelado direto no banco pra simplificar o teste
+        from apps.financeiro.services.private_label.lancamentos import reparcelar
+        reparcelar(lancamento, novo_valor_total=Decimal("777.78"), novas_parcelas_qtd=9)
+        p1 = lancamento.parcelas.order_by("numero").first()
+        dar_baixa(parcela=p1, valor_principal=p1.valor, data=date.today(), conta=self.conta)
+
+        # colaborador comum: bloqueado
+        resp = self.client_colaborador.post("/financeiro/private-label/htmx/lancamentos/salvar/", {
+            "pk": lancamento.pk, "parcela_pk": p1.pk, "tipo": "despesa", "descricao": lancamento.descricao,
+            "categoria": self.categoria.pk, "escopo_valor": "todas", "novo_valor_total": "7000.00",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ds-modal-erro", resp.content)
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.valor_original, Decimal("777.78"))
+
+        # superadmin: funciona
+        resp2 = self.client_superadmin.post("/financeiro/private-label/htmx/lancamentos/salvar/", {
+            "pk": lancamento.pk, "parcela_pk": p1.pk, "tipo": "despesa", "descricao": lancamento.descricao,
+            "categoria": self.categoria.pk, "escopo_valor": "todas", "novo_valor_total": "7000.00",
+        })
+        self.assertEqual(resp2.status_code, 200)
+        self.assertNotIn(b"ds-modal-erro", resp2.content)
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.valor_original, Decimal("7000.00"))
+        self.assertEqual(lancamento.parcelas.count(), 9)

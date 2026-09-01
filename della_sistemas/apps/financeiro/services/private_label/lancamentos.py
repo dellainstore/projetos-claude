@@ -240,6 +240,40 @@ def reparcelar(
 
 
 @transaction.atomic
+def reparcelar_mantendo_parcelas(
+    lancamento: LancamentoFinanceiro, *, usuario=None, novo_valor_total, ignorar_baixa=False,
+) -> LancamentoFinanceiro:
+    """Corrige o valor total de TODAS as parcelas de uma vez SEM apagar
+    nenhuma — pedido do dono: "preciso alterar o valor de todas as
+    parcelas, mesmo as pagas, e não quero deletar tudo". Mantém a
+    quantidade de parcelas atual (não dá pra mudar quantidade sem apagar
+    parcela, e parcela com baixa não pode ser apagada — `Baixa.parcela` é
+    PROTECT no banco). Redistribui o novo total entre as parcelas na mesma
+    proporção que `gerar_valores_parcelas` já usa (igual, com a diferença
+    de centavos na última). Reaproveita `editar_parcela` parcela por
+    parcela — mesma trava de permissão dela: só ignora baixa quando
+    `ignorar_baixa=True` (reservado a superadmin, checado na view)."""
+    parcelas = list(
+        lancamento.parcelas.exclude(estado_estrutural=ESTADO_CANCELADO).order_by("numero")
+    )
+    if not parcelas:
+        raise ValueError("Este lançamento não tem parcelas em aberto para reparcelar.")
+    novo_valor_total = Decimal(novo_valor_total)
+    if novo_valor_total <= 0:
+        raise ValueError("Valor total deve ser maior que zero.")
+    valor_de = lancamento.valor_original
+    valores = gerar_valores_parcelas(novo_valor_total, len(parcelas))
+    for parcela, novo_valor in zip(parcelas, valores):
+        editar_parcela(parcela, usuario=usuario, valor=novo_valor, ignorar_baixa=ignorar_baixa)
+    registrar_log(
+        operacao=lancamento.operacao, entidade="lancamento", objeto_id=lancamento.id, acao="edicao",
+        usuario=usuario, campo="reparcelamento_mantendo_parcelas",
+        valor_de=f"R$ {valor_de}", valor_para=f"R$ {novo_valor_total}",
+    )
+    return lancamento
+
+
+@transaction.atomic
 def cancelar_lancamento(lancamento: LancamentoFinanceiro, *, usuario=None) -> LancamentoFinanceiro:
     if lancamento.estado_estrutural == ESTADO_CANCELADO:
         return lancamento

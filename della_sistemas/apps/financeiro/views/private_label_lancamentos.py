@@ -41,6 +41,7 @@ from apps.financeiro.services.private_label.lancamentos import (
     editar_lancamento,
     editar_parcela,
     reparcelar,
+    reparcelar_mantendo_parcelas,
 )
 from apps.financeiro.services.private_label.operacao import obter_operacao_padrao
 from apps.financeiro.services.private_label.recorrencias import verificar_lazy
@@ -306,8 +307,21 @@ def pl_htmx_lancamento_salvar(request):
         # (só quando nenhuma parcela tem baixa ainda) — nunca as duas coisas
         # ao mesmo tempo. Superadmin pode mudar valor mesmo com baixa.
         escopo_valor = request.POST.get("escopo_valor", "parcela")
+        lancamento_tem_baixa = Baixa.objects.filter(parcela__lancamento=lancamento).exists()
         try:
-            if escopo_valor == "todas":
+            if escopo_valor == "todas" and lancamento_tem_baixa:
+                # Já tem baixa em algum lugar da série — apagar e recriar
+                # parcelas (reparcelar()) esbarraria em Baixa.parcela=PROTECT.
+                # Só superadmin corrige o total mantendo as parcelas como
+                # estão (nada é apagado).
+                if not request.user.is_superadmin:
+                    raise ValueError("Só o superadmin pode reparcelar uma série que já tem baixa.")
+                reparcelar_mantendo_parcelas(
+                    lancamento, usuario=request.user,
+                    novo_valor_total=_decimal(request.POST.get("novo_valor_total")),
+                    ignorar_baixa=True,
+                )
+            elif escopo_valor == "todas":
                 reparcelar(
                     lancamento, usuario=request.user,
                     novo_valor_total=_decimal(request.POST.get("novo_valor_total")),
