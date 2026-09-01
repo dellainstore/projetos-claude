@@ -32,9 +32,9 @@
             {% if lanc.parcelas.count > 1 %}<span class="text-muted" style="font-size:.76rem;"> ({{ parcela.numero }}/{{ lanc.parcelas.count }})</span>{% endif %}
           </td>
           <td>{{ lanc.categoria.icone }} {{ lanc.categoria.nome|default:"" }}</td>
-          <td>{{ lanc.conta_prevista.nome|default:"—" }}</td>
+          <td>{{ lanc.conta_prevista.nome }}</td>
           <td>
-            {{ parcela.valor|brl }}
+            <span class="{% if lanc.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ parcela.valor|brl }}</span>
             {% if sit == "parcial" %}<br><span class="text-muted" style="font-size:.74rem;">restam {{ parcela.saldo_restante|brl }}</span>{% endif %}
           </td>
           <td>{{ parcela.data_vencimento|date:"d/m/Y" }}</td>
@@ -69,7 +69,7 @@
             &#8646; {{ t.conta_origem.nome }} &rarr; {{ t.conta_destino.nome }}
             {% if t.observacao %}<br><span class="text-muted" style="font-size:.76rem;">{{ t.observacao }}</span>{% endif %}
           </td>
-          <td class="text-muted">— (fora do DRE)</td>
+          <td class="text-muted">Transf. entre contas</td>
           <td>{{ t.conta_origem.nome }} &rarr; {{ t.conta_destino.nome }}</td>
           <td>{{ t.valor|brl }}</td>
           <td>{{ t.data|date:"d/m/Y" }}</td>

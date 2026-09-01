@@ -14,7 +14,7 @@
   .pl-card-valor { font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--preto); }
   .pl-card--consolidado { border-color: var(--dourado); background: rgba(201,169,110,.08); }
   .pl-card--gasto .pl-card-valor { color: var(--vermelho); }
-  .pl-card--recebido .pl-card-valor { color: var(--verde); }
+  .pl-card--recebido .pl-card-valor { color: #2563eb; }
   .pl-card--resultado.negativo .pl-card-valor { color: var(--vermelho); }
   .pl-card--resultado.positivo .pl-card-valor { color: var(--verde); }
   .pl-secao-titulo { font-size: .95rem; font-weight: 700; color: var(--preto); margin: 1.5rem 0 .6rem; }
@@ -78,14 +78,14 @@
       {% for linha in gasto_por_categoria %}
       <tr>
         <td>{{ linha.parcela__lancamento__categoria__icone }} {{ linha.parcela__lancamento__categoria__nome|default:"Sem categoria" }}</td>
-        <td>{{ linha.total|brl }}</td>
+        <td class="pl-valor-despesa">{{ linha.total|brl }}</td>
       </tr>
       {% empty %}
       <tr><td colspan="2" class="text-muted">Nenhum gasto no período.</td></tr>
       {% endfor %}
     </tbody>
     {% if gasto_por_categoria %}
-    <tfoot><tr><td>Total</td><td>{{ total_gasto|brl }}</td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td class="pl-valor-despesa">{{ total_gasto|brl }}</td></tr></tfoot>
     {% endif %}
   </table>
 </div>
@@ -98,14 +98,14 @@
       {% for linha in recebido_por_forma %}
       <tr>
         <td>{{ linha.forma_pagamento__nome|default:"Não informada" }}</td>
-        <td>{{ linha.total|brl }}</td>
+        <td class="pl-valor-receita">{{ linha.total|brl }}</td>
       </tr>
       {% empty %}
       <tr><td colspan="2" class="text-muted">Nenhum recebimento no período.</td></tr>
       {% endfor %}
     </tbody>
     {% if recebido_por_forma %}
-    <tfoot><tr><td>Total</td><td>{{ total_recebido|brl }}</td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td class="pl-valor-receita">{{ total_recebido|brl }}</td></tr></tfoot>
     {% endif %}
   </table>
 </div>
@@ -123,8 +123,8 @@
           </a>
         </td>
         <td>{{ linha.lancamento.categoria.icone }} {{ linha.lancamento.categoria.nome|default:"" }}</td>
-        <td>{{ linha.lancamento.valor_original|brl }}</td>
-        <td>{{ linha.saldo_restante|brl }}</td>
+        <td class="{% if linha.lancamento.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ linha.lancamento.valor_original|brl }}</td>
+        <td class="{% if linha.lancamento.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ linha.saldo_restante|brl }}</td>
         <td>
           {% if linha.proxima_parcela %}
             {{ linha.proxima_parcela.valor|brl }} em {{ linha.proxima_parcela.data_vencimento|date:"d/m/Y" }}

@@ -25,7 +25,7 @@
         <div class="pl-form-campo">
           <label>Categoria pai (opcional)</label>
           <select class="ds-select" name="categoria_pai">
-            <option value="">— nenhuma (categoria raiz) —</option>
+            <option value="">Nenhuma (categoria raiz)</option>
             {% for pai in categorias_pai %}
             {% if not categoria or pai.pk != categoria.pk %}
             <option value="{{ pai.pk }}" {% if categoria.categoria_pai_id == pai.pk %}selected{% endif %}>{{ pai.nome }}</option>

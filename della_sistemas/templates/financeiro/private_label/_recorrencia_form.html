@@ -52,7 +52,7 @@
           <div class="pl-form-campo">
             <label>Conta prevista</label>
             <select class="ds-select" name="conta_prevista">
-              <option value="">—</option>
+              <option value="">Nenhuma</option>
               {% for conta in contas_todas %}
               <option value="{{ conta.pk }}">{{ conta.nome }}</option>
               {% endfor %}
@@ -72,9 +72,6 @@
           </div>
         </div>
       </details>
-      <p class="text-muted" style="font-size:.78rem;margin-top:.5rem;">
-        Se não informar data final nem quantidade, as ocorrências são geradas dentro da janela acima e estendidas automaticamente conforme o tempo passa.
-      </p>
       <div class="pl-form-acoes">
         <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
         <button type="submit" class="ds-btn ds-btn--dourado">Criar recorrência</button>

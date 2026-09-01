@@ -8,11 +8,11 @@
 
     <div class="pl-form-grid" style="margin-bottom:1rem;font-size:.85rem;">
       <div><strong>Tipo:</strong> {{ lancamento.get_tipo_display }}</div>
-      <div><strong>Valor original:</strong> {{ lancamento.valor_original|brl }}</div>
-      <div><strong>Categoria:</strong> {{ lancamento.categoria.icone }} {{ lancamento.categoria.nome|default:"—" }}</div>
-      <div><strong>Centro de custo:</strong> {{ lancamento.centro_custo.nome|default:"—" }}</div>
-      <div><strong>Contato:</strong> {{ lancamento.contato.nome|default:"—" }}</div>
-      <div><strong>Conta prevista:</strong> {{ lancamento.conta_prevista.nome|default:"—" }}</div>
+      <div><strong>Valor original:</strong> <span class="{% if lancamento.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ lancamento.valor_original|brl }}</span></div>
+      <div><strong>Categoria:</strong> {{ lancamento.categoria.icone }} {{ lancamento.categoria.nome }}</div>
+      <div><strong>Centro de custo:</strong> {{ lancamento.centro_custo.nome }}</div>
+      <div><strong>Contato:</strong> {{ lancamento.contato.nome }}</div>
+      <div><strong>Conta prevista:</strong> {{ lancamento.conta_prevista.nome }}</div>
       <div><strong>Situação:</strong> <span class="pl-badge pl-badge--{{ lancamento.situacao_temporal }}">{% rotulo_situacao_tag lancamento.tipo lancamento.situacao_temporal %}</span></div>
       {% if lancamento.data_quitacao %}<div><strong>Quitado em:</strong> {{ lancamento.data_quitacao|date:"d/m/Y" }}</div>{% endif %}
       {% if lancamento.tags.all %}<div class="pl-form-campo--full"><strong>Tags:</strong> {% for t in lancamento.tags.all %}{{ t.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
@@ -41,7 +41,7 @@
                 </div>
                 {% endif %}
               {% empty %}
-              <span class="text-muted">—</span>
+              <span class="text-muted">Nenhuma baixa</span>
               {% endfor %}
             </td>
           </tr>
@@ -67,7 +67,7 @@
     <h3 style="font-size:.9rem;margin-bottom:.5rem;">Histórico</h3>
     <ul style="font-size:.78rem;color:var(--cinza-texto);padding-left:1.1rem;max-height:140px;overflow-y:auto;">
       {% for log in logs %}
-      <li>{{ log.criado_em|date:"d/m/Y H:i" }} — {{ log.get_acao_display }}{% if log.usuario %} por {{ log.usuario }}{% endif %}{% if log.valor_para %}: {{ log.valor_para }}{% endif %}</li>
+      <li>{{ log.criado_em|date:"d/m/Y H:i" }}: {{ log.get_acao_display }}{% if log.usuario %} por {{ log.usuario }}{% endif %}{% if log.valor_para %}: {{ log.valor_para }}{% endif %}</li>
       {% empty %}
       <li class="text-muted">Sem histórico.</li>
       {% endfor %}

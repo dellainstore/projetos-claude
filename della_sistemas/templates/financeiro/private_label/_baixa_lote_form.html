@@ -4,9 +4,6 @@
       <span>Baixar {{ quantidade }} parcela{{ quantidade|pluralize }} selecionada{{ quantidade|pluralize }}</span>
       <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
     </div>
-    <p class="text-muted" style="font-size:.82rem;margin-bottom:.75rem;">
-      Baixa total (pelo saldo restante de cada parcela), sem juros/multa/desconto — para baixas com ajuste, use "Baixar" individualmente.
-    </p>
     <form hx-post="{% url 'financeiro:pl_htmx_baixa_lote' %}" hx-target="#modal-container" hx-swap="innerHTML">
       {% csrf_token %}
       {% for pid in ids_lista %}<input type="hidden" name="parcela_ids" value="{{ pid }}">{% endfor %}
@@ -25,7 +22,7 @@
         <div class="pl-form-campo pl-form-campo--full">
           <label>Forma de pagamento</label>
           <select class="ds-select" name="forma_pagamento">
-            <option value="">—</option>
+            <option value="">Não informada</option>
             {% for forma in formas_pagamento %}<option value="{{ forma.pk }}">{{ forma.nome }}</option>{% endfor %}
           </select>
         </div>

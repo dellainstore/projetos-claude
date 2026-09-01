@@ -250,6 +250,10 @@ def pl_htmx_lancamento_salvar(request):
             return render(request, "financeiro/private_label/_erro_generico_modal.html", {
                 "erro": "Você só pode editar lançamentos que você mesmo criou (ou ser superadmin).",
             })
+        if request.POST.get("tipo") != lancamento_existente.tipo and not request.user.is_superadmin:
+            return render(request, "financeiro/private_label/_erro_generico_modal.html", {
+                "erro": "Só o superadmin pode trocar entre despesa e receita.",
+            })
 
     tipo = request.POST.get("tipo", "despesa")
     categoria_id = request.POST.get("categoria")
@@ -289,15 +293,18 @@ def pl_htmx_lancamento_salvar(request):
 
     if pk:
         lancamento = get_object_or_404(LancamentoFinanceiro, pk=pk, operacao=operacao)
-        editar_lancamento(
-            lancamento, usuario=request.user, tags=tags, descricao=descricao, contato=contato,
-            categoria=categoria, centro_custo=centro_custo, conta_prevista=conta_prevista,
-            forma_pagamento=forma_pagamento, numero_documento=request.POST.get("numero_documento", "").strip(),
-            observacoes=request.POST.get("observacoes", "").strip(),
-        )
-        # Pedido do dono (2026-09-02): dá pra corrigir o valor de UMA
-        # parcela só, ou reparcelar a série inteira (só quando nenhuma
-        # parcela tem baixa ainda) — nunca as duas coisas ao mesmo tempo.
+        try:
+            editar_lancamento(
+                lancamento, usuario=request.user, tags=tags, descricao=descricao, contato=contato,
+                categoria=categoria, centro_custo=centro_custo, conta_prevista=conta_prevista,
+                forma_pagamento=forma_pagamento, numero_documento=request.POST.get("numero_documento", "").strip(),
+                observacoes=request.POST.get("observacoes", "").strip(), tipo=tipo,
+            )
+        except ValueError as e:
+            return _erro_com_contexto(lancamento, str(e))
+        # Corrigir o valor de UMA parcela só, ou reparcelar a série inteira
+        # (só quando nenhuma parcela tem baixa ainda) — nunca as duas coisas
+        # ao mesmo tempo. Superadmin pode mudar valor mesmo com baixa.
         escopo_valor = request.POST.get("escopo_valor", "parcela")
         try:
             if escopo_valor == "todas":
@@ -316,6 +323,7 @@ def pl_htmx_lancamento_salvar(request):
                     editar_parcela(
                         parcela, usuario=request.user,
                         valor=novo_valor if novo_valor else None,
+                        ignorar_baixa=request.user.is_superadmin,
                         data_vencimento=request.POST.get("parcela_vencimento") or None,
                     )
         except ValueError as e:

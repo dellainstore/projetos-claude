@@ -98,7 +98,7 @@ def criar_lancamento(
 
 CAMPOS_EDITAVEIS = [
     "descricao", "contato", "categoria", "centro_custo", "conta_prevista",
-    "forma_pagamento", "numero_documento", "observacoes",
+    "forma_pagamento", "numero_documento", "observacoes", "tipo",
 ]
 
 
@@ -106,6 +106,15 @@ CAMPOS_EDITAVEIS = [
 def editar_lancamento(lancamento: LancamentoFinanceiro, *, usuario=None, tags=None, **campos) -> LancamentoFinanceiro:
     if lancamento.estado_estrutural == ESTADO_CANCELADO:
         raise ValueError("Lançamento cancelado não pode ser editado.")
+    if "tipo" in campos and campos["tipo"] != lancamento.tipo:
+        # Trocar despesa<->receita depois que já existe baixa inverteria o
+        # sinal de movimentos já gravados no razão — trava técnica, vale
+        # pra qualquer usuário (mesmo superadmin, que só ganha permissão
+        # pra trocar tipo antes de qualquer baixa acontecer).
+        if Baixa.objects.filter(parcela__lancamento=lancamento).exists():
+            raise ValueError(
+                "Não dá pra trocar entre despesa e receita depois que já existe baixa registrada nesta série."
+            )
     alterados = []
     for campo, novo_valor in campos.items():
         if campo not in CAMPOS_EDITAVEIS:
@@ -126,14 +135,17 @@ def editar_lancamento(lancamento: LancamentoFinanceiro, *, usuario=None, tags=No
 
 
 @transaction.atomic
-def editar_parcela(parcela: Parcela, *, usuario=None, valor=None, data_vencimento=None) -> Parcela:
-    """Edita SÓ esta parcela — pedido do dono (2026-09-02): "quando eu clico
-    na parcela gerada eu consigo editar apenas aquela parcela e não todas".
-    `valor` só pode mudar enquanto a parcela não tiver nenhuma baixa (senão
-    corromperia o dinheiro já registrado — estorne antes). `data_vencimento`
-    pode mudar sempre. Depois de mudar, `lancamento.valor_original` é
-    recalculado como a soma de todas as parcelas — ele é sempre um espelho
-    da soma, nunca editado direto."""
+def editar_parcela(
+    parcela: Parcela, *, usuario=None, valor=None, data_vencimento=None, ignorar_baixa=False,
+) -> Parcela:
+    """Edita SÓ esta parcela. `valor` só pode mudar enquanto a parcela não
+    tiver nenhuma baixa, a menos que `ignorar_baixa=True` (reservado a
+    superadmin, checado na view) — útil pra corrigir um valor errado que já
+    foi baixado, sem precisar estornar antes; o saldo restante passa a
+    refletir a diferença automaticamente. `data_vencimento` pode mudar
+    sempre. Depois de mudar, `lancamento.valor_original` é recalculado como
+    a soma de todas as parcelas — ele é sempre um espelho da soma, nunca
+    editado direto."""
     if parcela.estado_estrutural == ESTADO_CANCELADO:
         raise ValueError("Parcela cancelada não pode ser editada.")
     alterou = []
@@ -142,7 +154,7 @@ def editar_parcela(parcela: Parcela, *, usuario=None, valor=None, data_venciment
         if valor <= 0:
             raise ValueError("Valor da parcela deve ser maior que zero.")
         if valor != parcela.valor:
-            if parcela.valor_baixado_principal > 0:
+            if parcela.valor_baixado_principal > 0 and not ignorar_baixa:
                 raise ValueError(
                     "Esta parcela já tem baixa registrada — não dá pra mudar o valor. "
                     "Estorne a baixa primeiro, ou reparcele a série inteira se nenhuma outra parcela tiver baixa."
@@ -165,6 +177,12 @@ def editar_parcela(parcela: Parcela, *, usuario=None, valor=None, data_venciment
             alterou.append("data_vencimento")
     if alterou:
         parcela.save(update_fields=alterou)
+        if "valor" in alterou:
+            # o saldo restante mudou — o estado (aberto/parcial/quitado)
+            # precisa refletir isso agora, não só quando uma baixa nova
+            # acontece.
+            parcela.recalcular_estado()
+            parcela.lancamento.recalcular_estado()
         lancamento = parcela.lancamento
         novo_total = lancamento.parcelas.aggregate(total=Sum("valor"))["total"] or Decimal("0.00")
         if novo_total != lancamento.valor_original:

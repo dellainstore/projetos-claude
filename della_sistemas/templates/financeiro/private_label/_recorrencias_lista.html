@@ -10,7 +10,7 @@
         <td>{{ regra.valor|brl }}</td>
         <td>{{ regra.get_frequencia_display }}</td>
         <td>{{ regra.ocorrencias.count }}</td>
-        <td>{{ regra.janela_gerada_ate|date:"d/m/Y"|default:"—" }}</td>
+        <td>{{ regra.janela_gerada_ate|date:"d/m/Y" }}</td>
         <td>
           {% if not regra.ativa %}<span class="pl-badge pl-badge--cancelado">Encerrada</span>
           {% elif regra.pausada %}<span class="pl-badge pl-badge--pendente">Pausada</span>

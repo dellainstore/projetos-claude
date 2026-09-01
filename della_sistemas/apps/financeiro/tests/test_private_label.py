@@ -598,6 +598,30 @@ class DeletarEEditarPermissaoTests(BaseFinanceiroTestCase):
         body = resp.content.decode()
         self.assertIn(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/form/", body)
 
+    def test_view_bloqueia_troca_de_tipo_para_usuario_nao_superadmin(self):
+        lancamento = self._criar_lancamento_de(self.colaborador)
+        resp = self.client_colaborador.post("/financeiro/private-label/htmx/lancamentos/salvar/", {
+            "pk": lancamento.pk, "parcela_pk": lancamento.parcelas.first().pk, "tipo": "receita",
+            "descricao": lancamento.descricao, "categoria": self.categoria_receita.pk,
+            "escopo_valor": "parcela",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ds-modal-erro", resp.content)
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.tipo, "despesa")
+
+    def test_view_permite_troca_de_tipo_para_superadmin(self):
+        lancamento = self._criar_lancamento_de(self.superadmin)
+        resp = self.client_superadmin.post("/financeiro/private-label/htmx/lancamentos/salvar/", {
+            "pk": lancamento.pk, "parcela_pk": lancamento.parcelas.first().pk, "tipo": "receita",
+            "descricao": lancamento.descricao, "categoria": self.categoria_receita.pk,
+            "escopo_valor": "parcela",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(b"ds-modal-erro", resp.content)
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.tipo, "receita")
+
 
 class EditarParcelaEReparcelarTests(BaseFinanceiroTestCase):
     """Pedido do dono (2026-09-02): corrigir um lançamento de 7.000 em 9x
@@ -688,3 +712,47 @@ class EditarParcelaEReparcelarTests(BaseFinanceiroTestCase):
         dar_baixa(parcela=p1, valor_principal=Decimal("7000.00"), data=date.today(), conta=self.conta2)
         p1.refresh_from_db()
         self.assertEqual(p1.estado_estrutural, ESTADO_QUITADO)
+
+    def test_superadmin_pode_editar_valor_de_parcela_ja_baixada_com_ignorar_baixa(self):
+        """Pedido do dono (2026-09-02): superadmin corrige direto, sem
+        precisar estornar antes. O saldo restante passa a refletir a
+        diferença e o estado vira parcial automaticamente."""
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Valor errado baixado",
+            valor_original=Decimal("100.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        parcela = lancamento.parcelas.first()
+        dar_baixa(parcela=parcela, valor_principal=Decimal("100.00"), data=date.today(), conta=self.conta)
+        parcela.refresh_from_db()
+        self.assertEqual(parcela.estado_estrutural, ESTADO_QUITADO)
+
+        editar_parcela(parcela, valor=Decimal("700.00"), ignorar_baixa=True)
+        parcela.refresh_from_db()
+        lancamento.refresh_from_db()
+        self.assertEqual(parcela.valor, Decimal("700.00"))
+        self.assertEqual(parcela.saldo_restante, Decimal("600.00"))
+        self.assertEqual(parcela.estado_estrutural, ESTADO_PARCIAL)
+        self.assertEqual(lancamento.valor_original, Decimal("700.00"))
+
+    def test_trocar_tipo_e_bloqueado_depois_de_qualquer_baixa(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Tipo errado",
+            valor_original=Decimal("50.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        dar_baixa(parcela=lancamento.parcelas.first(), valor_principal=Decimal("50.00"), data=date.today(), conta=self.conta)
+        from apps.financeiro.services.private_label.lancamentos import editar_lancamento
+        with self.assertRaises(ValueError):
+            editar_lancamento(lancamento, tipo="receita")
+
+    def test_trocar_tipo_funciona_antes_de_qualquer_baixa(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Tipo a corrigir",
+            valor_original=Decimal("50.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        from apps.financeiro.services.private_label.lancamentos import editar_lancamento
+        editar_lancamento(lancamento, categoria=self.categoria_receita, tipo="receita")
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.tipo, "receita")
