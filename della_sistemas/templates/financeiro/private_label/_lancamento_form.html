@@ -62,13 +62,13 @@
         {% endif %}
       </div>
 
-      {% if lancamento and lancamento.parcelas.count > 1 %}
+      {% if lancamento and lancamento.parcelas.count > 1 and not lancamento_tem_baixa %}
       <div class="pl-form-campo pl-form-campo--full" style="margin-top:.9rem;">
         <label>Alterar valor/parcelamento</label>
         <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.3rem;">
           <label class="pl-form-check"><input type="radio" name="escopo_valor" value="parcela" id="pl-escopo-parcela" checked onchange="plAlternarEscopoValor()"> Somente esta parcela ({{ parcela.numero }}/{{ lancamento.parcelas.count }})</label>
           <label class="pl-form-check">
-            <input type="radio" name="escopo_valor" value="todas" id="pl-escopo-todas" onchange="plAlternarEscopoValor()" {% if lancamento_tem_baixa %}disabled{% endif %}>
+            <input type="radio" name="escopo_valor" value="todas" id="pl-escopo-todas" onchange="plAlternarEscopoValor()">
             Todas as parcelas (reparcelar)
           </label>
         </div>
