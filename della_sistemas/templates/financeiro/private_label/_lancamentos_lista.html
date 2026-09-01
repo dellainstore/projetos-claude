@@ -44,7 +44,7 @@
               {% if sit != "quitado" and sit != "cancelado" %}
               <button type="button" class="pl-icon-btn pl-icon-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_baixa_form' parcela.pk %}" hx-target="#modal-container" title="{% if lanc.tipo == 'despesa' %}Marcar como pago{% else %}Marcar como recebido{% endif %}">&#10003;</button>
               {% endif %}
-              {% if sit == "aberto" and parcela.numero == 1 %}
+              {% if sit != "cancelado" and parcela.numero == 1 %}
                 {% if user.is_superadmin or lanc.criado_por_id == user.id %}
                 <button type="button" class="pl-icon-btn" hx-get="{% url 'financeiro:pl_htmx_lancamento_form_editar' lanc.pk %}" hx-target="#modal-container" title="Editar">&#9998;</button>
                 {% endif %}

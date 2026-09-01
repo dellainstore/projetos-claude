@@ -578,3 +578,20 @@ class DeletarEEditarPermissaoTests(BaseFinanceiroTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"ds-modal-erro", resp.content)
         self.assertTrue(LancamentoFinanceiro.objects.filter(pk=lancamento.pk).exists())
+
+    def test_botao_editar_aparece_na_lista_mesmo_ja_pago(self):
+        """Regressão 2026-09-02: o botão de Editar comparava a situação
+        TEMPORAL (vencido/pendente/previsto/quitado/cancelado) com o valor
+        "aberto", que só existe no estado ESTRUTURAL — a comparação nunca
+        batia e o botão não aparecia pra ninguém, nem pro superadmin."""
+        ontem = date.today() - timedelta(days=2)
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Já pago automaticamente",
+            valor_original=Decimal("60.00"), data_competencia=ontem, primeiro_vencimento=ontem,
+            categoria=self.categoria, conta_prevista=self.conta, usuario=self.superadmin,
+        )
+        self.assertEqual(lancamento.estado_estrutural, ESTADO_QUITADO)  # nasceu pago (auto-baixa)
+        resp = self.client_superadmin.get("/financeiro/private-label/lancamentos/?situacao=todas")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(f"/financeiro/private-label/htmx/lancamentos/{lancamento.pk}/form/", body)
