@@ -56,38 +56,18 @@
     <div class="pl-card-valor" style="font-size:1.1rem;">{{ conta.saldo|brl }}</div>
   </div>
   {% endfor %}
-  <div class="pl-card pl-card--gasto">
-    <div class="pl-card-label">Gasto no período</div>
-    <div class="pl-card-valor">{{ total_gasto|brl }}</div>
-  </div>
   <div class="pl-card pl-card--recebido">
     <div class="pl-card-label">Recebido no período</div>
     <div class="pl-card-valor">{{ total_recebido|brl }}</div>
+  </div>
+  <div class="pl-card pl-card--gasto">
+    <div class="pl-card-label">Gasto no período</div>
+    <div class="pl-card-valor">{{ total_gasto|brl }}</div>
   </div>
   <div class="pl-card pl-card--resultado {% if resultado < 0 %}negativo{% else %}positivo{% endif %}">
     <div class="pl-card-label">Resultado do período</div>
     <div class="pl-card-valor">{{ resultado|brl }}</div>
   </div>
-</div>
-
-<div class="pl-secao-titulo">Gasto por categoria</div>
-<div class="ds-table-wrapper">
-  <table class="ds-table">
-    <thead><tr><th>Categoria</th><th>Total</th></tr></thead>
-    <tbody>
-      {% for linha in gasto_por_categoria %}
-      <tr>
-        <td>{{ linha.parcela__lancamento__categoria__icone }} {{ linha.parcela__lancamento__categoria__nome|default:"Sem categoria" }}</td>
-        <td class="pl-valor-despesa">{{ linha.total|brl }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="2" class="text-muted">Nenhum gasto no período.</td></tr>
-      {% endfor %}
-    </tbody>
-    {% if gasto_por_categoria %}
-    <tfoot><tr><td>Total</td><td class="pl-valor-despesa">{{ total_gasto|brl }}</td></tr></tfoot>
-    {% endif %}
-  </table>
 </div>
 
 <div class="pl-secao-titulo">Recebimentos por forma de pagamento</div>
@@ -110,6 +90,26 @@
   </table>
 </div>
 
+<div class="pl-secao-titulo">Gasto por categoria</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Categoria</th><th>Total</th></tr></thead>
+    <tbody>
+      {% for linha in gasto_por_categoria %}
+      <tr>
+        <td>{{ linha.parcela__lancamento__categoria__icone }} {{ linha.parcela__lancamento__categoria__nome|default:"Sem categoria" }}</td>
+        <td class="pl-valor-despesa">{{ linha.total|brl }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="2" class="text-muted">Nenhum gasto no período.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if gasto_por_categoria %}
+    <tfoot><tr><td>Total</td><td class="pl-valor-despesa">{{ total_gasto|brl }}</td></tr></tfoot>
+    {% endif %}
+  </table>
+</div>
+
 <div class="pl-secao-titulo">Contas parceladas</div>
 <div class="ds-table-wrapper">
   <table class="ds-table">
@@ -127,6 +127,7 @@
         <td class="{% if linha.lancamento.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ linha.saldo_restante|brl }}</td>
         <td>
           {% if linha.proxima_parcela %}
+            <span class="text-muted">({{ linha.proxima_parcela.numero }}/{{ linha.lancamento.parcelas.count }})</span>
             {{ linha.proxima_parcela.valor|brl }} em {{ linha.proxima_parcela.data_vencimento|date:"d/m/Y" }}
           {% else %}
             <span class="pl-badge pl-badge--quitado">Quitada</span>

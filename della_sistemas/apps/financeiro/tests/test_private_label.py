@@ -394,6 +394,12 @@ class DashboardETransferenciaNaListaTests(BaseFinanceiroTestCase):
         self.assertIn("R$ 300,00", body)  # total gasto
         self.assertIn("R$ 500,00", body)  # total recebido
         self.assertIn("R$ 900,00", body)  # total da conta parcelada
+        # pedido do dono (2026-09-02): próxima parcela mostra "qual/quantas",
+        # não uma data fixa — 1ª de 3 parcelas em aberto
+        self.assertIn("(1/3)", body)
+        # recebido vem antes de gasto (cards e tabelas)
+        self.assertLess(body.index("Recebido no período"), body.index("Gasto no período"))
+        self.assertLess(body.index("Recebimentos por forma de pagamento"), body.index("Gasto por categoria"))
 
     def test_transferencia_aparece_na_lista_de_lancamentos_mesmo_fora_do_dre(self):
         transferir(operacao=self.operacao, conta_origem=self.conta, conta_destino=self.conta2,

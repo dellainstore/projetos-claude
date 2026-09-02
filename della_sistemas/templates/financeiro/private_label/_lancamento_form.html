@@ -1,4 +1,4 @@
-{% load l10n %}
+{% load core_extras l10n %}
 <div class="ds-modal-fundo">
   <div class="ds-modal ds-modal--largo">
     <div class="ds-modal-titulo">
@@ -82,6 +82,9 @@
         <div class="pl-form-campo">
           <label>Valor desta parcela</label>
           <input class="ds-input" type="number" step="0.01" min="0.01" name="parcela_valor" value="{{ parcela.valor|unlocalize }}" {% if parcela.valor_baixado_principal > 0 and not user.is_superadmin %}readonly{% endif %}>
+          {% if parcela.valor_baixado_principal > 0 and user.is_superadmin %}
+          <span class="text-muted" style="font-size:.72rem;">já tem baixa de {{ parcela.valor_baixado_principal|brl }} — mudar aqui não corrige a baixa, estorne e baixe de novo se o valor pago também estiver errado</span>
+          {% endif %}
         </div>
         <div class="pl-form-campo">
           <label>Vencimento desta parcela</label>
