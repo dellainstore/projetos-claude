@@ -1,0 +1,26 @@
+<div class="ds-modal-fundo">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>Resultado da exclusão</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if excluidos %}
+    <p style="font-size:.85rem;font-weight:600;margin-bottom:.3rem;">Excluídos ({{ excluidos|length }})</p>
+    <ul style="font-size:.85rem;padding-left:1.1rem;margin-bottom:.9rem;">
+      {% for descricao in excluidos %}<li>{{ descricao }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if bloqueados %}
+    <p style="font-size:.85rem;font-weight:600;margin-bottom:.3rem;">Não excluídos ({{ bloqueados|length }})</p>
+    <ul style="font-size:.85rem;padding-left:1.1rem;margin-bottom:.9rem;">
+      {% for descricao, motivo in bloqueados %}<li>{{ descricao }} — <span class="text-muted">{{ motivo }}</span></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if not excluidos and not bloqueados %}
+    <p class="text-muted" style="font-size:.85rem;">Nenhum lançamento selecionado.</p>
+    {% endif %}
+    <div class="pl-form-acoes">
+      <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Fechar</button>
+    </div>
+  </div>
+</div>

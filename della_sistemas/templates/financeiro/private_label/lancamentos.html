@@ -78,6 +78,9 @@
 <div class="pl-lote-barra" id="pl-lote-barra">
   <span id="pl-lote-contagem">0 selecionadas</span>
   <button type="button" class="ds-btn ds-btn--dourado ds-btn--sm" onclick="plAbrirBaixaLote()">Baixar selecionadas</button>
+  {% if user.is_superadmin %}
+  <button type="button" class="ds-btn ds-btn--perigo ds-btn--sm" onclick="plAbrirDeletarLote()">Excluir selecionadas</button>
+  {% endif %}
   <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" onclick="plLimparSelecao()">Limpar seleção</button>
 </div>
 
@@ -107,6 +110,11 @@ function plAbrirBaixaLote() {
   const ids = plParcelasSelecionadas().join(',');
   if (!ids) return;
   htmx.ajax('GET', "{% url 'financeiro:pl_htmx_baixa_lote_form' %}?ids=" + encodeURIComponent(ids), {target: '#modal-container'});
+}
+function plAbrirDeletarLote() {
+  const ids = plParcelasSelecionadas().join(',');
+  if (!ids) return;
+  htmx.ajax('GET', "{% url 'financeiro:pl_htmx_lancamento_deletar_lote_form' %}?ids=" + encodeURIComponent(ids), {target: '#modal-container'});
 }
 document.body.addEventListener('change', function(e) {
   if (e.target.classList.contains('pl-check-parcela') || e.target.id === 'pl-check-todas') {

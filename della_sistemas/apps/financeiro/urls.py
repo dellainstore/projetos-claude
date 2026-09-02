@@ -64,6 +64,8 @@ urlpatterns = [
     path("private-label/htmx/baixas/<int:pk>/estornar/", views.pl_htmx_baixa_estornar, name="pl_htmx_baixa_estornar"),
     path("private-label/htmx/lancamentos/baixa-lote/form/", views.pl_htmx_baixa_lote_form, name="pl_htmx_baixa_lote_form"),
     path("private-label/htmx/lancamentos/baixa-lote/", views.pl_htmx_baixa_lote, name="pl_htmx_baixa_lote"),
+    path("private-label/htmx/lancamentos/deletar-lote/form/", views.pl_htmx_lancamento_deletar_lote_form, name="pl_htmx_lancamento_deletar_lote_form"),
+    path("private-label/htmx/lancamentos/deletar-lote/", views.pl_htmx_lancamento_deletar_lote, name="pl_htmx_lancamento_deletar_lote"),
 
     # Transferências
     path("private-label/htmx/transferencias/form/", views.pl_htmx_transferencia_form, name="pl_htmx_transferencia_form"),

@@ -574,6 +574,60 @@ def pl_htmx_baixa_lote_form(request):
     return render(request, "financeiro/private_label/_baixa_lote_form.html", contexto)
 
 
+@perm_required("private_label.lancar")
+def pl_htmx_lancamento_deletar_lote_form(request):
+    """Exclusão definitiva em lote — só superadmin. Cada linha selecionada é
+    uma PARCELA, mas excluir apaga o LANÇAMENTO inteiro dela (mesma regra do
+    botão individual 🗑) — então primeiro resolve pros lançamentos distintos
+    por trás da seleção."""
+    if not request.user.is_superadmin:
+        return render(request, "financeiro/private_label/_erro_generico_modal.html", {
+            "erro": "Só o superadmin pode excluir definitivamente.",
+        })
+    operacao = obter_operacao_padrao()
+    ids = request.GET.get("ids", "")
+    ids_lista = [i for i in ids.split(",") if i.isdigit()]
+    lancamentos = list(
+        LancamentoFinanceiro.objects.filter(
+            parcelas__pk__in=ids_lista, operacao=operacao,
+        ).distinct().order_by("descricao")
+    )
+    return render(request, "financeiro/private_label/_lancamento_deletar_lote_form.html", {
+        "ids_lista": ids_lista, "lancamentos": lancamentos,
+    })
+
+
+@perm_required("private_label.lancar")
+def pl_htmx_lancamento_deletar_lote(request):
+    """Exclui o que dá (nunca teve baixa) e reporta o que foi pulado (já
+    teve baixa em algum momento, mesmo estornada) — silêncio numa ação
+    destrutiva em lote esconderia demais, então sempre mostra o resultado."""
+    if request.method != "POST":
+        return redirect("financeiro:pl_lancamentos")
+    if not request.user.is_superadmin:
+        return render(request, "financeiro/private_label/_erro_generico_modal.html", {
+            "erro": "Só o superadmin pode excluir definitivamente.",
+        })
+    operacao = obter_operacao_padrao()
+    ids = [int(i) for i in request.POST.getlist("parcela_ids") if i.isdigit()]
+    lancamentos = LancamentoFinanceiro.objects.filter(
+        parcelas__pk__in=ids, operacao=operacao,
+    ).distinct().order_by("descricao")
+    excluidos, bloqueados = [], []
+    for lancamento in lancamentos:
+        descricao = lancamento.descricao
+        try:
+            deletar_lancamento(lancamento, usuario=request.user)
+            excluidos.append(descricao)
+        except ValueError as e:
+            bloqueados.append((descricao, str(e)))
+    resposta = render(request, "financeiro/private_label/_lancamento_deletar_lote_resultado.html", {
+        "excluidos": excluidos, "bloqueados": bloqueados,
+    })
+    resposta["HX-Trigger"] = "pl:lancamentos-mudou"
+    return resposta
+
+
 # ── Transferências ───────────────────────────────────────────────────────
 
 @perm_required("private_label.lancar")

@@ -1,0 +1,24 @@
+<div class="ds-modal-fundo">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>Excluir {{ lancamentos|length }} lançamento{{ lancamentos|length|pluralize }}</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    <p style="font-size:.85rem;margin-bottom:.75rem;">Exclusão definitiva — só funciona para os que nunca tiveram baixa. Não dá pra desfazer.</p>
+    <ul style="font-size:.85rem;padding-left:1.1rem;margin-bottom:1rem;max-height:220px;overflow-y:auto;">
+      {% for lancamento in lancamentos %}
+      <li>{{ lancamento.descricao }} <span class="text-muted">({{ lancamento.get_tipo_display }}, {{ lancamento.valor_original|default:"" }})</span></li>
+      {% empty %}
+      <li class="text-muted">Nenhum lançamento selecionado.</li>
+      {% endfor %}
+    </ul>
+    <form hx-post="{% url 'financeiro:pl_htmx_lancamento_deletar_lote' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      {% for pid in ids_lista %}<input type="hidden" name="parcela_ids" value="{{ pid }}">{% endfor %}
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--perigo" {% if not lancamentos %}disabled{% endif %}>Excluir definitivamente</button>
+      </div>
+    </form>
+  </div>
+</div>

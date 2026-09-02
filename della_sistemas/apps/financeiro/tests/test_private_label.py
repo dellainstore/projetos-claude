@@ -1071,3 +1071,63 @@ class ContaRealVsPrevistaTests(BaseFinanceiroTestCase):
 
         resp_b = client.get("/financeiro/private-label/htmx/lancamentos/lista/", {"conta": self.conta2.pk})
         self.assertNotIn(f'value="{parcela.pk}"'.encode(), resp_b.content)
+
+
+class DeletarLoteTests(BaseFinanceiroTestCase):
+    """Pedido do dono (2026-09-02): "quando eu seleciono vários lançamentos
+    no check box tem só a opção de baixar, mais eu como super admin quero
+    poder excluir tbm" — exclusão em lote, só superadmin, pulando (com
+    motivo visível) o que já teve baixa."""
+
+    def setUp(self):
+        super().setUp()
+        self.superadmin = get_user_model().objects.create_user(
+            username="_teste_superadmin_del_lote", password="x", papel="superadmin", is_superuser=True,
+        )
+        self.colaborador = get_user_model().objects.create_user(
+            username="_teste_colaborador_del_lote", password="x", papel="operador",
+            permissoes={"private_label": {"lancar": True, "ver_lancamentos": True}},
+        )
+        self.client_superadmin = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_superadmin.force_login(self.superadmin)
+        self.client_colaborador = Client(SERVER_NAME="localhost", HTTP_X_FORWARDED_PROTO="https")
+        self.client_colaborador.force_login(self.colaborador)
+
+    def test_superadmin_exclui_sem_baixa_e_pula_com_baixa(self):
+        sem_baixa = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Sem baixa nenhuma",
+            valor_original=Decimal("100.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        com_baixa = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Já tem baixa",
+            valor_original=Decimal("200.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        dar_baixa(parcela=com_baixa.parcelas.first(), valor_principal=Decimal("200.00"), data=date.today(), conta=self.conta)
+
+        ids = [sem_baixa.parcelas.first().pk, com_baixa.parcelas.first().pk]
+        resp = self.client_superadmin.post(
+            "/financeiro/private-label/htmx/lancamentos/deletar-lote/",
+            {"parcela_ids": ids},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Sem baixa nenhuma", body)
+        self.assertIn("Já tem baixa", body)
+        self.assertFalse(LancamentoFinanceiro.objects.filter(pk=sem_baixa.pk).exists())
+        self.assertTrue(LancamentoFinanceiro.objects.filter(pk=com_baixa.pk).exists())
+
+    def test_colaborador_comum_nao_pode_excluir_em_lote(self):
+        lancamento = criar_lancamento(
+            operacao=self.operacao, tipo="despesa", descricao="Tentativa negada",
+            valor_original=Decimal("50.00"), data_competencia=date.today(), primeiro_vencimento=date.today(),
+            categoria=self.categoria,
+        )
+        resp = self.client_colaborador.post(
+            "/financeiro/private-label/htmx/lancamentos/deletar-lote/",
+            {"parcela_ids": [lancamento.parcelas.first().pk]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ds-modal-erro", resp.content)
+        self.assertTrue(LancamentoFinanceiro.objects.filter(pk=lancamento.pk).exists())

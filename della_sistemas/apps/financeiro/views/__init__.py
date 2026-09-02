@@ -38,6 +38,8 @@ from .private_label_lancamentos import (
     pl_htmx_baixa_estornar,
     pl_htmx_baixa_lote,
     pl_htmx_baixa_lote_form,
+    pl_htmx_lancamento_deletar_lote,
+    pl_htmx_lancamento_deletar_lote_form,
     pl_htmx_transferencia_form,
     pl_htmx_transferencia_salvar,
     pl_htmx_transferencia_estornar,
