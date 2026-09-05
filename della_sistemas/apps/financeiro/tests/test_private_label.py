@@ -394,9 +394,13 @@ class DashboardETransferenciaNaListaTests(BaseFinanceiroTestCase):
         self.assertIn("R$ 300,00", body)  # total gasto
         self.assertIn("R$ 500,00", body)  # total recebido
         self.assertIn("R$ 900,00", body)  # total da conta parcelada
-        # pedido do dono (2026-09-02): próxima parcela mostra "qual/quantas",
-        # não uma data fixa — 1ª de 3 parcelas em aberto
-        self.assertIn("(1/3)", body)
+        # pedido do dono (2026-09-02): próxima parcela mostra "qual/quantas"
+        # — 1ª de 3 parcelas em aberto — e a data de vencimento dela
+        self.assertIn("1/3", body)
+        self.assertIn("vence em", body)
+        # pedido do dono (2026-09-02): coluna dedicada ao valor da parcela,
+        # com soma no rodapé (valor mensal comprometido)
+        self.assertIn("Valor da parcela", body)
         # recebido vem antes de gasto (cards e tabelas)
         self.assertLess(body.index("Recebido no período"), body.index("Gasto no período"))
         self.assertLess(body.index("Recebimentos por forma de pagamento"), body.index("Gasto por categoria"))

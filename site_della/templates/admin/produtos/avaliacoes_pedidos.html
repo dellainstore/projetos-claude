@@ -1,0 +1,362 @@
+{% extends "admin/base_site.html" %}
+{% load i18n della_filters %}
+
+{% block title %}Pedidos entregues x avaliação | D'ELLA Instore{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block content %}
+<style>
+  .aval-h1 { font-size: 1.45rem; margin: 0 0 16px; }
+  .aval-links a { margin-right:14px; font-size:13px; }
+  .aval-filtros { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .aval-tabs { display:flex; gap:6px; flex-wrap:wrap; }
+  .aval-tabs a {
+    padding:8px 14px; border-radius:999px; font-size:13px; font-weight:600;
+    background:#f0f0f0; color:#444; text-decoration:none;
+  }
+  .aval-tabs a.ativo { background:#1a73e8; color:#fff; }
+  .aval-busca { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+  .aval-busca input[type="text"] { padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:13px; min-height:38px; }
+  .aval-busca button {
+    padding:8px 14px; border-radius:6px; font-size:12px; font-weight:600; border:none; cursor:pointer;
+    min-height:38px; background:#333; color:#fff;
+  }
+  .aval-copy, .aval-abrir, .aval-ver {
+    display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box;
+    padding:6px 10px; border-radius:6px; font-size:11px; font-weight:600; border:none; cursor:pointer;
+    min-height:30px; line-height:1; white-space:nowrap;
+  }
+  .aval-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:10px; border:1px solid #e3e3e3; }
+  .aval-table { width:100%; min-width:760px; border-collapse:collapse; background:#fff; }
+  .aval-table th, .aval-table td { text-align:left; padding:10px 12px; border-bottom:1px solid #f0f0f0; font-size:13px; vertical-align:middle; white-space:nowrap; }
+  .aval-table th { background:#fafafa; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#777; }
+  .aval-table tr:last-child td { border-bottom:none; }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .pill::before { content:''; width:8px; height:8px; border-radius:50%; }
+  .pill.ok { background:#e7f6ec; color:#1a7f37; } .pill.ok::before { background:#1a7f37; }
+  .pill.warn { background:#fff4e0; color:#a15c00; } .pill.warn::before { background:#d98a00; }
+  .aval-estrelas { color:#c9a96e; margin-left:6px; }
+  .aval-copy { background:#1a73e8; color:#fff; }
+  .aval-copy.copiado { background:#1a7f37; }
+  .aval-copy:disabled { background:#ccc; color:#888; cursor:not-allowed; }
+  .aval-abrir { background:#eee; color:#333; text-decoration:none; }
+  .aval-ver { background:#eee; color:#333; text-decoration:none; }
+  .aval-acoes { display:flex; gap:6px; align-items:center; flex-wrap:nowrap; }
+  .aval-muted { color:#999; }
+  .aval-pag { margin-top:16px; display:flex; gap:14px; flex-wrap:wrap; align-items:center; font-size:13px; }
+  .aval-pag a { color:#1a73e8; padding:6px 2px; }
+  .aval-contato { text-decoration:none; font-weight:600; }
+  .aval-contato.whatsapp { color:#1a7f37; }
+  .aval-contato.email { color:#555; font-weight:400; }
+  /* width fixo (nao so max-width): sem isso o <select> encolhe pro
+     tamanho do texto da opcao selecionada -- "Adriana" fica bem mais
+     estreito que "-- selecionar --", deixando cada linha com uma largura
+     diferente. */
+  .aval-resp-select { padding:7px 8px; border:1px solid #ccc; border-radius:6px; font-size:12px; width:150px; min-height:38px; }
+  .aval-resp-select:disabled { background:#f0f0f0; color:#666; border-color:#e0e0e0; }
+  tr.aval-locked { opacity:.45; }
+  tr.aval-locked .aval-contato,
+  tr.aval-locked .aval-copy,
+  tr.aval-locked .aval-abrir { pointer-events:none; }
+
+  /* Mobile: alvo de toque maior e busca ocupando a linha inteira */
+  @media (max-width: 640px) {
+    .aval-busca { width:100%; }
+    .aval-busca input[type="text"] { flex:1; min-width:0; }
+    .aval-tabs a { padding:9px 14px; font-size:13px; }
+    .aval-table th, .aval-table td { padding:12px 14px; }
+  }
+</style>
+
+{% csrf_token %}
+<h1 class="aval-h1">Pedidos entregues x avaliação</h1>
+
+{% if pode_ver_avaliacoes %}
+<div class="aval-links">
+  <a href="{% url 'admin:produtos_avaliacao_changelist' %}">&larr; Avaliações (moderação)</a>
+</div>
+{% endif %}
+
+<form method="get" class="aval-filtros">
+  <div class="aval-tabs">
+    <a href="?filtro=pendentes" class="{% if filtro == 'pendentes' %}ativo{% endif %}">Pendentes ({{ total_pendentes }})</a>
+    <a href="?filtro=avaliados" class="{% if filtro == 'avaliados' %}ativo{% endif %}">Avaliadas ({{ total_avaliados }})</a>
+    <a href="?filtro=todos" class="{% if filtro == 'todos' %}ativo{% endif %}">Todas</a>
+  </div>
+  <div class="aval-busca">
+    <input type="hidden" name="filtro" value="{{ filtro }}">
+    <input type="text" name="q" value="{{ busca }}" placeholder="Buscar por pedido, nome ou e-mail">
+    <button type="submit">Buscar</button>
+  </div>
+</form>
+
+<div class="aval-table-wrap">
+<table class="aval-table">
+  <tr>
+    <th>Responsável</th><th>Pedido</th><th>Cliente</th><th>Contato</th><th>Entregue em</th><th>Situação</th><th>Ação</th>
+  </tr>
+  {% for linha in linhas %}
+  <tr class="aval-row" data-numero="{{ linha.pedido.numero }}" data-avaliado="{% if linha.avaliacao %}1{% else %}0{% endif %}"
+      data-resp-id="{{ linha.responsavel_id|default_if_none:'' }}" data-resp-nome="{{ linha.responsavel_nome }}">
+    <td>
+      {% if linha.avaliacao %}
+        {{ linha.responsavel_nome }}
+      {% else %}
+        <select class="aval-resp-select"></select>
+      {% endif %}
+    </td>
+    <td><strong>{{ linha.pedido.numero }}</strong></td>
+    <td>{{ linha.nome }}</td>
+    <td>
+      {% if linha.contato.tipo == 'whatsapp' %}
+        <a class="aval-contato whatsapp" href="{{ linha.contato.link }}" target="_blank" rel="noopener">{{ linha.contato.texto }}</a>
+      {% else %}
+        <a class="aval-contato email" href="{{ linha.contato.link }}">{{ linha.contato.texto }}</a>
+      {% endif %}
+    </td>
+    <td>{% if linha.data_entrega %}{{ linha.data_entrega|datahora_br }}{% else %}<span class="aval-muted">sem data</span>{% endif %}</td>
+    <td>
+      {% if linha.avaliacao %}
+        <span class="pill ok">avaliado</span><span class="aval-estrelas">{{ linha.estrelas }}</span>
+      {% else %}
+        <span class="pill warn">pendente</span>
+      {% endif %}
+    </td>
+    <td>
+      <div class="aval-acoes">
+        {% if linha.avaliacao %}
+          {% if pode_ver_avaliacoes %}
+            <a class="aval-ver" href="{% url 'admin:produtos_avaliacao_change' linha.avaliacao.pk %}">Ver avaliação</a>
+          {% endif %}
+        {% else %}
+          <button type="button" class="aval-copy" data-link="{{ linha.link_avaliacao }}" {% if not linha.responsavel_id and not is_superuser %}disabled{% endif %}>Copiar link</button>
+          {% if is_superuser %}
+            <a class="aval-abrir" href="{{ linha.link_avaliacao }}" target="_blank" rel="noopener">Abrir</a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="7" class="aval-muted">Nenhum pedido entregue encontrado com esse filtro.</td></tr>
+  {% endfor %}
+</table>
+</div>
+
+{% if pagina.paginator.num_pages > 1 %}
+<div class="aval-pag">
+  {% if pagina.has_previous %}
+    <a href="?filtro={{ filtro }}&amp;q={{ busca }}&amp;page={{ pagina.previous_page_number }}">&larr; Anterior</a>
+  {% endif %}
+  <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+  {% if pagina.has_next %}
+    <a href="?filtro={{ filtro }}&amp;q={{ busca }}&amp;page={{ pagina.next_page_number }}">Próxima &rarr;</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{{ config|json_script:"aval-config" }}
+
+<script>
+document.querySelectorAll('.aval-copy').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var link = btn.getAttribute('data-link');
+    var marcarCopiado = function () {
+      var textoOriginal = btn.textContent;
+      btn.textContent = 'Copiado!';
+      btn.classList.add('copiado');
+      setTimeout(function () {
+        btn.textContent = textoOriginal;
+        btn.classList.remove('copiado');
+      }, 1500);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(link).then(marcarCopiado);
+    } else {
+      var campo = document.createElement('textarea');
+      campo.value = link;
+      campo.style.position = 'fixed';
+      campo.style.opacity = '0';
+      document.body.appendChild(campo);
+      campo.focus();
+      campo.select();
+      try { document.execCommand('copy'); marcarCopiado(); } catch (e) {}
+      document.body.removeChild(campo);
+    }
+  });
+});
+
+(function () {
+  var config = JSON.parse(document.getElementById('aval-config').textContent);
+  var usuarioAtual = config.usuarioAtual;
+  var assignaveis = config.assignaveis;
+  var estado = {};
+
+  function getCookie(nome) {
+    // Regex em vez de split: robusta contra cookie duplicado (mais de um
+    // "nome=" na string). Mantida so como fallback -- ver csrfToken() abaixo
+    // pra explicacao de por que ela sozinha nao bastou.
+    var m = document.cookie.match(new RegExp('(?:^|; )' + nome + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function csrfToken() {
+    // O navegador tem DOIS cookies "csrftoken" pra este dominio (um antigo
+    // sem Domain + o atual com Domain=.dellainstore.com) -- o servidor usa
+    // o ULTIMO da string do header Cookie, mas o regex acima so pega o
+    // PRIMEIRO, entao os dois nunca batem (403 "CSRF token ... incorrect").
+    // O input oculto do {% csrf_token %} (logo no topo da pagina) sempre
+    // tem o valor certo pra ESTA requisicao, sem depender de cookie -- usar
+    // ele como fonte principal e o cookie so de ultimo recurso.
+    var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    return (input && input.value) || getCookie('csrftoken');
+  }
+
+  function postForm(url, campos) {
+    var body = Object.keys(campos).map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(campos[k]);
+    }).join('&');
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrfToken(),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body,
+    }).then(function (resp) {
+      return resp.json().then(function (data) { return { status: resp.status, data: data }; });
+    });
+  }
+
+  function montarOpcao(select, valor, texto, selecionada) {
+    var opt = document.createElement('option');
+    opt.value = valor;
+    opt.textContent = texto;
+    if (selecionada) opt.selected = true;
+    select.appendChild(opt);
+  }
+
+  function opcaoPropria() {
+    return assignaveis.filter(function (a) {
+      return String(a.id) === String(usuarioAtual.id);
+    })[0];
+  }
+
+  var ultimoRenderizado = {};
+
+  function aplicarLinha(tr) {
+    if (tr.dataset.avaliado === '1') return;
+    var select = tr.querySelector('.aval-resp-select');
+    var btnCopiar = tr.querySelector('.aval-copy');
+
+    var numero = tr.dataset.numero;
+    var atual = estado[numero] || null;
+    var respId = atual ? String(atual.id) : '';
+    var respNome = atual ? atual.nome : '';
+
+    // evita reconstruir a linha a cada poll quando nada mudou (senao um
+    // dropdown aberto pela vendedora fecha sozinho a cada 6s)
+    if (ultimoRenderizado[numero] === respId) return;
+    ultimoRenderizado[numero] = respId;
+
+    if (btnCopiar) btnCopiar.disabled = !respId && !usuarioAtual.isSuperuser;
+
+    if (!select) return;
+
+    var souEu = respId && respId === String(usuarioAtual.id);
+    var travado = !!respId && !souEu && !usuarioAtual.isSuperuser;
+
+    tr.classList.toggle('aval-locked', travado);
+
+    select.innerHTML = '';
+    montarOpcao(select, '', respId ? '-- liberar --' : '-- selecionar --', false);
+
+    if (usuarioAtual.isSuperuser) {
+      // super admin ve e reatribui pra qualquer uma, mesmo ja ocupado
+      assignaveis.forEach(function (a) {
+        montarOpcao(select, a.id, a.nome, String(a.id) === respId);
+      });
+      select.disabled = false;
+    } else if (!respId) {
+      // livre: vendedora comum so pode se colocar a si mesma (nao escolhe
+      // o nome de outra pessoa)
+      var propria = opcaoPropria();
+      if (propria) montarOpcao(select, propria.id, propria.nome, false);
+      select.disabled = false;
+    } else if (souEu) {
+      montarOpcao(select, respId, respNome, true);
+      select.disabled = false;
+    } else {
+      montarOpcao(select, respId, respNome, true);
+      select.disabled = true;
+    }
+  }
+
+  function renderizarTudo() {
+    document.querySelectorAll('.aval-row').forEach(aplicarLinha);
+  }
+
+  function bootstrapEstadoInicial() {
+    document.querySelectorAll('.aval-row').forEach(function (tr) {
+      var respId = tr.dataset.respId;
+      if (respId) {
+        estado[tr.dataset.numero] = { id: respId, nome: tr.dataset.respNome };
+      }
+    });
+  }
+
+  function poll() {
+    fetch(config.statusUrl).then(function (resp) {
+      return resp.json();
+    }).then(function (data) {
+      estado = data.responsaveis || {};
+      renderizarTudo();
+    }).catch(function () {});
+  }
+
+  document.querySelectorAll('.aval-resp-select').forEach(function (select) {
+    select.addEventListener('change', function () {
+      var tr = select.closest('tr');
+      var numero = tr.dataset.numero;
+      var valor = select.value;
+      if (valor === '') {
+        postForm(config.liberarUrl, { numero: numero }).then(function (res) {
+          if (res.data.ok) {
+            delete estado[numero];
+          } else {
+            alert('Não foi possível liberar essa cliente agora.');
+          }
+          renderizarTudo();
+        }).catch(function () {
+          // resposta nao-JSON (ex: pagina de erro do servidor) -- nao
+          // deixar falhar em silencio, senao a linha parece "salva" na tela
+          // mas nao foi
+          alert('Não foi possível liberar essa cliente agora. Atualize a página e tente de novo.');
+          renderizarTudo();
+        });
+      } else {
+        postForm(config.atribuirUrl, { numero: numero, responsavel_id: valor }).then(function (res) {
+          if (res.data.ok) {
+            estado[numero] = res.data.responsavel;
+          } else if (res.status === 409) {
+            estado[numero] = res.data.responsavel;
+            alert('Essa cliente acabou de ser atribuída a ' + res.data.responsavel.nome + '.');
+          } else {
+            alert('Não foi possível atribuir agora.');
+          }
+          renderizarTudo();
+        }).catch(function () {
+          alert('Não foi possível atribuir agora. Atualize a página e tente de novo.');
+          renderizarTudo();
+        });
+      }
+    });
+  });
+
+  bootstrapEstadoInicial();
+  renderizarTudo();
+  poll();
+  setInterval(poll, 6000);
+})();
+</script>
+{% endblock %}

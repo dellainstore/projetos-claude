@@ -8,6 +8,7 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
+from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 
@@ -86,7 +87,27 @@ def cadastro(request):
                 pass
 
         if form.is_valid():
-            usuario = form.save()
+            try:
+                usuario = form.save()
+            except IntegrityError:
+                # Corrida de duplo-envio (ex: duplo toque no botao "Cadastrar" no
+                # navegador do Instagram) -- a conta ja foi criada por uma
+                # requisicao concorrente antes desta terminar. Se a senha enviada
+                # bate com a conta recem-criada, e a mesma pessoa: loga em vez de
+                # estourar 500 (achado real: cliente Manoela, pedido 2026-0040,
+                # 2026-09-04, comprou normalmente apesar do 500 no log).
+                email = form.cleaned_data.get('email', '')
+                senha = form.cleaned_data.get('senha', '')
+                usuario_existente = Cliente.objects.filter(email=email).first()
+                if usuario_existente and usuario_existente.check_password(senha):
+                    _session_key_antes = request.session.session_key
+                    login(request, usuario_existente, backend='django.contrib.auth.backends.ModelBackend')
+                    from apps.analytics.services import migrar_sessao_analytics
+                    migrar_sessao_analytics(_session_key_antes, request.session.session_key)
+                    return redirect('usuarios:minha_conta')
+                form.add_error('email', 'Já existe uma conta com este e-mail.')
+                return render(request, 'usuarios/cadastro.html', {'form': form})
+
             _session_key_antes = request.session.session_key
             login(request, usuario, backend='django.contrib.auth.backends.ModelBackend')
             from apps.analytics.services import migrar_sessao_analytics

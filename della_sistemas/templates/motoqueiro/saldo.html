@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Motoqueiro - Saldo Lalamove | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+{% include "motoqueiro/_estilos.html" %}
+
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Motoqueiro</h1>
+</div>
+
+{% include "motoqueiro/_abas.html" %}
+
+<div class="moto-cards">
+  <div class="moto-card">
+    <div class="moto-card-label">Saldo atual da carteira Lalamove</div>
+    <div class="moto-card-valor">{{ saldo_atual|brl }}</div>
+  </div>
+</div>
+
+<div class="ds-form-section" style="max-width:520px;margin-bottom:1.3rem;">
+  <div class="ds-form-section-titulo">Lançar movimento</div>
+  <form method="post" action="{% url 'motoqueiro:saldo_lancar' %}">
+    {% csrf_token %}
+    <div class="ds-form-group">
+      <label class="ds-label">O que aconteceu?</label>
+      <div style="display:flex;gap:0.75rem;">
+        <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.85rem;cursor:pointer;">
+          <input type="radio" name="tipo" value="credito" required> Incluí saldo (recarga)
+        </label>
+        <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.85rem;cursor:pointer;">
+          <input type="radio" name="tipo" value="debito" required> Saiu manualmente (fora do sistema)
+        </label>
+      </div>
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Valor (R$)</label>
+      <input class="ds-input" type="text" name="valor" placeholder="Ex: 100,00" required>
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Descrição (opcional)</label>
+      <input class="ds-input" type="text" name="descricao" placeholder="Ex: recarga via app, corrida prioritária pedida direto">
+    </div>
+    <button type="submit" class="ds-btn ds-btn--primario mt-2">Lançar</button>
+  </form>
+</div>
+
+<div class="ds-form-section">
+  <h2 style="font-size:1rem;font-weight:500;margin-bottom:0.75rem;">Histórico de movimentos</h2>
+  {% if movimentos %}
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead>
+        <tr><th>Data</th><th>Tipo</th><th>Origem</th><th>Valor</th><th>Descrição</th><th>Lançado por</th></tr>
+      </thead>
+      <tbody>
+        {% for m in movimentos %}
+        <tr>
+          <td>{{ m.criado_em|date:"d/m/Y H:i" }}</td>
+          <td>
+            {% if m.tipo == 'credito' %}
+            <span class="ds-status ds-status--aprovado">+ Crédito</span>
+            {% else %}
+            <span class="ds-status ds-status--rejeitado">- Débito</span>
+            {% endif %}
+          </td>
+          <td>{{ m.get_origem_display }}</td>
+          <td><strong>{{ m.valor|brl }}</strong></td>
+          <td class="text-muted" style="font-size:0.85rem;">{{ m.descricao|default:"" }}</td>
+          <td class="text-muted" style="font-size:0.85rem;">{{ m.lancado_por.username }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Nenhum movimento lançado ainda.</p>
+  {% endif %}
+</div>
+{% endblock %}

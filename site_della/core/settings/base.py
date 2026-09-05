@@ -192,8 +192,19 @@ AXES_LOCKOUT_PARAMETERS = ['ip_address', 'username']
 # Atras de Cloudflare + nginx (com real_ip do CF-Connecting-IP), o IP real
 # vem em X-Real-IP / X-Forwarded-For. REMOTE_ADDR aqui aponta para o socket
 # unix do gunicorn, entao precisamos instruir o ipware a olhar nos headers.
+# CORRIGIDO 2026-09-04: essa config nunca funcionou de fato -- o pacote
+# django-ipware nao estava instalado (axes cai silenciosamente pro fallback
+# REMOTE_ADDR = None atras do unix socket), e mesmo depois de instalado,
+# proxy_count=1 exige uma CADEIA no X-Forwarded-For (N proxies na frente) --
+# nao faz sentido pro X-Real-IP, que ja e' o IP final (o nginx ja resolveu
+# via real_ip_module). Com proxy_count=1, o ipware descartava o X-Real-IP
+# como invalido e devolvia None. Isso colapsava TODAS as falhas de login em
+# um unico bucket (ip_address=None), e bastava acumular 5 falhas de
+# QUALQUER pessoa pra travar o admin inteiro por 1h (AXES_COOLOFF_TIME) --
+# foi o que aconteceu com a Adriana em 04/09. Ver requirements.txt
+# (django-ipware adicionado).
 AXES_IPWARE_META_PRECEDENCE_ORDER = ['HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR']
-AXES_IPWARE_PROXY_COUNT = 1
+AXES_IPWARE_PROXY_COUNT = 0
 
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',
@@ -315,6 +326,13 @@ INSTAGRAM_ACCESS_TOKEN = config('INSTAGRAM_ACCESS_TOKEN', default='')
 INSTAGRAM_ACCOUNT_ID   = config('INSTAGRAM_ACCOUNT_ID', default='')
 INSTAGRAM_APP_ID       = config('INSTAGRAM_APP_ID', default='')
 INSTAGRAM_APP_SECRET   = config('INSTAGRAM_APP_SECRET', default='')
+
+# Content API de Catalogo (push em tempo real de preco/estoque pro catalogo
+# da Meta, ver apps/produtos/services/meta_catalog.py). Token de System User
+# com permissao catalog_management, reaproveitavel do mesmo Business Manager
+# usado no META_CONVERSIONS_API_TOKEN acima.
+META_CATALOG_TOKEN = config('META_CATALOG_TOKEN', default='')
+META_CATALOG_ID    = config('META_CATALOG_ID', default='')
 
 MELHOR_ENVIO_TOKEN          = config('MELHOR_ENVIO_TOKEN', default='')
 MELHOR_ENVIO_SANDBOX        = config('MELHOR_ENVIO_SANDBOX', default=True, cast=bool)

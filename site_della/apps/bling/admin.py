@@ -107,7 +107,8 @@ class BlingLogAdmin(admin.ModelAdmin):
     def payload_resumo(self, obj):
         """Exibe apenas campos não-sensíveis do payload para diagnóstico."""
         p = obj.payload_enviado or {}
-        safe_keys = ('numero', 'numeroLoja', 'data', 'total', 'situacao', 'itens')
+        safe_keys = ('numero', 'numeroLoja', 'data', 'total', 'situacao', 'itens',
+                     'contato_id', 'campos_removidos')
         resumo = {k: p[k] for k in safe_keys if k in p}
         if not resumo:
             return '—'

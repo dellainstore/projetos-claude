@@ -12,6 +12,21 @@ E cuja permissão o usuário tem — nunca aba "em construção".
     {% if user.pode_ver_private_label_lancamentos %}
     <a href="{% url 'financeiro:pl_lancamentos' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_lancamentos' %}ativa{% endif %}">Lançamentos</a>
     {% endif %}
+    {% if user.pode_ver_private_label_cartoes %}
+    <a href="{% url 'financeiro:pl_cartoes' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_cartoes' or request.resolver_match.url_name == 'pl_cartao_detalhe' %}ativa{% endif %}">Cartões</a>
+    {% endif %}
+    {% if user.pode_ver_private_label_fluxo_caixa %}
+    <a href="{% url 'financeiro:pl_fluxo_caixa' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_fluxo_caixa' %}ativa{% endif %}">Fluxo de Caixa</a>
+    {% endif %}
+    {% if user.pode_ver_private_label_dre %}
+    <a href="{% url 'financeiro:pl_dre' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_dre' %}ativa{% endif %}">DRE</a>
+    {% endif %}
+    {% if user.pode_ver_private_label_investimentos %}
+    <a href="{% url 'financeiro:pl_investimentos' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_investimentos' %}ativa{% endif %}">Investimentos</a>
+    {% endif %}
+    {% if user.pode_conciliar_private_label %}
+    <a href="{% url 'financeiro:pl_conciliacao' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_conciliacao' or request.resolver_match.url_name == 'pl_conciliacao_detalhe' %}ativa{% endif %}">Conciliação</a>
+    {% endif %}
     {% if user.pode_configurar_private_label %}
     <a href="{% url 'financeiro:pl_configuracoes' %}" class="pl-aba {% if request.resolver_match.url_name == 'pl_configuracoes' %}ativa{% endif %}">Configurações</a>
     {% endif %}
@@ -22,6 +37,21 @@ E cuja permissão o usuário tem — nunca aba "em construção".
     {% endif %}
     {% if user.pode_ver_private_label_lancamentos %}
     <option value="{% url 'financeiro:pl_lancamentos' %}" {% if request.resolver_match.url_name == 'pl_lancamentos' %}selected{% endif %}>Lançamentos</option>
+    {% endif %}
+    {% if user.pode_ver_private_label_cartoes %}
+    <option value="{% url 'financeiro:pl_cartoes' %}" {% if request.resolver_match.url_name == 'pl_cartoes' or request.resolver_match.url_name == 'pl_cartao_detalhe' %}selected{% endif %}>Cartões</option>
+    {% endif %}
+    {% if user.pode_ver_private_label_fluxo_caixa %}
+    <option value="{% url 'financeiro:pl_fluxo_caixa' %}" {% if request.resolver_match.url_name == 'pl_fluxo_caixa' %}selected{% endif %}>Fluxo de Caixa</option>
+    {% endif %}
+    {% if user.pode_ver_private_label_dre %}
+    <option value="{% url 'financeiro:pl_dre' %}" {% if request.resolver_match.url_name == 'pl_dre' %}selected{% endif %}>DRE</option>
+    {% endif %}
+    {% if user.pode_ver_private_label_investimentos %}
+    <option value="{% url 'financeiro:pl_investimentos' %}" {% if request.resolver_match.url_name == 'pl_investimentos' %}selected{% endif %}>Investimentos</option>
+    {% endif %}
+    {% if user.pode_conciliar_private_label %}
+    <option value="{% url 'financeiro:pl_conciliacao' %}" {% if request.resolver_match.url_name == 'pl_conciliacao' or request.resolver_match.url_name == 'pl_conciliacao_detalhe' %}selected{% endif %}>Conciliação</option>
     {% endif %}
     {% if user.pode_configurar_private_label %}
     <option value="{% url 'financeiro:pl_configuracoes' %}" {% if request.resolver_match.url_name == 'pl_configuracoes' %}selected{% endif %}>Configurações</option>

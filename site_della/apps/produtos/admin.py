@@ -20,7 +20,7 @@ from apps.core_utils.sanitize import sanitize_text
 from .models import (
     Categoria, Produto, ProdutoImagem, Variacao, Avaliacao, CorPadrao,
     TamanhoPadrao, TabelaMedidas, TabelaMedidasLinha, ProdutoCorFoto,
-    NewsletterInscricao,
+    NewsletterInscricao, AvaliacaoPedidoResponsavel,
 )
 from .forms import (
     ProdutoCorFotoForm, ProdutoAdminForm, CategoriaSubSelect,
@@ -88,6 +88,70 @@ def _limpar_celula_planilha(valor):
         return ''
     texto = str(valor).strip()
     return texto.replace('\ufeff', '').replace('\u200b', '').replace('\u200c', '').replace('\u200d', '').strip()
+
+
+def _formatar_telefone_exibicao(telefone):
+    digitos = re.sub(r'\D', '', telefone or '')
+    if len(digitos) == 11:
+        return f'({digitos[:2]}) {digitos[2]} {digitos[3:7]}-{digitos[7:]}'
+    if len(digitos) == 10:
+        return f'({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}'
+    return telefone or ''
+
+
+def _contato_pedido(pedido):
+    """WhatsApp (wa.me/55...) quando o pedido (ou o cadastro da cliente) tem
+    telefone; sem telefone, cai pro e-mail."""
+    telefone = pedido.telefone or (pedido.cliente.telefone if pedido.cliente_id else '')
+    if telefone:
+        digitos = re.sub(r'\D', '', telefone)
+        if not digitos.startswith('55'):
+            digitos = '55' + digitos
+        return {
+            'tipo': 'whatsapp',
+            'link': f'https://wa.me/{digitos}',
+            'texto': _formatar_telefone_exibicao(telefone),
+        }
+    return {'tipo': 'email', 'link': f'mailto:{pedido.email}', 'texto': pedido.email}
+
+
+PERM_GERENCIAR_PEDIDOS_ENTREGUES = 'produtos.gerenciar_pedidos_entregues'
+
+
+def _pode_gerenciar_pedidos_entregues(user):
+    """Super admin sempre pode. Fora isso, so quem tem a permissao explicita
+    (concedida so pras vendedoras autorizadas a mandar link de avaliacao) --
+    ninguem entra so por ter is_staff=True."""
+    return user.is_authenticated and (user.is_superuser or user.has_perm(PERM_GERENCIAR_PEDIDOS_ENTREGUES))
+
+
+# Apelido usado no lugar do primeiro nome quando o time chama a pessoa por
+# outro nome no dia a dia (ex: Crislainy -> Cris). Fora daqui, so o primeiro
+# nome do cadastro.
+_APELIDOS_RESPONSAVEIS = {
+    98: 'Cris',  # Crislainy Silvério Giacomelli
+}
+
+
+def _nome_curto_responsavel(cliente):
+    """Nome exibido na coluna Responsavel (lista suspensa, rotulo da linha
+    travada, resposta dos endpoints) -- so o primeiro nome, ou o apelido do
+    time quando tiver um mapeado."""
+    apelido = _APELIDOS_RESPONSAVEIS.get(cliente.id)
+    if apelido:
+        return apelido
+    return cliente.nome.split()[0] if cliente.nome else cliente.get_full_name()
+
+
+def _responsaveis_atribuiveis():
+    """Quem aparece na lista suspensa de responsavel: staff ativo com a
+    permissao (via usuario ou grupo), sem contar o super admin."""
+    from apps.usuarios.models import Cliente
+    return [
+        {'id': c.id, 'nome': _nome_curto_responsavel(c)}
+        for c in Cliente.objects.filter(is_staff=True, is_active=True).order_by('nome')
+        if not c.is_superuser and c.has_perm(PERM_GERENCIAR_PEDIDOS_ENTREGUES)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -2245,6 +2309,7 @@ class TabelaMedidasAdmin(DellaAdminMixin, admin.ModelAdmin):
 @admin.register(Avaliacao)
 class AvaliacaoAdmin(DellaAdminMixin, admin.ModelAdmin):
     form = AvaliacaoAdminForm
+    change_list_template = 'admin/produtos/avaliacao_changelist.html'
     list_display = (
         'nome_publico', 'pedido_ref', 'nota_experiencia_estrelas',
         'nota_produtos_estrelas', 'nota_estrelas', 'comentario_resumo',
@@ -2258,6 +2323,244 @@ class AvaliacaoAdmin(DellaAdminMixin, admin.ModelAdmin):
     class Media:
         js = ('admin/js/admin_linhas.js', 'js/star-rating.js')
         css = {'all': ('admin/css/della_admin.css',)}
+
+    def get_urls(self):
+        urls = super().get_urls()
+        extras = [
+            path('pedidos-entregues/',
+                 self.admin_site.admin_view(self._pedidos_entregues_view),
+                 name='produtos_avaliacao_pedidos_entregues'),
+            path('pedidos-entregues/status/',
+                 self.admin_site.admin_view(self._pedidos_entregues_status_view),
+                 name='produtos_avaliacao_pedidos_entregues_status'),
+            path('pedidos-entregues/atribuir/',
+                 self.admin_site.admin_view(self._pedidos_entregues_atribuir_view),
+                 name='produtos_avaliacao_pedidos_entregues_atribuir'),
+            path('pedidos-entregues/liberar/',
+                 self.admin_site.admin_view(self._pedidos_entregues_liberar_view),
+                 name='produtos_avaliacao_pedidos_entregues_liberar'),
+        ]
+        return extras + urls
+
+    def _pedidos_entregues_view(self, request):
+        """Todo pedido entregue, avaliado ou nao, com link de avaliacao
+        pronto para copiar e mandar manualmente pra quem nao avaliou
+        (mesmo token assinado do e-mail pos-entrega, ver
+        apps/pedidos/services/avaliacao_token.py). Acesso restrito -- ver
+        _pode_gerenciar_pedidos_entregues."""
+        from django.core.cache import cache
+        from django.core.exceptions import PermissionDenied
+        from django.core.paginator import Paginator
+        from django.db.models import F, Prefetch, Q
+        from apps.conteudo.views_link_curto import obter_ou_criar_link_curto
+        from apps.pedidos.models import HistoricoPedido, Pedido
+        from apps.pedidos.services.avaliacao_token import gerar_token_avaliacao, MAX_AGE_DIAS
+
+        if not _pode_gerenciar_pedidos_entregues(request.user):
+            raise PermissionDenied
+
+        filtro = request.GET.get('filtro', 'pendentes')
+        if filtro not in ('pendentes', 'avaliados', 'todos'):
+            filtro = 'pendentes'
+        busca = (request.GET.get('q') or '').strip()
+
+        qs = Pedido.objects.filter(status='entregue').select_related(
+            'cliente', 'avaliacao_compra',
+            'avaliacao_responsavel', 'avaliacao_responsavel__responsavel',
+        ).prefetch_related(
+            Prefetch(
+                'historico',
+                queryset=HistoricoPedido.objects.filter(status_novo='entregue').order_by('criado_em'),
+                to_attr='historico_entrega',
+            ),
+        )
+        if filtro == 'pendentes':
+            qs = qs.filter(avaliacao_compra__isnull=True)
+        elif filtro == 'avaliados':
+            qs = qs.filter(avaliacao_compra__isnull=False)
+        if busca:
+            qs = qs.filter(
+                Q(numero__icontains=busca) | Q(nome_completo__icontains=busca)
+                | Q(email__icontains=busca) | Q(cliente__nome__icontains=busca)
+                | Q(cliente__sobrenome__icontains=busca)
+            )
+        qs = qs.order_by(F('avaliacao_compra').asc(nulls_first=True), '-atualizado_em')
+
+        paginator = Paginator(qs, 50)
+        pagina = paginator.get_page(request.GET.get('page'))
+
+        linhas = []
+        for pedido in pagina.object_list:
+            avaliacao = pedido.avaliacao
+            historico_entrega = getattr(pedido, 'historico_entrega', None) or []
+            data_entrega = historico_entrega[0].criado_em if historico_entrega else pedido.atualizado_em
+            nome = pedido.cliente.get_full_name() if pedido.cliente_id and pedido.cliente.nome else pedido.nome_completo
+            link_avaliacao = ''
+            if avaliacao is None:
+                # Cacheado por pedido (mesmo prazo do token) para o link
+                # continuar identico a cada carregamento da tela -- assim o
+                # link curto abaixo reaproveita sempre a mesma linha em vez
+                # de criar uma nova a cada visita.
+                chave_cache = f'aval_token_{pedido.numero}'
+                token = cache.get(chave_cache)
+                if not token:
+                    token = gerar_token_avaliacao(pedido)
+                    cache.set(chave_cache, token, 60 * 60 * 24 * (MAX_AGE_DIAS - 1))
+                url = reverse('produtos:avaliar_pedido', kwargs={'numero': pedido.numero})
+                link_completo = request.build_absolute_uri(
+                    f'{url}?token={token}&utm_source=admin&utm_medium=manual&utm_campaign=avaliacao_manual'
+                )
+                # Link curto (dellainstore.com/l/<codigo>) so pra mandar pra
+                # cliente sem o UTM/token gigante aparecendo -- o mesmo
+                # encurtador do painel Site > Gerar link (ver LinkCurto).
+                # Links longos ja enviados antes dessa mudanca continuam
+                # funcionando normalmente (o token/validacao nao mudou).
+                codigo_curto = obter_ou_criar_link_curto(link_completo)
+                link_avaliacao = (
+                    request.build_absolute_uri(reverse('link_curto_go', kwargs={'codigo': codigo_curto}))
+                    if codigo_curto else link_completo
+                )
+            try:
+                responsavel_obj = pedido.avaliacao_responsavel
+            except AvaliacaoPedidoResponsavel.DoesNotExist:
+                responsavel_obj = None
+            linhas.append({
+                'pedido': pedido,
+                'nome': nome,
+                'contato': _contato_pedido(pedido),
+                'data_entrega': data_entrega,
+                'avaliacao': avaliacao,
+                'estrelas': ('★' * avaliacao.nota + '☆' * (5 - avaliacao.nota)) if avaliacao else '',
+                'link_avaliacao': link_avaliacao,
+                'responsavel_id': responsavel_obj.responsavel_id if responsavel_obj else None,
+                'responsavel_nome': _nome_curto_responsavel(responsavel_obj.responsavel) if responsavel_obj else '',
+            })
+
+        entregues = Pedido.objects.filter(status='entregue')
+        config = {
+            'assignaveis': _responsaveis_atribuiveis(),
+            'usuarioAtual': {
+                'id': request.user.id,
+                'isSuperuser': request.user.is_superuser,
+            },
+            'statusUrl': reverse('admin:produtos_avaliacao_pedidos_entregues_status'),
+            'atribuirUrl': reverse('admin:produtos_avaliacao_pedidos_entregues_atribuir'),
+            'liberarUrl': reverse('admin:produtos_avaliacao_pedidos_entregues_liberar'),
+        }
+        context = {
+            'title': 'Pedidos entregues x avaliação',
+            'opts': self.model._meta,
+            'has_view_permission': True,
+            'linhas': linhas,
+            'pagina': pagina,
+            'filtro': filtro,
+            'busca': busca,
+            'total_pendentes': entregues.filter(avaliacao_compra__isnull=True).count(),
+            'total_avaliados': entregues.filter(avaliacao_compra__isnull=False).count(),
+            'is_superuser': request.user.is_superuser,
+            'pode_ver_avaliacoes': request.user.is_superuser or request.user.has_perm('produtos.view_avaliacao'),
+            'config': config,
+        }
+        return render(request, 'admin/produtos/avaliacoes_pedidos.html', context)
+
+    def _pedidos_entregues_status_view(self, request):
+        """JSON usado pelo polling da tela: estado atual de todos os
+        responsaveis atribuidos (pra sincronizar entre quem estiver com a
+        tela aberta ao mesmo tempo)."""
+        from django.core.exceptions import PermissionDenied
+        from django.http import JsonResponse
+
+        if not _pode_gerenciar_pedidos_entregues(request.user):
+            raise PermissionDenied
+
+        estado = {
+            r.pedido.numero: {'id': r.responsavel_id, 'nome': _nome_curto_responsavel(r.responsavel)}
+            for r in AvaliacaoPedidoResponsavel.objects.select_related('pedido', 'responsavel')
+        }
+        return JsonResponse({'responsaveis': estado})
+
+    def _pedidos_entregues_atribuir_view(self, request):
+        """Atribui um responsavel a um pedido. Vendedora comum so pode se
+        atribuir a si mesma (nunca outra pessoa), e so se o pedido ainda
+        estiver livre -- senao devolve 409 com quem ja pegou, pra travar a
+        corrida entre duas vendedoras clicando ao mesmo tempo. Super admin
+        atribui (ou reatribui, mesmo ja ocupado) a quem quiser."""
+        from django.core.exceptions import PermissionDenied
+        from django.http import JsonResponse
+        from apps.pedidos.models import Pedido
+        from apps.usuarios.models import Cliente
+
+        if not _pode_gerenciar_pedidos_entregues(request.user):
+            raise PermissionDenied
+        if request.method != 'POST':
+            return JsonResponse({'ok': False, 'erro': 'metodo_invalido'}, status=405)
+
+        numero = (request.POST.get('numero') or '').strip()
+        responsavel_id = request.POST.get('responsavel_id')
+        try:
+            responsavel_id = int(responsavel_id)
+        except (TypeError, ValueError):
+            return JsonResponse({'ok': False, 'erro': 'responsavel_invalido'}, status=400)
+
+        if request.user.is_superuser:
+            ids_permitidos = {a['id'] for a in _responsaveis_atribuiveis()}
+            if responsavel_id not in ids_permitidos:
+                return JsonResponse({'ok': False, 'erro': 'responsavel_invalido'}, status=400)
+        elif responsavel_id != request.user.id:
+            return JsonResponse({'ok': False, 'erro': 'so_pode_atribuir_a_si_mesma'}, status=403)
+
+        pedido = get_object_or_404(Pedido, numero=numero, status='entregue')
+        responsavel = get_object_or_404(Cliente, pk=responsavel_id)
+
+        if request.user.is_superuser:
+            # super admin reatribui livremente, mesmo ja ocupado por outra
+            AvaliacaoPedidoResponsavel.objects.update_or_create(
+                pedido=pedido, defaults={'responsavel': responsavel},
+            )
+            return JsonResponse({
+                'ok': True,
+                'responsavel': {'id': responsavel.id, 'nome': _nome_curto_responsavel(responsavel)},
+            })
+
+        obj, criado = AvaliacaoPedidoResponsavel.objects.get_or_create(
+            pedido=pedido, defaults={'responsavel': responsavel},
+        )
+        if not criado:
+            return JsonResponse({
+                'ok': False, 'erro': 'ja_atribuido',
+                'responsavel': {'id': obj.responsavel_id, 'nome': _nome_curto_responsavel(obj.responsavel)},
+            }, status=409)
+        return JsonResponse({
+            'ok': True,
+            'responsavel': {'id': responsavel.id, 'nome': _nome_curto_responsavel(responsavel)},
+        })
+
+    def _pedidos_entregues_liberar_view(self, request):
+        """Libera o responsavel de um pedido -- so quem esta atribuido ou o
+        super admin pode (impede outra vendedora tirar o nome de quem ja
+        pegou)."""
+        from django.core.exceptions import PermissionDenied
+        from django.http import JsonResponse
+        from apps.pedidos.models import Pedido
+
+        if not _pode_gerenciar_pedidos_entregues(request.user):
+            raise PermissionDenied
+        if request.method != 'POST':
+            return JsonResponse({'ok': False, 'erro': 'metodo_invalido'}, status=405)
+
+        numero = (request.POST.get('numero') or '').strip()
+        pedido = get_object_or_404(Pedido, numero=numero, status='entregue')
+
+        try:
+            obj = pedido.avaliacao_responsavel
+        except AvaliacaoPedidoResponsavel.DoesNotExist:
+            return JsonResponse({'ok': True})
+
+        if not (request.user.is_superuser or obj.responsavel_id == request.user.id):
+            return JsonResponse({'ok': False, 'erro': 'sem_permissao'}, status=403)
+
+        obj.delete()
+        return JsonResponse({'ok': True})
     date_hierarchy = 'criada_em'
     readonly_fields = ('cliente_resumo', 'nome_publico_resumo', 'criada_em')
     ordering = ('-criada_em',)

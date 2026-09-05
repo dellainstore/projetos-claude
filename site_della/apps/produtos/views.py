@@ -10,9 +10,9 @@ from django.db.models import Q, Avg, Count
 from django.db.models import Case, IntegerField, Value, When
 from django.conf import settings
 from django.contrib import messages
-from django.utils.html import strip_tags
 
 from apps.core_utils.meta import enviar_evento_meta, gerar_evento_id
+from apps.produtos.services.meta_catalog import produto_para_item_meta
 from apps.core_utils.cache_utils import (
     MENU_CATEGORIAS, HOME_BANNERS, HOME_MINI_BANNERS, HOME_LOOK,
     HOME_DEPOIMENTOS, HOME_DESTAQUES, LOJA_CONFIG, GUIA_TABELAS, LINKS_BIO,
@@ -161,49 +161,37 @@ def feed_meta_xml(request):
 
     itens = []
     for produto in produtos:
-        imagem = produto.imagem_principal
-        if not imagem or not getattr(imagem, 'imagem', None):
+        item = produto_para_item_meta(produto, site_url)
+        if item is None:
             continue
 
-        link = f'{site_url}{produto.get_absolute_url()}'
-        image_link = f'{site_url}{imagem.imagem.url}'
-        description = ' '.join(strip_tags(produto.descricao or '').split())
-        availability = 'in stock' if _produto_disponivel_meta(produto) else 'out of stock'
-        quantity = _quantidade_meta(produto)
-        category_parts = []
-        if produto.categoria.parent_id:
-            category_parts.append(produto.categoria.parent.nome)
-        category_parts.append(produto.categoria.nome)
-        product_type = ' > '.join(category_parts)
-        color_values = sorted({v.cor.nome for v in produto.variacoes.all() if v.ativa and v.cor_id})
-        size_values = sorted({v.tamanho.nome for v in produto.variacoes.all() if v.ativa and v.tamanho_id})
-
+        categoria_google = escape(item['google_product_category'])
         parts = [
             '    <item>',
-            f'      <g:id>{produto.id}</g:id>',
-            f'      <g:title>{escape(produto.nome)}</g:title>',
-            f'      <g:description>{escape(description[:9999])}</g:description>',
-            f'      <g:availability>{availability}</g:availability>',
-            f'      <g:quantity>{quantity}</g:quantity>',
-            '      <g:condition>new</g:condition>',
-            f'      <g:price>{_format_meta_price(produto.preco_base_exibicao)} BRL</g:price>',
-            f'      <g:link>{escape(link)}</g:link>',
-            f'      <g:image_link>{escape(image_link)}</g:image_link>',
-            '      <g:brand>D\'ELLA Instore</g:brand>',
-            f'      <g:google_product_category>{escape("Apparel & Accessories > Clothing")}</g:google_product_category>',
-            f'      <g:product_type>{escape(product_type)}</g:product_type>',
-            '      <g:gender>female</g:gender>',
-            '      <g:age_group>adult</g:age_group>',
-            f'      <g:item_group_id>{produto.id}</g:item_group_id>',
+            f'      <g:id>{item["id"]}</g:id>',
+            f'      <g:title>{escape(item["title"])}</g:title>',
+            f'      <g:description>{escape(item["description"])}</g:description>',
+            f'      <g:availability>{item["availability"]}</g:availability>',
+            f'      <g:quantity>{item["inventory"]}</g:quantity>',
+            f'      <g:condition>{item["condition"]}</g:condition>',
+            f'      <g:price>{item["price"]}</g:price>',
+            f'      <g:link>{escape(item["link"])}</g:link>',
+            f'      <g:image_link>{escape(item["image_link"])}</g:image_link>',
+            f'      <g:brand>{item["brand"]}</g:brand>',
+            f'      <g:google_product_category>{categoria_google}</g:google_product_category>',
+            f'      <g:product_type>{escape(item["product_type"])}</g:product_type>',
+            f'      <g:gender>{item["gender"]}</g:gender>',
+            f'      <g:age_group>{item["age_group"]}</g:age_group>',
+            f'      <g:item_group_id>{item["item_group_id"]}</g:item_group_id>',
         ]
-        if produto.em_promocao:
-            parts.append(f'      <g:sale_price>{_format_meta_price(produto.preco_atual)} BRL</g:sale_price>')
-        if produto.sku:
-            parts.append(f'      <g:mpn>{escape(produto.sku)}</g:mpn>')
-        if color_values:
-            parts.append(f'      <g:color>{escape(", ".join(color_values))}</g:color>')
-        if size_values:
-            parts.append(f'      <g:size>{escape(", ".join(size_values))}</g:size>')
+        if 'sale_price' in item:
+            parts.append(f'      <g:sale_price>{item["sale_price"]}</g:sale_price>')
+        if 'mpn' in item:
+            parts.append(f'      <g:mpn>{escape(item["mpn"])}</g:mpn>')
+        if 'color' in item:
+            parts.append(f'      <g:color>{escape(item["color"])}</g:color>')
+        if 'size' in item:
+            parts.append(f'      <g:size>{escape(item["size"])}</g:size>')
         parts.append('    </item>')
         itens.append('\n'.join(parts))
 
@@ -449,29 +437,6 @@ def loja_tamanhos(request):
     return JsonResponse({'tamanhos': tamanhos})
 
 
-def _produto_disponivel_meta(produto) -> bool:
-    variacoes = [v for v in produto.variacoes.all() if v.ativa]
-    if not variacoes:
-        return True
-    return any(v.disponivel for v in variacoes)
-
-
-def _quantidade_meta(produto) -> int:
-    variacoes = [v for v in produto.variacoes.all() if v.ativa and v.disponivel]
-    if not variacoes:
-        return 0
-    total = 0
-    for v in variacoes:
-        if v.modo_efetivo == 'sob_demanda':
-            return 999
-        total += v.estoque or 0
-    return max(total, 1)
-
-
-def _format_meta_price(valor) -> str:
-    return f'{valor:.2f}'
-
-
 def detalhe_produto(request, slug):
     from apps.produtos.models import Produto, Avaliacao
 
@@ -668,42 +633,60 @@ def avaliar_pedido(request, numero):
     """Avaliacao de pedido entregue -- por login (cliente com conta) OU por
     token assinado no link do e-mail (cliente convidada, sem conta -- ver
     apps/pedidos/services/avaliacao_token.py). Sem as duas coisas, pede
-    login normalmente (fluxo antigo intacto para quem chegou sem o link)."""
+    login normalmente (fluxo antigo intacto para quem chegou sem o link).
+
+    O token e' checado mesmo com sessao logada em OUTRA conta -- AUTH_USER_MODEL
+    e' o mesmo model do cliente do site E do staff do admin (/painel/), entao
+    um funcionario logado no admin esta "autenticado" em qualquer aba do site.
+    Sem esse fallback, abrir o link avulso (gerado em Avaliacoes > Pedidos
+    entregues) sempre dava 404 pra quem estivesse logado, pois a busca caia
+    direto em request.user.pedidos (so os pedidos da conta logada). Corrigido
+    2026-09-04."""
     from django.contrib.auth.views import redirect_to_login
+    from django.http import Http404
     from django.urls import reverse
     from apps.pedidos.models import Pedido
     from apps.pedidos.services.avaliacao_token import validar_token_avaliacao
     from .forms import AvaliacaoCompraForm
 
     token = request.GET.get('token', '') or request.POST.get('token', '')
-    via_token = not request.user.is_authenticated and validar_token_avaliacao(numero, token)
+    token_valido = validar_token_avaliacao(numero, token)
+
+    pedido = None
+    if request.user.is_authenticated:
+        pedido = request.user.pedidos.prefetch_related('itens__produto').filter(numero=numero).first()
+
+    via_token = pedido is None and token_valido
+
+    if pedido is None:
+        if token_valido:
+            pedido = get_object_or_404(
+                Pedido.objects.prefetch_related('itens__produto'),
+                numero=numero,
+            )
+        elif request.user.is_authenticated:
+            raise Http404
+        else:
+            return redirect_to_login(request.get_full_path())
 
     def _url_avaliacao():
         url = reverse('produtos:avaliar_pedido', kwargs={'numero': numero})
         return f'{url}?token={token}' if via_token else url
 
-    if request.user.is_authenticated:
-        pedido = get_object_or_404(
-            request.user.pedidos.prefetch_related('itens__produto'),
-            numero=numero,
-        )
-    elif via_token:
-        pedido = get_object_or_404(
-            Pedido.objects.prefetch_related('itens__produto'),
-            numero=numero,
-        )
-    else:
-        return redirect_to_login(request.get_full_path())
+    # So conta como "conta dona do pedido" quando NAO veio pelo fallback do
+    # token -- senao um funcionario logado no admin, abrindo o link de outra
+    # cliente, assinaria a avaliacao com o proprio nome/conta.
+    pedido_proprio = request.user.is_authenticated and not via_token
 
     avaliacao_existente = pedido.avaliacao
     if pedido.status != 'entregue' and avaliacao_existente is None:
         messages.info(request, 'A avaliação é liberada assim que o pedido estiver entregue.')
-        if request.user.is_authenticated:
+        if pedido_proprio:
             return redirect('usuarios:detalhe_pedido', numero=pedido.numero)
         return redirect('produtos:home')
 
     nome_avaliador = (
-        (request.user.nome if request.user.is_authenticated else '')
+        (request.user.nome if pedido_proprio else '')
         or pedido.nome_completo or 'Cliente'
     ).split()[0]
 
@@ -718,8 +701,9 @@ def avaliar_pedido(request, numero):
             avaliacao.pedido = pedido
             # Convidada sem conta: cliente fica None (pedido.cliente ja e' None
             # nesse caso). Se o pedido estiver vinculado a uma conta, mantem o
-            # vinculo mesmo entrando pelo token (ex: token clicado deslogada).
-            avaliacao.cliente = request.user if request.user.is_authenticated else pedido.cliente
+            # vinculo mesmo entrando pelo token (ex: token clicado deslogada,
+            # ou funcionario abrindo o link de outra cliente).
+            avaliacao.cliente = request.user if pedido_proprio else pedido.cliente
             avaliacao.produto = None
             avaliacao.nome_publico = nome_avaliador
             avaliacao.aprovada = False

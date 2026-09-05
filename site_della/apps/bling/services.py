@@ -519,11 +519,44 @@ def _dados_contato_pedido(pedido) -> dict:
     }
 
 
+# Mapeia o 'element' que o Bling devolve na validacao do contato para a
+# chave correspondente no nosso payload. So entram aqui campos que NAO sao
+# essenciais para a NF-e (nome/CPF/endereco continuam obrigatorios e nunca
+# sao descartados automaticamente) — hoje so o telefone, unico caso real
+# observado (2026-08-25, pedido 2026-0031: "55119911910" com formato invalido).
+CAMPOS_CONTATO_DESCARTAVEIS = {
+    'fone':     'telefone',
+    'celular':  'telefone',
+    'telefone': 'telefone',
+}
+
+
+def _campo_invalido_descartavel(exc: BlingAPIError) -> 'str | None':
+    """
+    Le os 'fields' de erro de validacao do Bling e retorna a chave do nosso
+    payload que pode ser removida com seguranca para tentar de novo.
+    Retorna None se nenhum campo do erro for reconhecido como descartavel
+    (nesse caso o chamador deve desistir, nao adivinhar).
+    """
+    campos_erro = (exc.data or {}).get('error', {}).get('fields', []) or []
+    for campo in campos_erro:
+        chave = CAMPOS_CONTATO_DESCARTAVEIS.get(campo.get('element'))
+        if chave:
+            return chave
+    return None
+
+
 def _criar_contato_bling(pedido, api: BlingAPI) -> 'int | None':
     """
     Cria novo contato no Bling com os dados do pedido.
     Retorna o ID do contato criado, ou None em caso de falha.
     POST /contatos exige 'tipo' (nao 'tipoPessoa') e 'situacao'.
+
+    Se o Bling recusar por um campo nao essencial mal formatado (ex:
+    telefone), removemos so esse campo do payload e tentamos de novo, em vez
+    de perder o pedido inteiro — o cadastro fica incompleto nesse campo e
+    fica registrado em BlingLog (tipo='contato') para confirmar com o
+    cliente depois. Nome, CPF e endereco nunca sao descartados sozinhos.
     """
     payload = {
         'nome':            pedido.nome_completo,
@@ -534,15 +567,48 @@ def _criar_contato_bling(pedido, api: BlingAPI) -> 'int | None':
         'telefone':        pedido.telefone or '',
         'endereco':        _endereco_contato_pedido(pedido),
     }
-    try:
-        resp = api.criar_contato(payload)
+    campos_removidos = {}
+
+    for _tentativa in range(3):
+        try:
+            resp = api.criar_contato(payload)
+        except BlingAPIError as exc:
+            campo = _campo_invalido_descartavel(exc)
+            if campo and campo in payload:
+                logger.warning(
+                    'Bling: campo "%s" invalido no contato do pedido %s (valor=%r) — '
+                    'removendo e tentando de novo sem ele',
+                    campo, pedido.numero, payload[campo],
+                )
+                campos_removidos[campo] = payload.pop(campo)
+                continue
+            logger.warning('Bling: falha ao criar contato para pedido %s: %s', pedido.numero, exc)
+            return None
+
         contato_id = (resp.get('data') or {}).get('id')
-        if contato_id:
-            logger.info('Bling: contato criado (id=%s) para pedido %s', contato_id, pedido.numero)
-            return int(contato_id)
-        logger.warning('Bling: criacao de contato para pedido %s nao retornou ID', pedido.numero)
-    except BlingAPIError as exc:
-        logger.warning('Bling: falha ao criar contato para pedido %s: %s', pedido.numero, exc)
+        if not contato_id:
+            logger.warning('Bling: criacao de contato para pedido %s nao retornou ID', pedido.numero)
+            return None
+
+        contato_id = int(contato_id)
+        logger.info('Bling: contato criado (id=%s) para pedido %s', contato_id, pedido.numero)
+
+        if campos_removidos:
+            resumo = ', '.join(f'{k}={v!r}' for k, v in campos_removidos.items())
+            logger.warning(
+                'Bling: contato %s do pedido %s criado SEM os campos invalidos (%s) — '
+                'confirmar dado correto com o cliente e completar o cadastro depois',
+                contato_id, pedido.numero, resumo,
+            )
+            BlingLog.objects.create(
+                tipo='contato', pedido=pedido, sucesso=True,
+                payload_enviado={'contato_id': contato_id, 'campos_removidos': campos_removidos},
+                resposta=resp,
+                erro=f'Contato criado sem: {resumo} (formato invalido — confirmar com cliente)',
+            )
+        return contato_id
+
+    logger.warning('Bling: falha ao criar contato para pedido %s apos remover campos invalidos', pedido.numero)
     return None
 
 
@@ -605,11 +671,32 @@ def _atualizar_contato_com_dados_pedido(contato_id: int, pedido, api: BlingAPI) 
         logger.info('Bling: contato %s ja completo, sem atualizacoes necessarias', contato_id)
         return
 
-    try:
-        api.atualizar_contato(contato_id, payload)
-        logger.info('Bling: contato %s atualizado com dados do pedido %s', contato_id, pedido.numero)
-    except BlingAPIError as exc:
-        logger.warning('Bling: falha ao atualizar contato %s: %s', contato_id, exc)
+    campos_removidos = {}
+    for _tentativa in range(3):
+        try:
+            api.atualizar_contato(contato_id, payload)
+            logger.info('Bling: contato %s atualizado com dados do pedido %s', contato_id, pedido.numero)
+            if campos_removidos:
+                resumo = ', '.join(f'{k}={v!r}' for k, v in campos_removidos.items())
+                BlingLog.objects.create(
+                    tipo='contato', pedido=pedido, sucesso=True,
+                    payload_enviado={'contato_id': contato_id, 'campos_removidos': campos_removidos},
+                    resposta={},
+                    erro=f'Atualizacao do contato pulou: {resumo} (formato invalido — confirmar com cliente)',
+                )
+            return
+        except BlingAPIError as exc:
+            campo = _campo_invalido_descartavel(exc)
+            if campo and campo in payload:
+                logger.warning(
+                    'Bling: campo "%s" invalido ao atualizar contato %s (valor=%r) — '
+                    'removendo e tentando de novo sem ele',
+                    campo, contato_id, payload[campo],
+                )
+                campos_removidos[campo] = payload.pop(campo)
+                continue
+            logger.warning('Bling: falha ao atualizar contato %s: %s', contato_id, exc)
+            return
 
 
 def _resolver_contato_bling(pedido, api) -> dict:

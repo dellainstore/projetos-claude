@@ -1,12 +1,15 @@
 from datetime import date
 from decimal import Decimal
 
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.core.decorators import perm_required
 from apps.metas.models import MetaFuncionario, MetaCanal
 from apps.rh.models import Colaborador
+from apps.metas.services.atualizacao import disparar_atualizacao, ler_status
 from apps.metas.services.relatorio import (
     carregar_vendas_periodo,
     calcular_individual,
@@ -178,6 +181,7 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
         "por_semana_total": por_semana_total,
         "dias_restantes": dias,
         "ultima_atualizacao": ultima_atualizacao_metas(),
+        "status_atualizacao": ler_status(),
         # filtro
         "filtro": filtro,
         "ano_atual": ano_atual,
@@ -185,3 +189,33 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
         "anos_disponiveis": anos_disponiveis,
         "meses_nomes": meses_nomes,
     })
+
+
+def _status_payload() -> dict:
+    """Status da atualização + horário formatado, pro JS do botão 'Atualizar'."""
+    status = ler_status()
+    ultima = ultima_atualizacao_metas()
+    return {
+        **status,
+        "ultima_atualizacao_label": timezone.localtime(ultima).strftime("%d/%m/%Y às %H:%M"),
+    }
+
+
+@perm_required("metas.ver")
+@require_GET
+def view_atualizar_status(request: HttpRequest) -> JsonResponse:
+    """Polling: estado atual da atualização (rodando por cron ou pelo botão)."""
+    return JsonResponse(_status_payload())
+
+
+@perm_required("metas.ver")
+@require_POST
+def view_atualizar_start(request: HttpRequest) -> JsonResponse:
+    """Antecipa o cron: dispara em background a mesma atualização do CSV de
+    vendas que alimenta o painel. Se já tiver uma rodando (cron ou outro
+    clique), não duplica — só devolve o status atual."""
+    iniciou, motivo = disparar_atualizacao(usuario=request.user.get_username())
+    payload = _status_payload()
+    payload["iniciou_agora"] = iniciou
+    payload["motivo"] = motivo
+    return JsonResponse(payload)

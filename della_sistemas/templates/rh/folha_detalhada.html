@@ -34,7 +34,6 @@
             <tr>
               <td>
                 {{ p.label }}
-                {% if p.data %}<span style="font-size:0.72rem;color:var(--cinza-texto);">(pago {{ p.data|date:"d/m" }})</span>{% endif %}
               </td>
               <td style="text-align:right;white-space:nowrap;">{{ p.valor|brl }}</td>
             </tr>
@@ -52,7 +51,6 @@
             <tr>
               <td>
                 {{ de.label }}
-                {% if de.data %}<span style="font-size:0.72rem;color:var(--cinza-texto);">(pago {{ de.data|date:"d/m" }})</span>{% endif %}
               </td>
               <td style="text-align:right;white-space:nowrap;">{{ de.valor|brl }}</td>
             </tr>

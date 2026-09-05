@@ -1,0 +1,9 @@
+{% if candidatos %}
+<div class="moto-sugestoes-lista">
+  {% for c in candidatos %}
+  <div class="moto-sugestao" onclick="escolherEnderecoGoogle('{{ campo }}', '{{ c.place_id }}', this)">
+    {{ c.description }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

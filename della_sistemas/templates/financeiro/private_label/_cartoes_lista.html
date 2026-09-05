@@ -1,0 +1,52 @@
+{% load core_extras %}
+<div class="pl-cartoes-grid">
+  {% for cartao in cartoes %}
+  <div class="pl-cartao-card" style="--cor-cartao: {{ cartao.cor }};">
+    <div class="pl-cartao-titulo">
+      <div>
+        <div class="pl-cartao-nome">{{ cartao.nome }}</div>
+        <div class="pl-cartao-sub">{{ cartao.banco|default:"" }}{% if cartao.final %} · final {{ cartao.final }}{% endif %}</div>
+      </div>
+      {% if not cartao.ativo %}<span class="pl-badge pl-badge--cancelado">Inativo</span>{% endif %}
+      {% if user.pode_configurar_private_label %}
+      <button type="button" class="pl-icon-btn" title="Editar cartão" hx-get="{% url 'financeiro:pl_htmx_cartao_form_editar' cartao.pk %}" hx-target="#modal-container">&#9998;</button>
+      {% endif %}
+    </div>
+
+    <div class="pl-limite-barra-fundo">
+      <div class="pl-limite-barra {% if cartao.percentual_utilizado >= 100 %}aviso-100{% elif cartao.percentual_utilizado >= 90 %}aviso-90{% elif cartao.percentual_utilizado >= 70 %}aviso-70{% endif %}"
+           style="width: {{ cartao.percentual_utilizado|pct_css }}%;"></div>
+    </div>
+    <div class="pl-limite-legenda">
+      <span>{{ cartao.limite_utilizado|brl }} usado</span>
+      <span>{{ cartao.limite_disponivel|brl }} disponível de {{ cartao.limite_total|brl }}</span>
+    </div>
+
+    {% if cartao.fatura_atual %}
+    <div class="pl-cartao-fatura">
+      <div class="pl-cartao-fatura-linha">
+        <span>Fatura atual ({{ cartao.fatura_atual.data_vencimento|date:"d/m" }})</span>
+        <span class="pl-valor-despesa">{{ cartao.fatura_atual.saldo_restante|brl }}</span>
+      </div>
+      {% if cartao.proxima_fatura %}
+      <div class="pl-cartao-fatura-linha">
+        <span>Próxima fatura ({{ cartao.proxima_fatura.data_vencimento|date:"d/m" }})</span>
+        <span>{{ cartao.proxima_fatura.saldo_restante|brl }}</span>
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="pl-cartao-fatura text-muted">Sem fatura em aberto.</div>
+    {% endif %}
+
+    <div class="pl-cartao-acoes">
+      <a href="{% url 'financeiro:pl_cartao_detalhe' cartao.pk %}" class="ds-btn ds-btn--outline ds-btn--sm">Ver detalhes</a>
+      {% if cartao.fatura_atual and cartao.fatura_atual.saldo_restante > 0 and user.pode_lancar_private_label %}
+      <button type="button" class="ds-btn ds-btn--dourado ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_fatura_pagar_form' cartao.fatura_atual.pk %}" hx-target="#modal-container">Pagar fatura</button>
+      {% endif %}
+    </div>
+  </div>
+  {% empty %}
+  <p class="text-muted">Nenhum cartão cadastrado ainda.</p>
+  {% endfor %}
+</div>

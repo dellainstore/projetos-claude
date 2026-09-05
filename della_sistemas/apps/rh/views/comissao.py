@@ -170,6 +170,12 @@ def view_comissao_incluir(request: HttpRequest) -> HttpResponse:
     return redirect(destino)
 
 
+# Oculta temporariamente a coluna "Pago?" no PDF de comissão — a lógica de
+# pago/parcial/não continua calculada normalmente, só não aparece no PDF
+# gerado. Voltar para True quando quiser reexibir a coluna.
+MOSTRAR_COLUNA_PAGO = False
+
+
 @perm_required("rh.gerir")
 def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse:
     """Gera o PDF de comissão de uma vendedora no período (para envio/conferência)."""
@@ -197,7 +203,10 @@ def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse
 
     import io
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, title=f"Comissão {primeiro_nome}")
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4, title=f"Comissão {primeiro_nome}",
+        leftMargin=1.2 * cm, rightMargin=1.2 * cm, topMargin=1.2 * cm, bottomMargin=1.2 * cm,
+    )
     styles = getSampleStyleSheet()
     titulo_style = ParagraphStyle(
         "TituloComissao", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER,
@@ -220,7 +229,9 @@ def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse
     def _brl(v) -> str:
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    cabecalho = ["Data", "Nº Pedido", "Cliente", "Valor Pedido", "%", "Comissão", "Pago?"]
+    cabecalho = ["Data", "Nº Pedido", "Cliente", "Valor Pedido", "%", "Comissão"]
+    if MOSTRAR_COLUNA_PAGO:
+        cabecalho.append("Pago?")
     linhas_tab = [cabecalho]
     total_base = Decimal("0.00")
     for l in dados["linhas"]:
@@ -237,16 +248,21 @@ def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse
             pago_str = "Parcial"
         else:
             pago_str = "NÃO"
-        linhas_tab.append([
+        linha = [
             l["data"].strftime("%d/%m/%Y"),
             num_str,
             (l["cliente"] or "")[:30],
             _brl(l["base"]),
             f'{l["percentual"]}%',
             _brl(l["valor"]),
-            pago_str,
-        ])
-    linhas_tab.append(["", "", "", _brl(total_base), "", _brl(dados["total"]), ""])
+        ]
+        if MOSTRAR_COLUNA_PAGO:
+            linha.append(pago_str)
+        linhas_tab.append(linha)
+    linha_total = ["", "", "", _brl(total_base), "", _brl(dados["total"])]
+    if MOSTRAR_COLUNA_PAGO:
+        linha_total.append("")
+    linhas_tab.append(linha_total)
 
     # Colorir células "Parcial" em laranja e "NÃO" em vermelho
     style_cmds = [
@@ -254,18 +270,20 @@ def view_comissao_pdf(request: HttpRequest, colaborador_id: int) -> HttpResponse
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("GRID", (0, 0), (-1, -2), 0.4, colors.HexColor("#dddddd")),
-        ("ALIGN", (3, 0), (6, -1), "RIGHT"),
+        ("ALIGN", (3, 0), (5, -1), "RIGHT"),
         ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
         ("LINEABOVE", (0, -1), (-1, -1), 1, colors.black),
         ("BACKGROUND", (0, 1), (-1, -2), colors.HexColor("#faf8f5")),
     ]
-    for row_idx, row in enumerate(linhas_tab[1:-1], start=1):
-        pago_cell = row[-1]
-        if pago_cell == "Parcial":
-            style_cmds.append(("TEXTCOLOR", (6, row_idx), (6, row_idx), colors.HexColor("#d97706")))
-            style_cmds.append(("FONTNAME", (6, row_idx), (6, row_idx), "Helvetica-Bold"))
-        elif pago_cell == "NÃO":
-            style_cmds.append(("TEXTCOLOR", (6, row_idx), (6, row_idx), colors.HexColor("#dc2626")))
+    if MOSTRAR_COLUNA_PAGO:
+        style_cmds.append(("ALIGN", (6, 0), (6, -1), "RIGHT"))
+        for row_idx, row in enumerate(linhas_tab[1:-1], start=1):
+            pago_cell = row[-1]
+            if pago_cell == "Parcial":
+                style_cmds.append(("TEXTCOLOR", (6, row_idx), (6, row_idx), colors.HexColor("#d97706")))
+                style_cmds.append(("FONTNAME", (6, row_idx), (6, row_idx), "Helvetica-Bold"))
+            elif pago_cell == "NÃO":
+                style_cmds.append(("TEXTCOLOR", (6, row_idx), (6, row_idx), colors.HexColor("#dc2626")))
 
     tabela = Table(linhas_tab, repeatRows=1)
     tabela.setStyle(TableStyle(style_cmds))

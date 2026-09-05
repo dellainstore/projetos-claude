@@ -1,0 +1,30 @@
+{% load core_extras %}
+<div class="ds-modal-fundo">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>Vincular manualmente</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <p class="text-muted" style="font-size:.85rem;margin:-.3rem 0 .9rem;">
+      Item do extrato: {{ item.data|date:"d/m/Y" }} — {{ item.valor|brl }} — {{ item.descricao }}
+    </p>
+    <form hx-post="{% url 'financeiro:pl_htmx_item_vincular_salvar' item.pk %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      <div class="pl-form-campo pl-form-campo--full">
+        <label>Movimento no razão (±10 dias da data do item)</label>
+        <select class="ds-select" name="movimento" required autofocus>
+          <option value="">Selecione</option>
+          {% for movimento in candidatos %}
+          <option value="{{ movimento.pk }}">{{ movimento.data|date:"d/m/Y" }} — {{ movimento.valor|brl }} — {{ movimento.evento_chave }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if not candidatos %}<p class="text-muted" style="font-size:.82rem;">Nenhum movimento livre encontrado nesse intervalo de datas.</p>{% endif %}
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Vincular</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,66 @@
+<div class="ds-modal-fundo">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>{% if cartao %}Editar cartão{% else %}Novo cartão{% endif %}</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_cartao_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      {% if cartao %}<input type="hidden" name="pk" value="{{ cartao.pk }}">{% endif %}
+      <div class="pl-form-grid">
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Nome do cartão</label>
+          <input class="ds-input" type="text" name="nome" required value="{{ cartao.nome|default:'' }}" autofocus placeholder="Ex.: Nubank Empresarial">
+        </div>
+        <div class="pl-form-campo">
+          <label>Banco</label>
+          <input class="ds-input" type="text" name="banco" value="{{ cartao.banco|default:'' }}">
+        </div>
+        <div class="pl-form-campo">
+          <label>Final do cartão</label>
+          <input class="ds-input" type="text" name="final" maxlength="4" value="{{ cartao.final|default:'' }}" placeholder="1234">
+        </div>
+        <div class="pl-form-campo">
+          <label>Limite total (R$)</label>
+          <input class="ds-input" type="number" step="0.01" min="0.01" name="limite_total" required value="{{ cartao.limite_total|stringformat:'s'|default:'' }}">
+        </div>
+        <div class="pl-form-campo">
+          <label>Conta de pagamento padrão</label>
+          <select class="ds-select" name="conta_pagamento_padrao">
+            <option value="">Nenhuma</option>
+            {% for conta in contas %}
+            <option value="{{ conta.pk }}" {% if cartao.conta_pagamento_padrao_id == conta.pk %}selected{% endif %}>{{ conta.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="pl-form-campo">
+          <label>Dia do fechamento</label>
+          <input class="ds-input" type="number" min="1" max="28" name="dia_fechamento" required value="{{ cartao.dia_fechamento|default:'' }}">
+        </div>
+        <div class="pl-form-campo">
+          <label>Dia do vencimento</label>
+          <input class="ds-input" type="number" min="1" max="28" name="dia_vencimento" required value="{{ cartao.dia_vencimento|default:'' }}">
+        </div>
+      </div>
+      <details class="pl-mais-opcoes">
+        <summary>Mais opções</summary>
+        <div class="pl-form-grid">
+          <div class="pl-form-campo">
+            <label>Cor</label>
+            <input class="ds-input" type="color" name="cor" value="{{ cartao.cor|default:'#c9a96e' }}" style="height:2.4rem;">
+          </div>
+          {% if cartao %}
+          <div class="pl-form-campo" style="justify-content:center;">
+            <label class="pl-form-check"><input type="checkbox" name="ativo" {% if cartao.ativo %}checked{% endif %}> Ativo</label>
+          </div>
+          {% endif %}
+        </div>
+      </details>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>

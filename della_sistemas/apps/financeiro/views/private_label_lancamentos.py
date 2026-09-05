@@ -66,6 +66,16 @@ def pl_home(request):
         return redirect("financeiro:pl_dashboard")
     if request.user.pode_ver_private_label_lancamentos:
         return redirect("financeiro:pl_lancamentos")
+    if request.user.pode_ver_private_label_cartoes:
+        return redirect("financeiro:pl_cartoes")
+    if request.user.pode_ver_private_label_fluxo_caixa:
+        return redirect("financeiro:pl_fluxo_caixa")
+    if request.user.pode_ver_private_label_dre:
+        return redirect("financeiro:pl_dre")
+    if request.user.pode_ver_private_label_investimentos:
+        return redirect("financeiro:pl_investimentos")
+    if request.user.pode_conciliar_private_label:
+        return redirect("financeiro:pl_conciliacao")
     if request.user.pode_configurar_private_label:
         return redirect("financeiro:pl_configuracoes")
     messages.error(request, "Você não tem acesso ao módulo Private Label.")

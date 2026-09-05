@@ -165,6 +165,44 @@ class User(AbstractUser):
         )
 
     @property
+    def pode_ver_motoqueiro_relatorio(self) -> bool:
+        return self.tem_perm("motoqueiro.ver_relatorio")
+
+    @property
+    def pode_ver_motoqueiro_dashboard(self) -> bool:
+        return self.tem_perm("motoqueiro.ver_dashboard")
+
+    @property
+    def pode_solicitar_motoqueiro(self) -> bool:
+        return self.tem_perm("motoqueiro.solicitar")
+
+    @property
+    def pode_solicitar_motoqueiro_para_outros(self) -> bool:
+        return self.tem_perm("motoqueiro.solicitar_para_outros")
+
+    @property
+    def pode_ver_todas_motoqueiro(self) -> bool:
+        return self.tem_perm("motoqueiro.ver_todos")
+
+    @property
+    def pode_editar_status_motoqueiro(self) -> bool:
+        return self.tem_perm("motoqueiro.editar_status")
+
+    @property
+    def pode_gerir_saldo_motoqueiro(self) -> bool:
+        return self.tem_perm("motoqueiro.gerir_saldo")
+
+    @property
+    def pode_ver_motoqueiro(self) -> bool:
+        """Algum acesso ao grupo Motoqueiro — só para abrir/fechar o submenu
+        (mesmo padrão de `pode_ver_private_label`)."""
+        return (
+            self.pode_ver_motoqueiro_relatorio
+            or self.pode_ver_motoqueiro_dashboard
+            or self.pode_solicitar_motoqueiro
+        )
+
+    @property
     def pode_ver_pedidos(self) -> bool:
         return self.tem_perm("pedidos.ver")
 

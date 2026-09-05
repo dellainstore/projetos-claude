@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}Private Label · DRE | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+{% include "financeiro/private_label/_estilos.html" %}
+<style>
+  .pl-dre-linha-total td { font-weight: 700; border-top: 1px solid var(--cinza-medio); }
+  .pl-dre-linha-destaque td { background: rgba(201,169,110,.08); font-weight: 700; }
+  .pl-dre-recuo td:first-child { padding-left: 1.6rem; color: var(--cinza-texto); font-size: .82rem; }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="pl-topo">
+  <div><h1 class="ds-page-titulo">Financeiro Private Label</h1></div>
+</div>
+
+{% include "financeiro/private_label/_abas.html" %}
+
+<form class="pl-filtros" method="get">
+  <div class="pl-form-campo">
+    <label>Ano</label>
+    <select class="ds-select" name="ano" onchange="this.form.submit()">
+      {% for a in anos_disponiveis %}
+      <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="pl-form-campo">
+    <label>Mês</label>
+    <select class="ds-select" name="mes" onchange="this.form.submit()">
+      <option value="">Ano inteiro (comparação mensal)</option>
+      {% for numero, nome in meses %}
+      <option value="{{ numero }}" {% if mes == numero %}selected{% endif %}>{{ nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <a class="ds-btn ds-btn--outline" href="{% url 'financeiro:pl_dre_exportar_csv' %}?ano={{ ano }}{% if mes %}&mes={{ mes }}{% endif %}">Exportar CSV</a>
+</form>
+
+{% if dre %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>DRE — {{ mes }}/{{ ano }}</th><th>Valor</th></tr></thead>
+    <tbody>
+      {% for chave, rotulo, recuo in linhas_resumo %}
+      <tr class="{% if recuo == 0 %}pl-dre-linha-destaque{% endif %}">
+        <td>{{ rotulo }}</td>
+        <td><span class="{% if dre|get_perm:chave < 0 %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ dre|get_perm:chave|brl }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="pl-secao-titulo">Detalhe por categoria</div>
+{% for chave, label in naturezas_dre %}
+{% with categorias=dre.por_categoria|get_perm:chave %}
+{% if categorias %}
+<div class="ds-table-wrapper" style="margin-bottom:.8rem;">
+  <table class="ds-table">
+    <thead><tr><th>{{ label }}</th><th>Valor</th></tr></thead>
+    <tbody>
+      {% for nome, valor in categorias.items %}
+      <tr><td>{{ nome }}</td><td>{{ valor|brl }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endwith %}
+{% endfor %}
+
+{% else %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>Linha</th>
+        {% for numero, nome in meses %}<th>{{ nome|slice:":3" }}</th>{% endfor %}
+        <th>Total {{ ano }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for chave, rotulo, recuo in linhas_resumo %}
+      <tr class="{% if recuo == 0 %}pl-dre-linha-destaque{% endif %}">
+        <td>{{ rotulo }}</td>
+        {% for mes_dre in dre_ano.meses %}
+        <td><span class="{% if mes_dre|get_perm:chave < 0 %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ mes_dre|get_perm:chave|brl }}</span></td>
+        {% endfor %}
+        <td class="pl-dre-linha-total"><span class="{% if dre_ano.total|get_perm:chave < 0 %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ dre_ano.total|get_perm:chave|brl }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

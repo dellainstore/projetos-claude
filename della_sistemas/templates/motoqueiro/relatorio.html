@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% load metas_extras motoqueiro_extras %}
+{% block titulo %}Motoqueiro | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+{% include "motoqueiro/_estilos.html" %}
+
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Motoqueiro</h1>
+</div>
+
+{% include "motoqueiro/_abas.html" %}
+
+{% include "motoqueiro/_filtros.html" with mostrar_busca=True %}
+
+<div class="ds-form-section" style="display:flex;gap:2rem;margin-bottom:1.25rem;">
+  <div><span class="text-muted" style="font-size:0.8rem;">Corridas no período</span><br><strong style="font-size:1.2rem;">{{ total_corridas }}</strong></div>
+  <div><span class="text-muted" style="font-size:0.8rem;">Valor total</span><br><strong style="font-size:1.2rem;">{{ total_geral|brl }}</strong></div>
+</div>
+
+{% if not secoes %}
+<div class="ds-form-section" style="text-align:center;padding:2.5rem;">
+  <p class="text-muted">Nenhuma corrida registrada no período/filtro selecionado.</p>
+</div>
+{% endif %}
+
+{% for secao in secoes %}
+<div class="ds-form-section moto-secao" style="margin-bottom:1.75rem;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:0.75rem;">
+    <h2 style="font-size:1.05rem;">{{ secao.colaborador.nome }}</h2>
+    <span style="font-weight:600;">{{ secao.linhas|length }} corrida{{ secao.linhas|length|pluralize }} — {{ secao.total_valor|brl }}</span>
+  </div>
+
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead>
+        <tr>
+          <th>Data</th><th>Retirada</th><th>Entrega</th><th>Remetente</th><th>Destinatário</th>
+          <th>Valor</th><th>Finalidade</th><th>Obs.</th><th>Plataforma</th><th>Veículo</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in secao.linhas %}
+        <tr class="moto-linha" data-busca="{{ s.remetente|lower }} {{ s.destinatario|lower }} {{ s.endereco_retirada|lower }} {{ s.endereco_entrega|lower }} {{ s.complemento_retirada|lower }} {{ s.complemento_entrega|lower }} {{ s.get_status_display|lower }} {{ s.get_finalidade_display|lower }} {{ s.observacao|lower }}">
+          <td>{{ s.criado_em|date:"d/m/Y H:i" }}</td>
+          <td style="max-width:220px;">{{ s.endereco_retirada }}{% if s.complemento_retirada %}<br><span class="text-muted" style="font-size:0.75rem;">{{ s.complemento_retirada }}</span>{% endif %}</td>
+          <td style="max-width:220px;">{{ s.endereco_entrega }}{% if s.complemento_entrega %}<br><span class="text-muted" style="font-size:0.75rem;">{{ s.complemento_entrega }}</span>{% endif %}</td>
+          <td>{{ s.remetente }}</td>
+          <td>{{ s.destinatario }}</td>
+          <td><strong>{{ s.valor|brl }}</strong></td>
+          <td>{{ s.get_finalidade_display }}</td>
+          <td class="text-muted" style="font-size:0.78rem;max-width:160px;">{{ s.observacao|default:"" }}</td>
+          <td>{{ s.get_plataforma_display }}</td>
+          <td class="text-muted" style="font-size:0.8rem;">{{ s.veiculo|default:"" }}</td>
+          <td>
+            {% if user.pode_editar_status_motoqueiro %}
+            <form method="post" action="{% url 'motoqueiro:atualizar_status_manual' s.pk %}" style="display:inline-flex;gap:0.3rem;align-items:center;">
+              {% csrf_token %}
+              <select name="status" class="ds-input" style="font-size:0.75rem;padding:0.15rem 0.4rem;" onchange="this.form.submit()">
+                {% for val, label in status_choices %}
+                <option value="{{ val }}" {% if val == s.status %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            {% else %}
+            <span class="ds-status {{ s.status|status_css }}">{{ s.get_status_display }}</span>
+            {% endif %}
+            {% if s.lalamove_share_link %}
+              {% if not s.eh_status_final %}
+              <a href="{{ s.lalamove_share_link }}" target="_blank" rel="noopener" class="moto-ao-vivo">&#128205; AO VIVO</a>
+              {% else %}
+              <a href="{{ s.lalamove_share_link }}" target="_blank" rel="noopener" title="Ver rastreio" style="margin-left:0.3rem;">&#128205;</a>
+              {% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+<script>
+function filtrarTabelaMoto(termo) {
+  termo = (termo || '').toLowerCase().trim();
+  document.querySelectorAll('.moto-linha').forEach(function (tr) {
+    var busca = tr.getAttribute('data-busca') || '';
+    tr.style.display = busca.indexOf(termo) !== -1 ? '' : 'none';
+  });
+  document.querySelectorAll('.moto-secao').forEach(function (secao) {
+    var temVisivel = Array.prototype.some.call(secao.querySelectorAll('.moto-linha'), function (tr) {
+      return tr.style.display !== 'none';
+    });
+    secao.style.display = temVisivel ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

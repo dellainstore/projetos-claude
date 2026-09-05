@@ -1,0 +1,11 @@
+{% if candidatos %}
+<div class="moto-sugestoes-lista">
+  {% for c in candidatos %}
+  <div class="moto-sugestao"
+       onclick="escolherEndereco('{{ campo }}', '{{ c.display_name|escapejs }}', {{ c.lat }}, {{ c.lon }})">
+    {{ c.display_name }}
+    {% if not c.tem_numero %}<span style="color:var(--vermelho);font-size:0.75rem;"> (sem número exato — confira)</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

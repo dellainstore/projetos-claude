@@ -1,0 +1,83 @@
+<div class="ds-modal-fundo">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>Nova compra no cartão</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_compra_cartao_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      <div class="pl-form-grid">
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Cartão</label>
+          <select class="ds-select" name="cartao" required autofocus>
+            <option value="">Selecione</option>
+            {% for cartao in cartoes %}
+            <option value="{{ cartao.pk }}">{{ cartao.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Descrição</label>
+          <input class="ds-input" type="text" name="descricao" required>
+        </div>
+        <div class="pl-form-campo">
+          <label>Categoria</label>
+          <select class="ds-select" name="categoria" required>
+            <option value="">Selecione</option>
+            {% for categoria in categorias %}
+            <option value="{{ categoria.pk }}">{{ categoria.icone }} {{ categoria.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="pl-form-campo">
+          <label>Valor total (R$)</label>
+          <input class="ds-input" type="number" step="0.01" min="0.01" name="valor_total" required>
+        </div>
+        <div class="pl-form-campo">
+          <label>Data da compra</label>
+          <input class="ds-input" type="date" name="data_compra" required value="{% now 'Y-m-d' %}">
+        </div>
+        <div class="pl-form-campo">
+          <label>Quantidade de parcelas</label>
+          <input class="ds-input" type="number" min="1" name="parcelas_qtd" value="1">
+        </div>
+      </div>
+      <details class="pl-mais-opcoes">
+        <summary>Mais opções</summary>
+        <div class="pl-form-grid">
+          <div class="pl-form-campo">
+            <label>Centro de custo</label>
+            <select class="ds-select" name="centro_custo">
+              <option value="">Nenhum</option>
+              {% for cc in centros_custo %}
+              <option value="{{ cc.pk }}">{{ cc.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="pl-form-campo">
+            <label>Contato</label>
+            <select class="ds-select" name="contato">
+              <option value="">Nenhum</option>
+              {% for contato in contatos %}
+              <option value="{{ contato.pk }}">{{ contato.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="pl-form-campo">
+            <label>Nº do documento</label>
+            <input class="ds-input" type="text" name="numero_documento">
+          </div>
+          <div class="pl-form-campo pl-form-campo--full">
+            <label>Observações</label>
+            <textarea class="ds-input" name="observacoes" rows="2"></textarea>
+          </div>
+        </div>
+      </details>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Lançar compra</button>
+      </div>
+    </form>
+  </div>
+</div>

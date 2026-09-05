@@ -1,0 +1,83 @@
+<div class="ds-form-section">
+  <p style="margin:0 0 0.75rem;font-weight:600;">Escolha a opção:</p>
+
+  {% if erros %}
+  <p style="font-size:0.78rem;color:var(--vermelho);margin:0 0 0.75rem;">
+    {% for e in erros %}{{ e }}<br>{% endfor %}
+  </p>
+  {% endif %}
+
+  {% for c in cotacoes %}
+  <div class="moto-cotacao-card {% if c.quotation_id == mais_barata_id %}mais-barata{% endif %}">
+    <div>
+      <strong>{{ c.label }}</strong>
+      {% if c.quotation_id == mais_barata_id %}<span class="ds-status ds-status--aprovado" style="margin-left:0.4rem;">mais barata</span>{% endif %}
+      <br><span style="font-size:1.3rem;">R$ {{ c.preco }}</span>
+    </div>
+    <button type="button" class="ds-btn ds-btn--primario ds-btn--sm" onclick="mostrarConfirmacao('{{ forloop.counter0 }}')">Escolher esta</button>
+  </div>
+
+  <div id="confirmar-{{ forloop.counter0 }}" hidden style="margin-top:0.5rem;margin-bottom:1rem;">
+    <form hx-post="{% url 'motoqueiro:htmx_confirmar' %}" hx-target="#resultado-cotacao" hx-swap="innerHTML">
+      {% csrf_token %}
+      <input type="hidden" name="quotation_id" value="{{ c.quotation_id }}">
+      <input type="hidden" name="stop_id_retirada" value="{{ c.stop_id_retirada }}">
+      <input type="hidden" name="stop_id_entrega" value="{{ c.stop_id_entrega }}">
+      <input type="hidden" name="endereco_retirada" value="{{ endereco_retirada }}">
+      <input type="hidden" name="endereco_entrega" value="{{ endereco_entrega }}">
+      <input type="hidden" name="complemento_retirada" value="{{ complemento_retirada }}">
+      <input type="hidden" name="complemento_entrega" value="{{ complemento_entrega }}">
+      <input type="hidden" name="lat_retirada" value="{{ lat_retirada }}">
+      <input type="hidden" name="lng_retirada" value="{{ lng_retirada }}">
+      <input type="hidden" name="lat_entrega" value="{{ lat_entrega }}">
+      <input type="hidden" name="lng_entrega" value="{{ lng_entrega }}">
+      <input type="hidden" name="preco" value="{{ c.preco }}">
+      <input type="hidden" name="veiculo_label" value="{{ c.label }}">
+
+      <div class="ds-form-grid">
+        <div class="ds-form-group">
+          <label class="ds-label">Remetente (quem envia) *</label>
+          <input class="ds-input" type="text" name="remetente" required>
+        </div>
+        <div class="ds-form-group">
+          <label class="ds-label">Telefone do remetente *</label>
+          <input class="ds-input" type="text" name="remetente_telefone" placeholder="(11) 90000-0000" required>
+        </div>
+        <div class="ds-form-group">
+          <label class="ds-label">Destinatário (quem recebe) *</label>
+          <input class="ds-input" type="text" name="destinatario" required>
+        </div>
+        <div class="ds-form-group">
+          <label class="ds-label">Telefone do destinatário *</label>
+          <input class="ds-input" type="text" name="destinatario_telefone" placeholder="(11) 90000-0000" required>
+        </div>
+      </div>
+      <div class="ds-form-group">
+        <label class="ds-label">Finalidade do frete *</label>
+        <div style="display:flex;gap:0.75rem;">
+          <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.85rem;cursor:pointer;">
+            <input type="radio" name="finalidade" value="comercial" required> Comercial
+          </label>
+          <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.85rem;cursor:pointer;">
+            <input type="radio" name="finalidade" value="producao" required> Produção
+          </label>
+        </div>
+      </div>
+      <div class="ds-form-group">
+        <label class="ds-label">Observação (opcional)</label>
+        <textarea class="ds-input" name="observacao" rows="2"></textarea>
+      </div>
+      <p class="text-muted" style="font-size:0.72rem;margin:-0.3rem 0 0.5rem;">* obrigatório</p>
+      <button type="submit" class="ds-btn ds-btn--primario mt-2">Confirmar corrida (R$ {{ c.preco }})</button>
+      <span class="htmx-indicator" style="margin-left:0.5rem;font-size:0.85rem;color:var(--cinza-texto);">Confirmando…</span>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+function mostrarConfirmacao(idx) {
+  document.querySelectorAll('[id^="confirmar-"]').forEach(function (el) { el.hidden = true; });
+  document.getElementById('confirmar-' + idx).hidden = false;
+}
+</script>

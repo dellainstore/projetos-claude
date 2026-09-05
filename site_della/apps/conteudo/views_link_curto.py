@@ -48,6 +48,25 @@ def _segredo_valido(request) -> bool:
     return hmac.compare_digest(recebido, esperado)
 
 
+def obter_ou_criar_link_curto(destino: str):
+    """Reaproveita (por `destino` exato) ou cria um LinkCurto, devolvendo o
+    codigo. Mesma logica usada pelo endpoint `criar_link_curto`, exposta
+    para uso direto (mesmo processo, sem passar pelo HTTP/segredo) por
+    outras partes do proprio site_della -- ex: link de avaliacao no admin.
+    Devolve None se nao conseguir gerar um codigo livre."""
+    existente = LinkCurto.objects.filter(destino=destino).first()
+    if existente:
+        return existente.codigo
+
+    for _ in range(6):
+        try:
+            novo = LinkCurto.objects.create(codigo=_gerar_codigo(), destino=destino)
+            return novo.codigo
+        except IntegrityError:
+            continue  # colisao rarissima de codigo; tenta outro
+    return None
+
+
 @csrf_exempt
 @require_POST
 def criar_link_curto(request):
@@ -73,27 +92,15 @@ def criar_link_curto(request):
 
     # Idempotente independente de quem chama: se ja existe um link curto
     # exatamente para esse destino, devolve o mesmo em vez de criar outro.
-    existente = LinkCurto.objects.filter(destino=destino).first()
-    if existente:
-        return JsonResponse({
-            'codigo': existente.codigo,
-            'url': f'{settings.SITE_URL}/l/{existente.codigo}',
-            'reaproveitado': True,
-        })
-
-    for _ in range(6):
-        try:
-            novo = LinkCurto.objects.create(codigo=_gerar_codigo(), destino=destino)
-            break
-        except IntegrityError:
-            continue  # colisao rarissima de codigo; tenta outro
-    else:
+    reaproveitado = LinkCurto.objects.filter(destino=destino).exists()
+    codigo = obter_ou_criar_link_curto(destino)
+    if not codigo:
         return JsonResponse({'erro': 'nao foi possivel gerar codigo'}, status=500)
 
     return JsonResponse({
-        'codigo': novo.codigo,
-        'url': f'{settings.SITE_URL}/l/{novo.codigo}',
-        'reaproveitado': False,
+        'codigo': codigo,
+        'url': f'{settings.SITE_URL}/l/{codigo}',
+        'reaproveitado': reaproveitado,
     })
 
 

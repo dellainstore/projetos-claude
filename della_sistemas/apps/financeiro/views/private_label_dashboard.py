@@ -100,6 +100,7 @@ def pl_dashboard(request):
     linhas_parceladas = []
     total_parcelados = Decimal("0.00")
     total_parcelados_restante = Decimal("0.00")
+    total_valor_parcelas = Decimal("0.00")
     for lancamento in parcelados_qs:
         proxima = (
             lancamento.parcelas.filter(estado_estrutural__in=[ESTADO_ABERTO, ESTADO_PARCIAL])
@@ -114,6 +115,8 @@ def pl_dashboard(request):
         })
         total_parcelados += lancamento.valor_original
         total_parcelados_restante += saldo_restante
+        if proxima:
+            total_valor_parcelas += proxima.valor
 
     contexto = {
         "periodo": escolha, "inicio": inicio, "fim": fim,
@@ -125,5 +128,6 @@ def pl_dashboard(request):
         "linhas_parceladas": linhas_parceladas,
         "total_parcelados": total_parcelados,
         "total_parcelados_restante": total_parcelados_restante,
+        "total_valor_parcelas": total_valor_parcelas,
     }
     return render(request, "financeiro/private_label/dashboard.html", contexto)

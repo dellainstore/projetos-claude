@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}{{ cartao.nome }} · Cartão | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+{% include "financeiro/private_label/_estilos.html" %}
+{% endblock %}
+
+{% block conteudo %}
+<div class="pl-topo">
+  <div>
+    <h1 class="ds-page-titulo">{{ cartao.nome }}</h1>
+  </div>
+  <div class="pl-topo-acoes">
+    <a href="{% url 'financeiro:pl_cartoes' %}" class="ds-btn ds-btn--outline">&larr; Voltar para Cartões</a>
+  </div>
+</div>
+
+{% include "financeiro/private_label/_abas.html" %}
+
+<div id="pl-cartao-detalhe" hx-get="{% url 'financeiro:pl_htmx_cartao_detalhe_conteudo' cartao.pk %}" hx-trigger="pl:cartoes-mudou from:body" hx-swap="innerHTML">
+  {% include "financeiro/private_label/_cartao_detalhe_conteudo.html" %}
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}

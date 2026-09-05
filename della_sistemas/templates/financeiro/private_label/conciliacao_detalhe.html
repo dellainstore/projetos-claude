@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}{{ importacao.nome_original }} · Conciliação | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+{% include "financeiro/private_label/_estilos.html" %}
+{% endblock %}
+
+{% block conteudo %}
+<div class="pl-topo">
+  <div><h1 class="ds-page-titulo">{{ importacao.nome_original }}</h1></div>
+  <div class="pl-topo-acoes">
+    <a href="{% url 'financeiro:pl_conciliacao' %}" class="ds-btn ds-btn--outline">&larr; Voltar</a>
+  </div>
+</div>
+
+{% include "financeiro/private_label/_abas.html" %}
+
+<div id="pl-conciliacao-itens" hx-get="{% url 'financeiro:pl_htmx_conciliacao_detalhe_conteudo' importacao.pk %}" hx-trigger="pl:conciliacao-mudou from:body" hx-swap="innerHTML">
+  {% include "financeiro/private_label/_conciliacao_itens.html" %}
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}

@@ -89,6 +89,23 @@
   .totais-bar .item { display: flex; flex-direction: column; gap: 0.1rem; }
   .totais-bar .item-val { font-size: 1.35rem; font-weight: 700; }
   .totais-bar .item-label { font-size: 0.72rem; color: var(--cinza-texto); text-transform: uppercase; letter-spacing: 0.04em; }
+
+  /* ── Aviso de atualização (botão "Atualizar") ────────────────── */
+  /* :not([hidden]) é obrigatório aqui: um .metas-aviso{display:flex} puro tem a
+     mesma especificidade do [hidden]{display:none} do navegador e, sendo regra
+     de autor, sempre vence — a faixa nunca some. Ver feedback_htmx_indicator_click_bloqueado (memória). */
+  .metas-aviso[hidden] { display: none; }
+  .metas-aviso:not([hidden]) {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    background: #fffbeb; border: 1px solid var(--dourado); color: #92702a;
+    border-radius: 8px; padding: 0.65rem 1rem; margin-bottom: 1.25rem; font-size: 0.85rem;
+  }
+  .metas-aviso.erro { background: #fef2f2; border-color: var(--vermelho); color: #b91c1c; }
+  .metas-aviso button {
+    background: none; border: none; cursor: pointer; font-size: 1rem; line-height: 1;
+    color: inherit; opacity: 0.7; padding: 0 0.2rem;
+  }
+  .metas-aviso button:hover { opacity: 1; }
 </style>
 {% endblock %}
 
@@ -99,10 +116,20 @@
     <p class="ds-page-subtitulo">{{ periodo_label }}</p>
   </div>
   {% if periodo_liberado and meta_total > 0 %}
-  <button type="button" id="btn-gerar-imagem" class="ds-btn ds-btn--primario" onclick="gerarImagemMetas(this)" style="white-space:nowrap;">
-    Gerar Imagem
-  </button>
+  <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+    <button type="button" id="btn-atualizar-metas" class="ds-btn ds-btn--outline" onclick="atualizarMetas(this)" {% if status_atualizacao.running %}disabled{% endif %} style="white-space:nowrap;">
+      {% if status_atualizacao.running %}Atualizando...{% else %}Atualizar{% endif %}
+    </button>
+    <button type="button" id="btn-gerar-imagem" class="ds-btn ds-btn--primario" onclick="gerarImagemMetas(this)" style="white-space:nowrap;">
+      Gerar Imagem
+    </button>
+  </div>
   {% endif %}
+</div>
+
+<div id="aviso-atualizacao-metas" class="metas-aviso" hidden>
+  <span id="aviso-atualizacao-metas-texto"></span>
+  <button type="button" onclick="fecharAvisoAtualizacaoMetas()" aria-label="Fechar">&times;</button>
 </div>
 
 <!-- Filtro de período -->
@@ -518,6 +545,114 @@ function gerarImagemMetas(btn) {
     btn.textContent = textoOriginal;
   });
 }
+
+// ── Botão "Atualizar" (antecipa o cron em background) ─────────────────────
+// Roda em background no servidor (o job continua mesmo se a página for
+// fechada). Enquanto estiver rodando — seja pelo cron das 4x/dia, seja por
+// este botão — ele fica indisponível pra todo mundo que estiver na página
+// (poll a cada 5s). Só quem apertou vê o aviso de "concluído" quando volta
+// pra página, via uma marca salva no localStorage deste navegador.
+(function () {
+  var STATUS_URL = '{% url "metas:atualizar_status" %}';
+  var START_URL = '{% url "metas:atualizar_start" %}';
+  var LS_KEY = 'della_metas_aguardando_atualizacao';
+  var pollTimer = null;
+  var avisoTimer = null;
+
+  function btnAtualizar() { return document.getElementById('btn-atualizar-metas'); }
+
+  function setBotaoRodando(rodando) {
+    var btn = btnAtualizar();
+    if (!btn) return;
+    btn.disabled = !!rodando;
+    btn.textContent = rodando ? 'Atualizando...' : 'Atualizar';
+  }
+
+  function fecharAviso() {
+    var box = document.getElementById('aviso-atualizacao-metas');
+    if (box) box.hidden = true;
+    if (avisoTimer) { clearTimeout(avisoTimer); avisoTimer = null; }
+  }
+  window.fecharAvisoAtualizacaoMetas = fecharAviso;
+
+  function mostrarAviso(msg, erro) {
+    var box = document.getElementById('aviso-atualizacao-metas');
+    var txt = document.getElementById('aviso-atualizacao-metas-texto');
+    if (!box || !txt) return;
+    txt.textContent = msg;
+    box.classList.toggle('erro', !!erro);
+    box.hidden = false;
+    if (avisoTimer) clearTimeout(avisoTimer);
+    avisoTimer = setTimeout(fecharAviso, 8000);
+  }
+
+  function marcarQueEuCliquei() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ desde: Date.now() / 1000 })); } catch (e) {}
+  }
+
+  function avisarSeEuCliquei(status) {
+    var marca = null;
+    try { marca = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
+    if (!marca || !marca.desde) return;
+    if (!status.concluido_em || status.concluido_em < marca.desde) return;
+    try { localStorage.removeItem(LS_KEY); } catch (e) {}
+    if (status.sucesso) {
+      mostrarAviso('Metas atualizadas às ' + (status.ultima_atualizacao_label || '') + '. Atualize a página para ver os números novos.', false);
+    } else {
+      mostrarAviso('A atualização das metas falhou (' + (status.erro || 'erro desconhecido') + '). Tente novamente em alguns minutos.', true);
+    }
+  }
+
+  function iniciarPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(checarStatus, 5000);
+  }
+
+  function pararPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function checarStatus() {
+    fetch(STATUS_URL, { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        setBotaoRodando(d.running);
+        if (d.running) {
+          iniciarPolling();
+        } else {
+          pararPolling();
+          avisarSeEuCliquei(d);
+        }
+      })
+      .catch(function () { /* falha de rede no poll — tenta de novo no próximo tick */ });
+  }
+
+  window.atualizarMetas = function (btn) {
+    if (btn.disabled) return;
+    setBotaoRodando(true);
+    marcarQueEuCliquei();
+    var csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+    fetch(START_URL, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfInput ? csrfInput.value : '', 'Accept': 'application/json' },
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.iniciou_agora && d.motivo === 'ja_rodando') {
+          mostrarAviso('Já tem uma atualização em andamento (cron ou outro clique) — aguarde terminar.', false);
+        }
+        setBotaoRodando(true);
+        iniciarPolling();
+      })
+      .catch(function () {
+        // Não deu pra nem iniciar (rede caiu, etc.) — libera o botão pra tentar de novo.
+        setBotaoRodando(false);
+        mostrarAviso('Não foi possível iniciar a atualização agora. Tente novamente.', true);
+      });
+  };
+
+  document.addEventListener('DOMContentLoaded', checarStatus);
+})();
 
 function abrirImagemEmNovaAba(blob) {
   const url = URL.createObjectURL(blob);

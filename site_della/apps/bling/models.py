@@ -24,7 +24,8 @@ class BlingToken(models.Model):
 
 class BlingLog(models.Model):
     """Log de todas as chamadas à API do Bling para diagnóstico."""
-    TIPOS = [('pedido', 'Pedido'), ('nfe', 'NF-e'), ('estoque', 'Estoque'), ('produto', 'Produto')]
+    TIPOS = [('pedido', 'Pedido'), ('nfe', 'NF-e'), ('estoque', 'Estoque'), ('produto', 'Produto'),
+             ('contato', 'Contato')]
 
     tipo = models.CharField('Tipo', max_length=10, choices=TIPOS)
     pedido = models.ForeignKey('pedidos.Pedido', on_delete=models.SET_NULL,

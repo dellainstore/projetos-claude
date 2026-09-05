@@ -1,0 +1,141 @@
+{% load core_extras %}
+<div class="pl-cartao-card" style="--cor-cartao: {{ cartao.cor }}; max-width:420px; margin-bottom:1.3rem;">
+  <div class="pl-cartao-sub">{{ cartao.banco|default:"" }}{% if cartao.final %} · final {{ cartao.final }}{% endif %} · fecha dia {{ cartao.dia_fechamento }}, vence dia {{ cartao.dia_vencimento }}</div>
+  <div class="pl-limite-barra-fundo">
+    <div class="pl-limite-barra {% if cartao.percentual_utilizado >= 100 %}aviso-100{% elif cartao.percentual_utilizado >= 90 %}aviso-90{% elif cartao.percentual_utilizado >= 70 %}aviso-70{% endif %}"
+         style="width: {{ cartao.percentual_utilizado|pct_css }}%;"></div>
+  </div>
+  <div class="pl-limite-legenda">
+    <span>{{ cartao.limite_utilizado|brl }} usado</span>
+    <span>{{ cartao.limite_disponivel|brl }} disponível de {{ cartao.limite_total|brl }}</span>
+  </div>
+</div>
+
+<div class="pl-secao-titulo" style="margin-top:0;">Fatura atual</div>
+{% if fatura_atual %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Competência</th><th>Vencimento</th><th>Total</th><th>Pago</th><th>Saldo</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      <tr>
+        <td>{{ fatura_atual.competencia_mes }}/{{ fatura_atual.competencia_ano }}</td>
+        <td>{{ fatura_atual.data_vencimento|date:"d/m/Y" }}</td>
+        <td>{{ fatura_atual.valor_total|brl }}</td>
+        <td>{{ fatura_atual.valor_pago|brl }}</td>
+        <td><span class="pl-valor-despesa">{{ fatura_atual.saldo_restante|brl }}</span></td>
+        <td>
+          {% if fatura_atual.estado_estrutural == "quitado" %}<span class="pl-badge pl-badge--quitado">Quitada</span>
+          {% elif fatura_atual.estado_estrutural == "parcial" %}<span class="pl-badge pl-badge--parcial">Parcial</span>
+          {% else %}<span class="pl-badge pl-badge--previsto">Aberta</span>{% endif %}
+        </td>
+        <td>
+          {% if fatura_atual.saldo_restante > 0 and user.pode_lancar_private_label %}
+          <button type="button" class="ds-btn ds-btn--dourado ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_fatura_pagar_form' fatura_atual.pk %}" hx-target="#modal-container">Pagar</button>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{% with pagamentos=fatura_atual.pagamentos.all %}
+{% if pagamentos %}
+<div class="pl-secao-titulo">Pagamentos desta fatura</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Data</th><th>Valor</th><th>Conta</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for pagamento in pagamentos %}
+      <tr>
+        <td>{{ pagamento.data|date:"d/m/Y" }}</td>
+        <td>{{ pagamento.valor|brl }}</td>
+        <td>{{ pagamento.conta.nome }}</td>
+        <td>{% if pagamento.estornado %}<span class="pl-badge pl-badge--cancelado">Estornado</span>{% else %}<span class="pl-badge pl-badge--quitado">Ativo</span>{% endif %}</td>
+        <td>
+          {% if not pagamento.estornado and user.pode_lancar_private_label %}
+          <button type="button" class="pl-icon-btn pl-icon-btn--perigo" title="Estornar pagamento"
+                  hx-post="{% url 'financeiro:pl_htmx_fatura_pagamento_estornar' pagamento.pk %}"
+                  hx-target="#modal-container" hx-confirm="Estornar este pagamento?">&#8635;</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endwith %}
+{% else %}
+<p class="text-muted">Sem fatura em aberto no momento.</p>
+{% endif %}
+
+{% if proxima_fatura %}
+<div class="pl-secao-titulo">Próxima fatura</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Competência</th><th>Vencimento</th><th>Total previsto</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>{{ proxima_fatura.competencia_mes }}/{{ proxima_fatura.competencia_ano }}</td>
+        <td>{{ proxima_fatura.data_vencimento|date:"d/m/Y" }}</td>
+        <td>{{ proxima_fatura.valor_total|brl }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="pl-secao-titulo">Histórico de faturas</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Competência</th><th>Vencimento</th><th>Total</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for fatura in historico %}
+      <tr>
+        <td>{{ fatura.competencia_mes }}/{{ fatura.competencia_ano }}</td>
+        <td>{{ fatura.data_vencimento|date:"d/m/Y" }}</td>
+        <td>{{ fatura.valor_total|brl }}</td>
+        <td>
+          {% if fatura.estado_estrutural == "quitado" %}<span class="pl-badge pl-badge--quitado">Quitada</span>
+          {% elif fatura.estado_estrutural == "parcial" %}<span class="pl-badge pl-badge--parcial">Parcial</span>
+          {% else %}<span class="pl-badge pl-badge--previsto">Aberta</span>{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="text-muted">Nenhuma fatura ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="pl-secao-titulo">Compras recentes</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Parcelas</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for compra in compras %}
+      <tr>
+        <td>{{ compra.data_compra|date:"d/m/Y" }}</td>
+        <td>{{ compra.descricao }}</td>
+        <td>{{ compra.categoria.icone }} {{ compra.categoria.nome }}</td>
+        <td><span class="pl-valor-despesa">{{ compra.valor_total|brl }}</span></td>
+        <td>{{ compra.parcelas_qtd }}x</td>
+        <td>
+          {% if compra.cancelada %}<span class="pl-badge pl-badge--cancelado">Cancelada</span>
+          {% elif compra.saldo_restante <= 0 %}<span class="pl-badge pl-badge--quitado">Quitada</span>
+          {% else %}<span class="pl-badge pl-badge--previsto">Em aberto</span>{% endif %}
+        </td>
+        <td>
+          {% if not compra.cancelada and user.pode_lancar_private_label %}
+          <button type="button" class="pl-icon-btn pl-icon-btn--perigo" title="Cancelar compra"
+                  hx-post="{% url 'financeiro:pl_htmx_compra_cartao_cancelar' compra.pk %}"
+                  hx-target="#modal-container" hx-confirm="Cancelar esta compra? Só é possível se nenhuma parcela já tiver sido paga.">&times;</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="text-muted">Nenhuma compra lançada neste cartão ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -76,9 +76,16 @@ projeto de CSS local por página (ex.: templates/tarefas/).
   .pl-badge--quitado   { background: rgba(45,158,110,.14); color: var(--verde); }
   .pl-badge--cancelado { background: rgba(107,107,107,.18); color: var(--cinza-texto); text-decoration: line-through; }
 
-  /* Valores: despesa em vermelho, receita em azul (pedido do dono) */
-  .pl-valor-despesa { color: var(--vermelho); font-weight: 600; }
-  .pl-valor-receita { color: #2563eb; font-weight: 600; }
+  /* Valores: despesa em vermelho, receita em azul (pedido do dono).
+     A regra .ds-table td (elemento+classe) do CSS global tem mais
+     especificidade que uma classe sozinha e vencia a cor quando a classe
+     ia direto na <td> — por isso o seletor "td.pl-valor-..." aqui também,
+     empatando a especificidade (quem decide o empate é a ordem: este
+     arquivo carrega depois do della_sistemas.css). Mesmo com o valor
+     dentro de um <span> (que não sofre esse empate), mantém os dois pra
+     não quebrar de novo se alguém aplicar a classe direto na <td>. */
+  .pl-valor-despesa, td.pl-valor-despesa { color: var(--vermelho); font-weight: 600; }
+  .pl-valor-receita, td.pl-valor-receita { color: #2563eb; font-weight: 600; }
 
   /* Botões de ação em ícone (bolinha + símbolo), tooltip nativo via title=
      no hover (desktop). Sem lib nova. Em mobile o hover não existe — o
@@ -125,4 +132,25 @@ projeto de CSS local por página (ex.: templates/tarefas/).
     flex-wrap: wrap; gap: .75rem; margin-bottom: 1.1rem;
   }
   .pl-topo-acoes { display: flex; gap: .6rem; flex-wrap: wrap; }
+
+  /* Cartões de crédito — grid de cards + barra de limite (Fase 1B) */
+  .pl-cartoes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .pl-cartao-card {
+    background: var(--branco); border: 1px solid var(--cinza-medio); border-radius: 10px;
+    padding: 1.1rem 1.2rem; border-top: 4px solid var(--cor-cartao, var(--dourado));
+  }
+  .pl-cartao-titulo { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; margin-bottom: .6rem; }
+  .pl-cartao-nome { font-family: 'Playfair Display', serif; font-size: 1.05rem; color: var(--preto); }
+  .pl-cartao-sub { font-size: .78rem; color: var(--cinza-texto); }
+  .pl-limite-barra-fundo {
+    background: var(--cinza-claro); border-radius: 999px; height: .5rem; overflow: hidden; margin: .5rem 0 .3rem;
+  }
+  .pl-limite-barra { height: 100%; border-radius: 999px; background: var(--verde); transition: width .2s; }
+  .pl-limite-barra.aviso-70 { background: var(--amarelo); }
+  .pl-limite-barra.aviso-90 { background: #d97706; }
+  .pl-limite-barra.aviso-100 { background: var(--vermelho); }
+  .pl-limite-legenda { display: flex; justify-content: space-between; font-size: .76rem; color: var(--cinza-texto); margin-bottom: .8rem; }
+  .pl-cartao-fatura { border-top: 1px dashed var(--cinza-medio); padding-top: .6rem; margin-top: .5rem; font-size: .84rem; }
+  .pl-cartao-fatura-linha { display: flex; justify-content: space-between; align-items: center; margin-bottom: .3rem; }
+  .pl-cartao-acoes { display: flex; gap: .4rem; margin-top: .7rem; flex-wrap: wrap; }
 </style>

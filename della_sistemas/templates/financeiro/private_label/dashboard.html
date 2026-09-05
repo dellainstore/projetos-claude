@@ -15,8 +15,11 @@
   .pl-card--consolidado { border-color: var(--dourado); background: rgba(201,169,110,.08); }
   .pl-card--gasto .pl-card-valor { color: var(--vermelho); }
   .pl-card--recebido .pl-card-valor { color: #2563eb; }
+  /* Mesma lógica das cores em Lançamentos: positivo (entrada) em azul, negativo (saída) em vermelho */
   .pl-card--resultado.negativo .pl-card-valor { color: var(--vermelho); }
-  .pl-card--resultado.positivo .pl-card-valor { color: var(--verde); }
+  .pl-card--resultado.positivo .pl-card-valor { color: #2563eb; }
+  .pl-parcela-valor { font-weight: 600; }
+  .pl-parcela-info { display: block; font-size: .78rem; color: var(--cinza-texto); margin-top: .15rem; }
   .pl-secao-titulo { font-size: .95rem; font-weight: 700; color: var(--preto); margin: 1.5rem 0 .6rem; }
   .pl-periodo { display: flex; gap: .4rem; margin-bottom: 1rem; }
   .pl-periodo a { padding: .35rem .75rem; border-radius: 999px; font-size: .8rem; text-decoration: none; color: var(--cinza-texto); background: var(--cinza-claro); }
@@ -48,12 +51,12 @@
 <div class="pl-cards">
   <div class="pl-card pl-card--consolidado">
     <div class="pl-card-label">Saldo consolidado</div>
-    <div class="pl-card-valor">{{ saldo_consolidado|brl }}</div>
+    <div class="pl-card-valor"><span class="{% if saldo_consolidado < 0 %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ saldo_consolidado|brl }}</span></div>
   </div>
   {% for conta in contas %}
   <div class="pl-card">
     <div class="pl-card-label">{{ conta.nome }}</div>
-    <div class="pl-card-valor" style="font-size:1.1rem;">{{ conta.saldo|brl }}</div>
+    <div class="pl-card-valor" style="font-size:1.1rem;"><span class="{% if conta.saldo < 0 %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ conta.saldo|brl }}</span></div>
   </div>
   {% endfor %}
   <div class="pl-card pl-card--recebido">
@@ -78,14 +81,14 @@
       {% for linha in recebido_por_forma %}
       <tr>
         <td>{{ linha.forma_pagamento__nome|default:"Não informada" }}</td>
-        <td class="pl-valor-receita">{{ linha.total|brl }}</td>
+        <td><span class="pl-valor-receita">{{ linha.total|brl }}</span></td>
       </tr>
       {% empty %}
       <tr><td colspan="2" class="text-muted">Nenhum recebimento no período.</td></tr>
       {% endfor %}
     </tbody>
     {% if recebido_por_forma %}
-    <tfoot><tr><td>Total</td><td class="pl-valor-receita">{{ total_recebido|brl }}</td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td><span class="pl-valor-receita">{{ total_recebido|brl }}</span></td></tr></tfoot>
     {% endif %}
   </table>
 </div>
@@ -98,22 +101,23 @@
       {% for linha in gasto_por_categoria %}
       <tr>
         <td>{{ linha.parcela__lancamento__categoria__icone }} {{ linha.parcela__lancamento__categoria__nome|default:"Sem categoria" }}</td>
-        <td class="pl-valor-despesa">{{ linha.total|brl }}</td>
+        <td><span class="pl-valor-despesa">{{ linha.total|brl }}</span></td>
       </tr>
       {% empty %}
       <tr><td colspan="2" class="text-muted">Nenhum gasto no período.</td></tr>
       {% endfor %}
     </tbody>
     {% if gasto_por_categoria %}
-    <tfoot><tr><td>Total</td><td class="pl-valor-despesa">{{ total_gasto|brl }}</td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td><span class="pl-valor-despesa">{{ total_gasto|brl }}</span></td></tr></tfoot>
     {% endif %}
   </table>
 </div>
 
 <div class="pl-secao-titulo">Contas parceladas</div>
+<p class="text-muted" style="font-size:.8rem;margin:-.4rem 0 .6rem;">A coluna "Valor da parcela" soma no rodapé o valor mensal comprometido com as próximas parcelas em aberto.</p>
 <div class="ds-table-wrapper">
   <table class="ds-table">
-    <thead><tr><th>Descrição</th><th>Categoria</th><th>Total</th><th>Saldo restante</th><th>Próxima parcela</th></tr></thead>
+    <thead><tr><th>Descrição</th><th>Categoria</th><th>Total</th><th>Saldo restante</th><th>Valor da parcela</th><th>Próxima parcela</th></tr></thead>
     <tbody>
       {% for linha in linhas_parceladas %}
       <tr>
@@ -123,23 +127,28 @@
           </a>
         </td>
         <td>{{ linha.lancamento.categoria.icone }} {{ linha.lancamento.categoria.nome|default:"" }}</td>
-        <td class="{% if linha.lancamento.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ linha.lancamento.valor_original|brl }}</td>
-        <td class="{% if linha.lancamento.tipo == 'despesa' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ linha.saldo_restante|brl }}</td>
+        <td><span class="pl-valor-despesa">{{ linha.lancamento.valor_original|brl }}</span></td>
+        <td><span class="pl-valor-despesa">{{ linha.saldo_restante|brl }}</span></td>
         <td>
           {% if linha.proxima_parcela %}
-            <span class="text-muted">({{ linha.proxima_parcela.numero }}/{{ linha.lancamento.parcelas.count }})</span>
-            {{ linha.proxima_parcela.valor|brl }} em {{ linha.proxima_parcela.data_vencimento|date:"d/m/Y" }}
+            <span class="pl-parcela-valor pl-valor-despesa">{{ linha.proxima_parcela.valor|brl }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if linha.proxima_parcela %}
+            {{ linha.proxima_parcela.numero }}/{{ linha.lancamento.parcelas.count }}
+            <span class="pl-parcela-info">vence em {{ linha.proxima_parcela.data_vencimento|date:"d/m/Y" }}</span>
           {% else %}
             <span class="pl-badge pl-badge--quitado">Quitada</span>
           {% endif %}
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="5" class="text-muted">Nenhuma conta parcelada em aberto.</td></tr>
+      <tr><td colspan="6" class="text-muted">Nenhuma conta parcelada em aberto.</td></tr>
       {% endfor %}
     </tbody>
     {% if linhas_parceladas %}
-    <tfoot><tr><td>Total</td><td></td><td>{{ total_parcelados|brl }}</td><td>{{ total_parcelados_restante|brl }}</td><td></td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td></td><td><span class="pl-valor-despesa">{{ total_parcelados|brl }}</span></td><td><span class="pl-valor-despesa">{{ total_parcelados_restante|brl }}</span></td><td><span class="pl-valor-despesa">{{ total_valor_parcelas|brl }}</span></td><td></td></tr></tfoot>
     {% endif %}
   </table>
 </div>

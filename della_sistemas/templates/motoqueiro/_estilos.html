@@ -1,0 +1,58 @@
+{% comment %}Estilos compartilhados das telas do Motoqueiro (abas + cards).{% endcomment %}
+<style>
+  .moto-abas { margin-bottom: 1.25rem; border-bottom: 1px solid var(--cinza-medio); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; }
+  .moto-abas-desktop { display: flex; gap: .25rem; }
+  .moto-aba {
+    padding: .6rem 1rem; font-size: .86rem; font-weight: 600; color: var(--cinza-texto);
+    text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .moto-aba:hover { color: var(--preto); }
+  .moto-aba.ativa { color: var(--dourado); border-bottom-color: var(--dourado); }
+  .moto-abas-mobile { display: none; width: 100%; margin-bottom: .75rem; }
+  @media (max-width: 768px) {
+    .moto-abas-desktop { display: none; }
+    .moto-abas-mobile { display: block; }
+    .moto-abas { border-bottom: none; flex-direction: column; align-items: stretch; }
+  }
+
+  .moto-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .9rem; margin-bottom: 1.3rem; }
+  .moto-card { background: var(--branco); border: 1px solid var(--cinza-borda); border-radius: 10px; padding: 1rem 1.2rem; }
+  .moto-card-label { font-size: .78rem; color: var(--cinza-texto); margin-bottom: .3rem; }
+  .moto-card-valor { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: var(--preto); }
+
+  .moto-sugestoes-lista {
+    position: absolute; z-index: 20; left: 0; right: 0; top: 100%;
+    background: var(--branco); border: 1px solid var(--cinza-borda); border-top: none;
+    border-radius: 0 0 8px 8px; box-shadow: 0 4px 10px rgba(0,0,0,.08); max-height: 220px; overflow-y: auto;
+  }
+  .moto-sugestao { padding: .55rem .8rem; font-size: .85rem; cursor: pointer; border-bottom: 1px solid var(--cinza-claro); }
+  .moto-sugestao:last-child { border-bottom: none; }
+  .moto-sugestao:hover { background: var(--cinza-claro); }
+
+  .moto-cotacao-card {
+    border: 1px solid var(--cinza-borda); border-radius: 10px; padding: 1rem 1.2rem;
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: .6rem;
+  }
+  .moto-cotacao-card.mais-barata { border-color: var(--dourado); background: rgba(201,169,110,.06); }
+
+  .moto-ao-vivo {
+    display: inline-flex; align-items: center; gap: .25rem; margin-left: .4rem;
+    background: var(--vermelho); color: #fff; font-size: .68rem; font-weight: 700;
+    letter-spacing: .04em; padding: .2rem .55rem; border-radius: 999px; text-decoration: none;
+    animation: moto-pulse 1.6s infinite;
+  }
+  .moto-ao-vivo:hover { opacity: .85; }
+
+  .moto-saldo-pill {
+    background: var(--cinza-claro); color: var(--preto); font-size: .78rem;
+    padding: .35rem .7rem; border-radius: 999px; white-space: nowrap;
+  }
+  .moto-saldo-pill strong { color: var(--dourado); }
+  @keyframes moto-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(217,79,79,.5); }
+    50% { box-shadow: 0 0 0 5px rgba(217,79,79,0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .moto-ao-vivo { animation: none; }
+  }
+</style>

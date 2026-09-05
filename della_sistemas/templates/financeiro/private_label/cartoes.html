@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}Private Label · Cartões | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+{% include "financeiro/private_label/_estilos.html" %}
+{% endblock %}
+
+{% block conteudo %}
+<div class="pl-topo">
+  <div>
+    <h1 class="ds-page-titulo">Financeiro Private Label</h1>
+  </div>
+  {% if user.pode_lancar_private_label %}
+  <div class="pl-topo-acoes">
+    <button type="button" class="ds-btn ds-btn--outline" hx-get="{% url 'financeiro:pl_htmx_compra_cartao_form' %}" hx-target="#modal-container">+ Nova compra no cartão</button>
+    {% if user.pode_configurar_private_label %}
+    <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_cartao_form' %}" hx-target="#modal-container">+ Novo cartão</button>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% include "financeiro/private_label/_abas.html" %}
+
+<div id="pl-cartoes-lista" hx-get="{% url 'financeiro:pl_htmx_cartoes_lista' %}" hx-trigger="pl:cartoes-mudou from:body" hx-swap="innerHTML">
+  {% include "financeiro/private_label/_cartoes_lista.html" %}
+</div>
+
+<div id="modal-container"></div>
+{% endblock %}

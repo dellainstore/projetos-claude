@@ -4,17 +4,29 @@ from apps.financeiro.models import (
     AjusteSaldo,
     AnexoFinanceiro,
     Baixa,
+    CartaoCredito,
     CategoriaFinanceira,
     CentroCusto,
+    Conciliacao,
+    CompraCartao,
     ContaBancaria,
+    ContaInvestimento,
     ContatoFinanceiro,
+    FaturaCartao,
+    FaturaPagamento,
+    FaturaPagamentoAlocacao,
     FormaPagamento,
+    ImportacaoExtrato,
+    InvestimentoTransacao,
+    ItemExtrato,
     LancamentoFinanceiro,
     LogAuditoriaFinanceiro,
     MovimentoConta,
+    MovimentoContaInvestimento,
     OcorrenciaRecorrencia,
     OperacaoFinanceira,
     Parcela,
+    ParcelaCompraCartao,
     RegraRecorrencia,
     TagFinanceira,
     Transferencia,
@@ -124,3 +136,77 @@ class LogAuditoriaFinanceiroAdmin(admin.ModelAdmin):
 @admin.register(AnexoFinanceiro)
 class AnexoFinanceiroAdmin(admin.ModelAdmin):
     list_display = ("nome_original", "lancamento", "tamanho", "enviado_por", "enviado_em")
+
+
+@admin.register(CartaoCredito)
+class CartaoCreditoAdmin(admin.ModelAdmin):
+    list_display = ("nome", "banco", "limite_total", "dia_fechamento", "dia_vencimento", "ativo")
+    list_filter = ("ativo",)
+
+
+@admin.register(CompraCartao)
+class CompraCartaoAdmin(admin.ModelAdmin):
+    list_display = ("descricao", "cartao", "categoria", "valor_total", "data_compra", "parcelas_qtd", "cancelada")
+    list_filter = ("cartao", "cancelada", "categoria")
+    search_fields = ("descricao", "numero_documento")
+    date_hierarchy = "data_compra"
+
+
+@admin.register(ParcelaCompraCartao)
+class ParcelaCompraCartaoAdmin(admin.ModelAdmin):
+    list_display = ("compra", "numero", "valor", "fatura", "paga_valor")
+
+
+@admin.register(FaturaCartao)
+class FaturaCartaoAdmin(admin.ModelAdmin):
+    list_display = ("cartao", "competencia_ano", "competencia_mes", "data_vencimento", "estado_estrutural")
+    list_filter = ("cartao", "estado_estrutural")
+
+
+@admin.register(FaturaPagamento)
+class FaturaPagamentoAdmin(admin.ModelAdmin):
+    list_display = ("fatura", "valor", "data", "conta", "estornado")
+    list_filter = ("estornado", "conta")
+
+
+@admin.register(FaturaPagamentoAlocacao)
+class FaturaPagamentoAlocacaoAdmin(admin.ModelAdmin):
+    list_display = ("pagamento", "parcela", "valor")
+
+
+@admin.register(ContaInvestimento)
+class ContaInvestimentoAdmin(admin.ModelAdmin):
+    list_display = ("nome", "instituicao", "tipo_produto", "ativa")
+    list_filter = ("tipo_produto", "ativa")
+
+
+@admin.register(InvestimentoTransacao)
+class InvestimentoTransacaoAdmin(admin.ModelAdmin):
+    list_display = ("conta_investimento", "tipo", "valor", "data", "estornada")
+    list_filter = ("tipo", "estornada", "conta_investimento")
+    date_hierarchy = "data"
+
+
+@admin.register(MovimentoContaInvestimento)
+class MovimentoContaInvestimentoAdmin(admin.ModelAdmin):
+    list_display = ("conta_investimento", "data", "valor", "evento_chave")
+    list_filter = ("conta_investimento",)
+    search_fields = ("evento_chave",)
+
+
+@admin.register(ImportacaoExtrato)
+class ImportacaoExtratoAdmin(admin.ModelAdmin):
+    list_display = ("nome_original", "conta", "formato", "total_itens", "importado_por", "importado_em")
+    list_filter = ("formato", "conta")
+
+
+@admin.register(ItemExtrato)
+class ItemExtratoAdmin(admin.ModelAdmin):
+    list_display = ("importacao", "data", "valor", "descricao", "status")
+    list_filter = ("status", "importacao")
+
+
+@admin.register(Conciliacao)
+class ConciliacaoAdmin(admin.ModelAdmin):
+    list_display = ("item_extrato", "movimento", "nivel_confianca", "status", "criado_em")
+    list_filter = ("status", "nivel_confianca")

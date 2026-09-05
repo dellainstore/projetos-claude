@@ -1,0 +1,10 @@
+<div class="ds-form-section" style="border-color:var(--verde);background:rgba(45,158,110,0.06);">
+  <p style="margin:0 0 0.5rem;color:var(--verde);font-weight:600;">&#10003; Corrida confirmada no Lalamove!</p>
+  <p style="margin:0;font-size:0.88rem;">Pedido #{{ solicitacao.id }} — {{ solicitacao.valor }} — status: {{ solicitacao.get_status_display }}</p>
+  <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+    {% if solicitacao.lalamove_share_link %}
+    <a href="{{ solicitacao.lalamove_share_link }}" target="_blank" rel="noopener" class="ds-btn ds-btn--primario ds-btn--sm">&#128205; Rastrear ao vivo</a>
+    {% endif %}
+    <a href="{% url 'motoqueiro:relatorio' %}" class="ds-btn ds-btn--sm">Ver no relatório</a>
+  </div>
+</div>

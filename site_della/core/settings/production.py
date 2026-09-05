@@ -136,6 +136,14 @@ LOGGING = {
             'backupCount': 3,
             'formatter': 'verbose',
         },
+        'file_meta_catalog': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'meta_catalog.log',
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 3,
+            'formatter': 'verbose',
+        },
     },
     'loggers': {
         'django': {
@@ -176,6 +184,11 @@ LOGGING = {
         'apps.core_utils.erros': {
             'handlers': ['file_erros5xx'],
             'level': 'ERROR',
+            'propagate': False,
+        },
+        'apps.produtos.services.meta_catalog': {
+            'handlers': ['file_meta_catalog'],
+            'level': 'INFO',
             'propagate': False,
         },
     },

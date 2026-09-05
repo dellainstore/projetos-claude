@@ -321,9 +321,22 @@ _UF_BRASIL = frozenset((
 # semanas). Cada sessao isolada e indistinguivel de visita humana -- so o
 # volume ACUMULADO da mesma cidade ao longo de dias denuncia o padrao. A loja
 # e 100% em portugues, sem campanha fora do Brasil, entao volume sustentado de
-# uma cidade fora do Brasil com sessoes curtas (1-2 paginas) e sem UTM nunca e
-# trafego organico legitimo -- diferente de um turista/expatriado isolado, que
-# fica bem abaixo do limiar.
+# uma cidade fora do Brasil com sessoes curtas (1-2 paginas) nunca e trafego
+# organico legitimo -- diferente de um turista/expatriado isolado, que fica
+# bem abaixo do limiar.
+#
+# Ate 2026-09-02 esse filtro exigia utm_source='' -- pra nao marcar como bot
+# um clique de anuncio internacional legitimo. Na pratica isso deixava passar
+# clique invalido de anuncio (Meta/Instagram) vindo de cidade estrangeira: 9
+# sessoes de "Altoona, IA" (EUA) em 14 dias, quase todas com utm_source=
+# 'instagram', 2 paginas cada, 0 conversao -- inflava o relatorio de Vendas/
+# Anuncios com trafego que nunca vira cliente (fraude de clique/bot farm
+# clicando no anuncio). Auditoria de 90 dias: 4015 sessoes de cidade
+# estrangeira, so 1 pedido pago associado -- e mesmo esse pedido (2026-0031)
+# e quase certamente cliente brasileira com geolocalizacao de IP incorreta
+# ("Kensington"), nao um cliente real do exterior. Tirado o utm_source='' do
+# filtro: volume sustentado de uma cidade fora do Brasil nunca e trafego
+# organico legitimo NEM clique de anuncio legitimo pra essa loja.
 LIMIAR_CIDADE_ESTRANGEIRA = 8
 JANELA_CIDADE_ESTRANGEIRA_DIAS = 14
 
@@ -341,13 +354,15 @@ RAJADA_ESTRANGEIRA_GLOBAL_JANELA_SEG = 1800
 
 
 def _rajada_estrangeira_global() -> bool:
-    """True se o site recebeu, na janela recente, varias sessoes curtas e sem
-    UTM vindas de cidades estrangeiras DIFERENTES -- sinal do mesmo scraper
-    distribuido rodando em leva rapida (ver LIMIAR_RAJADA_ESTRANGEIRA_GLOBAL)."""
+    """True se o site recebeu, na janela recente, varias sessoes curtas vindas
+    de cidades estrangeiras DIFERENTES -- sinal do mesmo scraper distribuido
+    rodando em leva rapida (ver LIMIAR_RAJADA_ESTRANGEIRA_GLOBAL). Nao exige
+    utm_source='' (ver comentario em LIMIAR_CIDADE_ESTRANGEIRA) -- clique
+    invalido de anuncio tambem conta."""
     from apps.analytics.models import SessaoAnalytics
     desde = timezone.now() - timezone.timedelta(seconds=RAJADA_ESTRANGEIRA_GLOBAL_JANELA_SEG)
     recentes = SessaoAnalytics.objects.filter(
-        iniciada_em__gte=desde, total_paginas__lte=2, utm_source='',
+        iniciada_em__gte=desde, total_paginas__lte=2,
     ).exclude(cidade='').exclude(estado__in=_UF_BRASIL)
     if recentes.count() >= LIMIAR_RAJADA_ESTRANGEIRA_GLOBAL - 1:
         # Marca tambem as irmas ja gravadas dessa rajada (corrige retroativo).
@@ -358,15 +373,16 @@ def _rajada_estrangeira_global() -> bool:
 
 def _cidade_estrangeira_em_rajada(cidade: str, estado: str) -> bool:
     """True se a cidade (fora do Brasil) acumulou volume anormal de sessoes
-    curtas e sem UTM na janela recente -- sinal de scraper distribuido por
-    muitos IPs residenciais diferentes (ver LIMIAR_CIDADE_ESTRANGEIRA)."""
+    curtas na janela recente -- sinal de scraper distribuido por muitos IPs
+    residenciais diferentes OU clique invalido de anuncio vindo de fora do
+    Brasil (ver LIMIAR_CIDADE_ESTRANGEIRA)."""
     if not cidade or estado in _UF_BRASIL:
         return False
     from apps.analytics.models import SessaoAnalytics
     desde = timezone.now() - timezone.timedelta(days=JANELA_CIDADE_ESTRANGEIRA_DIAS)
     candidatas = SessaoAnalytics.objects.filter(
         cidade=cidade, estado=estado, iniciada_em__gte=desde,
-        total_paginas__lte=2, utm_source='',
+        total_paginas__lte=2,
     )
     if candidatas.count() >= LIMIAR_CIDADE_ESTRANGEIRA - 1:
         # Marca tambem as irmas ja gravadas dessa cidade (corrige retroativo).

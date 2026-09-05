@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}Private Label · Fluxo de Caixa | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+{% include "financeiro/private_label/_estilos.html" %}
+<style>
+  .pl-fluxo-linha-futura { color: var(--cinza-texto); }
+  .pl-fluxo-hoje { border-left: 3px solid var(--dourado); }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="pl-topo">
+  <div>
+    <h1 class="ds-page-titulo">Financeiro Private Label</h1>
+  </div>
+</div>
+
+{% include "financeiro/private_label/_abas.html" %}
+
+<form class="pl-filtros" method="get">
+  <div class="pl-form-campo">
+    <label>Período</label>
+    <select class="ds-select" name="periodo" onchange="this.form.submit()">
+      <option value="mes" {% if periodo == "mes" %}selected{% endif %}>Mês atual (diário)</option>
+      <option value="trimestre" {% if periodo == "trimestre" %}selected{% endif %}>Próximos 3 meses (mensal)</option>
+      <option value="personalizado" {% if periodo == "personalizado" %}selected{% endif %}>Personalizado</option>
+    </select>
+  </div>
+  {% if periodo == "personalizado" %}
+  <div class="pl-form-campo">
+    <label>De</label>
+    <input class="ds-input" type="date" name="inicio" value="{{ inicio|date:'Y-m-d' }}">
+  </div>
+  <div class="pl-form-campo">
+    <label>Até</label>
+    <input class="ds-input" type="date" name="fim" value="{{ fim|date:'Y-m-d' }}">
+  </div>
+  {% endif %}
+  <div class="pl-form-campo">
+    <label>Conta</label>
+    <select class="ds-select" name="conta" onchange="this.form.submit()">
+      <option value="">Consolidado (todas as contas)</option>
+      {% for conta in contas %}
+      <option value="{{ conta.pk }}" {% if conta_selecionada.pk == conta.pk %}selected{% endif %}>{{ conta.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if periodo == "personalizado" %}<button type="submit" class="ds-btn ds-btn--outline">Aplicar</button>{% endif %}
+</form>
+
+<div class="pl-cards">
+  <div class="pl-card pl-card--recebido">
+    <div class="pl-card-label">Entradas no período (realizado + previsto)</div>
+    <div class="pl-card-valor">{{ totais.realizado_entrada|add:totais.previsto_entrada|brl }}</div>
+  </div>
+  <div class="pl-card pl-card--gasto">
+    <div class="pl-card-label">Saídas no período (realizado + previsto)</div>
+    <div class="pl-card-valor">{{ totais.realizado_saida|add:totais.previsto_saida|brl }}</div>
+  </div>
+  <div class="pl-card {% if saldo_final < 0 %}pl-card--gasto{% else %}pl-card--consolidado{% endif %}">
+    <div class="pl-card-label">Saldo projetado no fim do período</div>
+    <div class="pl-card-valor"><span class="{% if saldo_final < 0 %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ saldo_final|brl }}</span></div>
+  </div>
+</div>
+
+<p class="text-muted" style="font-size:.8rem;margin:-.4rem 0 .8rem;">
+  Realizado = já aconteceu (baixas, transferências, pagamentos de fatura). Previsto = parcelas em aberto (lançamentos e faturas de cartão) com vencimento futuro dentro do período. O saldo projetado soma os dois.
+</p>
+
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead>
+      <tr>
+        <th>{% if granularidade == "mes" %}Mês{% else %}Data{% endif %}</th>
+        <th>Entrada realizada</th><th>Saída realizada</th>
+        <th>Entrada prevista</th><th>Saída prevista</th>
+        <th>Saldo projetado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for linha in linhas %}
+      <tr class="{% if linha.data > hoje %}pl-fluxo-linha-futura{% endif %} {% if linha.data == hoje %}pl-fluxo-hoje{% endif %}">
+        <td>{% if granularidade == "mes" %}{{ linha.data|date:"m/Y" }}{% else %}{{ linha.data|date:"d/m/Y" }}{% endif %}</td>
+        <td>{% if linha.realizado_entrada %}<span class="pl-valor-receita">{{ linha.realizado_entrada|brl }}</span>{% endif %}</td>
+        <td>{% if linha.realizado_saida %}<span class="pl-valor-despesa">{{ linha.realizado_saida|brl }}</span>{% endif %}</td>
+        <td>{% if linha.previsto_entrada %}<span class="pl-valor-receita">{{ linha.previsto_entrada|brl }}</span>{% endif %}</td>
+        <td>{% if linha.previsto_saida %}<span class="pl-valor-despesa">{{ linha.previsto_saida|brl }}</span>{% endif %}</td>
+        <td><span class="{% if linha.saldo_acumulado < 0 %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ linha.saldo_acumulado|brl }}</span></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">Sem movimentação no período.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

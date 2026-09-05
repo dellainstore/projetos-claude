@@ -1,0 +1,40 @@
+<div class="ds-modal-fundo">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>{% if conta %}Editar conta de investimento{% else %}Nova conta de investimento{% endif %}</span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_conta_investimento_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      {% if conta %}<input type="hidden" name="pk" value="{{ conta.pk }}">{% endif %}
+      <div class="pl-form-grid">
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Nome</label>
+          <input class="ds-input" type="text" name="nome" required value="{{ conta.nome|default:'' }}" autofocus placeholder="Ex.: CDB Banco X">
+        </div>
+        <div class="pl-form-campo">
+          <label>Instituição</label>
+          <input class="ds-input" type="text" name="instituicao" value="{{ conta.instituicao|default:'' }}">
+        </div>
+        <div class="pl-form-campo">
+          <label>Tipo de produto</label>
+          <select class="ds-select" name="tipo_produto">
+            {% for valor, rotulo in tipos_produto %}
+            <option value="{{ valor }}" {% if conta.tipo_produto == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if conta %}
+        <div class="pl-form-campo" style="justify-content:center;">
+          <label class="pl-form-check"><input type="checkbox" name="ativa" {% if conta.ativa %}checked{% endif %}> Ativa</label>
+        </div>
+        {% endif %}
+      </div>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>

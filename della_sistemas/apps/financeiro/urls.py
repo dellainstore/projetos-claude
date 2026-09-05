@@ -78,4 +78,49 @@ urlpatterns = [
     # Ajuste de saldo (ação sensível)
     path("private-label/htmx/ajuste-saldo/form/", views.pl_htmx_ajuste_saldo_form, name="pl_htmx_ajuste_saldo_form"),
     path("private-label/htmx/ajuste-saldo/salvar/", views.pl_htmx_ajuste_saldo_salvar, name="pl_htmx_ajuste_saldo_salvar"),
+
+    # ── Cartões (Fase 1B) ────────────────────────────────────────────────
+    path("private-label/cartoes/", views.pl_cartoes, name="pl_cartoes"),
+    path("private-label/htmx/cartoes/lista/", views.pl_htmx_cartoes_lista, name="pl_htmx_cartoes_lista"),
+    path("private-label/htmx/cartoes/form/", views.pl_htmx_cartao_form, name="pl_htmx_cartao_form"),
+    path("private-label/htmx/cartoes/<int:pk>/form/", views.pl_htmx_cartao_form, name="pl_htmx_cartao_form_editar"),
+    path("private-label/htmx/cartoes/salvar/", views.pl_htmx_cartao_salvar, name="pl_htmx_cartao_salvar"),
+    path("private-label/cartoes/<int:pk>/", views.pl_cartao_detalhe, name="pl_cartao_detalhe"),
+    path("private-label/htmx/cartoes/<int:pk>/conteudo/", views.pl_htmx_cartao_detalhe_conteudo, name="pl_htmx_cartao_detalhe_conteudo"),
+
+    path("private-label/htmx/compras-cartao/form/", views.pl_htmx_compra_cartao_form, name="pl_htmx_compra_cartao_form"),
+    path("private-label/htmx/compras-cartao/salvar/", views.pl_htmx_compra_cartao_salvar, name="pl_htmx_compra_cartao_salvar"),
+    path("private-label/htmx/compras-cartao/<int:pk>/cancelar/", views.pl_htmx_compra_cartao_cancelar, name="pl_htmx_compra_cartao_cancelar"),
+
+    path("private-label/htmx/faturas/<int:pk>/pagar/form/", views.pl_htmx_fatura_pagar_form, name="pl_htmx_fatura_pagar_form"),
+    path("private-label/htmx/faturas/<int:pk>/pagar/salvar/", views.pl_htmx_fatura_pagar_salvar, name="pl_htmx_fatura_pagar_salvar"),
+    path("private-label/htmx/pagamentos-fatura/<int:pk>/estornar/", views.pl_htmx_fatura_pagamento_estornar, name="pl_htmx_fatura_pagamento_estornar"),
+
+    # ── Fluxo de Caixa (Fase 1C) ─────────────────────────────────────────
+    path("private-label/fluxo-caixa/", views.pl_fluxo_caixa, name="pl_fluxo_caixa"),
+
+    # ── DRE (Fase 1C) ────────────────────────────────────────────────────
+    path("private-label/dre/", views.pl_dre, name="pl_dre"),
+    path("private-label/dre/exportar/", views.pl_dre_exportar_csv, name="pl_dre_exportar_csv"),
+
+    # ── Investimentos (Fase 2) ───────────────────────────────────────────
+    path("private-label/investimentos/", views.pl_investimentos, name="pl_investimentos"),
+    path("private-label/htmx/investimentos/lista/", views.pl_htmx_investimentos_lista, name="pl_htmx_investimentos_lista"),
+    path("private-label/htmx/contas-investimento/form/", views.pl_htmx_conta_investimento_form, name="pl_htmx_conta_investimento_form"),
+    path("private-label/htmx/contas-investimento/<int:pk>/form/", views.pl_htmx_conta_investimento_form, name="pl_htmx_conta_investimento_form_editar"),
+    path("private-label/htmx/contas-investimento/salvar/", views.pl_htmx_conta_investimento_salvar, name="pl_htmx_conta_investimento_salvar"),
+    path("private-label/htmx/investimento-transacao/form/", views.pl_htmx_investimento_transacao_form, name="pl_htmx_investimento_transacao_form"),
+    path("private-label/htmx/investimento-transacao/salvar/", views.pl_htmx_investimento_transacao_salvar, name="pl_htmx_investimento_transacao_salvar"),
+    path("private-label/htmx/investimento-transacao/<int:pk>/estornar/", views.pl_htmx_investimento_transacao_estornar, name="pl_htmx_investimento_transacao_estornar"),
+
+    # ── Conciliação bancária (Fase 3) ────────────────────────────────────
+    path("private-label/conciliacao/", views.pl_conciliacao, name="pl_conciliacao"),
+    path("private-label/conciliacao/<int:pk>/", views.pl_conciliacao_detalhe, name="pl_conciliacao_detalhe"),
+    path("private-label/htmx/conciliacao/<int:pk>/conteudo/", views.pl_htmx_conciliacao_detalhe_conteudo, name="pl_htmx_conciliacao_detalhe_conteudo"),
+    path("private-label/htmx/conciliacao/<int:pk>/confirmar/", views.pl_htmx_conciliacao_confirmar, name="pl_htmx_conciliacao_confirmar"),
+    path("private-label/htmx/conciliacao/<int:pk>/rejeitar/", views.pl_htmx_conciliacao_rejeitar, name="pl_htmx_conciliacao_rejeitar"),
+    path("private-label/htmx/conciliacao/<int:pk>/desfazer/", views.pl_htmx_conciliacao_desfazer, name="pl_htmx_conciliacao_desfazer"),
+    path("private-label/htmx/conciliacao/item/<int:pk>/ignorar/", views.pl_htmx_item_ignorar, name="pl_htmx_item_ignorar"),
+    path("private-label/htmx/conciliacao/item/<int:pk>/vincular/form/", views.pl_htmx_item_vincular_form, name="pl_htmx_item_vincular_form"),
+    path("private-label/htmx/conciliacao/item/<int:pk>/vincular/salvar/", views.pl_htmx_item_vincular_salvar, name="pl_htmx_item_vincular_salvar"),
 ]

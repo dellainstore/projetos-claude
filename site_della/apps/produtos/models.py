@@ -902,6 +902,34 @@ class Avaliacao(models.Model):
         super().save(*args, **kwargs)
 
 
+class AvaliacaoPedidoResponsavel(models.Model):
+    """Quem esta cuidando de mandar o link de avaliacao pra essa cliente, na
+    tela Avaliacoes > Pedidos entregues (admin). Enquanto existir esse
+    registro, a linha do pedido fica travada pras outras vendedoras -- evita
+    duas pessoas mandando o link pra mesma cliente ao mesmo tempo."""
+    pedido = models.OneToOneField(
+        'pedidos.Pedido', on_delete=models.CASCADE,
+        related_name='avaliacao_responsavel',
+        verbose_name='Pedido',
+    )
+    responsavel = models.ForeignKey(
+        'usuarios.Cliente', on_delete=models.CASCADE,
+        related_name='avaliacoes_pedidos_responsavel',
+        verbose_name='Responsável',
+    )
+    atribuido_em = models.DateTimeField('Atribuído em', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Responsável por avaliação de pedido'
+        verbose_name_plural = 'Responsáveis por avaliação de pedido'
+        permissions = [
+            ('gerenciar_pedidos_entregues', 'Pode gerenciar pedidos entregues x avaliação'),
+        ]
+
+    def __str__(self):
+        return f'{self.pedido.numero}: {self.responsavel.get_full_name()}'
+
+
 class NewsletterInscricao(models.Model):
     email = models.EmailField('E-mail', max_length=254, unique=True)
     inscrito_em = models.DateTimeField('Inscrito em', auto_now_add=True)

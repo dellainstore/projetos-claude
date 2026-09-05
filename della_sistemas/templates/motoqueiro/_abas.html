@@ -1,0 +1,36 @@
+{% load metas_extras %}
+{% comment %}Navegação interna Motoqueiro — mesmo padrão do Private Label (rota própria por aba, funciona com F5, vira <select> no mobile). Saldo Lalamove + botão "Solicitar corrida" ficam sempre visíveis ao lado.{% endcomment %}
+<div class="moto-abas">
+  <div class="moto-abas-desktop">
+    {% if user.pode_ver_motoqueiro_dashboard %}
+    <a href="{% url 'motoqueiro:dashboard' %}" class="moto-aba {% if request.resolver_match.url_name == 'dashboard' %}ativa{% endif %}">Dashboard</a>
+    {% endif %}
+    {% if user.pode_ver_motoqueiro_relatorio %}
+    <a href="{% url 'motoqueiro:relatorio' %}" class="moto-aba {% if request.resolver_match.url_name == 'relatorio' %}ativa{% endif %}">Resumo de Corridas</a>
+    {% endif %}
+    {% if user.pode_gerir_saldo_motoqueiro %}
+    <a href="{% url 'motoqueiro:saldo' %}" class="moto-aba {% if request.resolver_match.url_name == 'saldo' %}ativa{% endif %}">Saldo Lalamove</a>
+    {% endif %}
+  </div>
+  <select class="moto-abas-mobile ds-input" onchange="if(this.value) location.href=this.value">
+    {% if user.pode_ver_motoqueiro_dashboard %}
+    <option value="{% url 'motoqueiro:dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}selected{% endif %}>Dashboard</option>
+    {% endif %}
+    {% if user.pode_ver_motoqueiro_relatorio %}
+    <option value="{% url 'motoqueiro:relatorio' %}" {% if request.resolver_match.url_name == 'relatorio' %}selected{% endif %}>Resumo de Corridas</option>
+    {% endif %}
+    {% if user.pode_gerir_saldo_motoqueiro %}
+    <option value="{% url 'motoqueiro:saldo' %}" {% if request.resolver_match.url_name == 'saldo' %}selected{% endif %}>Saldo Lalamove</option>
+    {% endif %}
+  </select>
+  <div style="display:flex;align-items:center;gap:0.6rem;">
+    {% if saldo_lalamove is not None %}
+    <span class="moto-saldo-pill" title="Saldo atual da carteira Lalamove">
+      Saldo Lalamove: <strong>{{ saldo_lalamove|brl }}</strong>
+    </span>
+    {% endif %}
+    {% if user.pode_solicitar_motoqueiro %}
+    <a href="{% url 'motoqueiro:solicitar' %}" class="ds-btn ds-btn--primario ds-btn--sm">+ Solicitar corrida</a>
+    {% endif %}
+  </div>
+</div>

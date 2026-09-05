@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block titulo %}Solicitar Corrida | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+{% include "motoqueiro/_estilos.html" %}
+
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Solicitar Corrida</h1>
+</div>
+
+<div class="ds-form-section" style="max-width:900px;">
+  {% if colaboradores %}
+  <div class="ds-form-group">
+    <label class="ds-label">Solicitando em nome de</label>
+    <select class="ds-input" id="colaborador_id" onchange="location.href='?colaborador_id='+this.value">
+      {% for c in colaboradores %}
+      <option value="{{ c.id }}" {% if colaborador and c.id == colaborador.id %}selected{% endif %}>{{ c.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% elif colaborador %}
+  <p class="text-muted" style="margin-bottom:1rem;">Solicitando em nome de <strong>{{ colaborador.nome }}</strong>.</p>
+  {% endif %}
+
+  <form id="form-cotar" hx-post="{% url 'motoqueiro:htmx_cotar' %}" hx-target="#resultado-cotacao" hx-swap="innerHTML">
+    {% csrf_token %}
+    {% if colaborador %}<input type="hidden" name="colaborador_id" value="{{ colaborador.id }}">{% endif %}
+    <div class="ds-form-group" style="position:relative;">
+      <label class="ds-label">Endereço de retirada</label>
+      <input class="ds-input" type="text" name="endereco_retirada" id="input-retirada" autocomplete="off"
+             style="width:100%;"
+             placeholder="Rua, número, bairro, cidade"
+             hx-get="{% url 'motoqueiro:htmx_autocomplete' %}?campo=retirada"
+             hx-trigger="keyup changed delay:500ms" hx-target="#sugestoes-retirada" hx-swap="innerHTML"
+             required>
+      <input type="hidden" name="lat_retirada" id="lat-retirada">
+      <input type="hidden" name="lng_retirada" id="lng-retirada">
+      <div id="sugestoes-retirada"></div>
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Complemento da retirada (opcional)</label>
+      <input class="ds-input" type="text" name="complemento_retirada" style="width:100%;"
+             placeholder="Bloco, apto, andar, ponto de referência">
+    </div>
+    <div class="ds-form-group" style="position:relative;">
+      <label class="ds-label">Endereço de entrega</label>
+      <input class="ds-input" type="text" name="endereco_entrega" id="input-entrega" autocomplete="off"
+             style="width:100%;"
+             placeholder="Rua, número, bairro, cidade"
+             hx-get="{% url 'motoqueiro:htmx_autocomplete' %}?campo=entrega"
+             hx-trigger="keyup changed delay:500ms" hx-target="#sugestoes-entrega" hx-swap="innerHTML"
+             required>
+      <input type="hidden" name="lat_entrega" id="lat-entrega">
+      <input type="hidden" name="lng_entrega" id="lng-entrega">
+      <div id="sugestoes-entrega"></div>
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Complemento da entrega (opcional)</label>
+      <input class="ds-input" type="text" name="complemento_entrega" style="width:100%;"
+             placeholder="Bloco, apto, andar, ponto de referência">
+    </div>
+    <button type="submit" class="ds-btn ds-btn--primario mt-2">Cotar</button>
+    <span class="htmx-indicator" style="margin-left:0.5rem;font-size:0.85rem;color:var(--cinza-texto);">Cotando…</span>
+  </form>
+</div>
+
+<div id="resultado-cotacao" style="max-width:900px;margin-top:1rem;"></div>
+
+<script>
+function escolherEndereco(campo, endereco, lat, lon) {
+  document.getElementById('input-' + campo).value = endereco;
+  document.getElementById('lat-' + campo).value = lat;
+  document.getElementById('lng-' + campo).value = lon;
+  document.getElementById('sugestoes-' + campo).innerHTML = '';
+}
+
+// Modo Google: o autocomplete so devolve place_id — precisa de mais uma
+// chamada (Place Details) pra pegar lat/lng exatos antes de preencher.
+function escolherEnderecoGoogle(campo, placeId, el) {
+  el.textContent = 'Carregando…';
+  fetch('{% url "motoqueiro:htmx_place_details" %}?place_id=' + encodeURIComponent(placeId))
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok) { el.textContent = 'Não consegui carregar esse endereço, tente outro.'; return; }
+      document.getElementById('input-' + campo).value = d.endereco;
+      document.getElementById('lat-' + campo).value = d.lat;
+      document.getElementById('lng-' + campo).value = d.lng;
+      document.getElementById('sugestoes-' + campo).innerHTML = '';
+    })
+    .catch(function () { el.textContent = 'Erro ao carregar endereço.'; });
+}
+// Se a pessoa digitar (evento nativo "input") depois de ter escolhido uma
+// sugestao, invalida o lat/lng antigo — obriga escolher de novo (evita
+// cotar endereco errado). escolherEndereco() seta o valor via JS, o que
+// nao dispara "input", entao a selecao por clique nunca se autoinvalida.
+['retirada', 'entrega'].forEach(function (campo) {
+  document.getElementById('input-' + campo).addEventListener('input', function () {
+    document.getElementById('lat-' + campo).value = '';
+    document.getElementById('lng-' + campo).value = '';
+  });
+});
+</script>
+{% endblock %}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import calendar
 import csv
 from datetime import date, datetime, timedelta
+from datetime import timezone as dt_timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -105,9 +106,24 @@ def dias_seg_a_sab_restantes(ano_fim: int, mes_fim: int) -> int:
 
 
 def ultima_atualizacao_metas() -> datetime:
-    """Horário (America/Sao_Paulo) da última execução do cron de vendas/metas
-    (06h, 13h, 17h ou 19h). Se nenhum desses horários já passou hoje, usa o
-    último horário de ontem."""
+    """Horário (America/Sao_Paulo) da última atualização bem-sucedida do CSV
+    de vendas — seja pelo cron, pelo botão manual do painel ou pelos scripts
+    de backfill (todos passam pelo status.json que jobs/vendas_atendidas.py
+    escreve; ver apps/metas/services/atualizacao.py). Se o status ainda não
+    existir (ex.: logo após o deploy desta funcionalidade) ou não tiver uma
+    conclusão com sucesso registrada, cai no heurístico antigo baseado no
+    horário fixo do cron."""
+    from apps.metas.services.atualizacao import ler_status
+
+    status = ler_status()
+    if status.get("sucesso") and status.get("concluido_em"):
+        try:
+            return timezone.localtime(
+                datetime.fromtimestamp(float(status["concluido_em"]), tz=dt_timezone.utc)
+            )
+        except (TypeError, ValueError, OSError):
+            pass
+
     agora = timezone.localtime()
     candidatos = [
         agora.replace(hour=h, minute=0, second=0, microsecond=0)

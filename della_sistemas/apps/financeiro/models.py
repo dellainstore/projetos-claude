@@ -710,6 +710,560 @@ class OcorrenciaRecorrencia(models.Model):
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Cartão de crédito (Fase 1B) — ver plano, seções 1.3, 3 e 11
+# ─────────────────────────────────────────────────────────────────────────
+
+class CartaoCredito(models.Model):
+    """`dia_fechamento`/`dia_vencimento` limitados a 1–28 (evita bug em
+    meses curtos — fevereiro). O limite utilizado NUNCA é um campo próprio:
+    é sempre calculado a partir das parcelas em aberto (`limite_utilizado`),
+    igual ao saldo de conta via `MovimentoConta`."""
+
+    operacao = models.ForeignKey(OperacaoFinanceira, on_delete=models.PROTECT, related_name="cartoes")
+    nome = models.CharField(max_length=120, verbose_name="Nome do cartão")
+    banco = models.CharField(max_length=120, blank=True)
+    final = models.CharField(max_length=4, blank=True, verbose_name="Final do cartão")
+    limite_total = models.DecimalField(max_digits=12, decimal_places=2)
+    dia_fechamento = models.PositiveSmallIntegerField()
+    dia_vencimento = models.PositiveSmallIntegerField()
+    conta_pagamento_padrao = models.ForeignKey(
+        ContaBancaria, on_delete=models.PROTECT, null=True, blank=True, related_name="cartoes_pagos_por_padrao",
+        help_text="Conta sugerida ao pagar a fatura — só previsão, não obriga nada.",
+    )
+    cor = models.CharField(max_length=7, default="#c9a96e")
+    ativo = models.BooleanField(default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="cartoes_criados",
+    )
+
+    class Meta:
+        verbose_name = "Cartão de Crédito"
+        verbose_name_plural = "Cartões de Crédito"
+        ordering = ["nome"]
+        constraints = [
+            models.CheckConstraint(check=Q(limite_total__gt=0), name="cartao_limite_total_positivo"),
+            models.CheckConstraint(
+                check=Q(dia_fechamento__gte=1) & Q(dia_fechamento__lte=28),
+                name="cartao_dia_fechamento_valido",
+            ),
+            models.CheckConstraint(
+                check=Q(dia_vencimento__gte=1) & Q(dia_vencimento__lte=28),
+                name="cartao_dia_vencimento_valido",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        sufixo = f" final {self.final}" if self.final else ""
+        return f"{self.nome}{sufixo}"
+
+    @property
+    def limite_utilizado(self) -> Decimal:
+        total = ParcelaCompraCartao.objects.filter(
+            compra__cartao=self, compra__cancelada=False,
+        ).aggregate(total=models.Sum(models.F("valor") - models.F("paga_valor")))["total"]
+        return total or Decimal("0.00")
+
+    @property
+    def limite_disponivel(self) -> Decimal:
+        return self.limite_total - self.limite_utilizado
+
+    @property
+    def percentual_utilizado(self) -> Decimal:
+        if not self.limite_total:
+            return Decimal("0.00")
+        return (self.limite_utilizado / self.limite_total * 100).quantize(Decimal("0.1"))
+
+
+class CompraCartao(models.Model):
+    """Reconhecida no DRE pela `data_compra` + `categoria` — não pela data de
+    pagamento da fatura (ver plano, fórmula do DRE). `cancelada` é mais
+    simples que o `estado_estrutural` de `LancamentoFinanceiro` porque uma
+    compra no cartão não tem "baixa parcial" própria: o que existe é o
+    pagamento (parcial ou total) da FATURA, que quita parcelas de várias
+    compras ao mesmo tempo."""
+
+    operacao = models.ForeignKey(OperacaoFinanceira, on_delete=models.PROTECT, related_name="compras_cartao")
+    cartao = models.ForeignKey(CartaoCredito, on_delete=models.PROTECT, related_name="compras")
+    descricao = models.CharField(max_length=200)
+    categoria = models.ForeignKey(CategoriaFinanceira, on_delete=models.PROTECT, related_name="compras_cartao")
+    centro_custo = models.ForeignKey(
+        CentroCusto, on_delete=models.PROTECT, null=True, blank=True, related_name="compras_cartao",
+    )
+    contato = models.ForeignKey(
+        ContatoFinanceiro, on_delete=models.PROTECT, null=True, blank=True, related_name="compras_cartao",
+    )
+    valor_total = models.DecimalField(max_digits=12, decimal_places=2)
+    data_compra = models.DateField()
+    parcelas_qtd = models.PositiveIntegerField(default=1)
+    numero_documento = models.CharField(max_length=60, blank=True)
+    observacoes = models.TextField(blank=True)
+    cancelada = models.BooleanField(default=False)
+    cancelada_em = models.DateTimeField(null=True, blank=True)
+    cancelada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="compras_cartao_canceladas",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="compras_cartao_criadas",
+    )
+
+    class Meta:
+        verbose_name = "Compra no Cartão"
+        verbose_name_plural = "Compras no Cartão"
+        ordering = ["-data_compra", "-id"]
+        indexes = [
+            models.Index(fields=["cartao", "data_compra"]),
+        ]
+        constraints = [
+            models.CheckConstraint(check=Q(valor_total__gt=0), name="compra_cartao_valor_total_positivo"),
+            models.CheckConstraint(check=Q(parcelas_qtd__gte=1), name="compra_cartao_parcelas_qtd_minima"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.descricao} — R$ {self.valor_total}"
+
+    @property
+    def saldo_restante(self) -> Decimal:
+        total = Decimal("0.00")
+        for parcela in self.parcelas.all():
+            total += parcela.saldo_restante
+        return total
+
+
+class FaturaCartao(models.Model):
+    """Uma fatura por (cartão, competência) — `get_or_create` no service ao
+    lançar uma compra. `estado_estrutural` reaproveita as choices padrão do
+    módulo (nunca usa "cancelado" — uma fatura não se cancela, só zera se
+    todas as compras dentro dela forem canceladas)."""
+
+    cartao = models.ForeignKey(CartaoCredito, on_delete=models.PROTECT, related_name="faturas")
+    competencia_ano = models.PositiveIntegerField()
+    competencia_mes = models.PositiveSmallIntegerField()
+    data_fechamento = models.DateField()
+    data_vencimento = models.DateField()
+    estado_estrutural = models.CharField(
+        max_length=10, choices=ESTADO_ESTRUTURAL_CHOICES, default=ESTADO_ABERTO,
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Fatura de Cartão"
+        verbose_name_plural = "Faturas de Cartão"
+        ordering = ["-competencia_ano", "-competencia_mes"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cartao", "competencia_ano", "competencia_mes"],
+                name="fatura_cartao_unica_por_competencia",
+            ),
+            models.CheckConstraint(
+                check=Q(competencia_mes__gte=1) & Q(competencia_mes__lte=12),
+                name="fatura_cartao_competencia_mes_valido",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.cartao.nome} — {self.competencia_mes:02d}/{self.competencia_ano}"
+
+    @property
+    def valor_total(self) -> Decimal:
+        total = self.parcelas.filter(compra__cancelada=False).aggregate(
+            total=models.Sum("valor"),
+        )["total"]
+        return total or Decimal("0.00")
+
+    @property
+    def valor_pago(self) -> Decimal:
+        total = self.parcelas.filter(compra__cancelada=False).aggregate(
+            total=models.Sum("paga_valor"),
+        )["total"]
+        return total or Decimal("0.00")
+
+    @property
+    def saldo_restante(self) -> Decimal:
+        return self.valor_total - self.valor_pago
+
+    def recalcular_estado(self, salvar: bool = True) -> str:
+        saldo = self.saldo_restante
+        total = self.valor_total
+        if total <= 0 or saldo <= 0:
+            novo_estado = ESTADO_QUITADO
+        elif saldo < total:
+            novo_estado = ESTADO_PARCIAL
+        else:
+            novo_estado = ESTADO_ABERTO
+        if novo_estado != self.estado_estrutural:
+            self.estado_estrutural = novo_estado
+            if salvar:
+                self.save(update_fields=["estado_estrutural"])
+        return novo_estado
+
+
+class ParcelaCompraCartao(models.Model):
+    """`paga_valor` (em vez de um `estado_estrutural` próprio) porque o
+    pagamento é sempre da FATURA inteira (total ou parcial) — o service
+    distribui o valor pago entre as parcelas em aberto daquela fatura, na
+    ordem da compra mais antiga primeiro (`FaturaPagamentoAlocacao` registra
+    exatamente quanto coube a cada parcela, para permitir estorno exato)."""
+
+    compra = models.ForeignKey(CompraCartao, on_delete=models.CASCADE, related_name="parcelas")
+    numero = models.PositiveIntegerField()
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    fatura = models.ForeignKey(FaturaCartao, on_delete=models.PROTECT, related_name="parcelas")
+    paga_valor = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+
+    class Meta:
+        verbose_name = "Parcela de Compra no Cartão"
+        verbose_name_plural = "Parcelas de Compra no Cartão"
+        ordering = ["compra", "numero"]
+        constraints = [
+            models.UniqueConstraint(fields=["compra", "numero"], name="parcela_compra_cartao_numero_unico"),
+            models.CheckConstraint(check=Q(valor__gt=0), name="parcela_compra_cartao_valor_positivo"),
+            models.CheckConstraint(check=Q(paga_valor__gte=0), name="parcela_compra_cartao_paga_valor_nao_negativo"),
+            models.CheckConstraint(
+                check=Q(paga_valor__lte=models.F("valor")),
+                name="parcela_compra_cartao_paga_valor_nao_excede_valor",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.compra.descricao} — parcela {self.numero}"
+
+    @property
+    def saldo_restante(self) -> Decimal:
+        return self.valor - self.paga_valor
+
+    @property
+    def paga(self) -> bool:
+        return self.saldo_restante <= 0
+
+
+class FaturaPagamento(models.Model):
+    """Pagamento total ou parcial de uma fatura — nunca gera um 2º
+    `LancamentoFinanceiro` (a despesa já foi reconhecida no DRE na
+    `CompraCartao.data_compra`). Sempre gera 1 `MovimentoConta`."""
+
+    fatura = models.ForeignKey(FaturaCartao, on_delete=models.PROTECT, related_name="pagamentos")
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    data = models.DateField()
+    conta = models.ForeignKey(ContaBancaria, on_delete=models.PROTECT, related_name="pagamentos_fatura")
+    observacao = models.TextField(blank=True)
+    estornado = models.BooleanField(default=False)
+    estornado_em = models.DateTimeField(null=True, blank=True)
+    estornado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="pagamentos_fatura_estornados",
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="pagamentos_fatura_feitos",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Pagamento de Fatura"
+        verbose_name_plural = "Pagamentos de Fatura"
+        ordering = ["-data", "-id"]
+        constraints = [
+            models.CheckConstraint(check=Q(valor__gt=0), name="fatura_pagamento_valor_positivo"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Pagamento {self.id} — {self.fatura} — R$ {self.valor}"
+
+
+class FaturaPagamentoAlocacao(models.Model):
+    """Registra exatamente quanto de um `FaturaPagamento` coube em cada
+    `ParcelaCompraCartao` — sem isso, estornar um pagamento parcial não
+    saberia de qual parcela tirar o valor de volta (a fatura pode ter
+    recebido outro pagamento depois). Ledger append-only, igual
+    `MovimentoConta`: nunca editado, só consultado no estorno."""
+
+    pagamento = models.ForeignKey(FaturaPagamento, on_delete=models.CASCADE, related_name="alocacoes")
+    parcela = models.ForeignKey(ParcelaCompraCartao, on_delete=models.PROTECT, related_name="alocacoes_pagamento")
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        verbose_name = "Alocação de Pagamento de Fatura"
+        verbose_name_plural = "Alocações de Pagamento de Fatura"
+        constraints = [
+            models.CheckConstraint(check=Q(valor__gt=0), name="fatura_pagamento_alocacao_valor_positivo"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.pagamento_id} → parcela {self.parcela_id}: R$ {self.valor}"
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Investimentos (Fase 2) — ver plano, seções 1.4 e 3
+# ─────────────────────────────────────────────────────────────────────────
+
+TIPO_PRODUTO_INVESTIMENTO_CHOICES = [
+    ("cdb", "CDB"),
+    ("tesouro_direto", "Tesouro Direto"),
+    ("fundo", "Fundo de Investimento"),
+    ("poupanca", "Poupança"),
+    ("acoes", "Ações"),
+    ("outro", "Outro"),
+]
+
+TIPO_TRANSACAO_INVESTIMENTO_CHOICES = [
+    ("aplicacao", "Aplicação"),
+    ("resgate", "Resgate"),
+    ("rendimento", "Rendimento"),
+    ("taxa", "Taxa/Imposto"),
+]
+
+TIPOS_TRANSACAO_INVESTIMENTO_COM_CONTA_BANCARIA = {"aplicacao", "resgate"}
+TIPOS_TRANSACAO_INVESTIMENTO_COM_CATEGORIA = {"rendimento", "taxa"}
+
+
+class ContaInvestimento(models.Model):
+    """Saldo SEMPRE calculado via `MovimentoContaInvestimento` (ledger
+    próprio, espelhando `MovimentoConta`) — nunca um campo editável, mesma
+    filosofia do resto do módulo. Não é uma `ContaBancaria`: o dinheiro só
+    "sai de verdade" na aplicação e "entra de verdade" no resgate — ver
+    `InvestimentoTransacao`."""
+
+    operacao = models.ForeignKey(OperacaoFinanceira, on_delete=models.PROTECT, related_name="contas_investimento")
+    nome = models.CharField(max_length=120)
+    instituicao = models.CharField(max_length=120, blank=True)
+    tipo_produto = models.CharField(max_length=20, choices=TIPO_PRODUTO_INVESTIMENTO_CHOICES, default="outro")
+    ativa = models.BooleanField(default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="contas_investimento_criadas",
+    )
+
+    class Meta:
+        verbose_name = "Conta de Investimento"
+        verbose_name_plural = "Contas de Investimento"
+        ordering = ["nome"]
+
+    def __str__(self) -> str:
+        return self.nome
+
+    def saldo_atual(self) -> Decimal:
+        total = self.movimentos.aggregate(total=models.Sum("valor"))["total"]
+        return total or Decimal("0.00")
+
+
+class InvestimentoTransacao(models.Model):
+    """Aplicação/resgate movimentam uma `ContaBancaria` de verdade (dinheiro
+    saindo/voltando pro caixa da operação) e ficam FORA do DRE — são só
+    remanejamento de patrimônio, igual uma `Transferencia`. Rendimento/taxa
+    não tocam conta bancária nenhuma (o valor só cresce/diminui dentro do
+    próprio investimento) e ENTRAM no DRE pela `categoria` informada
+    (receita_financeira/despesa_financeira, validado no service)."""
+
+    operacao = models.ForeignKey(OperacaoFinanceira, on_delete=models.PROTECT, related_name="transacoes_investimento")
+    conta_investimento = models.ForeignKey(ContaInvestimento, on_delete=models.PROTECT, related_name="transacoes")
+    conta_bancaria = models.ForeignKey(
+        ContaBancaria, on_delete=models.PROTECT, null=True, blank=True, related_name="transacoes_investimento",
+        help_text="Obrigatória para aplicação/resgate; não se aplica a rendimento/taxa.",
+    )
+    categoria = models.ForeignKey(
+        CategoriaFinanceira, on_delete=models.PROTECT, null=True, blank=True, related_name="transacoes_investimento",
+        help_text="Obrigatória para rendimento/taxa (natureza financeira); não se aplica a aplicação/resgate.",
+    )
+    tipo = models.CharField(max_length=12, choices=TIPO_TRANSACAO_INVESTIMENTO_CHOICES)
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    data = models.DateField()
+    observacao = models.TextField(blank=True)
+    estornada = models.BooleanField(default=False)
+    estornada_em = models.DateTimeField(null=True, blank=True)
+    estornada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="transacoes_investimento_estornadas",
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="transacoes_investimento_feitas",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Transação de Investimento"
+        verbose_name_plural = "Transações de Investimento"
+        ordering = ["-data", "-id"]
+        constraints = [
+            models.CheckConstraint(check=Q(valor__gt=0), name="investimento_transacao_valor_positivo"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_tipo_display()} — {self.conta_investimento} — R$ {self.valor}"
+
+
+class MovimentoContaInvestimento(models.Model):
+    """Razão único (ledger append-only) do saldo de uma `ContaInvestimento`
+    — mesmo espírito de `MovimentoConta`, mas nunca compartilha a mesma
+    tabela: uma `ContaInvestimento` não é uma `ContaBancaria`."""
+
+    conta_investimento = models.ForeignKey(ContaInvestimento, on_delete=models.PROTECT, related_name="movimentos")
+    transacao = models.ForeignKey(InvestimentoTransacao, on_delete=models.PROTECT, related_name="movimentos")
+    data = models.DateField()
+    valor = models.DecimalField(max_digits=12, decimal_places=2, help_text="Com sinal: + cresce, - diminui")
+    evento_chave = models.CharField(max_length=80, unique=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Movimento de Conta de Investimento"
+        verbose_name_plural = "Movimentos de Conta de Investimento"
+        ordering = ["-data", "-id"]
+        indexes = [
+            models.Index(fields=["conta_investimento", "data"]),
+        ]
+        constraints = [
+            models.CheckConstraint(check=~Q(valor=0), name="movimento_conta_investimento_valor_diferente_de_zero"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.conta_investimento} — {self.data} — R$ {self.valor}"
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Conciliação bancária (Fase 3) — ver plano, seção 1.4
+# ─────────────────────────────────────────────────────────────────────────
+
+FORMATO_EXTRATO_CHOICES = [("ofx", "OFX"), ("csv", "CSV")]
+
+STATUS_ITEM_EXTRATO_CHOICES = [
+    ("pendente", "Pendente"),
+    ("conciliado", "Conciliado"),
+    ("ignorado", "Ignorado"),
+]
+
+NIVEL_CONFIANCA_CHOICES = [
+    ("alta", "Alta (mesma data e valor)"),
+    ("media", "Média (valor igual, data próxima)"),
+    ("manual", "Manual"),
+]
+
+STATUS_CONCILIACAO_CHOICES = [
+    ("sugerido", "Sugerido"),
+    ("confirmado", "Confirmado"),
+    ("rejeitado", "Rejeitado"),
+]
+
+
+def caminho_extrato_financeiro(instance, filename: str) -> str:
+    """Mesmo cuidado do `caminho_anexo_financeiro`: nome no disco sempre
+    randomizado, nome original só no banco."""
+    extensao = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    nome = uuid.uuid4().hex + (f".{extensao}" if extensao else "")
+    hoje = timezone.localdate()
+    return f"financeiro_privatelabel/extratos/{hoje:%Y/%m}/{nome}"
+
+
+class ImportacaoExtrato(models.Model):
+    """Um upload de extrato bancário (OFX ou CSV) de UMA conta. `hash_arquivo`
+    (sha256 do conteúdo bruto) impede reimportar o mesmo arquivo duas vezes
+    por engano — reimportar o MESMO PERÍODO de datas diferentes (arquivos
+    diferentes, alguma transação repetida) não é bloqueado aqui, e sim na
+    conciliação item a item (`ItemExtrato.hash_transacao`, único só dentro
+    da mesma importação — ver plano)."""
+
+    operacao = models.ForeignKey(OperacaoFinanceira, on_delete=models.PROTECT, related_name="importacoes_extrato")
+    conta = models.ForeignKey(ContaBancaria, on_delete=models.PROTECT, related_name="importacoes_extrato")
+    arquivo = models.FileField(upload_to=caminho_extrato_financeiro)
+    nome_original = models.CharField(max_length=255)
+    formato = models.CharField(max_length=3, choices=FORMATO_EXTRATO_CHOICES)
+    hash_arquivo = models.CharField(max_length=64, unique=True)
+    total_itens = models.PositiveIntegerField(default=0)
+    importado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="importacoes_extrato_feitas",
+    )
+    importado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Importação de Extrato"
+        verbose_name_plural = "Importações de Extrato"
+        ordering = ["-importado_em"]
+
+    def __str__(self) -> str:
+        return f"{self.conta.nome} — {self.nome_original}"
+
+    @property
+    def total_conciliados(self) -> int:
+        return self.itens.filter(status="conciliado").count()
+
+    @property
+    def total_pendentes(self) -> int:
+        return self.itens.filter(status="pendente").count()
+
+
+class ItemExtrato(models.Model):
+    """1 linha do extrato importado. `valor` já normalizado com sinal
+    (+ entrada, - saída), mesma convenção de `MovimentoConta.valor`, pra
+    comparação direta na hora de sugerir conciliação."""
+
+    importacao = models.ForeignKey(ImportacaoExtrato, on_delete=models.CASCADE, related_name="itens")
+    data = models.DateField()
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    descricao = models.CharField(max_length=255, blank=True)
+    identificador_externo = models.CharField(
+        max_length=80, blank=True, verbose_name="FITID (OFX)",
+        help_text="Identificador único da transação no banco, quando o OFX traz um (FITID). Vazio em CSV.",
+    )
+    hash_transacao = models.CharField(max_length=64)
+    status = models.CharField(max_length=10, choices=STATUS_ITEM_EXTRATO_CHOICES, default="pendente")
+
+    class Meta:
+        verbose_name = "Item de Extrato"
+        verbose_name_plural = "Itens de Extrato"
+        ordering = ["-data", "id"]
+        constraints = [
+            models.CheckConstraint(check=~Q(valor=0), name="item_extrato_valor_diferente_de_zero"),
+            models.UniqueConstraint(
+                fields=["importacao", "hash_transacao"], name="item_extrato_hash_unico_por_importacao",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["importacao", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.data} — R$ {self.valor} — {self.descricao}"
+
+
+class Conciliacao(models.Model):
+    """Liga um `ItemExtrato` a um `MovimentoConta` já existente no razão.
+    O plano original (seção 1.4) previa `baixa` como alvo — generalizado
+    aqui para `movimento` (`MovimentoConta`), porque esse é o razão único
+    de TUDO que mexe numa conta bancária (baixa, transferência, ajuste,
+    pagamento de fatura), não só baixas — sem essa generalização um
+    pagamento de fatura de cartão nunca teria como ser conciliado.
+    Append-only: desfazer uma conciliação `confirmado` marca `desfeita_em`
+    e não apaga a linha (auditoria); o item volta a `pendente`."""
+
+    item_extrato = models.ForeignKey(ItemExtrato, on_delete=models.CASCADE, related_name="conciliacoes")
+    movimento = models.ForeignKey(
+        "MovimentoConta", on_delete=models.PROTECT, null=True, blank=True, related_name="conciliacoes",
+    )
+    nivel_confianca = models.CharField(max_length=8, choices=NIVEL_CONFIANCA_CHOICES, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CONCILIACAO_CHOICES, default="sugerido")
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="conciliacoes_feitas",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    desfeita_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Conciliação"
+        verbose_name_plural = "Conciliações"
+        ordering = ["-criado_em"]
+
+    def __str__(self) -> str:
+        return f"{self.item_extrato} — {self.status}"
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Ajuste de saldo, razão (ledger) e auditoria
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -743,9 +1297,7 @@ class MovimentoConta(models.Model):
     cada conta. Nunca editado/deletado após criado; um estorno lança um novo
     movimento inverso. Exatamente 1 dos FKs de origem é não-nulo (ver
     CheckConstraint) — dá integridade referencial de verdade, ao contrário
-    de um `origem_tipo`/`origem_id` genérico. `fatura_pagamento` e
-    `investimento_transacao` serão adicionados nas migrations das Fases 1B
-    e 2 (junto com a atualização desta constraint)."""
+    de um `origem_tipo`/`origem_id` genérico."""
 
     operacao = models.ForeignKey(OperacaoFinanceira, on_delete=models.PROTECT, related_name="movimentos")
     conta = models.ForeignKey(ContaBancaria, on_delete=models.PROTECT, related_name="movimentos")
@@ -764,6 +1316,12 @@ class MovimentoConta(models.Model):
     ajuste = models.ForeignKey(
         AjusteSaldo, on_delete=models.PROTECT, null=True, blank=True, related_name="movimentos",
     )
+    fatura_pagamento = models.ForeignKey(
+        FaturaPagamento, on_delete=models.PROTECT, null=True, blank=True, related_name="movimentos",
+    )
+    investimento_transacao = models.ForeignKey(
+        InvestimentoTransacao, on_delete=models.PROTECT, null=True, blank=True, related_name="movimentos_conta_bancaria",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -777,9 +1335,11 @@ class MovimentoConta(models.Model):
             models.CheckConstraint(check=~Q(valor=0), name="movimento_conta_valor_diferente_de_zero"),
             models.CheckConstraint(
                 check=(
-                    (Q(baixa__isnull=False) & Q(transferencia__isnull=True) & Q(ajuste__isnull=True))
-                    | (Q(baixa__isnull=True) & Q(transferencia__isnull=False) & Q(ajuste__isnull=True))
-                    | (Q(baixa__isnull=True) & Q(transferencia__isnull=True) & Q(ajuste__isnull=False))
+                    (Q(baixa__isnull=False) & Q(transferencia__isnull=True) & Q(ajuste__isnull=True) & Q(fatura_pagamento__isnull=True) & Q(investimento_transacao__isnull=True))
+                    | (Q(baixa__isnull=True) & Q(transferencia__isnull=False) & Q(ajuste__isnull=True) & Q(fatura_pagamento__isnull=True) & Q(investimento_transacao__isnull=True))
+                    | (Q(baixa__isnull=True) & Q(transferencia__isnull=True) & Q(ajuste__isnull=False) & Q(fatura_pagamento__isnull=True) & Q(investimento_transacao__isnull=True))
+                    | (Q(baixa__isnull=True) & Q(transferencia__isnull=True) & Q(ajuste__isnull=True) & Q(fatura_pagamento__isnull=False) & Q(investimento_transacao__isnull=True))
+                    | (Q(baixa__isnull=True) & Q(transferencia__isnull=True) & Q(ajuste__isnull=True) & Q(fatura_pagamento__isnull=True) & Q(investimento_transacao__isnull=False))
                 ),
                 name="movimento_conta_exatamente_uma_origem",
             ),

@@ -1,0 +1,43 @@
+{% load core_extras %}
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Status</th><th>Sugestão de conciliação</th><th></th></tr></thead>
+    <tbody>
+      {% for linha in linhas %}
+      <tr>
+        <td>{{ linha.item.data|date:"d/m/Y" }}</td>
+        <td>{{ linha.item.descricao }}</td>
+        <td><span class="{% if linha.item.valor < 0 %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ linha.item.valor|brl }}</span></td>
+        <td>
+          {% if linha.item.status == "conciliado" %}<span class="pl-badge pl-badge--quitado">Conciliado</span>
+          {% elif linha.item.status == "ignorado" %}<span class="pl-badge pl-badge--cancelado">Ignorado</span>
+          {% else %}<span class="pl-badge pl-badge--pendente">Pendente</span>{% endif %}
+        </td>
+        <td>
+          {% if linha.conciliacao %}
+            {{ linha.conciliacao.movimento.data|date:"d/m/Y" }} — {{ linha.conciliacao.movimento.valor|brl }}
+            <span class="pl-badge {% if linha.conciliacao.nivel_confianca == 'alta' %}pl-badge--quitado{% elif linha.conciliacao.nivel_confianca == 'media' %}pl-badge--parcial{% else %}pl-badge--previsto{% endif %}">{{ linha.conciliacao.get_nivel_confianca_display }}</span>
+          {% else %}
+            <span class="text-muted">Sem sugestão</span>
+          {% endif %}
+        </td>
+        <td class="pl-acoes">
+          {% if linha.conciliacao and linha.conciliacao.status == "sugerido" %}
+          <button type="button" class="pl-icon-btn pl-icon-btn--dourado" title="Confirmar" hx-post="{% url 'financeiro:pl_htmx_conciliacao_confirmar' linha.conciliacao.pk %}" hx-target="#modal-container">&#10003;</button>
+          <button type="button" class="pl-icon-btn pl-icon-btn--perigo" title="Rejeitar sugestão" hx-post="{% url 'financeiro:pl_htmx_conciliacao_rejeitar' linha.conciliacao.pk %}" hx-target="#modal-container">&times;</button>
+          {% elif linha.conciliacao and linha.conciliacao.status == "confirmado" %}
+          <button type="button" class="pl-icon-btn" title="Desfazer" hx-post="{% url 'financeiro:pl_htmx_conciliacao_desfazer' linha.conciliacao.pk %}" hx-target="#modal-container" hx-confirm="Desfazer esta conciliação?">&#8635;</button>
+          {% else %}
+          <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_item_vincular_form' linha.item.pk %}" hx-target="#modal-container">Vincular</button>
+          {% if linha.item.status == "pendente" %}
+          <button type="button" class="pl-icon-btn" title="Ignorar" hx-post="{% url 'financeiro:pl_htmx_item_ignorar' linha.item.pk %}" hx-target="#modal-container" hx-confirm="Ignorar este item (não vai ser conciliado)?">&#8709;</button>
+          {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">Nenhum item nesta importação.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

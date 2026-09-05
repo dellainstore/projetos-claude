@@ -22,3 +22,16 @@ def brl(value):
     centavos = round((v - inteiro) * 100)
     inteiro_fmt = f"{inteiro:,}".replace(",", ".")
     return f"R$ {inteiro_fmt},{centavos:02d}"
+
+
+@register.filter
+def pct_css(value):
+    """Percentual como string com ponto decimal — para uso em CSS width
+    (LANGUAGE_CODE=pt-br faz floatformat/interpolação padrão usar vírgula,
+    o que quebra silenciosamente `style="width:X%"`). Mesma implementação de
+    `apps.metas.templatetags.metas_extras.pct_css`."""
+    try:
+        f = min(max(float(value), 0.0), 100.0)
+        return f"{f:.1f}"
+    except (TypeError, ValueError):
+        return "0"

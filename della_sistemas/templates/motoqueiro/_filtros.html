@@ -1,0 +1,53 @@
+<form method="get" class="ds-form-section" style="margin-bottom:1.25rem;padding:1rem 1.5rem;" id="form-filtros-moto">
+  <div class="ds-form-section-titulo" style="margin-bottom:0.5rem;">Período</div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.5rem;" id="div-botoes-periodo-moto">
+    {% for val, label in periodos %}
+    <button type="button" data-periodo="{{ val }}"
+            class="ds-btn ds-btn--sm btn-periodo-moto {% if periodo.chave == val %}ds-btn--primario{% else %}ds-btn--outline{% endif %}">
+      {{ label }}
+    </button>
+    {% endfor %}
+    {% if mostrar_busca %}
+    <input type="text" id="busca-moto" class="ds-input" style="flex:1;min-width:200px;margin-left:0.5rem;"
+           placeholder="Buscar por cliente, endereço, status…"
+           oninput="filtrarTabelaMoto(this.value)">
+    {% endif %}
+    <button type="submit" class="ds-btn ds-btn--primario ds-btn--sm" style="margin-left:auto;">Filtrar</button>
+  </div>
+  <div id="div-datas-custom-moto"
+       style="display:{% if periodo.chave == 'personalizado' %}grid{% else %}none{% endif %};
+              grid-template-columns:1fr 1fr;gap:0.75rem;max-width:420px;">
+    <div class="ds-form-group">
+      <label class="ds-label">Data início</label>
+      <input class="ds-input" type="date" name="data_inicio" value="{{ periodo.data_inicio_str }}">
+    </div>
+    <div class="ds-form-group">
+      <label class="ds-label">Data fim</label>
+      <input class="ds-input" type="date" name="data_fim" value="{{ periodo.data_fim_str }}">
+    </div>
+  </div>
+  <input type="hidden" name="periodo" value="{{ periodo.chave }}" id="input-periodo-moto">
+</form>
+
+<script>
+(function () {
+  var inputPeriodo = document.getElementById('input-periodo-moto');
+  var divDatas = document.getElementById('div-datas-custom-moto');
+  document.querySelectorAll('.btn-periodo-moto').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var val = this.dataset.periodo;
+      document.querySelectorAll('.btn-periodo-moto').forEach(function (b) {
+        b.classList.remove('ds-btn--primario'); b.classList.add('ds-btn--outline');
+      });
+      this.classList.remove('ds-btn--outline'); this.classList.add('ds-btn--primario');
+      inputPeriodo.value = val;
+      if (val === 'personalizado') {
+        divDatas.style.display = 'grid';
+      } else {
+        divDatas.style.display = 'none';
+        document.getElementById('form-filtros-moto').submit();
+      }
+    });
+  });
+})();
+</script>

@@ -1,0 +1,48 @@
+{% load core_extras %}
+<div class="pl-cards">
+  {% for conta in contas %}
+  <div class="pl-card">
+    <div class="pl-card-label">{{ conta.nome }} <span class="text-muted">({{ conta.get_tipo_produto_display }}{% if conta.instituicao %} · {{ conta.instituicao }}{% endif %})</span></div>
+    <div class="pl-card-valor" style="font-size:1.1rem;">{{ conta.saldo|brl }}</div>
+    {% if not conta.ativa %}<span class="pl-badge pl-badge--cancelado">Inativa</span>{% endif %}
+    {% if user.pode_configurar_private_label %}
+    <div style="margin-top:.5rem;">
+      <button type="button" class="ds-btn ds-btn--outline ds-btn--sm" hx-get="{% url 'financeiro:pl_htmx_conta_investimento_form_editar' conta.pk %}" hx-target="#modal-container">Editar</button>
+    </div>
+    {% endif %}
+  </div>
+  {% empty %}
+  <p class="text-muted">Nenhuma conta de investimento cadastrada ainda.</p>
+  {% endfor %}
+</div>
+
+<div class="pl-secao-titulo">Transações recentes</div>
+<div class="ds-table-wrapper">
+  <table class="ds-table">
+    <thead><tr><th>Data</th><th>Tipo</th><th>Conta de investimento</th><th>Origem/Categoria</th><th>Valor</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for t in transacoes %}
+      <tr>
+        <td>{{ t.data|date:"d/m/Y" }}</td>
+        <td>{{ t.get_tipo_display }}</td>
+        <td>{{ t.conta_investimento.nome }}</td>
+        <td>{% if t.conta_bancaria %}{{ t.conta_bancaria.nome }}{% elif t.categoria %}{{ t.categoria.icone }} {{ t.categoria.nome }}{% endif %}</td>
+        <td>
+          {% if t.tipo == "aplicacao" or t.tipo == "taxa" %}<span class="pl-valor-despesa">{{ t.valor|brl }}</span>
+          {% else %}<span class="pl-valor-receita">{{ t.valor|brl }}</span>{% endif %}
+        </td>
+        <td>{% if t.estornada %}<span class="pl-badge pl-badge--cancelado">Estornada</span>{% else %}<span class="pl-badge pl-badge--quitado">Ativa</span>{% endif %}</td>
+        <td>
+          {% if not t.estornada and user.pode_lancar_private_label %}
+          <button type="button" class="pl-icon-btn pl-icon-btn--perigo" title="Estornar"
+                  hx-post="{% url 'financeiro:pl_htmx_investimento_transacao_estornar' t.pk %}"
+                  hx-target="#modal-container" hx-confirm="Estornar esta transação?">&#8635;</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="text-muted">Nenhuma transação de investimento ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

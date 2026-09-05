@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load metas_extras %}
+{% block titulo %}Motoqueiro - Dashboard | D'ELLA Sistemas{% endblock %}
+
+{% block conteudo %}
+{% include "motoqueiro/_estilos.html" %}
+<style>
+  .moto-chart-wrap { position: relative; height: 320px; }
+</style>
+
+<div class="ds-page-header">
+  <h1 class="ds-page-titulo">Motoqueiro</h1>
+</div>
+
+{% include "motoqueiro/_abas.html" %}
+
+{% include "motoqueiro/_filtros.html" %}
+
+<div class="moto-cards">
+  <div class="moto-card">
+    <div class="moto-card-label">Corridas solicitadas no período</div>
+    <div class="moto-card-valor">{{ total_corridas }}</div>
+  </div>
+  <div class="moto-card">
+    <div class="moto-card-label">Valor total gasto no período</div>
+    <div class="moto-card-valor">{{ total_valor|brl }}</div>
+  </div>
+</div>
+
+<div class="ds-form-section" style="margin-bottom:1.3rem;">
+  <h2 style="font-size:1rem;font-weight:500;margin-bottom:0.75rem;">Gasto e volume por mês (últimos 12 meses)</h2>
+  <div class="moto-chart-wrap">
+    <canvas id="moto-chart-mensal"></canvas>
+  </div>
+</div>
+
+<div class="ds-form-section" style="margin-bottom:1.3rem;">
+  <h2 style="font-size:1rem;font-weight:500;margin-bottom:0.75rem;">Resumo por funcionário (período selecionado)</h2>
+  {% if resumo_funcionario %}
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead><tr><th>Funcionário</th><th>Corridas</th><th>Valor</th></tr></thead>
+      <tbody>
+        {% for r in resumo_funcionario %}
+        <tr>
+          <td>{{ r.colaborador__nome }}</td>
+          <td>{{ r.corridas }}</td>
+          <td><strong>{{ r.valor|brl }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Nenhuma corrida no período.</p>
+  {% endif %}
+</div>
+
+<div class="ds-form-section" style="margin-bottom:1.3rem;">
+  <h2 style="font-size:1rem;font-weight:500;margin-bottom:0.75rem;">Lalamove x Loggi (período selecionado)</h2>
+  {% if resumo_plataforma %}
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead><tr><th>Plataforma</th><th>Corridas</th><th>Valor</th></tr></thead>
+      <tbody>
+        {% for r in resumo_plataforma %}
+        <tr>
+          <td>{{ r.plataforma_label }}</td>
+          <td>{{ r.corridas }}</td>
+          <td><strong>{{ r.valor|brl }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Nenhuma corrida no período.</p>
+  {% endif %}
+</div>
+
+<div class="ds-form-section">
+  <h2 style="font-size:1rem;font-weight:500;margin-bottom:0.75rem;">Comercial x Produção (período selecionado)</h2>
+  {% if resumo_finalidade %}
+  <div class="ds-table-wrapper">
+    <table class="ds-table">
+      <thead><tr><th>Finalidade</th><th>Corridas</th><th>Valor</th></tr></thead>
+      <tbody>
+        {% for r in resumo_finalidade %}
+        <tr>
+          <td>{{ r.finalidade_label }}</td>
+          <td>{{ r.corridas }}</td>
+          <td><strong>{{ r.valor|brl }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">Nenhuma corrida no período.</p>
+  {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var DOURADO = '#c9a96e', DOURADO_HVR = '#b8924a', GRID_CLR = '#f0ece4', TEXT_CLR = '#666666', PRETO = '#1a1a1a';
+  var dados = {{ grafico_mensal_json|safe }};
+
+  new Chart(document.getElementById('moto-chart-mensal'), {
+    data: {
+      labels: dados.labels,
+      datasets: [
+        { type: 'bar', label: 'Valor gasto (R$)', data: dados.valores, yAxisID: 'y',
+          backgroundColor: DOURADO, hoverBackgroundColor: DOURADO_HVR, borderRadius: 5, borderSkipped: false, order: 2 },
+        { type: 'line', label: 'Corridas solicitadas', data: dados.corridas, yAxisID: 'y1',
+          borderColor: PRETO, backgroundColor: PRETO, borderWidth: 2, pointRadius: 3,
+          pointBackgroundColor: PRETO, tension: 0.3, order: 1 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: TEXT_CLR, usePointStyle: true } },
+        tooltip: {
+          backgroundColor: PRETO, titleColor: '#fff', bodyColor: '#fff', padding: 10, cornerRadius: 6,
+          callbacks: {
+            label: function (c) {
+              if (c.dataset.yAxisID === 'y') return 'Valor: R$ ' + c.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+              return 'Corridas: ' + c.parsed.y;
+            }
+          }
+        }
+      },
+      scales: {
+        y:  { beginAtZero: true, position: 'left', grid: { color: GRID_CLR }, ticks: { color: TEXT_CLR, font: { size: 11 } }, border: { color: '#eeede8' } },
+        y1: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { precision: 0, color: TEXT_CLR, font: { size: 11 } }, border: { color: '#eeede8' } },
+        x:  { grid: { display: false }, ticks: { color: TEXT_CLR, font: { size: 11 } }, border: { color: '#eeede8' } }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -125,6 +125,13 @@
       </tr>
       {% endfor %}
     </tbody>
+    <tfoot>
+      <tr style="background:var(--fundo-suave, #faf8f5);font-weight:600;">
+        <td colspan="5" style="text-align:right;">Total (filtro atual)</td>
+        <td>{{ total_qty }}</td>
+        <td colspan="{% if user.pode_excluir_estoque %}6{% else %}5{% endif %}"></td>
+      </tr>
+    </tfoot>
   </table>
 </div>
 

@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.estoque",
     "apps.financeiro",
     "apps.tarefas",
+    "apps.motoqueiro",
 ]
 
 MIDDLEWARE = [
@@ -220,6 +221,11 @@ LOGGING = {
         "django.request": {
             "handlers": ["stderr"],
             "level": "ERROR",
+            "propagate": False,
+        },
+        "apps.motoqueiro": {
+            "handlers": ["stderr"],
+            "level": "INFO",
             "propagate": False,
         },
     },

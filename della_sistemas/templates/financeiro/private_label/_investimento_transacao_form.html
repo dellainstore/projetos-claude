@@ -1,0 +1,72 @@
+<div class="ds-modal-fundo">
+  <div class="ds-modal">
+    <div class="ds-modal-titulo">
+      <span>
+        {% if tipo == "aplicacao" %}Aplicação
+        {% elif tipo == "resgate" %}Resgate
+        {% elif tipo == "rendimento" %}Rendimento
+        {% else %}Taxa/Imposto{% endif %}
+      </span>
+      <button type="button" class="ds-modal-fechar" onclick="document.getElementById('modal-container').innerHTML=''">&times;</button>
+    </div>
+    {% if erro %}<div class="ds-modal-erro">{{ erro }}</div>{% endif %}
+    <form hx-post="{% url 'financeiro:pl_htmx_investimento_transacao_salvar' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      {% csrf_token %}
+      <input type="hidden" name="tipo" value="{{ tipo }}">
+      <div class="pl-form-grid">
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Conta de investimento</label>
+          <select class="ds-select" name="conta_investimento" required autofocus>
+            <option value="">Selecione</option>
+            {% for conta in contas_investimento %}
+            <option value="{{ conta.pk }}">{{ conta.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if tipo == "aplicacao" or tipo == "resgate" %}
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Conta bancária ({% if tipo == "aplicacao" %}de onde sai{% else %}pra onde volta{% endif %})</label>
+          <select class="ds-select" name="conta_bancaria" required>
+            <option value="">Selecione</option>
+            {% for conta in contas_bancarias %}
+            <option value="{{ conta.pk }}">{{ conta.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Categoria</label>
+          <select class="ds-select" name="categoria" required>
+            <option value="">Selecione</option>
+            {% if tipo == "rendimento" %}
+            {% for categoria in categorias_receita_financeira %}
+            <option value="{{ categoria.pk }}">{{ categoria.icone }} {{ categoria.nome }}</option>
+            {% endfor %}
+            {% else %}
+            {% for categoria in categorias_despesa_financeira %}
+            <option value="{{ categoria.pk }}">{{ categoria.icone }} {{ categoria.nome }}</option>
+            {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="pl-form-campo">
+          <label>Valor (R$)</label>
+          <input class="ds-input" type="number" step="0.01" min="0.01" name="valor" required>
+        </div>
+        <div class="pl-form-campo">
+          <label>Data</label>
+          <input class="ds-input" type="date" name="data" required value="{% now 'Y-m-d' %}">
+        </div>
+        <div class="pl-form-campo pl-form-campo--full">
+          <label>Observação</label>
+          <input class="ds-input" type="text" name="observacao">
+        </div>
+      </div>
+      <div class="pl-form-acoes">
+        <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
+        <button type="submit" class="ds-btn ds-btn--dourado">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>

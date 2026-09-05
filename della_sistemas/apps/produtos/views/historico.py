@@ -159,11 +159,13 @@ def _buscar_inclusoes(request: HttpRequest) -> tuple[list[dict], list[dict], lis
 @perm_required("estoque.historico")
 def view_historico(request: HttpRequest) -> HttpResponse:
     tabela, resumo, suppliers, filtros = _buscar_inclusoes(request)
+    total_qty = sum(r["qty"] for r in tabela)
     return render(request, "produtos/historico.html", {
         "tabela": tabela,
         "resumo": resumo,
         "suppliers": suppliers,
         "filtros": filtros,
+        "total_qty": total_qty,
         "status_opcoes": [("DONE", "Concluído"), ("PENDING", "Pendente"), ("ERROR", "Erro")],
         "periodos": [
             ("hoje", "Hoje"),

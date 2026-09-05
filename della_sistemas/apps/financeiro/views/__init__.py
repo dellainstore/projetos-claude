@@ -47,3 +47,39 @@ from .private_label_lancamentos import (
     pl_htmx_ajuste_saldo_salvar,
 )
 from .private_label_dashboard import pl_dashboard
+from .private_label_cartoes import (
+    pl_cartoes,
+    pl_htmx_cartoes_lista,
+    pl_htmx_cartao_form,
+    pl_htmx_cartao_salvar,
+    pl_htmx_compra_cartao_form,
+    pl_htmx_compra_cartao_salvar,
+    pl_htmx_compra_cartao_cancelar,
+    pl_cartao_detalhe,
+    pl_htmx_cartao_detalhe_conteudo,
+    pl_htmx_fatura_pagar_form,
+    pl_htmx_fatura_pagar_salvar,
+    pl_htmx_fatura_pagamento_estornar,
+)
+from .private_label_fluxo_caixa import pl_fluxo_caixa
+from .private_label_dre import pl_dre, pl_dre_exportar_csv
+from .private_label_investimentos import (
+    pl_investimentos,
+    pl_htmx_investimentos_lista,
+    pl_htmx_conta_investimento_form,
+    pl_htmx_conta_investimento_salvar,
+    pl_htmx_investimento_transacao_form,
+    pl_htmx_investimento_transacao_salvar,
+    pl_htmx_investimento_transacao_estornar,
+)
+from .private_label_conciliacao import (
+    pl_conciliacao,
+    pl_conciliacao_detalhe,
+    pl_htmx_conciliacao_detalhe_conteudo,
+    pl_htmx_conciliacao_confirmar,
+    pl_htmx_conciliacao_rejeitar,
+    pl_htmx_conciliacao_desfazer,
+    pl_htmx_item_ignorar,
+    pl_htmx_item_vincular_form,
+    pl_htmx_item_vincular_salvar,
+)
