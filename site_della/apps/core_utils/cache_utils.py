@@ -77,6 +77,9 @@ def invalidar_tabelas_medidas(categoria_id=None):
     except Exception:
         logger.warning('Falha ao invalidar cache de tabelas de medidas por categoria', exc_info=True)
 
+def invalidar_depoimentos():
+    cache.delete(HOME_DEPOIMENTOS)
+
 def invalidar_home_completa():
     cache.delete_many([
         HOME_BANNERS, HOME_MINI_BANNERS, HOME_LOOK,

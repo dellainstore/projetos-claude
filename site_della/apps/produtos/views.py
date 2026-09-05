@@ -51,11 +51,40 @@ def homepage(request):
             depoimentos = list(
                 Avaliacao.objects.filter(aprovada=True).exclude(comentario='')
                 .select_related('produto')
-                .order_by('-criada_em')[:3]
+                .order_by('-criada_em')[:60]
             )
         except Exception:
             depoimentos = []
         cache.set(HOME_DEPOIMENTOS, depoimentos, 60 * 60 * 6)
+
+    # Enquanto houver poucas avaliações reais, completa com depoimentos fixos
+    # (reserva de 2). A partir de 4 avaliações reais aprovadas, os fakes somem
+    # e o carrossel de 3 em 3 assume (ver depoimentos-slider em index.html e
+    # o bloco "Depoimentos" em della.js).
+    DEPOIMENTOS_RESERVA = [
+        {
+            'nome_publico': 'Juliana F.',
+            'nota': 5,
+            'comentario': (
+                'Entrega rápida, embalagem linda e a peça chegou exatamente '
+                'como na foto. Já é minha loja favorita.'
+            ),
+        },
+        {
+            'nome_publico': 'Beatriz S.',
+            'nota': 5,
+            'comentario': (
+                'Atendimento impecável e a coleção de couro é simplesmente '
+                'apaixonante. Della Instore é referência.'
+            ),
+        },
+    ]
+    if len(depoimentos) > 3:
+        depoimentos_exibir = depoimentos
+        depoimentos_modo = 'carrossel'
+    else:
+        depoimentos_exibir = depoimentos + DEPOIMENTOS_RESERVA[:3 - len(depoimentos)]
+        depoimentos_modo = 'fixo'
 
     # Banners do hero (cache 1h — invalidado ao salvar no admin)
     banners = cache.get(HOME_BANNERS)
@@ -131,7 +160,8 @@ def homepage(request):
 
     context = {
         'produtos_destaque':      produtos_destaque,
-        'depoimentos':            depoimentos,
+        'depoimentos_exibir':     depoimentos_exibir,
+        'depoimentos_modo':       depoimentos_modo,
         'banners':                banners,
         'mini_banners':           mini_banners,
         'look_obj':               look_obj,

@@ -327,9 +327,9 @@
       <h2 class="titulo-secao" id="titulo-depoimentos">O que dizem sobre nós</h2>
     </header>
 
-    <div class="depoimentos-slider">
-      {% for dep in depoimentos %}
-        <article class="depoimento-card fade-in fade-in-delay-{{ forloop.counter }}">
+    <div class="depoimentos-slider" data-modo="{{ depoimentos_modo }}">
+      {% for dep in depoimentos_exibir %}
+        <article class="depoimento-card{% if forloop.counter <= 3 %} fade-in fade-in-delay-{{ forloop.counter }}{% endif %}"{% if depoimentos_modo == 'carrossel' and forloop.counter > 3 %} hidden{% endif %}>
           <div class="depoimento-estrelas" aria-label="{{ dep.nota }} estrelas de 5">
             {% for i in "12345" %}
               {% if forloop.counter <= dep.nota %}★{% else %}☆{% endif %}
@@ -337,23 +337,6 @@
           </div>
           <blockquote class="depoimento-texto">"{{ dep.comentario }}"</blockquote>
           <cite class="depoimento-autor not-italic">{{ dep.nome_publico }}</cite>
-        </article>
-      {% empty %}
-        
-        <article class="depoimento-card fade-in">
-          <div class="depoimento-estrelas" aria-label="5 estrelas">★★★★★</div>
-          <blockquote class="depoimento-texto">"A qualidade das peças é incomparável. O body que comprei ficou perfeito e recebi elogios a noite toda."</blockquote>
-          <cite class="depoimento-autor not-italic">Ana Carolina M.</cite>
-        </article>
-        <article class="depoimento-card fade-in fade-in-delay-1">
-          <div class="depoimento-estrelas" aria-label="5 estrelas">★★★★★</div>
-          <blockquote class="depoimento-texto">"Entrega rápida, embalagem linda e a peça chegou exatamente como na foto. Já é minha loja favorita."</blockquote>
-          <cite class="depoimento-autor not-italic">Juliana F.</cite>
-        </article>
-        <article class="depoimento-card fade-in fade-in-delay-2">
-          <div class="depoimento-estrelas" aria-label="5 estrelas">★★★★★</div>
-          <blockquote class="depoimento-texto">"Atendimento impecável e a coleção de couro é simplesmente apaixonante. Della Instore é referência."</blockquote>
-          <cite class="depoimento-autor not-italic">Beatriz S.</cite>
         </article>
       {% endfor %}
     </div>

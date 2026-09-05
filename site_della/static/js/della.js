@@ -1482,6 +1482,66 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnNext) btnNext.addEventListener('click', function() { irPara(atual + 1); iniciarTimer(); });
   })();
 
+  // ─── Depoimentos: carrossel de 3 em 3 ──────────────────────────────────────
+  // Só ativa quando o servidor manda data-modo="carrossel" (mais de 3
+  // avaliações reais aprovadas). Com 3 ou menos, os cards ficam fixos.
+  (function() {
+    const slider = document.querySelector('.depoimentos-slider[data-modo="carrossel"]');
+    if (!slider) return;
+
+    const cards = Array.from(slider.querySelectorAll('.depoimento-card'));
+    const total = cards.length;
+    if (total <= 3) return;
+
+    const DURACAO = 7000;
+    const TRANSICAO = 450;
+
+    // Agrupa em páginas de 3. A última página, se sobrar menos de 3, "gruda"
+    // nos anteriores em vez de mostrar 1 ou 2 sozinho (ex: 4 avaliações =
+    // página 1 com [1,2,3], página 2 com [2,3,4]; 5 avaliações = [1,2,3] e [3,4,5]).
+    const paginas = [];
+    for (let inicio = 0; inicio < total; inicio += 3) {
+      paginas.push(Math.min(inicio, total - 3));
+    }
+
+    let atual = 0;
+
+    function mostrarPagina(idx, animar) {
+      const inicio = paginas[idx];
+      const visiveis = new Set(cards.slice(inicio, inicio + 3));
+
+      if (!animar) {
+        cards.forEach(function(card) { card.hidden = !visiveis.has(card); });
+        return;
+      }
+
+      const saindo = cards.filter(function(card) { return !card.hidden && !visiveis.has(card); });
+      const entrando = cards.filter(function(card) { return card.hidden && visiveis.has(card); });
+
+      saindo.forEach(function(card) { card.classList.add('depoimento-saindo'); });
+
+      setTimeout(function() {
+        saindo.forEach(function(card) {
+          card.hidden = true;
+          card.classList.remove('depoimento-saindo');
+        });
+        entrando.forEach(function(card) {
+          card.hidden = false;
+          card.classList.add('depoimento-entrando');
+          void card.offsetWidth; // reinicia a transição (mesmo truque do shake de variação)
+          card.classList.remove('depoimento-entrando');
+        });
+      }, TRANSICAO);
+    }
+
+    mostrarPagina(0, false);
+
+    setInterval(function() {
+      atual = (atual + 1) % paginas.length;
+      mostrarPagina(atual, true);
+    }, DURACAO);
+  })();
+
   // ─── Mascara de telefone no formulario de contato ──────────────────────────
   (function () {
     var contatoTel = document.querySelector('.contato-form #telefone');

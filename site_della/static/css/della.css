@@ -1317,6 +1317,21 @@ html[data-tarja="1"] { --tarja-h: 32px; }
   color: var(--cinza-texto);
 }
 
+/* Carrossel de depoimentos (ativo com mais de 3 avaliações reais aprovadas) */
+.depoimentos-slider[data-modo="carrossel"] .depoimento-card {
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.depoimentos-slider[data-modo="carrossel"] .depoimento-card.depoimento-saindo {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+
+.depoimentos-slider[data-modo="carrossel"] .depoimento-card.depoimento-entrando {
+  opacity: 0;
+  transform: translateX(24px);
+}
+
 /* ─── Instagram ──────────────────────────────────────────────────────────────*/
 .instagram-grid {
   display: grid;
