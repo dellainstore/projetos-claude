@@ -99,5 +99,27 @@ function escolherEnderecoGoogle(campo, placeId, el) {
     document.getElementById('lng-' + campo).value = '';
   });
 });
+
+// Vem do "Pedir agora" da tela de Monitoramento: os endereços já foram
+// escolhidos antes (têm lat/lng salvos), então só preenche e já dispara uma
+// cotação NOVA sozinho — nunca reaproveita preço antigo, que já pode ter
+// mudado ou expirado na Lalamove.
+(function () {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('auto_cotar') !== '1') return;
+  ['retirada', 'entrega'].forEach(function (campo) {
+    var endereco = params.get('endereco_' + campo);
+    var lat = params.get('lat_' + campo);
+    var lng = params.get('lng_' + campo);
+    if (endereco) document.getElementById('input-' + campo).value = endereco;
+    if (lat) document.getElementById('lat-' + campo).value = lat;
+    if (lng) document.getElementById('lng-' + campo).value = lng;
+  });
+  var complementoRetirada = params.get('complemento_retirada');
+  var complementoEntrega = params.get('complemento_entrega');
+  if (complementoRetirada) document.querySelector('[name="complemento_retirada"]').value = complementoRetirada;
+  if (complementoEntrega) document.querySelector('[name="complemento_entrega"]').value = complementoEntrega;
+  document.getElementById('form-cotar').requestSubmit();
+})();
 </script>
 {% endblock %}

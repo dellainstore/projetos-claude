@@ -8,6 +8,11 @@ _STATUS_CSS = {
     "entrega_realizada": "ds-status--aprovado",
     "problema_entrega": "ds-status--rejeitado",
     "problema_coleta": "ds-status--rejeitado",
+    "cancelado": "ds-status--rejeitado",
+    # Status do MonitoramentoCotacao — reaproveita as mesmas classes.
+    "ativo": "ds-status--pendente",
+    "encontrado": "ds-status--aprovado",
+    "expirado": "ds-status--rejeitado",
 }
 
 

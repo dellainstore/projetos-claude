@@ -113,8 +113,10 @@ def htmx_cotar(request: HttpRequest) -> HttpResponse:
     # Lalamove recusa e lista so WAITING_TIME_*/RETURN/THERMAL_BAG_1 como
     # specialRequests validos) — so da pra oferecer o preco Regular mesmo.
     VEICULOS_LALAMOVE = [
-        ("LALAGO", "Lalamove — LalaGo (moto, sem baú)"),
-        ("LALAPRO", "Lalamove — LalaPro (moto com baú)"),
+        # Sem repetir "Lalamove" no rótulo: a plataforma já é coluna própria no
+        # relatório, e aqui o campo é só qual veículo/serviço foi escolhido.
+        ("LALAGO", "LalaGo (moto, sem baú)"),
+        ("LALAPRO", "LalaPro (moto com baú)"),
     ]
     cotacoes = []
     erros = []
@@ -181,9 +183,12 @@ def htmx_confirmar(request: HttpRequest) -> HttpResponse:
     endereco_entrega = request.POST.get("endereco_entrega", "").strip()
     complemento_retirada = request.POST.get("complemento_retirada", "").strip()
     complemento_entrega = request.POST.get("complemento_entrega", "").strip()
-    remetente = request.POST.get("remetente", "").strip()
+    # Nome digitado em qualquer caixa (tudo minúsculo, tudo maiúsculo etc.)
+    # vira Title Case por padrão — evita "sara"/"MICHELLE" espalhado no
+    # relatório e nos pedidos que chegam pra Lalamove.
+    remetente = request.POST.get("remetente", "").strip().title()
     remetente_telefone = request.POST.get("remetente_telefone", "").strip()
-    destinatario = request.POST.get("destinatario", "").strip()
+    destinatario = request.POST.get("destinatario", "").strip().title()
     destinatario_telefone = request.POST.get("destinatario_telefone", "").strip()
     observacao = request.POST.get("observacao", "").strip()
     preco = request.POST.get("preco", "0")

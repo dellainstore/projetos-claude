@@ -193,6 +193,10 @@ class User(AbstractUser):
         return self.tem_perm("motoqueiro.gerir_saldo")
 
     @property
+    def pode_monitorar_motoqueiro(self) -> bool:
+        return self.tem_perm("motoqueiro.monitorar")
+
+    @property
     def pode_ver_motoqueiro(self) -> bool:
         """Algum acesso ao grupo Motoqueiro — só para abrir/fechar o submenu
         (mesmo padrão de `pode_ver_private_label`)."""
@@ -200,6 +204,7 @@ class User(AbstractUser):
             self.pode_ver_motoqueiro_relatorio
             or self.pode_ver_motoqueiro_dashboard
             or self.pode_solicitar_motoqueiro
+            or self.pode_monitorar_motoqueiro
         )
 
     @property

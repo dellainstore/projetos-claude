@@ -4,9 +4,12 @@ LALAMOVE_API_KEY = os.environ.get("LALAMOVE_API_KEY", "").strip()
 LALAMOVE_API_SECRET = os.environ.get("LALAMOVE_API_SECRET", "").strip()
 LALAMOVE_MARKET = os.environ.get("LALAMOVE_MARKET", "BR").strip() or "BR"
 LALAMOVE_SANDBOX = os.environ.get("LALAMOVE_SANDBOX", "True").strip().lower() in ("1", "true", "yes")
-# Se a Lalamove nao expuser um segredo de webhook separado no painel deles,
-# a verificacao da assinatura do webhook cai para o API_SECRET normal.
-LALAMOVE_WEBHOOK_SECRET = os.environ.get("LALAMOVE_WEBHOOK_SECRET", "").strip() or LALAMOVE_API_SECRET
+# A Lalamove NAO assina os webhooks — a doc v3 nao define assinatura, header
+# de autenticacao nem nada equivalente, so exige que o endpoint responda 200.
+# Entao a protecao do endpoint publico e um token secreto no proprio caminho
+# da URL cadastrada no portal deles:
+#   https://sistemas.dellainstore.com/motoqueiro/webhook/lalamove/<token>/
+LALAMOVE_WEBHOOK_TOKEN = os.environ.get("LALAMOVE_WEBHOOK_TOKEN", "").strip()
 
 LALAMOVE_BASE_URL = (
     "https://sandbox-rest.lalamove.com" if LALAMOVE_SANDBOX else "https://rest.lalamove.com"
@@ -32,3 +35,15 @@ LOGGI_WEBHOOK_PASSWORD = os.environ.get("LOGGI_WEBHOOK_PASSWORD", "").strip()
 LOGGI_BASE_URL = (
     "https://stg.api.loggi.com" if LOGGI_SANDBOX else "https://api.loggi.com"
 )
+
+# Monitoramento de cotação (Financeiro > Motoqueiro > Monitoramento) — avisa
+# num bot/grupo do Telegram quando acha o preço-alvo. Criar o bot no
+# @BotFather (token vem de lá); TELEGRAM_CHAT_ID é o id do grupo/conversa que
+# vai receber o aviso — ver instruções em services/telegram.py.
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+
+# Domínio público do painel (não o do site) — usado só pra montar o link
+# "Pedir agora" dentro da mensagem do Telegram (fora do navegador, não dá
+# pra usar request.build_absolute_uri()).
+PAINEL_BASE_URL = os.environ.get("PAINEL_BASE_URL", "https://sistemas.dellainstore.com").strip().rstrip("/")
