@@ -12,7 +12,7 @@ from django.utils import timezone
 from apps.core.decorators import perm_required
 
 from ..models import MovimentoSaldoLalamove, SolicitacaoEntrega
-from ..services.escopo import qs_do_usuario
+from ..services.escopo import qs_contabilizavel
 from ..services.periodo import PERIODOS, parse_periodo
 
 
@@ -20,7 +20,9 @@ from ..services.periodo import PERIODOS, parse_periodo
 def view_dashboard(request: HttpRequest) -> HttpResponse:
     periodo = parse_periodo(request)
 
-    qs_base = qs_do_usuario(request)
+    # Canceladas ficam de fora de tudo aqui (cards, rankings e grafico):
+    # corrida cancelada nao foi cobrada e nao pode inflar gasto nem ranking.
+    qs_base = qs_contabilizavel(request)
     qs_periodo = qs_base.filter(
         criado_em__gte=periodo.inicio, criado_em__lte=periodo.fim
     )

@@ -8,12 +8,13 @@ Fluxo usado pelo modulo Motoqueiro:
   4. obter_pedido()           -> GET /v3/orders/{id} (consulta status)
 
 Webhook (recebe status atualizado sem precisar ficar consultando):
-  verificar_assinatura_webhook() valida o payload recebido em
+  verificar_token_webhook() valida o token da URL recebida em
   apps/motoqueiro/views/webhook.py antes de aplicar qualquer mudanca de status.
 """
 import hashlib
 import hmac
 import json
+import re
 import time
 import uuid
 
@@ -24,10 +25,24 @@ from .config import (
     LALAMOVE_API_SECRET,
     LALAMOVE_BASE_URL,
     LALAMOVE_MARKET,
-    LALAMOVE_WEBHOOK_SECRET,
+    LALAMOVE_WEBHOOK_TOKEN,
 )
 
 TIMEOUT = 20
+
+
+def _telefone_e164(telefone: str) -> str:
+    """Normaliza pro formato E.164 exigido pela Lalamove (ex: +5511991771687).
+    A tela de Solicitar aceita texto livre ((11) 90000-0000, com espaço,
+    traço etc.) — aqui limpa tudo que não é dígito e garante o DDI 55 na
+    frente. Só cobre número nacional (DDD + 8 ou 9 dígitos); se já vier com
+    o 55 na frente, não duplica."""
+    digitos = re.sub(r"\D", "", telefone or "")
+    if not digitos:
+        return ""
+    if not digitos.startswith("55") or len(digitos) not in (12, 13):
+        digitos = "55" + digitos
+    return "+" + digitos
 
 
 class LalamoveError(Exception):
@@ -44,7 +59,7 @@ def _assinar(timestamp: str, method: str, path: str, body: str) -> str:
     ).hexdigest()
 
 
-def _request(method: str, path: str, payload: dict | None = None) -> dict:
+def _request(method: str, path: str, payload: dict | None = None, timeout: int | None = None) -> dict:
     body = json.dumps(payload, ensure_ascii=False) if payload is not None else ""
     timestamp = str(int(time.time() * 1000))
     assinatura = _assinar(timestamp, method, path, body)
@@ -58,7 +73,7 @@ def _request(method: str, path: str, payload: dict | None = None) -> dict:
     resp = requests.request(
         method, f"{LALAMOVE_BASE_URL}{path}",
         data=body if payload is not None else None,
-        headers=headers, timeout=TIMEOUT,
+        headers=headers, timeout=timeout or TIMEOUT,
     )
     if resp.status_code >= 400:
         raise LalamoveError(resp.status_code, resp.text)
@@ -137,13 +152,13 @@ def criar_pedido(
             "sender": {
                 "stopId": stop_id_retirada,
                 "name": remetente,
-                "phone": remetente_telefone,
+                "phone": _telefone_e164(remetente_telefone),
             },
             "recipients": [
                 {
                     "stopId": stop_id_entrega,
                     "name": destinatario,
-                    "phone": destinatario_telefone,
+                    "phone": _telefone_e164(destinatario_telefone),
                     "remarks": observacao,
                 }
             ],
@@ -152,38 +167,55 @@ def criar_pedido(
     return _request("POST", "/v3/orders", payload)
 
 
-def obter_pedido(order_id: str) -> dict:
+def obter_pedido(order_id: str, timeout: int | None = None) -> dict:
     """GET /v3/orders/{orderId} — consulta status atual (fallback se o
-    webhook falhar ou pra conferencia manual)."""
-    return _request("GET", f"/v3/orders/{order_id}")
+    webhook falhar ou pra conferencia manual).
+
+    `timeout` menor e' usado quando a consulta acontece dentro do carregamento
+    de uma pagina: melhor a linha ficar com o status velho do que a tela
+    inteira pendurar esperando a Lalamove."""
+    return _request("GET", f"/v3/orders/{order_id}", timeout=timeout)
 
 
-def verificar_assinatura_webhook(headers, raw_body: bytes) -> bool:
-    """Confere a assinatura do webhook antes de confiar no payload.
+def cancelar_pedido(order_id: str) -> dict:
+    """DELETE /v3/orders/{orderId} — cancela a corrida na Lalamove.
 
-    ATENCAO: o formato exato do header/assinatura do webhook v3 da Lalamove
-    nao pode ser confirmado sem ver um payload real chegando (a doc publica
-    varia por versao). Implementado com o mesmo esquema HMAC das chamadas de
-    API (Authorization: hmac key:timestamp:signature). Se o primeiro webhook
-    real vier num formato diferente, ajustar aqui — o evento inteiro (headers
-    + body) fica logado em SolicitacaoEntregaEvento mesmo quando a assinatura
-    nao bate, exatamente para permitir esse ajuste sem perder dado.
+    So e' aceito enquanto o pedido esta procurando motoboy (ASSIGNING_DRIVER)
+    ou ate 5 minutos depois de casar com um. Fora disso a API responde 409
+    com {"message": "ERR_CANCELLATION_FORBIDDEN"} — que sobe como
+    LalamoveError pra view traduzir numa mensagem util. Sucesso e' 204 sem
+    corpo, entao o retorno normal e' um dict vazio."""
+    return _request("DELETE", f"/v3/orders/{order_id}")
+
+
+def adicionar_prioridade(order_id: str, valor) -> dict:
+    """POST /v3/orders/{orderId}/priority-fee — aumenta a taxa de prioridade.
+
+    Regras da Lalamove: so aceita antes de um motoboy aceitar a corrida, e
+    cada valor novo SUBSTITUI o anterior (nao soma) e precisa ser maior que o
+    anterior. Erros conhecidos: ERR_EXCEED_MIN_TIPS / ERR_EXCEED_MAX_TIPS
+    quando o valor esta fora da faixa daquele mercado."""
+    return _request("POST", f"/v3/orders/{order_id}/priority-fee",
+                    {"data": {"priorityFee": f"{valor:.0f}" if valor == int(valor) else f"{valor:.2f}"}})
+
+
+def verificar_token_webhook(token: str) -> bool:
+    """Confere o token secreto que vem no caminho da URL do webhook.
+
+    A Lalamove nao assina os webhooks: a doc v3 nao especifica assinatura,
+    header de autenticacao nem verificacao de origem — so pede que o endpoint
+    responda 200. A tentativa anterior (HMAC no header Authorization, no mesmo
+    esquema das chamadas de API) rejeitava 100% das notificacoes reais, porque
+    esse header simplesmente nunca chega.
+
+    A protecao passa a ser o segredo no proprio caminho da URL cadastrada no
+    portal da Lalamove. Quem nao conhece o token nao consegue nem chegar na
+    view. Se LALAMOVE_WEBHOOK_TOKEN estiver vazio, nada e aceito — melhor o
+    status ficar parado do que abrir o endpoint pra qualquer um.
     """
-    auth = headers.get("Authorization", "")
-    if not auth.startswith("hmac "):
+    if not LALAMOVE_WEBHOOK_TOKEN:
         return False
-    try:
-        key, timestamp, assinatura_recebida = auth[len("hmac "):].split(":", 2)
-    except ValueError:
-        return False
-    if key != LALAMOVE_API_KEY:
-        return False
-    esperada = hmac.new(
-        LALAMOVE_WEBHOOK_SECRET.encode("utf-8"),
-        f"{timestamp}\r\n{raw_body.decode('utf-8')}".encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(esperada, assinatura_recebida)
+    return hmac.compare_digest(token or "", LALAMOVE_WEBHOOK_TOKEN)
 
 
 # Mapeia o status bruto da Lalamove para os 5 status do painel D'ELLA.
@@ -196,7 +228,7 @@ MAPA_STATUS_LALAMOVE = {
     "COMPLETED": "entrega_realizada",
     "REJECTED": "problema_coleta",
     "EXPIRED": "problema_coleta",
-    "CANCELED": "problema_entrega",
+    "CANCELED": "cancelado",
 }
 
 

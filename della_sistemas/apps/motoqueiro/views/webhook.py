@@ -8,19 +8,24 @@ from django.views.decorators.http import require_POST
 
 from apps.motoqueiro.models import SolicitacaoEntrega, SolicitacaoEntregaEvento
 from apps.motoqueiro.services import loggi
-from apps.motoqueiro.services.lalamove import traduzir_status, verificar_assinatura_webhook
+from apps.motoqueiro.services.lalamove import (
+    MAPA_STATUS_LALAMOVE, traduzir_status, verificar_token_webhook,
+)
 
 logger = logging.getLogger("apps.motoqueiro")
 
 
 @csrf_exempt
 @require_POST
-def webhook_lalamove(request: HttpRequest) -> HttpResponse:
+def webhook_lalamove(request: HttpRequest, token: str = "") -> HttpResponse:
     """Endpoint publico (sem login) que recebe as notificacoes de status da
     Lalamove. Sempre responde 200 rapido (evita retry em loop do lado deles),
-    mas so aplica a mudanca de status se a assinatura bater."""
+    mas so aplica a mudanca de status se o token da URL bater.
+
+    A rota sem token continua registrada de proposito: enquanto a URL antiga
+    nao for trocada no portal da Lalamove, e melhor responder 200 com um aviso
+    no log do que devolver 404 e provocar retry em loop do lado deles."""
     raw_body = request.body
-    assinatura_ok = verificar_assinatura_webhook(request.headers, raw_body)
 
     try:
         payload = json.loads(raw_body or b"{}")
@@ -28,20 +33,42 @@ def webhook_lalamove(request: HttpRequest) -> HttpResponse:
         logger.warning("motoqueiro webhook: payload nao é JSON valido: %r", raw_body[:500])
         return JsonResponse({"ok": False, "erro": "payload invalido"}, status=200)
 
-    if not assinatura_ok:
-        logger.warning("motoqueiro webhook: assinatura NAO confere. payload=%s", json.dumps(payload)[:1000])
-        # Loga mesmo assim (sem aplicar) para dar pra ajustar a verificacao
-        # olhando o formato real que a Lalamove mandou.
+    if not verificar_token_webhook(token):
+        logger.warning(
+            "motoqueiro webhook: token da URL invalido/ausente — a URL cadastrada na "
+            "Lalamove precisa ser a que tem o token no final. headers=%s payload=%s",
+            dict(request.headers), json.dumps(payload)[:1000],
+        )
         _logar_payload_bruto(payload, verificado=False)
-        return JsonResponse({"ok": False, "erro": "assinatura invalida"}, status=200)
+        return JsonResponse({"ok": False, "erro": "token invalido"}, status=200)
 
+    # O envelope real (confirmado num webhook de producao em 08/09/2026) e:
+    # {apiKey, timestamp, signature, eventId, eventType, eventVersion, data}.
+    # Nem todo evento e de corrida — WALLET_BALANCE_CHANGED, por exemplo, so
+    # avisa o saldo da carteira. Tratar isso como "sem orderId" enchia o log
+    # de alerta falso e escondia problema de verdade.
+    tipo_evento = payload.get("eventType", "")
     dados = (payload.get("data") or {})
+
+    if tipo_evento == "WALLET_BALANCE_CHANGED":
+        saldo = (dados.get("balance") or {}).get("amount")
+        logger.info(
+            "motoqueiro webhook: saldo da carteira Lalamove agora e %s %s.",
+            saldo, (dados.get("balance") or {}).get("currency", ""),
+        )
+        return JsonResponse({"ok": True, "evento": tipo_evento})
+
     order = dados.get("order") or dados
     order_id = order.get("orderId") or order.get("id")
     status_raw = order.get("status", "")
 
     if not order_id:
-        logger.warning("motoqueiro webhook: sem orderId no payload: %s", json.dumps(payload)[:1000])
+        # Nao adivinhar de novo o formato: registra o payload inteiro (e o
+        # cabecalho de evento) pra ajustar o parse em cima do dado real.
+        logger.warning(
+            "motoqueiro webhook: evento %r sem orderId. chaves_raiz=%s payload=%s",
+            tipo_evento, sorted(payload.keys()), json.dumps(payload, ensure_ascii=False)[:4000],
+        )
         return JsonResponse({"ok": False, "erro": "sem orderId"}, status=200)
 
     solicitacao = SolicitacaoEntrega.objects.filter(lalamove_order_id=order_id).first()
@@ -49,17 +76,36 @@ def webhook_lalamove(request: HttpRequest) -> HttpResponse:
         logger.info("motoqueiro webhook: order_id %s nao corresponde a nenhuma solicitacao local.", order_id)
         return JsonResponse({"ok": False, "erro": "solicitacao nao encontrada"}, status=200)
 
-    status_novo = traduzir_status(status_raw)
+    # Nem todo evento de corrida carrega status: ORDER_AMOUNT_CHANGED, por
+    # exemplo, e sobre preco. E traduzir_status() devolve "aguardando_coleta"
+    # pra qualquer coisa que nao conheca — se aplicassemos isso cegamente, um
+    # evento sem status (ou com um status novo da Lalamove) faria a corrida
+    # REGREDIR de "No Percurso" pra "Aguardando Coleta", que e exatamente a
+    # confusao que a gente esta tentando eliminar. So mexe no status quando o
+    # valor bruto e conhecido.
     status_anterior = solicitacao.status
+    campos = ["lalamove_status_raw", "atualizado_em"]
+    status_conhecido = status_raw in MAPA_STATUS_LALAMOVE
+    status_novo = traduzir_status(status_raw) if status_conhecido else status_anterior
 
-    solicitacao.status = status_novo
-    solicitacao.lalamove_status_raw = status_raw
+    if status_conhecido:
+        solicitacao.status = status_novo
+        solicitacao.lalamove_status_raw = status_raw
+        campos.append("status")
+        if status_novo in SolicitacaoEntrega.STATUS_FINAIS and not solicitacao.concluido_em:
+            solicitacao.concluido_em = timezone.now()
+            campos.append("concluido_em")
+    elif status_raw:
+        logger.warning(
+            "motoqueiro webhook: status %r desconhecido no evento %r — status local mantido em %r.",
+            status_raw, tipo_evento, status_anterior,
+        )
+
     novo_link = order.get("shareLink") or order.get("trackingUrl") or order.get("share_link")
     if novo_link:
         solicitacao.lalamove_share_link = novo_link
-    if status_novo in SolicitacaoEntrega.STATUS_FINAIS and not solicitacao.concluido_em:
-        solicitacao.concluido_em = timezone.now()
-    solicitacao.save(update_fields=["status", "lalamove_status_raw", "lalamove_share_link", "concluido_em", "atualizado_em"])
+        campos.append("lalamove_share_link")
+    solicitacao.save(update_fields=list(dict.fromkeys(campos)))
 
     SolicitacaoEntregaEvento.objects.create(
         solicitacao=solicitacao,
