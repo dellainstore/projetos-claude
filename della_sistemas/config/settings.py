@@ -216,6 +216,23 @@ LOGGING = {
         "stderr": {
             "class": "logging.StreamHandler",
         },
+        # O gunicorn nao roda com capture_output, entao o que a app manda pro
+        # stderr some no journal e nao aparece em `della logs admin error`.
+        # Este arquivo e' o unico jeito de ler payload de webhook depois.
+        "arquivo_motoqueiro": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": "/home/neto/logs/della-sistemas/motoqueiro.log",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 3,
+            "encoding": "utf-8",
+            "formatter": "simples",
+        },
+    },
+    "formatters": {
+        "simples": {
+            "format": "[{asctime}] {levelname} {message}",
+            "style": "{",
+        },
     },
     "loggers": {
         "django.request": {
@@ -224,7 +241,7 @@ LOGGING = {
             "propagate": False,
         },
         "apps.motoqueiro": {
-            "handlers": ["stderr"],
+            "handlers": ["stderr", "arquivo_motoqueiro"],
             "level": "INFO",
             "propagate": False,
         },

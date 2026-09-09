@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load tarefas_extras %}
+{% load tarefas_extras core_extras %}
 {% block titulo %}Histórico | Tarefas | D'ELLA Sistemas{% endblock %}
 
 {% block css_extra %}
@@ -98,5 +98,5 @@
 
 {% block js_extra %}
 <script>window.DELLA_CSRF = "{{ csrf_token }}";</script>
-<script src="{{ STATIC_URL }}js/tarefas-kanban.js"></script>
+<script src="{% estatico 'js/tarefas-kanban.js' %}"></script>
 {% endblock %}

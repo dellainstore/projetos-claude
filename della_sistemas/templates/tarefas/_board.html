@@ -7,7 +7,7 @@
   </div>
   <div class="kanban-coluna-corpo" data-status-id="{{ bloco.coluna.pk }}">
     {% for t in bloco.tarefas %}
-    <div class="kanban-card" draggable="true" data-tarefa-id="{{ t.pk }}"
+    <div class="kanban-card" data-tarefa-id="{{ t.pk }}"
          data-mover-url="{% url 'tarefas:htmx_mover_status' t.pk %}"
          hx-get="{% url 'tarefas:htmx_detalhe_tarefa' t.pk %}" hx-target="#modal-container" hx-trigger="click">
       <div class="kanban-card-titulo">{{ t.titulo }}</div>

@@ -13,18 +13,28 @@ projeto de CSS local por página (ex.: templates/tarefas/).
 
   /* Navegação interna "abas" do submenu Private Label */
   .pl-abas { margin-bottom: 1.25rem; border-bottom: 1px solid var(--cinza-medio); }
-  .pl-abas-desktop { display: flex; gap: .25rem; }
+  .pl-abas-lista { display: flex; gap: .25rem; }
   .pl-aba {
     padding: .6rem 1rem; font-size: .86rem; font-weight: 600; color: var(--cinza-texto);
     text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
   }
   .pl-aba:hover { color: var(--preto); }
   .pl-aba.ativa { color: var(--dourado); border-bottom-color: var(--dourado); }
-  .pl-abas-mobile { display: none; width: 100%; margin-bottom: .75rem; }
+  /* No mobile as abas continuam sendo ABAS, so que rolando na horizontal.
+     Antes viravam um <select>, e como .ds-input tem `appearance: none` o
+     campo saia sem a setinha — ficava identico a uma caixa de texto e
+     ninguem descobria que dali dava pra chegar nas outras telas. Mesma
+     correcao aplicada no Motoqueiro. */
   @media (max-width: 768px) {
-    .pl-abas-desktop { display: none; }
-    .pl-abas-mobile { display: block; }
     .pl-abas { border-bottom: none; }
+    .pl-abas-lista {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-bottom: 1px solid var(--cinza-medio);
+      scrollbar-width: none;
+    }
+    .pl-abas-lista::-webkit-scrollbar { display: none; }
+    .pl-aba { padding: .6rem .75rem; white-space: nowrap; flex: 0 0 auto; }
   }
 
   /* Sub-abas de Configurações (contas/categorias/...) */

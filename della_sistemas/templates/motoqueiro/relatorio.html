@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load metas_extras motoqueiro_extras %}
+{% load metas_extras motoqueiro_extras l10n %}
 {% block titulo %}Motoqueiro | D'ELLA Sistemas{% endblock %}
 
 {% block conteudo %}
@@ -28,30 +28,30 @@
 <div class="ds-form-section moto-secao" style="margin-bottom:1.75rem;">
   <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:0.75rem;">
     <h2 style="font-size:1.05rem;">{{ secao.colaborador.nome }}</h2>
-    <span style="font-weight:600;">{{ secao.linhas|length }} corrida{{ secao.linhas|length|pluralize }} — {{ secao.total_valor|brl }}</span>
+    <span style="font-weight:600;">{{ secao.qtd }} corrida{{ secao.qtd|pluralize }} — {{ secao.total_valor|brl }}</span>
   </div>
 
   <div class="ds-table-wrapper">
     <table class="ds-table">
       <thead>
         <tr>
-          <th>Data</th><th>Retirada</th><th>Entrega</th><th>Remetente</th><th>Destinatário</th>
-          <th>Valor</th><th>Finalidade</th><th>Obs.</th><th>Plataforma</th><th>Veículo</th><th>Status</th>
+          <th>Data</th><th>Rastreio</th><th>Status</th><th>Retirada</th><th>Entrega</th><th>Remetente</th><th>Destinatário</th>
+          <th>Valor</th><th>Finalidade</th><th>Obs.</th><th>Plataforma</th><th>Veículo</th>
         </tr>
       </thead>
       <tbody>
         {% for s in secao.linhas %}
         <tr class="moto-linha" data-busca="{{ s.remetente|lower }} {{ s.destinatario|lower }} {{ s.endereco_retirada|lower }} {{ s.endereco_entrega|lower }} {{ s.complemento_retirada|lower }} {{ s.complemento_entrega|lower }} {{ s.get_status_display|lower }} {{ s.get_finalidade_display|lower }} {{ s.observacao|lower }}">
           <td>{{ s.criado_em|date:"d/m/Y H:i" }}</td>
-          <td style="max-width:220px;">{{ s.endereco_retirada }}{% if s.complemento_retirada %}<br><span class="text-muted" style="font-size:0.75rem;">{{ s.complemento_retirada }}</span>{% endif %}</td>
-          <td style="max-width:220px;">{{ s.endereco_entrega }}{% if s.complemento_entrega %}<br><span class="text-muted" style="font-size:0.75rem;">{{ s.complemento_entrega }}</span>{% endif %}</td>
-          <td>{{ s.remetente }}</td>
-          <td>{{ s.destinatario }}</td>
-          <td><strong>{{ s.valor|brl }}</strong></td>
-          <td>{{ s.get_finalidade_display }}</td>
-          <td class="text-muted" style="font-size:0.78rem;max-width:160px;">{{ s.observacao|default:"" }}</td>
-          <td>{{ s.get_plataforma_display }}</td>
-          <td class="text-muted" style="font-size:0.8rem;">{{ s.veiculo|default:"" }}</td>
+          <td>
+            {% if s.lalamove_share_link %}
+              {% if not s.eh_status_final %}
+              <a href="{{ s.lalamove_share_link }}" target="_blank" rel="noopener" class="moto-ao-vivo">&#128205; AO VIVO</a>
+              {% else %}
+              <a href="{{ s.lalamove_share_link }}" target="_blank" rel="noopener" title="Ver rastreio" style="font-size:0.85rem;">&#128205; rastreio</a>
+              {% endif %}
+            {% endif %}
+          </td>
           <td>
             {% if user.pode_editar_status_motoqueiro %}
             <form method="post" action="{% url 'motoqueiro:atualizar_status_manual' s.pk %}" style="display:inline-flex;gap:0.3rem;align-items:center;">
@@ -65,14 +65,34 @@
             {% else %}
             <span class="ds-status {{ s.status|status_css }}">{{ s.get_status_display }}</span>
             {% endif %}
-            {% if s.lalamove_share_link %}
-              {% if not s.eh_status_final %}
-              <a href="{{ s.lalamove_share_link }}" target="_blank" rel="noopener" class="moto-ao-vivo">&#128205; AO VIVO</a>
-              {% else %}
-              <a href="{{ s.lalamove_share_link }}" target="_blank" rel="noopener" title="Ver rastreio" style="margin-left:0.3rem;">&#128205;</a>
-              {% endif %}
+            {% if s.lalamove_prioridade %}
+            <div class="moto-prioridade-atual">prioridade R$ {{ s.lalamove_prioridade|floatformat:2 }}</div>
+            {% endif %}
+            {% if s.pode_priorizar and pode_cancelar_corrida %}
+            <form method="post" action="{% url 'motoqueiro:priorizar' s.pk %}" class="moto-form-cancelar"
+                  onsubmit="return confirmarPrioridade(this, '{{ s.proxima_prioridade|floatformat:0 }}');">
+              {% csrf_token %}
+              <input type="hidden" name="valor" value="{{ s.proxima_prioridade|unlocalize }}">
+              <button type="submit" class="moto-btn-prioridade">Aumentar prioridade (R$ {{ s.proxima_prioridade|floatformat:2 }})</button>
+            </form>
+            {% endif %}
+            {% if s.pode_cancelar and pode_cancelar_corrida %}
+            <form method="post" action="{% url 'motoqueiro:cancelar' s.pk %}" class="moto-form-cancelar"
+                  onsubmit="return confirm('Cancelar a corrida de {{ s.remetente|escapejs }} para {{ s.destinatario|escapejs }}?\n\nA Lalamove só aceita cancelar enquanto o motoboy não saiu. Esta ação não pode ser desfeita.');">
+              {% csrf_token %}
+              <button type="submit" class="moto-btn-cancelar">Cancelar corrida</button>
+            </form>
             {% endif %}
           </td>
+          <td style="max-width:220px;">{{ s.endereco_retirada }}{% if s.complemento_retirada %}<br><span class="text-muted" style="font-size:0.75rem;">{{ s.complemento_retirada }}</span>{% endif %}</td>
+          <td style="max-width:220px;">{{ s.endereco_entrega }}{% if s.complemento_entrega %}<br><span class="text-muted" style="font-size:0.75rem;">{{ s.complemento_entrega }}</span>{% endif %}</td>
+          <td>{{ s.remetente }}</td>
+          <td>{{ s.destinatario }}</td>
+          <td><strong>{{ s.valor|brl }}</strong></td>
+          <td>{{ s.get_finalidade_display }}</td>
+          <td class="text-muted" style="font-size:0.78rem;max-width:160px;">{{ s.observacao|default:"" }}</td>
+          <td>{{ s.get_plataforma_display }}</td>
+          <td class="text-muted" style="font-size:0.8rem;">{{ s.veiculo|default:"" }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -82,6 +102,19 @@
 {% endfor %}
 
 <script>
+// Confirmacao + trava de clique duplo: sem desabilitar o botao, dois cliques
+// rapidos viram dois POSTs e o segundo ja pegaria o degrau seguinte (R$ 5)
+// sem a pessoa querer. A view tambem barra pelo valor, isto aqui e a primeira
+// linha de defesa.
+function confirmarPrioridade(form, valor) {
+  if (form.dataset.enviando === '1') return false;
+  if (!confirm('Deseja aumentar a prioridade por ' + valor + ' reais?')) return false;
+  form.dataset.enviando = '1';
+  var botao = form.querySelector('button');
+  if (botao) { botao.disabled = true; botao.textContent = 'Enviando...'; }
+  return true;
+}
+
 function filtrarTabelaMoto(termo) {
   termo = (termo || '').toLowerCase().trim();
   document.querySelectorAll('.moto-linha').forEach(function (tr) {
