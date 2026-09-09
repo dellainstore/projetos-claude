@@ -109,7 +109,7 @@ def _texto_encontrado(monitor: MonitoramentoCotacao) -> str:
     link = link_absoluto_pedir_agora(monitor)
     return (
         "🏍️ Cotação encontrada!\n"
-        f"{monitor.endereco_retirada} → {monitor.endereco_entrega}\n"
+        f"De {monitor.endereco_retirada} para {monitor.endereco_entrega}\n"
         f"{monitor.veiculo_encontrado}: R$ {monitor.preco_encontrado} (meta: R$ {monitor.preco_alvo})\n"
         f"Peça agora: {link}"
     )
@@ -119,8 +119,8 @@ def _texto_expirado(monitor: MonitoramentoCotacao) -> str:
     ultimo = monitor.ultimo_preco_lalago if monitor.ultimo_preco_lalago is not None else monitor.ultimo_preco_lalapro
     trecho_ultimo = f" Último preço visto: R$ {ultimo}." if ultimo is not None else " Nenhuma cotação válida foi conseguida."
     return (
-        "⌛ Monitoramento encerrado sem achar o preço-alvo.\n"
-        f"{monitor.endereco_retirada} → {monitor.endereco_entrega}\n"
+        "⌛ Monitoramento encerrado sem achar o preço alvo.\n"
+        f"De {monitor.endereco_retirada} para {monitor.endereco_entrega}\n"
         f"Meta era R$ {monitor.preco_alvo}.{trecho_ultimo}"
     )
 

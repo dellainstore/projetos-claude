@@ -15,12 +15,21 @@ from ..services import monitoramento as monitoramento_service
 
 @perm_required("motoqueiro.monitorar")
 def view_monitoramento(request: HttpRequest) -> HttpResponse:
-    monitoramentos = MonitoramentoCotacao.objects.select_related("criado_por")[:100]
-    ctx = {
-        "monitoramentos": monitoramentos,
-        "agora": timezone.now(),
-    }
+    ctx = {"monitoramentos": _monitoramentos(), "agora": timezone.now()}
     return render(request, "motoqueiro/monitoramento.html", ctx)
+
+
+def _monitoramentos():
+    return MonitoramentoCotacao.objects.select_related("criado_por")[:100]
+
+
+@perm_required("motoqueiro.monitorar")
+def htmx_lista(request: HttpRequest) -> HttpResponse:
+    """Pedaço da tabela que fica se atualizando sozinho (a cada 30s) —
+    reflete o último preço visto e o status sem precisar dar F5. A checagem
+    de verdade continua sendo só o cron a cada 20 min; isto aqui só mostra o
+    que já está salvo no banco."""
+    return render(request, "motoqueiro/_monitoramento_lista.html", {"monitoramentos": _monitoramentos()})
 
 
 @perm_required("motoqueiro.monitorar")

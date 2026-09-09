@@ -10,6 +10,7 @@ urlpatterns = [
     path("saldo/", saldo.view_saldo, name="saldo"),
     path("saldo/lancar/", saldo.view_saldo_lancar, name="saldo_lancar"),
     path("monitoramento/", monitoramento.view_monitoramento, name="monitoramento"),
+    path("monitoramento/lista/", monitoramento.htmx_lista, name="monitoramento_htmx_lista"),
     path("monitoramento/criar/", monitoramento.view_criar, name="monitoramento_criar"),
     path("monitoramento/<int:pk>/cancelar/", monitoramento.view_cancelar, name="monitoramento_cancelar"),
     path("solicitar/", solicitar.view_solicitar, name="solicitar"),

@@ -12,13 +12,6 @@
 {% include "motoqueiro/_abas.html" %}
 
 <div class="ds-form-section" style="max-width:900px;margin-bottom:1.5rem;">
-  <p style="margin:0 0 1rem;font-size:0.85rem;color:var(--cinza-texto);">
-    Define um trajeto e um preço-alvo — o sistema cota de novo a cada 20 minutos e avisa
-    no grupo do Telegram assim que achar igual ou abaixo do valor (ou quando parar sozinho,
-    no horário escolhido, sem achar). Não pede nada sozinho: quando avisar, é você quem clica
-    em "Pedir agora" pra confirmar a corrida com uma cotação nova na hora.
-  </p>
-
   <form method="post" action="{% url 'motoqueiro:monitoramento_criar' %}" id="form-monitorar">
     {% csrf_token %}
     <div class="ds-form-group" style="position:relative;">
@@ -80,58 +73,8 @@
   </form>
 </div>
 
-<div class="ds-form-section moto-secao">
-  <h2 style="font-size:1.05rem;margin-bottom:0.75rem;">Monitoramentos</h2>
-  {% if not monitoramentos %}
-  <p class="text-muted">Nenhum monitoramento criado ainda.</p>
-  {% else %}
-  <div class="ds-table-wrapper">
-    <table class="ds-table">
-      <thead>
-        <tr>
-          <th>Criado em</th><th>Status</th><th>Retirada</th><th>Entrega</th><th>Veículo</th>
-          <th>Alvo</th><th>Último preço visto</th><th>Para às</th><th>Ação</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for m in monitoramentos %}
-        <tr>
-          <td>{{ m.criado_em|date:"d/m/Y H:i" }}</td>
-          <td>
-            <span class="ds-status {{ m.status|status_css }}">{{ m.get_status_display }}</span>
-            {% if m.status == "encontrado" %}
-            <div class="text-muted" style="font-size:0.72rem;margin-top:0.2rem;">{{ m.veiculo_encontrado }} — R$ {{ m.preco_encontrado }}</div>
-            {% endif %}
-          </td>
-          <td style="max-width:200px;">{{ m.endereco_retirada }}{% if m.complemento_retirada %}<br><span class="text-muted" style="font-size:0.75rem;">{{ m.complemento_retirada }}</span>{% endif %}</td>
-          <td style="max-width:200px;">{{ m.endereco_entrega }}{% if m.complemento_entrega %}<br><span class="text-muted" style="font-size:0.75rem;">{{ m.complemento_entrega }}</span>{% endif %}</td>
-          <td>{{ m.get_veiculo_display }}</td>
-          <td><strong>R$ {{ m.preco_alvo }}</strong></td>
-          <td class="text-muted" style="font-size:0.85rem;">
-            {% if m.ultimo_preco_lalago %}LalaGo: R$ {{ m.ultimo_preco_lalago }}<br>{% endif %}
-            {% if m.ultimo_preco_lalapro %}LalaPro: R$ {{ m.ultimo_preco_lalapro }}<br>{% endif %}
-            {% if not m.ultimo_preco_lalago and not m.ultimo_preco_lalapro %}—ainda sem cotação—{% endif %}
-            {% if m.ultima_consulta_em %}<span style="font-size:0.72rem;">checado {{ m.ultima_consulta_em|date:"H:i" }}</span>{% endif %}
-          </td>
-          <td>{{ m.expira_em|date:"H:i" }}</td>
-          <td>
-            {% if m.status == "encontrado" %}
-            <a href="{% url 'motoqueiro:solicitar' %}?{{ m.query_pedir_agora }}" class="ds-btn ds-btn--primario ds-btn--sm">Pedir agora</a>
-            {% endif %}
-            {% if m.pode_cancelar %}
-            <form method="post" action="{% url 'motoqueiro:monitoramento_cancelar' m.pk %}" style="display:inline;"
-                  onsubmit="return confirm('Cancelar este monitoramento?');">
-              {% csrf_token %}
-              <button type="submit" class="moto-btn-cancelar">Cancelar</button>
-            </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
+<div id="monitoramento-lista" hx-get="{% url 'motoqueiro:monitoramento_htmx_lista' %}" hx-trigger="every 30s" hx-swap="innerHTML">
+  {% include "motoqueiro/_monitoramento_lista.html" %}
 </div>
 
 <script>
