@@ -2,6 +2,7 @@ import threading
 import time
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from django.http import Http404
 
 
@@ -36,6 +37,15 @@ class Erro5xxMiddleware:
         # pode devolver um redirect 301) -- nao e uma falha real, entao nao
         # entra no registro de 5xx.
         if isinstance(exception, Http404):
+            return None
+
+        # PermissionDenied vira 403 (handler403 padrao do Django), nunca 500 --
+        # nao e falha do site, e o usuario sem permissao pra aquela tela. Antes
+        # entrava no registro como status=500 e inflava o contador de 5xx do
+        # relatorio de seguranca com acessos negados normais (achado real:
+        # 2 ocorrencias de PermissionDenied em admin:produtos_avaliacao_changelist
+        # contadas como "500" no e-mail de 09/09).
+        if isinstance(exception, PermissionDenied):
             return None
 
         # View levantou excecao nao tratada -> Django devolvera 500.
