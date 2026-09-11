@@ -39,6 +39,9 @@ WHATSAPP          = 'WhatsApp'
 GOOGLE            = 'Google'
 EMAIL             = 'E-mail'
 DIRETO            = 'Direto ou busca'
+# Clique num link que o ChatGPT mostrou numa resposta -- a OpenAI grava
+# `utm_source=chatgpt.com` sozinha nesses links, sem medium nenhum.
+CHATGPT           = 'ChatGPT (IA)'
 
 # Origens que representam midia paga. Usado pelo painel de Anuncios e pelo card
 # "quanto do faturamento veio de anuncio".
@@ -59,6 +62,17 @@ def label_origem(source: str, tem_fbclid: bool = False, tem_gclid: bool = False,
     s = (source or '').lower().strip()
     m = (medium or '').lower().strip()
     pago = m in ('paid', 'cpc', 'ppc', 'paid_social')
+
+    if 'chatgpt' in s or s == 'chat.openai.com':
+        return CHATGPT
+
+    # Campanha da Meta configurada com a macro de ID em vez da de nome
+    # ({{campaign.id}} ao inves de {{campaign.name}}) manda um numero cru
+    # como utm_source -- ilegivel na tela e nao reconhecido por nenhuma regra
+    # abaixo. Trata como origem vazia pra cair no fallback de fbclid/gclid no
+    # fim da funcao, em vez de mostrar o ID.
+    if s.isdigit() and len(s) > 8:
+        s = ''
 
     # Instagram, nas suas formas distintas.
     if s == 'igshopping':
