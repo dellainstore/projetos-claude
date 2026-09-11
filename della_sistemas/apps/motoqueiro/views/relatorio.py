@@ -15,6 +15,7 @@ from ..models import MovimentoSaldoLalamove, SolicitacaoEntrega, SolicitacaoEntr
 from ..services import lalamove
 from ..services.escopo import qs_do_usuario
 from ..services.periodo import PERIODOS, parse_periodo
+from ..services.refund import creditar_estorno_problema_coleta
 
 logger = logging.getLogger("apps.motoqueiro")
 
@@ -150,11 +151,24 @@ def view_cancelar(request: HttpRequest, pk: int) -> HttpResponse:
         )
         return redirect(request.META.get("HTTP_REFERER", "motoqueiro:relatorio"))
 
+    valor_original = solicitacao.valor
+    taxa_cancelamento, taxa_confirmada = _consultar_taxa_cancelamento(solicitacao.lalamove_order_id, valor_original)
+
     status_anterior = solicitacao.status
     solicitacao.status = SolicitacaoEntrega.STATUS_CANCELADO
     solicitacao.lalamove_status_raw = "CANCELED"
     solicitacao.concluido_em = timezone.now()
-    solicitacao.save(update_fields=["status", "lalamove_status_raw", "concluido_em", "atualizado_em"])
+    campos = ["status", "lalamove_status_raw", "concluido_em", "atualizado_em"]
+    if taxa_confirmada:
+        # "Valor" passa a mostrar o que a Lalamove realmente cobrou por essa
+        # corrida (0 se cancelou de graca, a taxa se reteve algo) — mesmo
+        # criterio do proprio painel da Lalamove, em vez de continuar
+        # mostrando o preco da cotacao original de uma corrida que nao
+        # aconteceu. Sem confirmar a taxa, mantem o valor como estava (nao
+        # arrisca mostrar R$ 0,00 numa corrida que pode ter sido cobrada).
+        solicitacao.valor = taxa_cancelamento
+        campos.append("valor")
+    solicitacao.save(update_fields=campos)
 
     SolicitacaoEntregaEvento.objects.create(
         solicitacao=solicitacao,
@@ -162,25 +176,78 @@ def view_cancelar(request: HttpRequest, pk: int) -> HttpResponse:
         status_novo=solicitacao.status,
         status_raw="CANCELED",
         origem="cancelamento",
-        payload={"usuario": request.user.username},
+        payload={
+            "usuario": request.user.username,
+            "taxa_cancelamento": str(taxa_cancelamento) if taxa_confirmada else None,
+        },
     )
 
-    # Estorno no ledger: a confirmacao da corrida lancou um debito automatico,
-    # e cancelamento antes do motoboy sair nao e' cobrado pela Lalamove. O
-    # ledger e' append-only (nunca se apaga o debito), entao o acerto e' um
-    # credito de mesmo valor. Se a Lalamove cobrar taxa em algum caso, o
-    # superadmin lanca o debito da taxa na tela de Saldo.
-    MovimentoSaldoLalamove.objects.create(
-        tipo=MovimentoSaldoLalamove.TIPO_CREDITO,
-        origem=MovimentoSaldoLalamove.ORIGEM_CORRIDA,
-        valor=solicitacao.valor,
-        descricao=f"Estorno — corrida #{solicitacao.id} cancelada por {request.user.username}",
-        solicitacao=solicitacao,
-        lancado_por=request.user,
-    )
+    # Estorno no ledger: a confirmacao da corrida lancou um debito automatico
+    # pelo valor cheio. Cancelar antes do motoboy sair costuma ser de graca,
+    # mas cancelar depois que ele ja aceitou pode reter uma taxa mesmo com a
+    # Lalamove aceitando o DELETE sem erro (confirmado ao vivo em 2026-09-10:
+    # corrida cancelada da Michelle reteve R$ 6,00). O ledger e' append-only
+    # (nunca se apaga o debito original), entao o acerto e' um credito so da
+    # diferenca. Se nao deu pra confirmar a taxa, credita o valor cheio (
+    # comportamento antigo) e avisa pra conferir manualmente.
+    estorno = valor_original if not taxa_confirmada else (valor_original - taxa_cancelamento)
+    if estorno > 0:
+        descricao = f"Estorno — corrida #{solicitacao.id} cancelada por {request.user.username}"
+        if taxa_confirmada and taxa_cancelamento > 0:
+            descricao += f" (taxa de cancelamento de R$ {taxa_cancelamento:.2f} retida pela Lalamove)"
+        MovimentoSaldoLalamove.objects.create(
+            tipo=MovimentoSaldoLalamove.TIPO_CREDITO,
+            origem=MovimentoSaldoLalamove.ORIGEM_CORRIDA,
+            valor=estorno,
+            descricao=descricao,
+            solicitacao=solicitacao,
+            lancado_por=request.user,
+        )
 
-    messages.success(request, f"Corrida #{solicitacao.id} cancelada na Lalamove e valor estornado no saldo.")
+    if not taxa_confirmada:
+        messages.warning(
+            request,
+            f"Corrida #{solicitacao.id} cancelada na Lalamove, mas não deu pra confirmar se cobraram taxa de "
+            "cancelamento agora — o valor cheio foi estornado no saldo. Confira no painel da Lalamove e ajuste "
+            "manualmente na tela de Saldo se precisar.",
+        )
+    elif taxa_cancelamento > 0:
+        messages.warning(
+            request,
+            f"Corrida #{solicitacao.id} cancelada. A Lalamove cobrou uma taxa de cancelamento de "
+            f"R$ {taxa_cancelamento:.2f} (motoboy já estava a caminho) — só R$ {estorno:.2f} foi estornado no saldo.",
+        )
+    else:
+        messages.success(request, f"Corrida #{solicitacao.id} cancelada na Lalamove e valor estornado no saldo.")
     return redirect(request.META.get("HTTP_REFERER", "motoqueiro:relatorio"))
+
+
+def _consultar_taxa_cancelamento(order_id: str, valor_original: Decimal) -> tuple[Decimal, bool]:
+    """Busca a taxa de cancelamento real logo apos o DELETE ter sido aceito.
+
+    GET /v3/orders/{id} devolve priceBreakdown.cancellationFee — "0.00"
+    quando cancelou de graca (dentro da janela livre), ou o valor retido
+    quando cancelou depois que o motoboy ja tinha aceitado (confirmado ao
+    vivo em 2026-09-10 contra uma corrida real: retido R$ 6,00 mesmo com a
+    Lalamove aceitando o DELETE sem 409).
+
+    Devolve (taxa, confirmado). confirmado=False quando a consulta falha
+    (rede, campo ausente em formato inesperado) — quem chama credita o valor
+    cheio nesse caso, em vez de arriscar estornar a menos por causa de uma
+    falha de rede."""
+    try:
+        dados = lalamove.obter_pedido(order_id).get("data", {})
+        bruta = (dados.get("priceBreakdown") or {}).get("cancellationFee")
+        if bruta is None:
+            return Decimal("0.00"), True
+        taxa = Decimal(str(bruta))
+    except (lalamove.LalamoveError, requests.RequestException, InvalidOperation, TypeError) as exc:
+        logger.warning("motoqueiro cancelar: nao deu pra confirmar taxa de cancelamento (%s): %s", order_id, exc)
+        return Decimal("0.00"), False
+    # Trava nos dois lados: nunca credita nada negativo nem mais que o valor
+    # original (defesa contra formato inesperado vindo da API).
+    taxa = max(Decimal("0.00"), min(taxa, valor_original))
+    return taxa, True
 
 
 def _ressincronizar_status(solicitacao: SolicitacaoEntrega, timeout: int | None = None) -> str:
@@ -202,9 +269,13 @@ def _ressincronizar_status(solicitacao: SolicitacaoEntrega, timeout: int | None 
             status_anterior = solicitacao.status
             solicitacao.status = status_novo
             solicitacao.lalamove_status_raw = status_raw
+            campos = ["status", "lalamove_status_raw", "concluido_em", "atualizado_em"]
             if status_novo in SolicitacaoEntrega.STATUS_FINAIS and not solicitacao.concluido_em:
                 solicitacao.concluido_em = timezone.now()
-            solicitacao.save(update_fields=["status", "lalamove_status_raw", "concluido_em", "atualizado_em"])
+            if status_raw in ("EXPIRED", "REJECTED") and status_anterior != SolicitacaoEntrega.STATUS_CANCELADO:
+                creditar_estorno_problema_coleta(solicitacao, status_raw)
+                campos.append("valor")
+            solicitacao.save(update_fields=campos)
             SolicitacaoEntregaEvento.objects.create(
                 solicitacao=solicitacao,
                 status_anterior=status_anterior,

@@ -11,6 +11,7 @@ from apps.motoqueiro.services import loggi
 from apps.motoqueiro.services.lalamove import (
     MAPA_STATUS_LALAMOVE, traduzir_status, verificar_token_webhook,
 )
+from apps.motoqueiro.services.refund import creditar_estorno_problema_coleta
 
 logger = logging.getLogger("apps.motoqueiro")
 
@@ -95,6 +96,15 @@ def webhook_lalamove(request: HttpRequest, token: str = "") -> HttpResponse:
         if status_novo in SolicitacaoEntrega.STATUS_FINAIS and not solicitacao.concluido_em:
             solicitacao.concluido_em = timezone.now()
             campos.append("concluido_em")
+        if status_raw in ("EXPIRED", "REJECTED") and status_anterior != SolicitacaoEntrega.STATUS_CANCELADO:
+            # So credita na PRIMEIRA vez que chega EXPIRED/REJECTED — evita
+            # duplicar o estorno se a Lalamove reenviar o mesmo webhook.
+            # (EXPIRED/REJECTED tambem viram status "cancelado" desde
+            # 2026-09-10 — ver comentario em services/lalamove.py — mas o
+            # estorno automatico so se aplica a esses dois, nunca a um
+            # cancelamento pedido pela pessoa via view_cancelar.)
+            creditar_estorno_problema_coleta(solicitacao, status_raw)
+            campos.append("valor")
     elif status_raw:
         logger.warning(
             "motoqueiro webhook: status %r desconhecido no evento %r — status local mantido em %r.",

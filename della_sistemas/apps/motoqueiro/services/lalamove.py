@@ -221,13 +221,21 @@ def verificar_token_webhook(token: str) -> bool:
 # Mapeia o status bruto da Lalamove para os 5 status do painel D'ELLA.
 # Referencia (ordens de lifecycle da Lalamove): ASSIGNING_DRIVER -> ON_GOING
 # -> PICKED_UP -> COMPLETED, alem de CANCELED/REJECTED/EXPIRED.
+#
+# REJECTED/EXPIRED viravam "problema_coleta" ate 2026-09-10 (a ideia era
+# diferenciar "ninguem aceitou" de "alguem cancelou"). Trocado pra
+# "cancelado" porque o proprio painel/rastreio da Lalamove mostra as duas
+# coisas como "Cancelado" pro usuario — manter separado aqui so criava
+# duvida ("por que ta diferente do rastreio?"), sem ganho real: os dois casos
+# ja se comportam igual no resto do sistema (estorno automatico de
+# problema_coleta em services/refund.py, valor final R$ 0,00).
 MAPA_STATUS_LALAMOVE = {
     "ASSIGNING_DRIVER": "aguardando_coleta",
     "ON_GOING": "aguardando_coleta",
     "PICKED_UP": "no_percurso",
     "COMPLETED": "entrega_realizada",
-    "REJECTED": "problema_coleta",
-    "EXPIRED": "problema_coleta",
+    "REJECTED": "cancelado",
+    "EXPIRED": "cancelado",
     "CANCELED": "cancelado",
 }
 
