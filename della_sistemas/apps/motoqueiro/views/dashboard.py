@@ -81,25 +81,29 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
     mapa_mes = {a["mes"].date().replace(day=1): a for a in agregados_mes}
 
     # So exibe a partir do primeiro mes com corrida registrada (nao mostra
-    # meses vazios anteriores ao inicio da operacao). Os meses de fora ficam
-    # como categoria vazia (label "" + valor None) em vez de serem removidos
-    # da lista: assim o Chart.js continua dividindo a largura do grafico por
-    # 12 categorias e a barra do(s) mes(es) real(is) nao fica gorda so porque
-    # e a unica aparecendo.
+    # meses vazios anteriores ao inicio da operacao). Os meses reais ficam
+    # centralizados dentro de uma moldura de 12 categorias (as sobras viram
+    # categoria vazia, label "" + valor None, metade antes e metade depois):
+    # assim o Chart.js continua dividindo a largura do grafico por 12
+    # categorias (a barra nao fica gorda so porque e a unica aparecendo) e o
+    # mes real fica no meio do grafico, nao espremido no canto direito.
     primeiro_com_dado = next((m for m in meses if m in mapa_mes), None)
+    meses_reais = [m for m in meses if primeiro_com_dado and m >= primeiro_com_dado]
 
-    labels_mes = []
-    valores_mes = []
-    corridas_mes = []
-    for m in meses:
-        if primeiro_com_dado and m >= primeiro_com_dado:
-            labels_mes.append(f"{MESES_ABREV_PT[m.month]}/{str(m.year)[2:]}")
-            valores_mes.append(float(mapa_mes.get(m, {}).get("valor") or 0))
-            corridas_mes.append(mapa_mes.get(m, {}).get("corridas") or 0)
-        else:
-            labels_mes.append("")
-            valores_mes.append(None)
-            corridas_mes.append(None)
+    vazios = len(meses) - len(meses_reais)
+    pad_esquerda = vazios // 2
+    pad_direita = vazios - pad_esquerda
+
+    labels_mes = [""] * pad_esquerda
+    valores_mes = [None] * pad_esquerda
+    corridas_mes = [None] * pad_esquerda
+    for m in meses_reais:
+        labels_mes.append(f"{MESES_ABREV_PT[m.month]}/{str(m.year)[2:]}")
+        valores_mes.append(float(mapa_mes.get(m, {}).get("valor") or 0))
+        corridas_mes.append(mapa_mes.get(m, {}).get("corridas") or 0)
+    labels_mes += [""] * pad_direita
+    valores_mes += [None] * pad_direita
+    corridas_mes += [None] * pad_direita
 
     ctx = {
         "periodo": periodo,
