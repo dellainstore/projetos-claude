@@ -81,15 +81,25 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
     mapa_mes = {a["mes"].date().replace(day=1): a for a in agregados_mes}
 
     # So exibe a partir do primeiro mes com corrida registrada (nao mostra
-    # meses vazios anteriores ao inicio da operacao) - mantendo a janela de
-    # ate 12 meses para tras a partir dai.
+    # meses vazios anteriores ao inicio da operacao). Os meses de fora ficam
+    # como categoria vazia (label "" + valor None) em vez de serem removidos
+    # da lista: assim o Chart.js continua dividindo a largura do grafico por
+    # 12 categorias e a barra do(s) mes(es) real(is) nao fica gorda so porque
+    # e a unica aparecendo.
     primeiro_com_dado = next((m for m in meses if m in mapa_mes), None)
-    if primeiro_com_dado:
-        meses = [m for m in meses if m >= primeiro_com_dado]
 
-    labels_mes = [f"{MESES_ABREV_PT[m.month]}/{str(m.year)[2:]}" for m in meses]
-    valores_mes = [float(mapa_mes.get(m, {}).get("valor") or 0) for m in meses]
-    corridas_mes = [mapa_mes.get(m, {}).get("corridas") or 0 for m in meses]
+    labels_mes = []
+    valores_mes = []
+    corridas_mes = []
+    for m in meses:
+        if primeiro_com_dado and m >= primeiro_com_dado:
+            labels_mes.append(f"{MESES_ABREV_PT[m.month]}/{str(m.year)[2:]}")
+            valores_mes.append(float(mapa_mes.get(m, {}).get("valor") or 0))
+            corridas_mes.append(mapa_mes.get(m, {}).get("corridas") or 0)
+        else:
+            labels_mes.append("")
+            valores_mes.append(None)
+            corridas_mes.append(None)
 
     ctx = {
         "periodo": periodo,
