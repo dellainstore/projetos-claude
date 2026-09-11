@@ -1,5 +1,4 @@
 import json
-from calendar import month_abbr
 from datetime import date
 from decimal import Decimal
 
@@ -14,6 +13,11 @@ from apps.core.decorators import perm_required
 from ..models import MovimentoSaldoLalamove, SolicitacaoEntrega
 from ..services.escopo import qs_contabilizavel
 from ..services.periodo import PERIODOS, parse_periodo
+
+MESES_ABREV_PT = [
+    "", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+]
 
 
 @perm_required("motoqueiro.ver_dashboard")
@@ -76,7 +80,14 @@ def view_dashboard(request: HttpRequest) -> HttpResponse:
     )
     mapa_mes = {a["mes"].date().replace(day=1): a for a in agregados_mes}
 
-    labels_mes = [f"{month_abbr[m.month]}/{str(m.year)[2:]}" for m in meses]
+    # So exibe a partir do primeiro mes com corrida registrada (nao mostra
+    # meses vazios anteriores ao inicio da operacao) - mantendo a janela de
+    # ate 12 meses para tras a partir dai.
+    primeiro_com_dado = next((m for m in meses if m in mapa_mes), None)
+    if primeiro_com_dado:
+        meses = [m for m in meses if m >= primeiro_com_dado]
+
+    labels_mes = [f"{MESES_ABREV_PT[m.month]}/{str(m.year)[2:]}" for m in meses]
     valores_mes = [float(mapa_mes.get(m, {}).get("valor") or 0) for m in meses]
     corridas_mes = [mapa_mes.get(m, {}).get("corridas") or 0 for m in meses]
 

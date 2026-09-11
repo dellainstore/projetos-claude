@@ -27,6 +27,10 @@ REELS_INSTAGRAM   = 'Reels do Instagram'
 # identico nos dois ao mesmo tempo (cross-post da Meta) com o mesmo link na
 # legenda — nao ha como saber de qual app a pessoa veio clicando.
 POST_ORGANICO     = 'Post do Instagram'
+# Prospeccao ativa: link mandado no Direct pelas meninas (nao e alguem que
+# achou a loja sozinha) — separado do perfil/organico pra medir a conversao
+# desse trabalho manual.
+DIRECT_INSTAGRAM  = 'Direct do Instagram'
 STORY_TIKTOK      = 'Story do TikTok'
 POST_TIKTOK       = 'Post do TikTok'
 INSTAGRAM_PERFIL  = 'Instagram (perfil)'
@@ -78,6 +82,8 @@ def label_origem(source: str, tem_fbclid: bool = False, tem_gclid: bool = False,
             return REELS_INSTAGRAM
         if m in ('post', 'feed'):
             return POST_ORGANICO
+        if m in ('direct', 'dm'):
+            return DIRECT_INSTAGRAM
         return INSTAGRAM_PERFIL
 
     if s in ('fb', 'facebook') or 'facebook' in s:
