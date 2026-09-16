@@ -684,6 +684,19 @@
     })();
   </script>
   <script src="{{ STATIC_URL }}js/htmx.min.js"></script>
+  <script>
+    // Injeta o token CSRF em toda requisição htmx (GET não precisa). Sem isso,
+    // qualquer hx-post/hx-delete em botão solto (fora de <form>) toma 403 do
+    // Django silenciosamente — htmx não exibe respostas de erro por padrão,
+    // então o clique parece não fazer nada e nenhuma mensagem aparece.
+    // Achado em 2026-09-15: botões Cancelar/Duplicar/Excluir de Lançamento
+    // Financeiro (private_label) sem form ao redor, sem csrf_token.
+    document.body.addEventListener('htmx:configRequest', function (evt) {
+      if (evt.detail.verb !== 'get') {
+        evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+      }
+    });
+  </script>
   {% block js_extra %}{% endblock %}
 </body>
 </html>

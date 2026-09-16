@@ -63,7 +63,7 @@
           </td>
         </tr>
         {% endwith %}
-      {% else %}
+      {% elif linha.kind == "transferencia" %}
         {% with t=linha.transferencia %}
         <tr style="background:rgba(107,107,107,.05);">
           <td></td>
@@ -84,6 +84,34 @@
             {% if not t.estornada %}
             <div class="pl-acoes">
               <button type="button" class="pl-icon-btn pl-icon-btn--perigo" hx-post="{% url 'financeiro:pl_htmx_transferencia_estornar' t.pk %}" hx-confirm="Estornar esta transferência de {{ t.valor|brl }}?" title="Estornar">&#8634;</button>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endwith %}
+      {% else %}
+        {% with t=linha.investimento %}
+        <tr style="background:rgba(107,107,107,.05);">
+          <td></td>
+          <td>{% if t.tipo == "aplicacao" %}Aplicação{% else %}Resgate{% endif %}</td>
+          <td style="font-weight:600;">
+            &#128176; {% if t.tipo == "aplicacao" %}{{ t.conta_bancaria.nome }} &rarr; {{ t.conta_investimento.nome }}{% else %}{{ t.conta_investimento.nome }} &rarr; {{ t.conta_bancaria.nome }}{% endif %}
+            {% if t.observacao %}<br><span class="text-muted" style="font-size:.76rem;">{{ t.observacao }}</span>{% endif %}
+          </td>
+          <td class="text-muted">Investimento</td>
+          <td>{{ t.conta_bancaria.nome }}</td>
+          <td>
+            <span class="{% if t.tipo == 'aplicacao' %}pl-valor-despesa{% else %}pl-valor-receita{% endif %}">{{ t.valor|brl }}</span>
+          </td>
+          <td>{{ t.data|date:"d/m/Y" }}</td>
+          <td>
+            {% if t.estornada %}<span class="pl-badge pl-badge--cancelado">Estornada</span>
+            {% else %}<span class="pl-badge pl-badge--quitado">Concluída</span>{% endif %}
+          </td>
+          <td class="pl-col-acoes" style="background:#f6f5f4;">
+            {% if not t.estornada %}
+            <div class="pl-acoes">
+              <button type="button" class="pl-icon-btn pl-icon-btn--perigo" hx-post="{% url 'financeiro:pl_htmx_investimento_transacao_estornar' t.pk %}" hx-confirm="Estornar {% if t.tipo == 'aplicacao' %}esta aplicação{% else %}este resgate{% endif %} de {{ t.valor|brl }}?" title="Estornar">&#8634;</button>
             </div>
             {% endif %}
           </td>

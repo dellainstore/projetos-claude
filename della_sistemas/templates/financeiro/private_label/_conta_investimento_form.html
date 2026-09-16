@@ -25,11 +25,49 @@
             {% endfor %}
           </select>
         </div>
+        <div class="pl-form-campo">
+          <label>Liquidez</label>
+          <select class="ds-select" name="liquidez">
+            <option value="">-- não informado --</option>
+            {% for valor, rotulo in liquidezes %}
+            <option value="{{ valor }}" {% if conta.liquidez == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        </div>
         {% if conta %}
         <div class="pl-form-campo" style="justify-content:center;">
           <label class="pl-form-check"><input type="checkbox" name="ativa" {% if conta.ativa %}checked{% endif %}> Ativa</label>
         </div>
         {% endif %}
+
+        <div class="pl-form-campo pl-form-campo--full" style="border-top:1px solid #ececec;padding-top:.75rem;margin-top:.25rem;">
+          <label class="pl-form-check">
+            <input type="checkbox" name="rendimento_automatico" id="id-rendimento-automatico"
+                   {% if conta.rendimento_automatico %}checked{% endif %}
+                   onchange="document.getElementById('bloco-rendimento-cdi').style.display = this.checked ? 'grid' : 'none';">
+            Calcular rendimento sozinho (% do CDI, todo dia útil)
+          </label>
+          <p class="text-muted" style="font-size:.78rem;margin:.25rem 0 0;">
+            Com isso marcado, o sistema consulta o CDI oficial do Banco Central todo dia e já lança o
+            rendimento da conta automaticamente — não precisa registrar nada na mão.
+          </p>
+        </div>
+        <div id="bloco-rendimento-cdi" class="pl-form-grid" style="display:{% if conta.rendimento_automatico %}grid{% else %}none{% endif %};grid-column:1/-1;">
+          <div class="pl-form-campo">
+            <label>% do CDI</label>
+            <input class="ds-input" type="number" step="0.01" min="0" name="percentual_cdi"
+                   value="{{ conta.percentual_cdi|default:'' }}" placeholder="Ex.: 98.00">
+          </div>
+          <div class="pl-form-campo">
+            <label>Categoria do rendimento (DRE)</label>
+            <select class="ds-select" name="categoria_rendimento">
+              <option value="">-- selecione --</option>
+              {% for cat in categorias_receita_financeira %}
+              <option value="{{ cat.pk }}" {% if conta.categoria_rendimento_id == cat.pk %}selected{% endif %}>{{ cat.icone }} {{ cat.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
       </div>
       <div class="pl-form-acoes">
         <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>

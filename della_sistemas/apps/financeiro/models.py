@@ -1004,11 +1004,18 @@ class FaturaPagamentoAlocacao(models.Model):
 
 TIPO_PRODUTO_INVESTIMENTO_CHOICES = [
     ("cdb", "CDB"),
+    ("dcb", "DCB"),
     ("tesouro_direto", "Tesouro Direto"),
     ("fundo", "Fundo de Investimento"),
     ("poupanca", "Poupança"),
     ("acoes", "Ações"),
     ("outro", "Outro"),
+]
+
+LIQUIDEZ_INVESTIMENTO_CHOICES = [
+    ("diaria", "Diária"),
+    ("vencimento", "No vencimento"),
+    ("carencia", "Com carência"),
 ]
 
 TIPO_TRANSACAO_INVESTIMENTO_CHOICES = [
@@ -1033,6 +1040,24 @@ class ContaInvestimento(models.Model):
     nome = models.CharField(max_length=120)
     instituicao = models.CharField(max_length=120, blank=True)
     tipo_produto = models.CharField(max_length=20, choices=TIPO_PRODUTO_INVESTIMENTO_CHOICES, default="outro")
+    liquidez = models.CharField(
+        max_length=12, choices=LIQUIDEZ_INVESTIMENTO_CHOICES, blank=True,
+        help_text="Só informativo — não afeta o cálculo de rendimento.",
+    )
+    percentual_cdi = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True,
+        help_text="Ex.: 98.00 para 98% do CDI. Deixe vazio se o produto não é indexado ao CDI.",
+    )
+    rendimento_automatico = models.BooleanField(
+        default=False,
+        help_text="Se marcado, o rendimento de cada dia útil é lançado sozinho (CDI oficial do "
+                   "Banco Central x percentual_cdi) — cron `calcular_rendimento_investimentos`.",
+    )
+    categoria_rendimento = models.ForeignKey(
+        CategoriaFinanceira, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="contas_investimento_rendimento_auto",
+        help_text="Categoria usada nos lançamentos automáticos de rendimento (natureza 'Receita financeira').",
+    )
     ativa = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     criado_por = models.ForeignKey(
@@ -1044,6 +1069,14 @@ class ContaInvestimento(models.Model):
         verbose_name = "Conta de Investimento"
         verbose_name_plural = "Contas de Investimento"
         ordering = ["nome"]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(rendimento_automatico=False) | (
+                    Q(percentual_cdi__isnull=False) & Q(categoria_rendimento__isnull=False)
+                ),
+                name="investimento_auto_exige_percentual_e_categoria",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.nome
@@ -1051,6 +1084,15 @@ class ContaInvestimento(models.Model):
     def saldo_atual(self) -> Decimal:
         total = self.movimentos.aggregate(total=models.Sum("valor"))["total"]
         return total or Decimal("0.00")
+
+    def ultimo_rendimento_lancado(self):
+        """Data do último rendimento (não estornado) já lançado nesta conta,
+        ou None se nunca rendeu nada ainda — usado como ponto de partida
+        pelo cron para saber a partir de qual dia útil calcular."""
+        ultima = (
+            self.transacoes.filter(tipo="rendimento", estornada=False).order_by("-data").values_list("data", flat=True).first()
+        )
+        return ultima
 
 
 class InvestimentoTransacao(models.Model):
@@ -1124,6 +1166,30 @@ class MovimentoContaInvestimento(models.Model):
 
     def __str__(self) -> str:
         return f"{self.conta_investimento} — {self.data} — R$ {self.valor}"
+
+
+class TaxaCDIDiaria(models.Model):
+    """Cache local da série 12 do SGS/Bacen (CDI, taxa % ao dia — só dias
+    úteis, o Bacen não publica valor pra fim de semana/feriado). Alimentado
+    por `services/private_label/cdi.py::atualizar_taxas_cdi()`; é a fonte
+    usada pelo cron de rendimento automático das `ContaInvestimento` com
+    `percentual_cdi` preenchido. Não tem `operacao` — o CDI é o mesmo pra
+    qualquer operação/tenant."""
+
+    data = models.DateField(unique=True)
+    taxa_pct_dia = models.DecimalField(
+        max_digits=9, decimal_places=6,
+        help_text="Taxa do CDI daquele dia útil, em % ao dia (ex.: 0.051660).",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Taxa CDI Diária"
+        verbose_name_plural = "Taxas CDI Diárias"
+        ordering = ["-data"]
+
+    def __str__(self) -> str:
+        return f"{self.data} — {self.taxa_pct_dia}% a.d."
 
 
 # ─────────────────────────────────────────────────────────────────────────

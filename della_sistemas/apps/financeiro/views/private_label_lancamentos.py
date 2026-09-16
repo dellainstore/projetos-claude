@@ -22,10 +22,12 @@ from apps.financeiro.models import (
     ContatoFinanceiro,
     ESTADO_CANCELADO,
     FormaPagamento,
+    InvestimentoTransacao,
     LancamentoFinanceiro,
     LogAuditoriaFinanceiro,
     Parcela,
     TIPO_LANCAMENTO_CHOICES,
+    TIPOS_TRANSACAO_INVESTIMENTO_COM_CONTA_BANCARIA,
     TagFinanceira,
     Transferencia,
     naturezas_permitidas,
@@ -33,6 +35,7 @@ from apps.financeiro.models import (
 from apps.financeiro.services.private_label.ajustes import ajustar_saldo
 from apps.financeiro.services.private_label.auditoria import registrar_log
 from apps.financeiro.services.private_label.baixas import dar_baixa, dar_baixa_em_lote, estornar_baixa
+from apps.financeiro.services.private_label.investimentos import estornar_transacao as estornar_transacao_investimento
 from apps.financeiro.services.private_label.lancamentos import (
     cancelar_lancamento,
     criar_lancamento,
@@ -190,10 +193,45 @@ def _transferencias_filtradas(request, operacao):
     return qs.order_by("data")
 
 
+def _investimentos_filtradas(request, operacao):
+    """Aplicação/resgate de investimento também mexem numa `ContaBancaria`
+    de verdade (ver `services/private_label/investimentos.py`) — mesmo
+    motivo da Transferência: sem aparecer aqui, o dinheiro "some" da conta
+    sem deixar rastro visível pro usuário. Rendimento/taxa NÃO entram aqui
+    (não tocam conta bancária nenhuma, ficam só na tela de Investimentos)."""
+    tipo = request.GET.get("tipo")
+    if tipo and tipo != "investimento":
+        return InvestimentoTransacao.objects.none()
+
+    situacao = request.GET.get("situacao", "")
+    if situacao in ("vencido", "aberto", "parcial"):
+        return InvestimentoTransacao.objects.none()
+
+    qs = InvestimentoTransacao.objects.filter(
+        operacao=operacao, tipo__in=TIPOS_TRANSACAO_INVESTIMENTO_COM_CONTA_BANCARIA,
+    ).select_related("conta_investimento", "conta_bancaria")
+    qs = qs.filter(estornada=(situacao == "cancelado"))
+
+    conta = request.GET.get("conta")
+    if conta:
+        qs = qs.filter(conta_bancaria_id=conta)
+    busca = request.GET.get("q", "").strip()
+    if busca:
+        qs = qs.filter(models.Q(observacao__icontains=busca) | models.Q(conta_investimento__nome__icontains=busca))
+    data_de = request.GET.get("data_de")
+    if data_de:
+        qs = qs.filter(data__gte=data_de)
+    data_ate = request.GET.get("data_ate")
+    if data_ate:
+        qs = qs.filter(data__lte=data_ate)
+    return qs.order_by("data")
+
+
 def _linhas_lancamentos(request, operacao):
     """Lista unificada e ordenada por data: parcelas de LancamentoFinanceiro
-    + Transferências, cada uma como uma linha com `kind` próprio pro
-    template distinguir. Corta em 300 linhas no total (não 300+300)."""
+    + Transferências + aplicação/resgate de Investimento, cada uma como uma
+    linha com `kind` próprio pro template distinguir. Corta em 300 linhas no
+    total (não 300+300+300)."""
     linhas = [
         {"kind": "lancamento", "data": p.data_vencimento, "parcela": p}
         for p in _parcelas_filtradas(request, operacao)
@@ -201,6 +239,10 @@ def _linhas_lancamentos(request, operacao):
     linhas += [
         {"kind": "transferencia", "data": t.data, "transferencia": t}
         for t in _transferencias_filtradas(request, operacao)
+    ]
+    linhas += [
+        {"kind": "investimento", "data": t.data, "investimento": t}
+        for t in _investimentos_filtradas(request, operacao)
     ]
     linhas.sort(key=lambda linha: linha["data"])
     return linhas[:300]

@@ -36,6 +36,7 @@
       <option value="{{ valor }}" {% if request.GET.tipo == valor %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
       <option value="transferencia" {% if request.GET.tipo == "transferencia" %}selected{% endif %}>Transferência</option>
+      <option value="investimento" {% if request.GET.tipo == "investimento" %}selected{% endif %}>Investimento</option>
     </select>
   </div>
   <div class="pl-form-campo">

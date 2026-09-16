@@ -11,6 +11,7 @@ from apps.financeiro.models import (
     ContaBancaria,
     ContaInvestimento,
     InvestimentoTransacao,
+    LIQUIDEZ_INVESTIMENTO_CHOICES,
     TIPO_PRODUTO_INVESTIMENTO_CHOICES,
 )
 from apps.financeiro.services.private_label.investimentos import (
@@ -66,11 +67,22 @@ def pl_htmx_investimentos_lista(request):
 
 # ── Cadastro de conta de investimento ────────────────────────────────────
 
+def _opcoes_conta_investimento(operacao):
+    return {
+        "tipos_produto": TIPO_PRODUTO_INVESTIMENTO_CHOICES,
+        "liquidezes": LIQUIDEZ_INVESTIMENTO_CHOICES,
+        "categorias_receita_financeira": CategoriaFinanceira.objects.filter(
+            operacao=operacao, ativa=True, natureza="receita_financeira",
+        ).order_by("nome"),
+    }
+
+
 @perm_required("private_label.configurar")
 def pl_htmx_conta_investimento_form(request, pk=None):
+    operacao = obter_operacao_padrao()
     conta = get_object_or_404(ContaInvestimento, pk=pk) if pk else None
     return render(request, "financeiro/private_label/_conta_investimento_form.html", {
-        "conta": conta, "tipos_produto": TIPO_PRODUTO_INVESTIMENTO_CHOICES,
+        "conta": conta, **_opcoes_conta_investimento(operacao),
     })
 
 
@@ -81,13 +93,30 @@ def pl_htmx_conta_investimento_salvar(request):
     conta = get_object_or_404(ContaInvestimento, pk=pk) if pk else ContaInvestimento(operacao=operacao, criado_por=request.user)
 
     nome = request.POST.get("nome", "").strip()
-    contexto_erro = {"conta": conta, "tipos_produto": TIPO_PRODUTO_INVESTIMENTO_CHOICES}
+    contexto_erro = {"conta": conta, **_opcoes_conta_investimento(operacao)}
     if not nome:
         return render(request, "financeiro/private_label/_conta_investimento_form.html", {**contexto_erro, "erro": "Nome é obrigatório."})
+
+    rendimento_automatico = request.POST.get("rendimento_automatico") == "on"
+    percentual_cdi = _decimal(request.POST.get("percentual_cdi")) if request.POST.get("percentual_cdi", "").strip() else None
+    categoria_rendimento_pk = request.POST.get("categoria_rendimento")
+    categoria_rendimento = (
+        CategoriaFinanceira.objects.filter(pk=categoria_rendimento_pk, operacao=operacao, natureza="receita_financeira").first()
+        if categoria_rendimento_pk else None
+    )
+    if rendimento_automatico:
+        if percentual_cdi is None or percentual_cdi <= 0:
+            return render(request, "financeiro/private_label/_conta_investimento_form.html", {**contexto_erro, "erro": "Informe o % do CDI para calcular o rendimento automático."})
+        if not categoria_rendimento:
+            return render(request, "financeiro/private_label/_conta_investimento_form.html", {**contexto_erro, "erro": "Selecione a categoria do rendimento (natureza 'Receita financeira')."})
 
     conta.nome = nome
     conta.instituicao = request.POST.get("instituicao", "").strip()
     conta.tipo_produto = request.POST.get("tipo_produto", "outro")
+    conta.liquidez = request.POST.get("liquidez", "")
+    conta.rendimento_automatico = rendimento_automatico
+    conta.percentual_cdi = percentual_cdi if rendimento_automatico else None
+    conta.categoria_rendimento = categoria_rendimento if rendimento_automatico else None
     conta.ativa = request.POST.get("ativa") == "on" if pk else True
     conta.save()
     return _evento("pl:investimentos-mudou")
@@ -173,4 +202,7 @@ def pl_htmx_investimento_transacao_estornar(request, pk):
         estornar_transacao(transacao, usuario=request.user, motivo="estornada pela tela")
     except ValueError as erro:
         return _erro_generico(request, str(erro))
-    return _evento("pl:investimentos-mudou")
+    # aplicação/resgate aparecem também na tela de Lançamentos (mexem numa
+    # ContaBancaria de verdade) — dispara os dois eventos pra ambas as
+    # telas se atualizarem, mesmo estornando pela tela de Investimentos.
+    return _evento("pl:investimentos-mudou, pl:lancamentos-mudou")
