@@ -1058,6 +1058,17 @@ class ContaInvestimento(models.Model):
         related_name="contas_investimento_rendimento_auto",
         help_text="Categoria usada nos lançamentos automáticos de rendimento (natureza 'Receita financeira').",
     )
+    iof_automatico = models.BooleanField(
+        default=False,
+        help_text="Se marcado, todo resgate calcula sozinho o IOF regressivo (tabela oficial da Receita, "
+                   "incide só sobre o rendimento, isento a partir do 30º dia corrido de cada aplicação) e "
+                   "já lança a taxa — ver `services/private_label/investimentos.py::_calcular_iof_resgate`.",
+    )
+    categoria_iof = models.ForeignKey(
+        CategoriaFinanceira, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="contas_investimento_iof_auto",
+        help_text="Categoria usada no lançamento automático de IOF no resgate (natureza 'Despesa financeira').",
+    )
     ativa = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     criado_por = models.ForeignKey(
@@ -1075,6 +1086,10 @@ class ContaInvestimento(models.Model):
                     Q(percentual_cdi__isnull=False) & Q(categoria_rendimento__isnull=False)
                 ),
                 name="investimento_auto_exige_percentual_e_categoria",
+            ),
+            models.CheckConstraint(
+                check=Q(iof_automatico=False) | Q(categoria_iof__isnull=False),
+                name="investimento_iof_auto_exige_categoria",
             ),
         ]
 
@@ -1117,6 +1132,11 @@ class InvestimentoTransacao(models.Model):
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     data = models.DateField()
     observacao = models.TextField(blank=True)
+    transacao_origem = models.ForeignKey(
+        "self", on_delete=models.PROTECT, null=True, blank=True, related_name="taxas_derivadas",
+        help_text="Preenchido só no IOF automático de resgate: aponta pro resgate que o gerou — "
+                   "estornar o resgate também estorna esse IOF junto (ver `estornar_transacao`).",
+    )
     estornada = models.BooleanField(default=False)
     estornada_em = models.DateTimeField(null=True, blank=True)
     estornada_por = models.ForeignKey(

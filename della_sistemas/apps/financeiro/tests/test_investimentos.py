@@ -108,3 +108,83 @@ class RendimentoTaxaTests(BaseInvestimentoTestCase):
                 operacao=self.operacao, conta_investimento=self.conta_investimento,
                 categoria=self.categoria_receita_financeira, valor=Decimal("5.00"), data=date(2026, 9, 20),
             )
+
+
+class IofAutomaticoResgateTests(BaseInvestimentoTestCase):
+    def setUp(self):
+        super().setUp()
+        self.conta_investimento.iof_automatico = True
+        self.conta_investimento.categoria_iof = self.categoria_despesa_financeira
+        self.conta_investimento.save()
+
+    def test_resgate_total_com_5_dias_retem_83_por_cento_do_rendimento(self):
+        aplicar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1000.00"), data=date(2026, 9, 1),
+        )
+        registrar_rendimento(
+            operacao=self.operacao, conta_investimento=self.conta_investimento,
+            categoria=self.categoria_receita_financeira, valor=Decimal("100.00"), data=date(2026, 9, 5),
+        )
+        resgatar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1100.00"), data=date(2026, 9, 6),
+        )
+        # 5 dias corridos desde a aplicação -> alíquota 83% (tabela regressiva),
+        # incide só sobre o rendimento (100.00) -> IOF = 83.00.
+        self.assertEqual(self.conta.saldo_atual(), Decimal("1017.00"))
+        self.assertEqual(self.conta_investimento.saldo_atual(), Decimal("0.00"))
+        iof = self.conta_investimento.transacoes.get(tipo="taxa")
+        self.assertEqual(iof.valor, Decimal("83.00"))
+        self.assertFalse(iof.estornada)
+
+    def test_resgate_apos_30_dias_e_isento_de_iof(self):
+        aplicar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1000.00"), data=date(2026, 8, 1),
+        )
+        registrar_rendimento(
+            operacao=self.operacao, conta_investimento=self.conta_investimento,
+            categoria=self.categoria_receita_financeira, valor=Decimal("50.00"), data=date(2026, 8, 10),
+        )
+        resgatar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1050.00"), data=date(2026, 9, 1),
+        )
+        self.assertEqual(self.conta.saldo_atual(), Decimal("1050.00"))
+        self.assertFalse(self.conta_investimento.transacoes.filter(tipo="taxa").exists())
+
+    def test_estornar_resgate_estorna_iof_derivado_junto(self):
+        aplicar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1000.00"), data=date(2026, 9, 1),
+        )
+        registrar_rendimento(
+            operacao=self.operacao, conta_investimento=self.conta_investimento,
+            categoria=self.categoria_receita_financeira, valor=Decimal("100.00"), data=date(2026, 9, 5),
+        )
+        resgate = resgatar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1100.00"), data=date(2026, 9, 6),
+        )
+        iof = self.conta_investimento.transacoes.get(tipo="taxa")
+        estornar_transacao(resgate, motivo="teste")
+        iof.refresh_from_db()
+        self.assertTrue(iof.estornada)
+        self.assertEqual(self.conta.saldo_atual(), Decimal("0.00"))
+        self.assertEqual(self.conta_investimento.saldo_atual(), Decimal("1100.00"))
+
+    def test_conta_sem_iof_automatico_nao_calcula_nada(self):
+        self.conta_investimento.iof_automatico = False
+        self.conta_investimento.categoria_iof = None
+        self.conta_investimento.save()
+        aplicar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1000.00"), data=date(2026, 9, 1),
+        )
+        resgatar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1000.00"), data=date(2026, 9, 2),
+        )
+        self.assertEqual(self.conta.saldo_atual(), Decimal("1000.00"))
+        self.assertFalse(self.conta_investimento.transacoes.filter(tipo="taxa").exists())

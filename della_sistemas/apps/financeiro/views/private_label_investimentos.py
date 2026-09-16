@@ -74,6 +74,9 @@ def _opcoes_conta_investimento(operacao):
         "categorias_receita_financeira": CategoriaFinanceira.objects.filter(
             operacao=operacao, ativa=True, natureza="receita_financeira",
         ).order_by("nome"),
+        "categorias_despesa_financeira": CategoriaFinanceira.objects.filter(
+            operacao=operacao, ativa=True, natureza="despesa_financeira",
+        ).order_by("nome"),
     }
 
 
@@ -110,6 +113,15 @@ def pl_htmx_conta_investimento_salvar(request):
         if not categoria_rendimento:
             return render(request, "financeiro/private_label/_conta_investimento_form.html", {**contexto_erro, "erro": "Selecione a categoria do rendimento (natureza 'Receita financeira')."})
 
+    iof_automatico = request.POST.get("iof_automatico") == "on"
+    categoria_iof_pk = request.POST.get("categoria_iof")
+    categoria_iof = (
+        CategoriaFinanceira.objects.filter(pk=categoria_iof_pk, operacao=operacao, natureza="despesa_financeira").first()
+        if categoria_iof_pk else None
+    )
+    if iof_automatico and not categoria_iof:
+        return render(request, "financeiro/private_label/_conta_investimento_form.html", {**contexto_erro, "erro": "Selecione a categoria do IOF (natureza 'Despesa financeira')."})
+
     conta.nome = nome
     conta.instituicao = request.POST.get("instituicao", "").strip()
     conta.tipo_produto = request.POST.get("tipo_produto", "outro")
@@ -117,6 +129,8 @@ def pl_htmx_conta_investimento_salvar(request):
     conta.rendimento_automatico = rendimento_automatico
     conta.percentual_cdi = percentual_cdi if rendimento_automatico else None
     conta.categoria_rendimento = categoria_rendimento if rendimento_automatico else None
+    conta.iof_automatico = iof_automatico
+    conta.categoria_iof = categoria_iof if iof_automatico else None
     conta.ativa = request.POST.get("ativa") == "on" if pk else True
     conta.save()
     return _evento("pl:investimentos-mudou")

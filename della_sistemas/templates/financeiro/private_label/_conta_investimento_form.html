@@ -68,6 +68,31 @@
             </select>
           </div>
         </div>
+
+        <div class="pl-form-campo pl-form-campo--full" style="border-top:1px solid #ececec;padding-top:.75rem;margin-top:.25rem;">
+          <label class="pl-form-check">
+            <input type="checkbox" name="iof_automatico" id="id-iof-automatico"
+                   {% if conta.iof_automatico %}checked{% endif %}
+                   onchange="document.getElementById('bloco-iof').style.display = this.checked ? 'grid' : 'none';">
+            Calcular IOF sozinho nos resgates (tabela regressiva, isento após 30 dias)
+          </label>
+          <p class="text-muted" style="font-size:.78rem;margin:.25rem 0 0;">
+            Com isso marcado, todo resgate calcula o IOF sobre o rendimento pela tabela regressiva oficial
+            (96% no 1º dia até 0% a partir do 30º dia corrido de cada aplicação) e já lança a taxa sozinho —
+            não precisa registrar "+ taxa/imposto" na mão pra isso.
+          </p>
+        </div>
+        <div id="bloco-iof" class="pl-form-grid" style="display:{% if conta.iof_automatico %}grid{% else %}none{% endif %};grid-column:1/-1;">
+          <div class="pl-form-campo pl-form-campo--full">
+            <label>Categoria do IOF (DRE)</label>
+            <select class="ds-select" name="categoria_iof">
+              <option value="">-- selecione --</option>
+              {% for cat in categorias_despesa_financeira %}
+              <option value="{{ cat.pk }}" {% if conta.categoria_iof_id == cat.pk %}selected{% endif %}>{{ cat.icone }} {{ cat.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
       </div>
       <div class="pl-form-acoes">
         <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>
