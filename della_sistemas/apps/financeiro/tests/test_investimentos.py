@@ -188,3 +188,81 @@ class IofAutomaticoResgateTests(BaseInvestimentoTestCase):
         )
         self.assertEqual(self.conta.saldo_atual(), Decimal("1000.00"))
         self.assertFalse(self.conta_investimento.transacoes.filter(tipo="taxa").exists())
+
+
+class IrAutomaticoResgateTests(BaseInvestimentoTestCase):
+    def setUp(self):
+        super().setUp()
+        self.conta_investimento.ir_automatico = True
+        self.conta_investimento.categoria_ir = self.categoria_despesa_financeira
+        self.conta_investimento.save()
+
+    def test_resgate_com_59_dias_e_sem_iof_retem_22_5_por_cento_de_ir(self):
+        aplicar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1000.00"), data=date(2026, 1, 1),
+        )
+        registrar_rendimento(
+            operacao=self.operacao, conta_investimento=self.conta_investimento,
+            categoria=self.categoria_receita_financeira, valor=Decimal("200.00"), data=date(2026, 1, 10),
+        )
+        resgatar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1200.00"), data=date(2026, 3, 1),
+        )
+        # 59 dias corridos -> faixa até 180 dias -> IR 22,5% sobre os 200,00
+        # de rendimento (sem IOF automático ligado nesta conta) = 45,00.
+        self.assertEqual(self.conta.saldo_atual(), Decimal("1155.00"))
+        ir = self.conta_investimento.transacoes.get(tipo="taxa")
+        self.assertEqual(ir.valor, Decimal("45.00"))
+        self.assertEqual(ir.categoria_id, self.categoria_despesa_financeira.id)
+
+    def test_iof_e_ir_juntos_ir_incide_sobre_rendimento_liquido_de_iof(self):
+        self.conta_investimento.iof_automatico = True
+        self.conta_investimento.categoria_iof = self.categoria_despesa_financeira
+        self.conta_investimento.save()
+        aplicar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1000.00"), data=date(2026, 9, 1),
+        )
+        registrar_rendimento(
+            operacao=self.operacao, conta_investimento=self.conta_investimento,
+            categoria=self.categoria_receita_financeira, valor=Decimal("100.00"), data=date(2026, 9, 5),
+        )
+        resgatar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1100.00"), data=date(2026, 9, 6),
+        )
+        # 5 dias -> IOF 83% sobre 100,00 de rendimento = 83,00; IR 22,5%
+        # sobre o que sobrou do rendimento (100 - 83 = 17,00) = 3,82~3,83.
+        # SQLite não tem tipo Decimal nativo — Sum() de DecimalField volta
+        # float, então quantiza antes de comparar (mesma pegadinha de
+        # qualquer outro `saldo_atual()` neste arquivo de teste).
+        self.assertEqual(
+            Decimal(self.conta.saldo_atual()).quantize(Decimal("0.01")), Decimal("1013.18"),
+        )
+        taxas = list(self.conta_investimento.transacoes.filter(tipo="taxa").values_list("valor", flat=True))
+        self.assertEqual(len(taxas), 2)
+        self.assertEqual(sum(taxas), Decimal("86.82"))
+
+    def test_estornar_resgate_estorna_iof_e_ir_derivados_junto(self):
+        self.conta_investimento.iof_automatico = True
+        self.conta_investimento.categoria_iof = self.categoria_despesa_financeira
+        self.conta_investimento.save()
+        aplicar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1000.00"), data=date(2026, 9, 1),
+        )
+        registrar_rendimento(
+            operacao=self.operacao, conta_investimento=self.conta_investimento,
+            categoria=self.categoria_receita_financeira, valor=Decimal("100.00"), data=date(2026, 9, 5),
+        )
+        resgate = resgatar(
+            operacao=self.operacao, conta_investimento=self.conta_investimento, conta_bancaria=self.conta,
+            valor=Decimal("1100.00"), data=date(2026, 9, 6),
+        )
+        self.assertEqual(self.conta_investimento.transacoes.filter(tipo="taxa", estornada=False).count(), 2)
+        estornar_transacao(resgate, motivo="teste")
+        self.assertEqual(self.conta_investimento.transacoes.filter(tipo="taxa", estornada=False).count(), 0)
+        self.assertEqual(self.conta.saldo_atual(), Decimal("0.00"))
+        self.assertEqual(self.conta_investimento.saldo_atual(), Decimal("1100.00"))

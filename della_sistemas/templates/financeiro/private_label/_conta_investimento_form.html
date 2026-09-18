@@ -93,6 +93,31 @@
             </select>
           </div>
         </div>
+
+        <div class="pl-form-campo pl-form-campo--full" style="border-top:1px solid #ececec;padding-top:.75rem;margin-top:.25rem;">
+          <label class="pl-form-check">
+            <input type="checkbox" name="ir_automatico" id="id-ir-automatico"
+                   {% if conta.ir_automatico %}checked{% endif %}
+                   onchange="document.getElementById('bloco-ir').style.display = this.checked ? 'grid' : 'none';">
+            Calcular IR sozinho nos resgates (tabela regressiva de renda fixa)
+          </label>
+          <p class="text-muted" style="font-size:.78rem;margin:.25rem 0 0;">
+            Com isso marcado, todo resgate calcula o IR sobre o rendimento (já líquido de IOF) pela tabela
+            regressiva oficial — 22,5% até 180 dias, 20% até 360, 17,5% até 720, 15% acima disso — e já
+            lança a taxa sozinho.
+          </p>
+        </div>
+        <div id="bloco-ir" class="pl-form-grid" style="display:{% if conta.ir_automatico %}grid{% else %}none{% endif %};grid-column:1/-1;">
+          <div class="pl-form-campo pl-form-campo--full">
+            <label>Categoria do IR (DRE)</label>
+            <select class="ds-select" name="categoria_ir">
+              <option value="">-- selecione --</option>
+              {% for cat in categorias_despesa_financeira %}
+              <option value="{{ cat.pk }}" {% if conta.categoria_ir_id == cat.pk %}selected{% endif %}>{{ cat.icone }} {{ cat.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
       </div>
       <div class="pl-form-acoes">
         <button type="button" class="ds-btn ds-btn--outline" onclick="document.getElementById('modal-container').innerHTML=''">Cancelar</button>

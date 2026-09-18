@@ -122,6 +122,15 @@ def pl_htmx_conta_investimento_salvar(request):
     if iof_automatico and not categoria_iof:
         return render(request, "financeiro/private_label/_conta_investimento_form.html", {**contexto_erro, "erro": "Selecione a categoria do IOF (natureza 'Despesa financeira')."})
 
+    ir_automatico = request.POST.get("ir_automatico") == "on"
+    categoria_ir_pk = request.POST.get("categoria_ir")
+    categoria_ir = (
+        CategoriaFinanceira.objects.filter(pk=categoria_ir_pk, operacao=operacao, natureza="despesa_financeira").first()
+        if categoria_ir_pk else None
+    )
+    if ir_automatico and not categoria_ir:
+        return render(request, "financeiro/private_label/_conta_investimento_form.html", {**contexto_erro, "erro": "Selecione a categoria do IR (natureza 'Despesa financeira')."})
+
     conta.nome = nome
     conta.instituicao = request.POST.get("instituicao", "").strip()
     conta.tipo_produto = request.POST.get("tipo_produto", "outro")
@@ -131,6 +140,8 @@ def pl_htmx_conta_investimento_salvar(request):
     conta.categoria_rendimento = categoria_rendimento if rendimento_automatico else None
     conta.iof_automatico = iof_automatico
     conta.categoria_iof = categoria_iof if iof_automatico else None
+    conta.ir_automatico = ir_automatico
+    conta.categoria_ir = categoria_ir if ir_automatico else None
     conta.ativa = request.POST.get("ativa") == "on" if pk else True
     conta.save()
     return _evento("pl:investimentos-mudou")

@@ -1069,6 +1069,18 @@ class ContaInvestimento(models.Model):
         related_name="contas_investimento_iof_auto",
         help_text="Categoria usada no lançamento automático de IOF no resgate (natureza 'Despesa financeira').",
     )
+    ir_automatico = models.BooleanField(
+        default=False,
+        help_text="Se marcado, todo resgate calcula sozinho o IR pela tabela regressiva de renda fixa "
+                   "(22,5% até 180 dias, 20% até 360, 17,5% até 720, 15% acima disso — sobre o rendimento "
+                   "já líquido de IOF) e já lança a taxa — ver "
+                   "`services/private_label/investimentos.py::_calcular_impostos_resgate`.",
+    )
+    categoria_ir = models.ForeignKey(
+        CategoriaFinanceira, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="contas_investimento_ir_auto",
+        help_text="Categoria usada no lançamento automático de IR no resgate (natureza 'Despesa financeira').",
+    )
     ativa = models.BooleanField(default=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     criado_por = models.ForeignKey(
@@ -1090,6 +1102,10 @@ class ContaInvestimento(models.Model):
             models.CheckConstraint(
                 check=Q(iof_automatico=False) | Q(categoria_iof__isnull=False),
                 name="investimento_iof_auto_exige_categoria",
+            ),
+            models.CheckConstraint(
+                check=Q(ir_automatico=False) | Q(categoria_ir__isnull=False),
+                name="investimento_ir_auto_exige_categoria",
             ),
         ]
 

@@ -29,6 +29,16 @@ TABELA_IOF_REGRESSIVA = {
     20: 33, 21: 30, 22: 26, 23: 23, 24: 20, 25: 16, 26: 13, 27: 10, 28: 6, 29: 3,
 }
 
+# Tabela regressiva de IR pra renda fixa (Lei 11.033/2004, art. 1º) — incide
+# sobre o rendimento LÍQUIDO de IOF (nunca zera, mínimo 15% acima de 2 anos).
+# Faixas em dias corridos desde a aplicação.
+FAIXAS_IR_REGRESSIVA = [
+    (180, Decimal("0.225")),
+    (360, Decimal("0.20")),
+    (720, Decimal("0.175")),
+]
+ALIQUOTA_IR_MINIMA = Decimal("0.15")
+
 
 def _aliquota_iof(dias_corridos: int) -> Decimal:
     if dias_corridos >= 30:
@@ -37,30 +47,45 @@ def _aliquota_iof(dias_corridos: int) -> Decimal:
     return Decimal(TABELA_IOF_REGRESSIVA[dias_corridos]) / Decimal("100")
 
 
-def _calcular_iof_resgate(conta_investimento, *, valor_resgate: Decimal, data_resgate) -> Decimal:
-    """Calcula o IOF regressivo de um resgate — aproximação deliberada, não
-    contabilidade de lote bancária completa (ver plano de implementação,
-    2026-09-16): rendimento não fica preso a uma aplicação específica (é um
-    ledger só, `MovimentoContaInvestimento`), então a fração do resgate que é
+def _aliquota_ir(dias_corridos: int) -> Decimal:
+    for limite, aliquota in FAIXAS_IR_REGRESSIVA:
+        if dias_corridos <= limite:
+            return aliquota
+    return ALIQUOTA_IR_MINIMA
+
+
+def _calcular_impostos_resgate(
+    conta_investimento, *, valor_resgate: Decimal, data_resgate, calcular_iof: bool, calcular_ir: bool,
+) -> tuple[Decimal, Decimal]:
+    """Calcula IOF (Anexo I, IN RFB 907/2009) e/ou IR (Lei 11.033/2004) de um
+    resgate — aproximação deliberada, não contabilidade de lote bancária
+    completa (ver plano de implementação, 2026-09-16/18): rendimento não
+    fica preso a uma aplicação específica (é um ledger só,
+    `MovimentoContaInvestimento`), então a fração do resgate que é
     "rendimento" é estimada pela proporção rendimento líquido acumulado ÷
     saldo atual (antes deste resgate). Essa fração é aplicada a cada pedaço
     do valor resgatado, consumindo as aplicações mais antigas primeiro
     (FIFO, mesmo espírito de estoque) — cada pedaço usa a idade (dias desde
-    a SUA aplicação original) pra achar a alíquota na tabela regressiva. O
-    rendimento nunca "reinicia a idade": ele cresce dentro do lote antigo
+    a SUA aplicação original) pra achar a alíquota nas tabelas regressivas.
+    O rendimento nunca "reinicia a idade": ele cresce dentro do lote antigo
     que já existia, nunca vira um lote novo. Se as aplicações registradas já
     tiverem sido totalmente consumidas por resgates anteriores (sobra só
     rendimento acumulado sem aplicação viva), o restante usa a idade da
-    aplicação mais recente conhecida (fallback conservador)."""
+    aplicação mais recente conhecida (fallback conservador). IR é calculado
+    sobre o rendimento já líquido de IOF (ordem oficial de retenção: IOF
+    primeiro, IR depois sobre o que sobrou)."""
+    if not calcular_iof and not calcular_ir:
+        return Decimal("0.00"), Decimal("0.00")
+
     saldo_antes = conta_investimento.saldo_atual()
     if saldo_antes <= 0 or valor_resgate <= 0:
-        return Decimal("0.00")
+        return Decimal("0.00"), Decimal("0.00")
 
     aplicacoes = list(
         conta_investimento.transacoes.filter(tipo="aplicacao", estornada=False).order_by("data", "id")
     )
     if not aplicacoes:
-        return Decimal("0.00")
+        return Decimal("0.00"), Decimal("0.00")
     resgates_anteriores = list(
         conta_investimento.transacoes.filter(tipo="resgate", estornada=False)
         .exclude(data__gt=data_resgate)
@@ -83,8 +108,15 @@ def _calcular_iof_resgate(conta_investimento, *, valor_resgate: Decimal, data_re
     rendimento_liquido = max(saldo_antes - principal_vivo, Decimal("0.00"))
     razao_rendimento = (rendimento_liquido / saldo_antes) if saldo_antes > 0 else Decimal("0")
 
+    def _impostos_do_pedaco(consumo: Decimal, dias: int) -> tuple[Decimal, Decimal]:
+        rendimento_chunk = consumo * razao_rendimento
+        iof_chunk = rendimento_chunk * _aliquota_iof(dias) if calcular_iof else Decimal("0")
+        ir_chunk = (rendimento_chunk - iof_chunk) * _aliquota_ir(dias) if calcular_ir else Decimal("0")
+        return iof_chunk, ir_chunk
+
     ultima_data_aplicacao = aplicacoes[-1].data
     iof_total = Decimal("0.00")
+    ir_total = Decimal("0.00")
     restante = valor_resgate
     for lote in lotes:
         if restante <= 0:
@@ -93,17 +125,22 @@ def _calcular_iof_resgate(conta_investimento, *, valor_resgate: Decimal, data_re
             continue
         consumo = min(lote["valor"], restante)
         dias = (data_resgate - lote["data"]).days
-        rendimento_chunk = consumo * razao_rendimento
-        iof_total += rendimento_chunk * _aliquota_iof(dias)
+        iof_chunk, ir_chunk = _impostos_do_pedaco(consumo, dias)
+        iof_total += iof_chunk
+        ir_total += ir_chunk
         restante -= consumo
     if restante > 0:
         # sobrou valor resgatado além de toda aplicação viva conhecida —
         # trata como se fosse da aplicação mais recente (fallback).
         dias = (data_resgate - ultima_data_aplicacao).days
-        rendimento_chunk = restante * razao_rendimento
-        iof_total += rendimento_chunk * _aliquota_iof(dias)
+        iof_chunk, ir_chunk = _impostos_do_pedaco(restante, dias)
+        iof_total += iof_chunk
+        ir_total += ir_chunk
 
-    return iof_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return (
+        iof_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+        ir_total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+    )
 
 
 @transaction.atomic
@@ -140,14 +177,15 @@ def resgatar(*, operacao, conta_investimento, conta_bancaria, valor, data, obser
     if valor > saldo:
         raise ValueError(f"Valor do resgate (R$ {valor}) maior que o saldo do investimento (R$ {saldo}).")
 
-    iof = (
-        _calcular_iof_resgate(conta_investimento, valor_resgate=valor, data_resgate=data)
-        if conta_investimento.iof_automatico else Decimal("0.00")
+    iof, ir = _calcular_impostos_resgate(
+        conta_investimento, valor_resgate=valor, data_resgate=data,
+        calcular_iof=conta_investimento.iof_automatico, calcular_ir=conta_investimento.ir_automatico,
     )
-    # IOF é retido na fonte — sai do valor líquido que cai na conta bancária
-    # (igual o banco faz de verdade), nunca some do investimento uma 2ª vez:
-    # o resgate já tira o valor BRUTO inteiro do saldo investido logo abaixo.
-    valor_liquido_banco = valor - iof
+    # IOF/IR são retidos na fonte — saem do valor líquido que cai na conta
+    # bancária (igual o banco faz de verdade), nunca somem do investimento
+    # 2 vezes: o resgate já tira o valor BRUTO inteiro do saldo investido
+    # logo abaixo.
+    valor_liquido_banco = valor - iof - ir
 
     transacao = InvestimentoTransacao.objects.create(
         operacao=operacao, conta_investimento=conta_investimento, conta_bancaria=conta_bancaria,
@@ -161,22 +199,31 @@ def resgatar(*, operacao, conta_investimento, conta_bancaria, valor, data, obser
         conta_investimento=conta_investimento, transacao=transacao, data=data, valor=-valor,
         evento_chave=f"investimento:{transacao.id}:saida-investimento",
     )
+    detalhe_impostos = ", ".join(
+        f"{nome} R$ {v}" for nome, v in (("IOF", iof), ("IR", ir)) if v > 0
+    )
     registrar_log(
         operacao=operacao, entidade="investimento_transacao", objeto_id=transacao.id, acao="criacao",
         usuario=usuario, valor_para=f"Resgate de R$ {valor} de {conta_investimento}"
-        + (f" (líquido de R$ {iof} de IOF)" if iof > 0 else ""),
+        + (f" (líquido de {detalhe_impostos})" if detalhe_impostos else ""),
     )
 
+    # Cada imposto só entra no DRE (natureza despesa_financeira) — NÃO gera
+    # MovimentoContaInvestimento próprio, pra não descontar o saldo do
+    # investimento 2 vezes (o resgate acima já levou o valor bruto inteiro).
+    # `transacao_origem` liga cada um ao resgate, pra estornar o resgate
+    # também estornar os impostos junto (ver `estornar_transacao`).
     if iof > 0:
-        # Só entra no DRE (natureza despesa_financeira) — NÃO gera
-        # MovimentoContaInvestimento próprio, pra não descontar o saldo do
-        # investimento 2 vezes (o resgate acima já levou o valor bruto
-        # inteiro). `transacao_origem` liga esse registro ao resgate, pra
-        # estornar o resgate também estornar o IOF junto (ver abaixo).
         InvestimentoTransacao.objects.create(
             operacao=operacao, conta_investimento=conta_investimento, categoria=conta_investimento.categoria_iof,
             tipo="taxa", valor=iof, data=data, transacao_origem=transacao,
             observacao=f"IOF automático retido no resgate #{transacao.id}", usuario=usuario,
+        )
+    if ir > 0:
+        InvestimentoTransacao.objects.create(
+            operacao=operacao, conta_investimento=conta_investimento, categoria=conta_investimento.categoria_ir,
+            tipo="taxa", valor=ir, data=data, transacao_origem=transacao,
+            observacao=f"IR automático retido no resgate #{transacao.id}", usuario=usuario,
         )
 
     return transacao
