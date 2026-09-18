@@ -20,6 +20,11 @@ MESES_PT = [
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ]
 
+# Private Label só começou a ter movimentação a partir daqui — antes disso é
+# tudo zerado, então a visão "ano inteiro" esconde os meses anteriores pra
+# não poluir a tabela com colunas em branco (pedido do dono, 2026-09-18).
+ANO_INICIO_DADOS, MES_INICIO_DADOS = 2026, 8
+
 LINHAS_RESUMO = [
     ("receita_bruta", "Receita Bruta", 0),
     ("deducoes", "(-) Deduções", 1),
@@ -42,15 +47,20 @@ def pl_dre(request):
     mes_raw = request.GET.get("mes")
     mes = int(mes_raw) if mes_raw else None
 
+    primeiro_mes_do_ano = MES_INICIO_DADOS if ano == ANO_INICIO_DADOS else (13 if ano < ANO_INICIO_DADOS else 1)
+    meses_com_dados = [(n, nome) for n, nome in enumerate(MESES_PT, start=1) if n >= primeiro_mes_do_ano]
+
     contexto = {
         "ano": ano, "mes": mes, "anos_disponiveis": range(hoje.year - 2, hoje.year + 1),
-        "meses": list(enumerate(MESES_PT, start=1)),
+        "meses": meses_com_dados,
         "linhas_resumo": LINHAS_RESUMO, "naturezas_dre": NATUREZAS_DRE, "label_natureza": LABEL_NATUREZA,
     }
     if mes:
         contexto["dre"] = calcular_dre_mes(operacao, ano, mes)
     else:
-        contexto["dre_ano"] = calcular_dre_ano(operacao, ano)
+        dre_ano = calcular_dre_ano(operacao, ano)
+        dre_ano["meses"] = dre_ano["meses"][primeiro_mes_do_ano - 1:]
+        contexto["dre_ano"] = dre_ano
     return render(request, "financeiro/private_label/dre.html", contexto)
 
 

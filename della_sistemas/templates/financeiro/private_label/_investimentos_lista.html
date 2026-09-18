@@ -2,7 +2,7 @@
 <div class="pl-cards">
   {% for conta in contas %}
   <div class="pl-card">
-    <div class="pl-card-label">{{ conta.nome }} <span class="text-muted">({{ conta.get_tipo_produto_display }}{% if conta.instituicao %} · {{ conta.instituicao }}{% endif %}{% if conta.liquidez %} · liquidez {{ conta.get_liquidez_display|lower }}{% endif %})</span></div>
+    <div class="pl-card-label">{{ conta.nome }}</div>
     <div class="pl-card-valor" style="font-size:1.1rem;">{{ conta.saldo|brl }}</div>
     {% if not conta.ativa %}<span class="pl-badge pl-badge--cancelado">Inativa</span>{% endif %}
     {% if conta.rendimento_automatico %}<span class="pl-badge pl-badge--quitado" title="Rendimento lançado sozinho todo dia útil, com base no CDI do Banco Central">{{ conta.percentual_cdi }}% do CDI · auto</span>{% endif %}

@@ -244,7 +244,12 @@ def _linhas_lancamentos(request, operacao):
         {"kind": "investimento", "data": t.data, "investimento": t}
         for t in _investimentos_filtradas(request, operacao)
     ]
-    linhas.sort(key=lambda linha: linha["data"])
+    # Mais recente em cima, mais antigo embaixo — igual extrato de banco
+    # (pedido do dono, 2026-09-18). Corta os 300 mais recentes, não os 300
+    # mais antigos (o corte acontece DEPOIS de ordenar, então isso também
+    # evita que uma conta com muito histórico esconda os lançamentos de
+    # hoje atrás de linhas de anos atrás).
+    linhas.sort(key=lambda linha: linha["data"], reverse=True)
     return linhas[:300]
 
 

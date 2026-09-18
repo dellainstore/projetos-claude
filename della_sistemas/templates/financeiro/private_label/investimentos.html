@@ -13,8 +13,6 @@
   <div class="pl-topo-acoes">
     <button type="button" class="ds-btn ds-btn--outline" hx-get="{% url 'financeiro:pl_htmx_investimento_transacao_form' %}?tipo=aplicacao" hx-target="#modal-container">+ Aplicação</button>
     <button type="button" class="ds-btn ds-btn--outline" hx-get="{% url 'financeiro:pl_htmx_investimento_transacao_form' %}?tipo=resgate" hx-target="#modal-container">+ Resgate</button>
-    <button type="button" class="ds-btn ds-btn--outline" hx-get="{% url 'financeiro:pl_htmx_investimento_transacao_form' %}?tipo=rendimento" hx-target="#modal-container">+ Rendimento</button>
-    <button type="button" class="ds-btn ds-btn--outline" hx-get="{% url 'financeiro:pl_htmx_investimento_transacao_form' %}?tipo=taxa" hx-target="#modal-container">+ Taxa/Imposto</button>
     {% if user.pode_configurar_private_label %}
     <button type="button" class="ds-btn ds-btn--dourado" hx-get="{% url 'financeiro:pl_htmx_conta_investimento_form' %}" hx-target="#modal-container">+ Nova conta</button>
     {% endif %}
