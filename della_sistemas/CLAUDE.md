@@ -716,10 +716,10 @@ Projeção 2D do controle de ponto. **Somente leitura**: não cria, altera nem
 apaga `BatidaPonto`. O ponto (`apps/rh`) segue sendo a fonte oficial.
 Documentação completa em [`apps/escritorio_virtual/README.md`](apps/escritorio_virtual/README.md).
 
-**Status (2026-09-19):** fases 1 a 4 da fundação implementadas (domínio,
-projeção, comando de diagnóstico, API autenticada, poller + página
-diagnóstica). Migrations criadas e **não aplicadas em produção**. Cenário
-Phaser, sprites e relatório diário ficam para as fases seguintes.
+**Status (2026-09-19):** fases 1 a 7 implementadas (domínio, projeção, comando
+de diagnóstico, API autenticada, poller, cenário 2D, personagens e transições
+por batida). Migrations criadas e **não aplicadas em produção**. O relatório
+diário (fase 8) e o recorte de visão por perfil (fase 9) ficam para depois.
 
 - Rotas: `/escritorio/` (página diagnóstica) e `/escritorio/api/estado/` (JSON).
   Não existe endpoint público.
@@ -732,8 +732,13 @@ Phaser, sprites e relatório diário ficam para as fases seguintes.
   conexão persistente ocuparia um worker inteiro, travando o painel (inclusive
   a tela de bater ponto).
 - Frontend: workspace de build em `projetos-claude/escritorio-virtual/`
-  (TypeScript + Vite). Node só em build, nunca em runtime. Saída em
-  `static/escritorio/escritorio.js`, referenciada com `{% estatico %}`.
+  (Phaser 3 + TypeScript + Vite). Node só em build, nunca em runtime. Saída em
+  `static/escritorio/escritorio.js` (~1,2 MB, ~340 KB comprimido),
+  referenciada com `{% estatico %}`.
+- A planta do mapa vem da tabela `SalaEscritorio`: sala nova no banco vira
+  sala nova na cena, sem deploy de JS. As personagens são desenhadas por
+  código (sem arte de terceiros); trocar por sprites mexe só em
+  `src/cena/personagem.ts`.
 
 > Atenção ao reciclar workers: o serviço roda **sem `--preload`** e com
 > `--max-requests 500`, então código novo no disco entra em produção aos

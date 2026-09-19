@@ -1,10 +1,17 @@
 /**
- * Entrada do bundle. Liga o poller a pagina diagnostica.
+ * Entrada do bundle. Liga o poller a cena 2D e ao painel de diagnostico.
  *
  * A configuracao (URL da API e intervalo) vem de data-attributes no HTML
  * servido pelo Django, nunca hardcoded aqui.
+ *
+ * Fluxo: poller -> `onCena` -> cena Phaser (visual) + painel (conferencia).
+ * A cena nunca deriva estado proprio; ela so reflete a resposta do servidor.
  */
 
+import Phaser from "phaser";
+
+import { CENARIO, hex } from "./cena/paleta";
+import { CenaEscritorio } from "./cena/escritorio";
 import { ControleDeAnimacoes, estadosQueMudaram } from "./diff";
 import { Poller } from "./poller";
 import {
@@ -20,6 +27,40 @@ function exigir<T extends HTMLElement>(raiz: ParentNode, seletor: string): T {
   const el = raiz.querySelector<T>(seletor);
   if (!el) throw new Error(`elemento ausente no HTML: ${seletor}`);
   return el;
+}
+
+function montarJogo(destino: HTMLElement): {
+  aplicar: (cena: Cena) => void;
+} {
+  let cenaJogo: CenaEscritorio | null = null;
+  let ultima: Cena | null = null;
+
+  const jogo = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: destino,
+    width: 928,
+    height: 496,
+    backgroundColor: hex(CENARIO.fundo),
+    banner: false,
+    audio: { noAudio: true },
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
+    },
+    scene: [CenaEscritorio],
+  });
+
+  jogo.events.once("ready", () => {
+    cenaJogo = jogo.scene.getScene("escritorio") as CenaEscritorio;
+    if (ultima) cenaJogo.aplicar(ultima);
+  });
+
+  return {
+    aplicar(cena: Cena) {
+      ultima = cena;
+      cenaJogo?.aplicar(cena);
+    },
+  };
 }
 
 function iniciar(): void {
@@ -44,6 +85,7 @@ function iniciar(): void {
     log: exigir(raiz, "[data-ev=log]"),
   };
 
+  const jogo = montarJogo(exigir(raiz, "[data-ev=palco]"));
   const animacoes = new ControleDeAnimacoes();
   let cenaAnterior: Cena | null = null;
 
@@ -51,7 +93,9 @@ function iniciar(): void {
     url,
     intervaloMs,
     onCena: (cena, meta) => {
-      // O servidor manda: a tela e' sempre reconstruida a partir da resposta.
+      // O servidor manda: cena e painel sao sempre reconstruidos a partir da
+      // resposta, nunca de estado acumulado no cliente.
+      jogo.aplicar(cena);
       const mudaram = estadosQueMudaram(cenaAnterior, cena);
       renderizarCena(alvos, cena, mudaram);
       registrarTransicoes(alvos, animacoes.novasTransicoes(cena));

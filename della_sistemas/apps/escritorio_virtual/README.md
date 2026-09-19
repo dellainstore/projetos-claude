@@ -156,6 +156,25 @@ sozinho, então código novo entra em produção aos poucos, sem ninguém dar
 restart. Com a feature desligada por padrão, nada aparece até alguém ligar
 explicitamente, depois de aplicar a migration.
 
+## Cenário 2D
+
+O visual vive no workspace `projetos-claude/escritorio-virtual/` (Phaser 3 +
+TypeScript, build only) e consome exclusivamente `GET /escritorio/api/estado/`.
+
+O que o backend precisa garantir para a cena funcionar, e que os testes
+travam:
+
+- **as salas vão no payload com posição e tamanho.** A planta do mapa é a
+  tabela `SalaEscritorio`, não uma constante no frontend. Mover ou acrescentar
+  uma sala no banco muda o mapa e o trajeto das personagens sem deploy de JS;
+- **`sala` é `null` para quem não está fisicamente presente** (folga, ausência,
+  batida faltando, fim de expediente). O frontend usa isso para tirar a
+  personagem de cena; é o que impede alguém aparecer trabalhando de madrugada;
+- **os slugs `store-entrance` e `cafeteria` têm papel fixo**: a cena manda
+  quem chega e quem sai para a entrada, e quem está em `LUNCH` para o
+  refeitório. Renomear esses dois slugs quebra a encenação (as demais salas
+  podem ter qualquer slug).
+
 ## Preparo para agentes de IA
 
 `PersonagemEscritorio.tipo_ator` já distingue `HUMAN_EMPLOYEE`, `AI_AGENT` e

@@ -299,6 +299,7 @@ class PaginaDiagnosticaTests(BaseApiTestCase):
         self.assertIn('data-api-url="/escritorio/api/estado/"', html)
         self.assertIn('data-poll-segundos="10"', html)
         self.assertIn("escritorio/escritorio.js", html)
+        self.assertIn('data-ev="palco"', html, "o canvas do Phaser precisa de um destino")
 
     def test_pagina_nao_traz_dado_de_ponto_no_html(self):
         """Nada de estado renderizado no servidor: a tabela nasce vazia e é
