@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "dist-test",
+    "rootDir": ".",
+    "types": [
+      "node"
+    ],
+    "sourceMap": false,
+    "esModuleInterop": true
+  },
+  "include": [
+    "src",
+    "tests"
+  ],
+  "exclude": [
+    "vite.config.ts"
+  ]
+}

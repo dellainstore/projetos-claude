@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% load core_extras %}
+{% block titulo %}Escritório Virtual | D'ELLA Sistemas{% endblock %}
+
+{% block css_extra %}
+<style>
+  .ev-topo { display:flex; justify-content:space-between; align-items:flex-start;
+             flex-wrap:wrap; gap:.75rem; margin-bottom:1rem; }
+  .ev-topo h1 { font-family:'Playfair Display', serif; font-size:1.5rem; color:var(--preto); }
+  .ev-sub { font-size:.8rem; color:var(--cinza-escuro); margin-top:.2rem; max-width:52ch; }
+
+  .ev-cards { display:grid; gap:.75rem; margin-bottom:1.25rem;
+              grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); }
+  .ev-card { background:var(--branco); border:1px solid var(--cinza-medio);
+             border-radius:10px; padding:.7rem .9rem; }
+  .ev-card .rotulo { font-size:.7rem; text-transform:uppercase; letter-spacing:.04em;
+                     color:var(--cinza-escuro); }
+  .ev-card .valor { font-size:1.05rem; font-weight:600; color:var(--preto); margin-top:.2rem;
+                    word-break:break-word; }
+
+  .ev-tabela-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch;
+                    border:1px solid var(--cinza-medio); border-radius:10px;
+                    background:var(--branco); }
+  .ev-tabela { width:100%; border-collapse:collapse; font-size:.82rem; min-width:640px; }
+  .ev-tabela th, .ev-tabela td { padding:.55rem .7rem; text-align:left;
+                                 border-bottom:1px solid var(--cinza-medio); }
+  .ev-tabela th { font-size:.68rem; text-transform:uppercase; letter-spacing:.04em;
+                  color:var(--cinza-escuro); background:var(--cinza-claro); }
+  .ev-tabela tr:last-child td { border-bottom:none; }
+  .ev-tabela tr.ev-mudou { background:#fffbeb; }
+  .ev-vazio { text-align:center; color:var(--cinza-escuro); padding:1.5rem; }
+
+  td[data-estado="WORKING"] { color:#15803d; font-weight:600; }
+  td[data-estado="LUNCH"], td[data-estado="RETURNING_FROM_LUNCH"] { color:#b45309; font-weight:600; }
+  td[data-estado="ARRIVING"], td[data-estado="LEAVING"] { color:#1d4ed8; font-weight:600; }
+  td[data-estado="MISSING_PUNCH"], td[data-estado="ABSENT"] { color:#b91c1c; font-weight:600; }
+
+  .ev-rodape { display:flex; flex-wrap:wrap; gap:.75rem 1.25rem; align-items:center;
+               margin-top:1rem; font-size:.78rem; color:var(--cinza-escuro); }
+  [data-ev="situacao"]::before { content:""; display:inline-block; width:8px; height:8px;
+              border-radius:50%; background:var(--cinza-escuro); margin-right:.4rem;
+              vertical-align:middle; }
+  [data-ev="situacao"][data-situacao="ok"]::before,
+  [data-ev="situacao"][data-situacao="sem-mudanca"]::before { background:#16a34a; }
+  [data-ev="situacao"][data-situacao="erro"]::before { background:#dc2626; }
+  [data-ev="situacao"][data-situacao="pausado"]::before { background:#d97706; }
+  .ev-erro { color:#b91c1c; font-weight:600; }
+
+  .ev-log { list-style:none; padding:0; margin:.5rem 0 0; font-size:.75rem;
+            color:var(--cinza-escuro); font-family:ui-monospace, monospace; }
+  .ev-log li { padding:.15rem 0; }
+
+  .ev-botao { padding:.4rem .8rem; border-radius:6px; border:1px solid var(--cinza-medio);
+              background:var(--branco); font-size:.78rem; cursor:pointer; }
+
+  @media (max-width:640px) {
+    .ev-topo h1 { font-size:1.25rem; }
+    .ev-cards { grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
+  }
+</style>
+{% endblock %}
+
+{% block conteudo %}
+<div class="ev-topo">
+  <div>
+    <h1>Escritório Virtual</h1>
+    <p class="ev-sub">
+      Visualização diagnóstica da projeção do ponto. O cenário 2D entra numa fase
+      seguinte, consumindo exatamente este mesmo estado. Nada aqui altera o ponto:
+      correções continuam em RH &rsaquo; Ponto &rsaquo; Jornada.
+    </p>
+  </div>
+  <button type="button" class="ev-botao" data-ev="atualizar">Atualizar agora</button>
+</div>
+
+<div id="escritorio-diagnostico"
+     data-api-url="{% url 'escritorio:api_estado' %}"
+     data-poll-segundos="{{ poll_segundos }}">
+
+  <div class="ev-cards">
+    <div class="ev-card">
+      <div class="rotulo">Loja</div>
+      <div class="valor" data-ev="loja">carregando</div>
+    </div>
+    <div class="ev-card">
+      <div class="rotulo">Luzes</div>
+      <div class="valor" data-ev="luzes">carregando</div>
+    </div>
+    <div class="ev-card">
+      <div class="rotulo">Dia</div>
+      <div class="valor" data-ev="data">carregando</div>
+    </div>
+    <div class="ev-card">
+      <div class="rotulo">Pendências</div>
+      <div class="valor" data-ev="pendencias">carregando</div>
+    </div>
+  </div>
+
+  <div class="ev-tabela-wrap">
+    <table class="ev-tabela">
+      <thead>
+        <tr>
+          <th>Personagem</th>
+          <th>Estado</th>
+          <th>Sala atual</th>
+          <th>Origem da sala</th>
+          <th>Desde</th>
+          <th>Observação</th>
+        </tr>
+      </thead>
+      <tbody data-ev="corpo">
+        <tr><td colspan="6" class="ev-vazio">carregando</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="ev-rodape">
+    <span data-ev="situacao">conectando</span>
+    <span>atualizado às <strong data-ev="atualizado">aguardando</strong></span>
+    <span data-ev="contagem"></span>
+    <span>avisos técnicos: <strong data-ev="avisos">nenhum</strong></span>
+    <span class="ev-erro" data-ev="erro" hidden></span>
+  </div>
+
+  <ul class="ev-log" data-ev="log"></ul>
+</div>
+{% endblock %}
+
+{% block js_extra %}
+<script src="{% estatico 'escritorio/escritorio.js' %}"></script>
+{% endblock %}

@@ -710,6 +710,42 @@ cancelado). Regra única agora em `apps/analytics/vendas.py`:
 - **NÃO regredir:** somar `valor_total` de `pedido_finalizado` sem filtrar
   `produto_slug=''` duplica a receita (soma os eventos de item + o de total)
 
+## Módulo Escritório Virtual (`apps/escritorio_virtual/`)
+
+Projeção 2D do controle de ponto. **Somente leitura**: não cria, altera nem
+apaga `BatidaPonto`. O ponto (`apps/rh`) segue sendo a fonte oficial.
+Documentação completa em [`apps/escritorio_virtual/README.md`](apps/escritorio_virtual/README.md).
+
+**Status (2026-09-19):** fases 1 a 4 da fundação implementadas (domínio,
+projeção, comando de diagnóstico, API autenticada, poller + página
+diagnóstica). Migrations criadas e **não aplicadas em produção**. Cenário
+Phaser, sprites e relatório diário ficam para as fases seguintes.
+
+- Rotas: `/escritorio/` (página diagnóstica) e `/escritorio/api/estado/` (JSON).
+  Não existe endpoint público.
+- Permissões: `escritorio.ver` e `escritorio.configurar`, ambas **False** em
+  todos os papéis do fallback — acesso é concedido a dedo em `/usuarios/`.
+- Interruptor: `ESCRITORIO_ATIVO` no `.env`, padrão **False**. Com False,
+  `/escritorio/` responde 404. Ligar só depois de `migrate escritorio_virtual`.
+- Tempo real: **polling** HTTP de 10s com `ETag`/`If-None-Match`/304.
+  Nada de WebSocket nem SSE: o gunicorn roda com 2 workers `sync` e uma
+  conexão persistente ocuparia um worker inteiro, travando o painel (inclusive
+  a tela de bater ponto).
+- Frontend: workspace de build em `projetos-claude/escritorio-virtual/`
+  (TypeScript + Vite). Node só em build, nunca em runtime. Saída em
+  `static/escritorio/escritorio.js`, referenciada com `{% estatico %}`.
+
+> Atenção ao reciclar workers: o serviço roda **sem `--preload`** e com
+> `--max-requests 500`, então código novo no disco entra em produção aos
+> poucos, sem restart. É por isso que `ESCRITORIO_ATIVO` nasce em False.
+
+Decisões do relatório diário do ponto (ainda não implementado) estão em
+[`apps/rh/RELATORIO_DIARIO.md`](apps/rh/RELATORIO_DIARIO.md): autorização e
+destinatário são conceitos separados, e a entrega é uma tabela própria com
+unicidade `(relatorio, destinatario, canal)`.
+
+---
+
 ## Módulos futuros (placeholders no menu)
 
 - **Financeiro** — DRE, fluxo de caixa (virá de `app/financeiro/`)

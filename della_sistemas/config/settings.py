@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "apps.financeiro",
     "apps.tarefas",
     "apps.motoqueiro",
+    "apps.escritorio_virtual",
 ]
 
 MIDDLEWARE = [
@@ -190,6 +191,21 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# ── Escritório Virtual ───────────────────────────────────────────────────────
+# Interruptor da feature: com False as rotas de /escritorio/ respondem 404.
+#
+# O padrão é FALSE de propósito. O gunicorn deste painel roda sem `--preload`
+# e com `--max-requests 500`, então cada worker reciclado importa o código do
+# disco sozinho — código novo entra em produção aos poucos, sem ninguém dar
+# restart. Enquanto a migration do app não for aplicada, as tabelas não
+# existem e a rota quebraria. Com o padrão em False, a rota simplesmente não
+# existe até alguém ligar explicitamente no .env, DEPOIS de migrar.
+#
+# Os demais parâmetros (intervalo de poll, margem de fechamento, limite
+# absoluto) ficam em apps.escritorio_virtual.models.ParametrosEscritorio,
+# editáveis sem deploy.
+ESCRITORIO_ATIVO = os.getenv("ESCRITORIO_ATIVO", "False") == "True"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

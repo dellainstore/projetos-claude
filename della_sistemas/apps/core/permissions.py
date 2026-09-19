@@ -140,6 +140,14 @@ PERMISSION_TREE = [
         ],
     },
     {
+        "id": "escritorio",
+        "label": "Escritório Virtual",
+        "perms": [
+            {"id": "ver",        "label": "Ver o escritório virtual (projeção do ponto)"},
+            {"id": "configurar", "label": "Configurar salas, personagens e parâmetros do cenário"},
+        ],
+    },
+    {
         "id": "rh",
         "label": "Recursos Humanos",
         "perms": [
@@ -181,6 +189,11 @@ DEFAULT_PERMS_BY_PAPEL = {
         "em_breve":   {"ver": True},
         "analytics":  {"ver_visitas": True, "ver_vendas": True, "ver_relatorio": True, "ver_anuncios": True, "gerar_link": True},
         "tarefas":    {"ver": True, "criar": True},
+        # Módulo novo (2026-09-19): entra com TUDO FALSE em todos os papéis, de
+        # propósito. Adicionar uma permissão não pode liberar acesso para quem
+        # já existe — o acesso ao escritório é concedido explicitamente em
+        # /usuarios/. (Este fallback só vale para usuário com `permissoes={}`.)
+        "escritorio": {"ver": False, "configurar": False},
         "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": True},
         "admin":      {"usuarios": True},
     },
@@ -204,6 +217,11 @@ DEFAULT_PERMS_BY_PAPEL = {
         "em_breve":   {"ver": False},
         "analytics":  {"ver_visitas": True, "ver_vendas": True, "ver_relatorio": True, "ver_anuncios": True, "gerar_link": True},
         "tarefas":    {"ver": True, "criar": True},
+        # Módulo novo (2026-09-19): entra com TUDO FALSE em todos os papéis, de
+        # propósito. Adicionar uma permissão não pode liberar acesso para quem
+        # já existe — o acesso ao escritório é concedido explicitamente em
+        # /usuarios/. (Este fallback só vale para usuário com `permissoes={}`.)
+        "escritorio": {"ver": False, "configurar": False},
         "rh":         {"ver": True, "gerir": True, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": True},
         "admin":      {"usuarios": False},
     },
@@ -227,6 +245,11 @@ DEFAULT_PERMS_BY_PAPEL = {
         "em_breve":   {"ver": False},
         "analytics":  {"ver_visitas": False, "ver_vendas": False, "ver_relatorio": False, "ver_anuncios": False, "gerar_link": True},
         "tarefas":    {"ver": True, "criar": True},
+        # Módulo novo (2026-09-19): entra com TUDO FALSE em todos os papéis, de
+        # propósito. Adicionar uma permissão não pode liberar acesso para quem
+        # já existe — o acesso ao escritório é concedido explicitamente em
+        # /usuarios/. (Este fallback só vale para usuário com `permissoes={}`.)
+        "escritorio": {"ver": False, "configurar": False},
         "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": False},
         "admin":      {"usuarios": False},
     },
@@ -249,6 +272,11 @@ DEFAULT_PERMS_BY_PAPEL = {
         "em_breve":   {"ver": False},
         "analytics":  {"ver_visitas": False, "ver_vendas": False, "ver_relatorio": False, "ver_anuncios": False, "gerar_link": True},
         "tarefas":    {"ver": True, "criar": True},
+        # Módulo novo (2026-09-19): entra com TUDO FALSE em todos os papéis, de
+        # propósito. Adicionar uma permissão não pode liberar acesso para quem
+        # já existe — o acesso ao escritório é concedido explicitamente em
+        # /usuarios/. (Este fallback só vale para usuário com `permissoes={}`.)
+        "escritorio": {"ver": False, "configurar": False},
         "rh":         {"ver": False, "gerir": False, "ponto_bater": True, "ponto_jornada_ver": True, "ponto_gerir": False},
         "admin":      {"usuarios": False},
     },
