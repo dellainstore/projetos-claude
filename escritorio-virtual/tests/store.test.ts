@@ -16,6 +16,7 @@ import {
   type EstadoPorta,
 } from "../src/environment/StoreController";
 import { OfficeStore } from "../src/state/officeStore";
+import { assinaturaDaCena, resumoDaCena } from "../src/ui/painel";
 import type { Cena, EstadoLoja, Personagem } from "../src/types";
 import { PLANTA } from "./planta";
 
@@ -185,4 +186,36 @@ test("cancelar a assinatura para de receber", () => {
   cancelar();
   store.receberDaApi(cena("CLOSED"));
   assert.equal(recebidas, 1);
+});
+
+
+// ── aviso da pre-visualizacao ──────────────────────────────────────────────
+//
+// Existe porque o bug relatado NAO era a requisicao: era a falta de retorno.
+// A pessoa escolhia data e hora, a cena ficava parecida e parecia quebrado.
+
+test("o resumo diz o que cada uma esta fazendo", () => {
+  const c = cena("OPEN", [
+    pessoa({ id: 1, nome: "Tina", estado: "WORKING" }),
+    pessoa({ id: 2, nome: "Sara", estado: "LUNCH", sala: "cafeteria" }),
+  ]);
+  const texto = resumoDaCena(c);
+  assert.match(texto, /Tina trabalhando/);
+  assert.match(texto, /Sara no almoço/);
+});
+
+test("a assinatura muda quando a cena muda, e so quando muda", () => {
+  const base = cena("OPEN", [pessoa({ estado: "WORKING" })]);
+  const igual = cena("OPEN", [pessoa({ estado: "WORKING" })]);
+  const outra = cena("OPEN", [pessoa({ estado: "LUNCH", sala: "cafeteria" })]);
+
+  assert.equal(assinaturaDaCena(base), assinaturaDaCena(igual));
+  assert.notEqual(assinaturaDaCena(base), assinaturaDaCena(outra));
+
+  // Trocar so a hora do preview NAO conta como cena diferente: e' exatamente
+  // o caso em que a tela precisa avisar "mesma situacao".
+  const mesmaComOutraHora: Cena = {
+    ...base, preview: { ativo: true, data: "2026-09-18", hora: "15:00" },
+  };
+  assert.equal(assinaturaDaCena(base), assinaturaDaCena(mesmaComOutraHora));
 });

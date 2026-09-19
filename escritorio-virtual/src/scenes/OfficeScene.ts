@@ -20,6 +20,7 @@ import Phaser from "phaser";
 import { Personagem2D } from "../actors/Character";
 import { NameTag } from "../ui/NameTag";
 import {
+  CONTORNO,
   COR,
   PAREDE,
   SLUG,
@@ -260,24 +261,64 @@ export class CenaEscritorio extends Phaser.Scene {
 
     const g = this.add.graphics();
     g.setDepth(CAMADA.floor);
-    // Piso.
+
+    // Piso com textura: tabua de madeira nos showrooms e corredor, ladrilho
+    // no refeitorio e na entrada. Sem isso tudo vira uma mancha bege.
     g.fillStyle(estilo.piso, 1);
     g.fillRect(piso.x, piso.y, piso.largura, piso.altura);
+    this.texturaDoPiso(g, piso, estilo);
 
     // Parede de fundo vista por dentro: e' o que faz o comodo parecer um
     // comodo, e nao um retangulo pintado no chao.
     const fundo = Math.min(FUNDO, piso.altura * 0.34);
     g.fillStyle(estilo.fundo, 1);
     g.fillRect(piso.x, piso.y, piso.largura, fundo);
-    g.fillStyle(0x000000, 0.10);
-    g.fillRect(piso.x, piso.y + fundo - 5, piso.largura, 5);
-    g.fillStyle(0xffffff, 0.35);
-    g.fillRect(piso.x, piso.y, piso.largura, 4);
+    g.fillStyle(0xffffff, 0.12);
+    g.fillRect(piso.x, piso.y, piso.largura, 5);
+    g.fillStyle(COR.contorno, 0.45);
+    g.fillRect(piso.x, piso.y + fundo - 3, piso.largura, 3);
 
     this.camadas.floor.add(g);
 
     this.desenharMoveis(sala, fundo);
     this.desenharPlaca(sala, fundo);
+  }
+
+  /** Tabuas ou ladrilhos, conforme o ambiente. */
+  private texturaDoPiso(
+    g: Phaser.GameObjects.Graphics,
+    piso: { x: number; y: number; largura: number; altura: number },
+    estilo: ReturnType<typeof estiloDe>,
+  ): void {
+    g.fillStyle(estilo.listra, 1);
+
+    if (estilo.padrao === "ladrilho") {
+      const lado = 34;
+      for (let i = 0; i * lado < piso.largura; i += 1) {
+        for (let j = 0; j * lado < piso.altura; j += 1) {
+          if ((i + j) % 2 !== 0) continue;
+          g.fillRect(
+            piso.x + i * lado, piso.y + j * lado,
+            Math.min(lado, piso.largura - i * lado),
+            Math.min(lado, piso.altura - j * lado),
+          );
+        }
+      }
+      return;
+    }
+
+    // Tabuas: linhas finas no sentido longo do comodo.
+    const vertical = estilo.padrao === "tabua-vertical";
+    const passo = 30;
+    if (vertical) {
+      for (let x = piso.x + passo; x < piso.x + piso.largura; x += passo) {
+        g.fillRect(x, piso.y, 2, piso.altura);
+      }
+    } else {
+      for (let y = piso.y + passo; y < piso.y + piso.altura; y += passo) {
+        g.fillRect(piso.x, y, piso.largura, 2);
+      }
+    }
   }
 
   private desenharPlaca(sala: Sala, fundo: number): void {
@@ -288,7 +329,7 @@ export class CenaEscritorio extends Phaser.Scene {
 
     const texto = this.add.text(centroX, piso.y + fundo * 0.44, sala.nome.toUpperCase(), {
       fontFamily: "Georgia, 'Times New Roman', serif",
-      fontSize: "17px",
+      fontSize: "18px",
       color: hex(estilo.placa),
     });
     texto.setOrigin(0.5, 0.5);
@@ -296,7 +337,7 @@ export class CenaEscritorio extends Phaser.Scene {
     texto.setDepth(CAMADA.roomLabels);
 
     const filete = this.add.rectangle(
-      centroX, piso.y + fundo * 0.72, texto.width + 20, 1.5, COR.metalDourado, 0.75,
+      centroX, piso.y + fundo * 0.74, texto.width + 24, 2, COR.metalDourado, 0.85,
     );
     filete.setDepth(CAMADA.roomLabels);
     this.camadas.roomLabels.add([texto, filete]);
@@ -311,7 +352,6 @@ export class CenaEscritorio extends Phaser.Scene {
     frente.setDepth(CAMADA.furnitureFront);
     const tapetes = this.add.graphics();
     tapetes.setDepth(CAMADA.rugs);
-    const rotulos: Phaser.GameObjects.GameObject[] = [];
 
     for (const movel of mobiliarioDe(sala.slug)) {
       const pos = posicaoDoMovel(sala, movel);
@@ -322,8 +362,29 @@ export class CenaEscritorio extends Phaser.Scene {
     }
 
     this.camadas.rugs.add(tapetes);
-    this.camadas.furnitureBehind.add([atras, ...rotulos]);
+    this.camadas.furnitureBehind.add(atras);
     this.camadas.furnitureFront.add(frente);
+  }
+
+  /** Contorno escuro padrao: e' o que separa um objeto do outro. */
+  private contorno(g: Phaser.GameObjects.Graphics, largura = CONTORNO.largura): void {
+    g.lineStyle(largura, CONTORNO.cor, CONTORNO.alpha);
+  }
+
+  /** Retangulo arredondado com contorno e sombra no chao. */
+  private bloco(
+    g: Phaser.GameObjects.Graphics,
+    x: number, y: number, w: number, h: number,
+    cor: number, raio = 5, sombra = true,
+  ): void {
+    if (sombra) {
+      g.fillStyle(COR.contorno, 0.16);
+      g.fillRoundedRect(x + 3, y + 4, w, h, raio);
+    }
+    g.fillStyle(cor, 1);
+    g.fillRoundedRect(x, y, w, h, raio);
+    this.contorno(g);
+    g.strokeRoundedRect(x, y, w, h, raio);
   }
 
   private desenharMovel(
@@ -335,53 +396,69 @@ export class CenaEscritorio extends Phaser.Scene {
     const volume = m.volume ?? 0;
 
     switch (m.forma) {
-      case "tapete":
-        g.fillStyle(m.cor ?? COR.tapeteShowroom, 0.9);
+      case "tapete": {
+        const cor = m.cor ?? COR.tapeteShowroom;
+        const borda = m.corTopo ?? COR.tapeteShowroomBorda;
+        g.fillStyle(borda, 1);
         if (m.redondo) {
           g.fillEllipse(x + w / 2, y + h / 2, w, h);
+          g.fillStyle(cor, 1);
+          g.fillEllipse(x + w / 2, y + h / 2, w - 18, h - 18);
+          g.fillStyle(borda, 0.5);
+          g.fillEllipse(x + w / 2, y + h / 2, w - 34, h - 34);
+          g.fillStyle(cor, 1);
+          g.fillEllipse(x + w / 2, y + h / 2, w - 44, h - 44);
         } else {
-          g.fillRoundedRect(x, y, w, h, Math.min(14, h / 2));
-          g.lineStyle(3, COR.madeira, 0.35);
-          g.strokeRoundedRect(x + 7, y + 7, w - 14, h - 14, Math.min(10, h / 2));
+          g.fillRoundedRect(x, y, w, h, 10);
+          g.fillStyle(cor, 1);
+          g.fillRoundedRect(x + 8, y + 8, w - 16, h - 16, 8);
         }
         break;
+      }
 
-      case "monitor":
-        // Tela do caixa, em cima do balcao.
+      case "monitor": {
+        // Estacao de trabalho: teclado, tela acesa e base.
+        g.fillStyle(COR.movelClaro, 1);
+        g.fillRoundedRect(x + w * 0.12, y + h * 0.82, w * 0.76, h * 0.24, 2);
+        this.contorno(g, 1.5);
+        g.strokeRoundedRect(x + w * 0.12, y + h * 0.82, w * 0.76, h * 0.24, 2);
+
         g.fillStyle(COR.movelPreto, 1);
-        g.fillRoundedRect(x + w * 0.3, y + h * 0.7, w * 0.4, h * 0.3, 2);
-        g.fillStyle(0x1b1f24, 1);
-        g.fillRoundedRect(x, y, w, h * 0.78, 3);
-        g.fillStyle(0x5b7c93, 1);
-        g.fillRoundedRect(x + 3, y + 3, w - 6, h * 0.78 - 6, 2);
+        g.fillRect(x + w * 0.42, y + h * 0.66, w * 0.16, h * 0.2);
+        this.bloco(g, x, y, w, h * 0.72, COR.tela, 3, false);
+        g.fillStyle(COR.telaLuz, 0.85);
+        g.fillRoundedRect(x + 4, y + 4, w - 8, h * 0.72 - 8, 2);
+        g.fillStyle(0xffffff, 0.22);
+        g.fillRect(x + 6, y + 6, w * 0.34, h * 0.14);
         break;
+      }
 
       case "caixa": {
-        // Sombra no chao, corpo e tampo deslocado: da a impressao de volume.
-        g.fillStyle(0x000000, 0.14);
-        g.fillRoundedRect(x + 3, y + h - 4, w, 10, 5);
-        g.fillStyle(m.cor ?? COR.movelPreto, 1);
-        g.fillRoundedRect(x, y, w, h, 5);
-        g.fillStyle(m.corTopo ?? COR.movelClaro, 1);
-        g.fillRoundedRect(x, y - volume * 0.35, w, h * 0.7, 5);
-        g.lineStyle(1.5, 0x000000, 0.12);
-        g.strokeRoundedRect(x, y - volume * 0.35, w, h * 0.7, 5);
+        // Corpo com contorno e tampo mais claro deslocado: volume legivel.
+        this.bloco(g, x, y, w, h, m.cor ?? COR.movelPreto, 5);
+        const topo = m.corTopo ?? COR.movelClaro;
+        g.fillStyle(topo, 1);
+        g.fillRoundedRect(x + 2, y - volume * 0.34, w - 4, h * 0.62, 5);
+        this.contorno(g, 1.5);
+        g.strokeRoundedRect(x + 2, y - volume * 0.34, w - 4, h * 0.62, 5);
+        g.fillStyle(0xffffff, 0.16);
+        g.fillRoundedRect(x + 5, y - volume * 0.34 + 3, w - 10, 4, 2);
         break;
       }
 
       case "prateleira": {
-        g.fillStyle(0x000000, 0.10);
-        g.fillRoundedRect(x + 2, y + 3, w, h, 3);
-        g.fillStyle(m.cor ?? COR.madeira, 1);
-        g.fillRoundedRect(x, y, w, h, 3);
-        g.fillStyle(0xffffff, 0.22);
-        g.fillRect(x, y, w, 3);
-        // Objetos apoiados, para a prateleira nao ficar vazia.
-        const tons = [0x8d6e63, 0x3a332b, 0xcbb6a6, 0x6f5641];
-        const quantos = Math.max(2, Math.floor(w / 34));
+        this.bloco(g, x, y, w, h, m.cor ?? COR.madeira, 3);
+        // Caixas e objetos apoiados, coloridos.
+        const tons = COR.roupas;
+        const quantos = Math.max(2, Math.floor(w / 38));
         for (let i = 0; i < quantos; i += 1) {
-          g.fillStyle(tons[i % tons.length], 1);
-          g.fillRoundedRect(x + 8 + i * (w - 16) / quantos, y - h * 0.42, 18, h * 0.5, 3);
+          const bw = (w - 14) / quantos - 6;
+          const bx = x + 8 + i * ((w - 14) / quantos);
+          const bh = h * (0.7 + (i % 2) * 0.35);
+          g.fillStyle(tons[(i * 3) % tons.length], 1);
+          g.fillRoundedRect(bx, y - bh, bw, bh, 2);
+          this.contorno(g, 1.5);
+          g.strokeRoundedRect(bx, y - bh, bw, bh, 2);
         }
         break;
       }
@@ -389,127 +466,137 @@ export class CenaEscritorio extends Phaser.Scene {
       case "arara": {
         const vertical = h > w;
         const comprimento = vertical ? h : w;
-        const tons = [
-          0xefe6da, 0xd8bfb2, 0x2f2b28, 0xf3ece2, 0xc7a99b,
-          0x4a443e, 0xe3d3c6, 0x8d6e63,
-        ];
-        // Sombra da arara no chao.
-        g.fillStyle(0x000000, 0.10);
-        if (vertical) g.fillRoundedRect(x + 4, y + 6, w, h, 6);
-        else g.fillRoundedRect(x + 4, y + 6, w, h, 6);
+        const tons = COR.roupas;
+        g.fillStyle(COR.contorno, 0.14);
+        g.fillRoundedRect(x + 4, y + 6, w, h, 6);
 
-        // Pecas penduradas, encostadas uma na outra.
-        const passo = 19;
-        const quantidade = Math.max(3, Math.floor((comprimento - 12) / passo));
+        const passo = 21;
+        const quantidade = Math.max(3, Math.floor((comprimento - 10) / passo));
         for (let i = 0; i < quantidade; i += 1) {
-          g.fillStyle(tons[i % tons.length], 1);
+          g.fillStyle(tons[(i * 2 + 1) % tons.length], 1);
           if (vertical) {
-            const py = y + 8 + i * passo;
-            g.fillRoundedRect(x + 1, py, w - 2, passo - 3, 4);
-            g.fillStyle(0x000000, 0.07);
-            g.fillRect(x + 1, py + passo - 5, w - 2, 2);
+            const py = y + 6 + i * passo;
+            g.fillRoundedRect(x, py, w, passo - 4, 5);
+            this.contorno(g, 1.5);
+            g.strokeRoundedRect(x, py, w, passo - 4, 5);
           } else {
-            const px = x + 8 + i * passo;
-            g.fillRoundedRect(px, y + 1, passo - 3, h - 2, 4);
-            g.fillStyle(0x000000, 0.07);
-            g.fillRect(px, y + h - 4, passo - 3, 2);
+            const px = x + 6 + i * passo;
+            g.fillRoundedRect(px, y, passo - 4, h, 5);
+            this.contorno(g, 1.5);
+            g.strokeRoundedRect(px, y, passo - 4, h, 5);
           }
         }
 
-        // Barra dourada por cima das pecas.
+        // Barra por cima das pecas.
         g.fillStyle(COR.metalDourado, 1);
+        this.contorno(g, 1.5);
         if (vertical) {
-          g.fillRect(x + w / 2 - 2.5, y, 5, h);
-          g.fillCircle(x + w / 2, y, 4);
-          g.fillCircle(x + w / 2, y + h, 4);
+          g.fillRect(x + w / 2 - 3, y - 4, 6, h + 8);
+          g.strokeRect(x + w / 2 - 3, y - 4, 6, h + 8);
         } else {
-          g.fillRect(x, y + h / 2 - 2.5, w, 5);
-          g.fillCircle(x, y + h / 2, 4);
-          g.fillCircle(x + w, y + h / 2, 4);
-        }
-        break;
-      }
-
-      case "pecas": {
-        // Pilhas de roupa dobrada em cima das mesas de exposicao.
-        const tons = [0xe7d9cb, 0xcbb6a6, 0x3a332b, 0xf1e8dd];
-        for (let i = 0; i < 3; i += 1) {
-          const px = x + i * (w / 3);
-          const alturaPilha = h * (0.6 + (i % 2) * 0.25);
-          g.fillStyle(0x000000, 0.10);
-          g.fillRoundedRect(px + 2, y + h - alturaPilha + 3, w / 3 - 6, alturaPilha, 3);
-          g.fillStyle(tons[i % tons.length], 1);
-          g.fillRoundedRect(px, y + h - alturaPilha, w / 3 - 8, alturaPilha, 3);
-          g.lineStyle(1, 0x000000, 0.08);
-          g.strokeRoundedRect(px, y + h - alturaPilha, w / 3 - 8, alturaPilha, 3);
+          g.fillRect(x - 4, y + h / 2 - 3, w + 8, 6);
+          g.strokeRect(x - 4, y + h / 2 - 3, w + 8, 6);
         }
         break;
       }
 
       case "espelho":
-        g.fillStyle(COR.metalDourado, 1);
-        g.fillRoundedRect(x - 3, y - 3, w + 6, h + 6, 20);
+        this.bloco(g, x - 4, y - 4, w + 8, h + 8, COR.metalDourado, 20);
         g.fillStyle(COR.vidro, 1);
-        g.fillRoundedRect(x, y, w, h, 18);
-        g.fillStyle(0xffffff, 0.35);
-        g.fillRoundedRect(x + 4, y + 6, w * 0.32, h * 0.6, 10);
+        g.fillRoundedRect(x, y, w, h, 16);
+        g.fillStyle(0xffffff, 0.45);
+        g.fillRoundedRect(x + 5, y + 8, w * 0.3, h * 0.55, 10);
+        this.contorno(g, 1.5);
+        g.strokeRoundedRect(x, y, w, h, 16);
         break;
 
       case "manequim": {
         const cx = x + w / 2;
-        g.fillStyle(0x000000, 0.14);
-        g.fillEllipse(cx, y + h + 2, w * 0.7, 9);
+        g.fillStyle(COR.contorno, 0.18);
+        g.fillEllipse(cx, y + h + 3, w * 0.7, 10);
+        // Base e haste.
         g.fillStyle(COR.madeiraEscura, 1);
-        g.fillRect(cx - 2.5, y + h * 0.62, 5, h * 0.4);
-        g.fillEllipse(cx, y + h, w * 0.46, 7);
-        // Vestido: ombros estreitos, barra larga.
-        g.fillStyle(0xd8bfb2, 1);
+        g.fillRect(cx - 3, y + h * 0.6, 6, h * 0.42);
+        g.fillEllipse(cx, y + h, w * 0.5, 9);
+        this.contorno(g, 1.5);
+        g.strokeEllipse(cx, y + h, w * 0.5, 9);
+        // Vestido.
+        g.fillStyle(COR.estofado, 1);
         g.fillTriangle(
-          cx - w * 0.2, y + h * 0.08,
-          cx + w * 0.2, y + h * 0.08,
-          cx, y + h * 0.66,
+          cx - w * 0.24, y + h * 0.06,
+          cx + w * 0.24, y + h * 0.06,
+          cx, y + h * 0.7,
         );
-        g.fillEllipse(cx, y + h * 0.5, w * 0.62, h * 0.42);
+        g.fillEllipse(cx, y + h * 0.5, w * 0.66, h * 0.44);
+        this.contorno(g, 1.5);
+        g.strokeEllipse(cx, y + h * 0.5, w * 0.66, h * 0.44);
         g.fillStyle(COR.movelClaro, 1);
-        g.fillEllipse(cx, y + h * 0.12, w * 0.34, h * 0.2);
+        g.fillEllipse(cx, y + h * 0.1, w * 0.36, h * 0.2);
         break;
       }
 
-      case "planta":
-        g.fillStyle(0x000000, 0.12);
-        g.fillEllipse(x + w / 2, y + h - 2, w * 0.7, 7);
-        g.fillStyle(COR.movelClaro, 1);
-        g.fillRoundedRect(x + w * 0.22, y + h * 0.58, w * 0.56, h * 0.42, 4);
+      case "planta": {
+        const cx = x + w / 2;
+        g.fillStyle(COR.contorno, 0.18);
+        g.fillEllipse(cx, y + h, w * 0.7, 8);
+        // Vaso de terracota.
+        g.fillStyle(COR.vaso, 1);
+        g.fillRoundedRect(x + w * 0.24, y + h * 0.58, w * 0.52, h * 0.42, 4);
+        this.contorno(g, 1.5);
+        g.strokeRoundedRect(x + w * 0.24, y + h * 0.58, w * 0.52, h * 0.42, 4);
+        g.fillStyle(COR.vasoEscuro, 1);
+        g.fillRect(x + w * 0.24, y + h * 0.58, w * 0.52, 5);
+        // Folhagem em camadas.
+        g.fillStyle(COR.plantaEscura, 1);
+        g.fillCircle(cx, y + h * 0.38, w * 0.4);
+        this.contorno(g, 1.5);
+        g.strokeCircle(cx, y + h * 0.38, w * 0.4);
         g.fillStyle(COR.planta, 1);
-        g.fillCircle(x + w / 2, y + h * 0.4, w * 0.36);
+        g.fillCircle(cx - w * 0.14, y + h * 0.3, w * 0.24);
+        g.fillCircle(cx + w * 0.16, y + h * 0.34, w * 0.2);
         g.fillStyle(COR.plantaClara, 1);
-        g.fillCircle(x + w * 0.36, y + h * 0.3, w * 0.2);
-        g.fillCircle(x + w * 0.66, y + h * 0.34, w * 0.17);
+        g.fillCircle(cx - w * 0.06, y + h * 0.22, w * 0.15);
         break;
+      }
+
+      case "pecas": {
+        const tons = COR.roupas;
+        for (let i = 0; i < 3; i += 1) {
+          const px = x + i * (w / 3);
+          const alturaPilha = h * (0.62 + (i % 2) * 0.28);
+          g.fillStyle(tons[(i * 2) % tons.length], 1);
+          g.fillRoundedRect(px, y + h - alturaPilha, w / 3 - 8, alturaPilha, 3);
+          this.contorno(g, 1.5);
+          g.strokeRoundedRect(px, y + h - alturaPilha, w / 3 - 8, alturaPilha, 3);
+          g.fillStyle(0xffffff, 0.18);
+          g.fillRect(px + 2, y + h - alturaPilha + 2, w / 3 - 12, 3);
+        }
+        break;
+      }
+
+      case "luminaria": {
+        g.fillStyle(0xffd9a0, 0.26);
+        g.fillCircle(x + w / 2, y + h / 2, w * 1.05);
+        g.fillStyle(0xffe6bd, 0.4);
+        g.fillCircle(x + w / 2, y + h / 2, w * 0.6);
+        g.fillStyle(COR.movelPreto, 1);
+        g.fillCircle(x + w / 2, y + h / 2, w * 0.22);
+        this.contorno(g, 1.5);
+        g.strokeCircle(x + w / 2, y + h / 2, w * 0.22);
+        break;
+      }
 
       case "quadro": {
         // Pendurado na parede de fundo, nao apoiado no chao.
         const piso = this.pisoDe(sala);
         const py = piso.y + Math.max(fundo * 0.5 - h / 2, 4);
-        g.fillStyle(0x000000, 0.18);
-        g.fillRect(x + 2, py + 3, w, h);
-        g.fillStyle(COR.metalDourado, 1);
-        g.fillRect(x, py, w, h);
+        this.bloco(g, x, py, w, h, COR.metalDourado, 2, false);
         g.fillStyle(COR.movelClaro, 1);
         g.fillRect(x + 3, py + 3, w - 6, h - 6);
-        g.fillStyle(0xcdbfae, 1);
-        g.fillRect(x + 8, py + 8, w - 16, h - 16);
-        break;
-      }
-
-      case "luminaria": {
-        // Pendente: halo quente no teto, visto de cima.
-        g.fillStyle(0xffd9a0, 0.22);
-        g.fillCircle(x + w / 2, y + h / 2, w * 0.9);
-        g.fillStyle(0xffe6bd, 0.35);
-        g.fillCircle(x + w / 2, y + h / 2, w * 0.55);
-        g.fillStyle(COR.movelPreto, 1);
-        g.fillCircle(x + w / 2, y + h / 2, w * 0.2);
+        g.fillStyle(COR.estofado, 0.8);
+        g.fillRect(x + 7, py + 7, w - 14, h - 14);
+        g.fillStyle(COR.planta, 0.7);
+        g.fillCircle(x + w * 0.35, py + h * 0.62, Math.min(w, h) * 0.18);
         break;
       }
     }

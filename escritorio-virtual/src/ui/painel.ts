@@ -71,6 +71,83 @@ export interface Alvos {
   avisos: HTMLElement;
   log: HTMLElement;
   modo: HTMLElement;
+  aviso: HTMLElement;
+}
+
+const ESTADO_CURTO: Record<Personagem["estado"], string> = {
+  OFFLINE: "ainda não chegou",
+  ARRIVING: "chegando",
+  WORKING: "trabalhando",
+  LUNCH: "no almoço",
+  RETURNING_FROM_LUNCH: "voltando do almoço",
+  LEAVING: "saindo",
+  MISSING_PUNCH: "batida faltando",
+  DAY_OFF: "sem expediente",
+  AWAY: "afastada no momento",
+  ABSENT: "não registrou ponto",
+  OFF_SHIFT: "já saiu",
+};
+
+/** Resumo em uma linha do que cada personagem está fazendo. */
+export function resumoDaCena(cena: Cena): string {
+  if (cena.personagens.length === 0) return "nenhuma personagem cadastrada";
+  return cena.personagens
+    .map((p) => `${p.nome} ${ESTADO_CURTO[p.estado] ?? p.estado}`)
+    .join(" · ");
+}
+
+/**
+ * Assinatura do que a tela MOSTRA. Serve para avisar quando o instante
+ * pedido produz exatamente a mesma cena do anterior — sem isso a pessoa
+ * troca a hora, nada muda, e conclui que o botão está quebrado.
+ */
+export function assinaturaDaCena(cena: Cena): string {
+  return [
+    cena.loja.estado,
+    ...cena.personagens.map((p) => `${p.id}:${p.estado}:${p.sala ?? "-"}`),
+  ].join("|");
+}
+
+export interface AvisoOpcoes {
+  erro?: string | null;
+  repetida?: boolean;
+}
+
+/** Faixa acima da cena: diz em que instante ela está, ou o que deu errado. */
+export function renderizarAviso(
+  alvos: Alvos, cena: Cena | null, opcoes: AvisoOpcoes = {},
+): void {
+  const el = alvos.aviso;
+
+  if (opcoes.erro) {
+    el.hidden = false;
+    el.dataset.tom = "erro";
+    el.replaceChildren(document.createTextNode(opcoes.erro));
+    return;
+  }
+
+  if (!cena || !cena.preview?.ativo) {
+    el.hidden = true;
+    el.removeAttribute("data-tom");
+    el.replaceChildren();
+    return;
+  }
+
+  const dia = new Date(`${cena.data}T12:00:00`).toLocaleDateString("pt-BR");
+  const hora = cena.preview.hora ? ` às ${cena.preview.hora}` : " (fim do dia)";
+
+  const titulo = document.createElement("span");
+  titulo.textContent = `Pré-visualização de ${dia}${hora}`;
+
+  const detalhe = document.createElement("span");
+  detalhe.className = "ev-aviso-detalhe";
+  detalhe.textContent = opcoes.repetida
+    ? `${resumoDaCena(cena)} · mesma situação do instante anterior`
+    : resumoDaCena(cena);
+
+  el.hidden = false;
+  el.dataset.tom = "preview";
+  el.replaceChildren(titulo, detalhe);
 }
 
 export function renderizarModo(alvos: Alvos, cena: Cena, simulado = false): void {

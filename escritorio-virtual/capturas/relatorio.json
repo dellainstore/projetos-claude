@@ -1,38 +1,8 @@
 [
   {
-    "nome": "fechada",
-    "titulo": "1. Loja fechada",
-    "arquivo": "/var/www/della-sistemas/projetos-claude/escritorio-virtual/capturas/fechada.png",
-    "erros": []
-  },
-  {
-    "nome": "postos",
-    "titulo": "2. Tina e Sara no Show Room, Michelle na Anacã",
-    "arquivo": "/var/www/della-sistemas/projetos-claude/escritorio-virtual/capturas/postos.png",
-    "erros": []
-  },
-  {
     "nome": "trabalhando",
     "titulo": "3. Todas trabalhando",
     "arquivo": "/var/www/della-sistemas/projetos-claude/escritorio-virtual/capturas/trabalhando.png",
-    "erros": []
-  },
-  {
-    "nome": "corredor",
-    "titulo": "4. Uma personagem atravessando o corredor",
-    "arquivo": "/var/www/della-sistemas/projetos-claude/escritorio-virtual/capturas/corredor.png",
-    "erros": []
-  },
-  {
-    "nome": "refeitorio",
-    "titulo": "5. Todas no refeitório",
-    "arquivo": "/var/www/della-sistemas/projetos-claude/escritorio-virtual/capturas/refeitorio.png",
-    "erros": []
-  },
-  {
-    "nome": "pendencia",
-    "titulo": "7. Fechada com registro a conferir",
-    "arquivo": "/var/www/della-sistemas/projetos-claude/escritorio-virtual/capturas/pendencia.png",
     "erros": []
   },
   {

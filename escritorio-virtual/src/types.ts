@@ -66,7 +66,13 @@ export interface Preview {
   ativo: boolean;
   data?: string;
   hora?: string | null;
-  ultimoDiaComMovimento?: string | null;
+  /**
+   * Dia que a tela deve sugerir: o mais recente com MAIS gente de expediente
+   * completo, não simplesmente o último com batida. Num dia em que ninguém
+   * bateu almoço a cena fica igual das 9h às 19h, e a pré-visualização
+   * parece quebrada.
+   */
+  diaSugerido?: string | null;
 }
 
 export interface Cena {

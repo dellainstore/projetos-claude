@@ -35,6 +35,10 @@ from apps.rh.services.calendario import feriados
 from apps.rh.services.escala import horas_esperadas_no_dia, tempos_esperados_no_dia
 from apps.rh.services.ponto import dia_incompleto
 
+# Quantos dias para trás a sugestão de pré-visualização procura um dia com
+# expediente completo. Mais que isso vira arqueologia, não sugestão.
+JANELA_SUGESTAO_DIAS = 45
+
 
 class EstadoPersonagem:
     """Estados da personagem. Os três de transição são EFÊMEROS: derivam da
@@ -356,22 +360,62 @@ def _estado_da_loja(atores: list[AtorProjetado]) -> str:
 
 
 def ultimo_dia_com_movimento(personagens_apenas: bool = True) -> date | None:
-    """Último dia (local) com alguma batida registrada.
-
-    Serve só para sugerir uma data na pré-visualização: sem isso, quem abre a
-    página num sábado à noite escolhe datas no escuro. Leitura pura."""
-    qs = BatidaPonto.objects.all()
-    if personagens_apenas:
-        ids = list(
-            PersonagemEscritorio.objects
-            .filter(ativo=True, colaborador__isnull=False)
-            .values_list("colaborador_id", flat=True)
-        )
-        if not ids:
-            return None
-        qs = qs.filter(colaborador_id__in=ids)
+    """Último dia (local) com alguma batida registrada."""
+    qs = _batidas_do_elenco() if personagens_apenas else BatidaPonto.objects.all()
+    if qs is None:
+        return None
     ultima = qs.order_by("-momento").values_list("momento", flat=True).first()
     return timezone.localtime(ultima).date() if ultima else None
+
+
+def dia_sugerido_para_preview() -> date | None:
+    """Dia a sugerir na pré-visualização: o mais recente em que dá para VER
+    alguma coisa acontecer.
+
+    Sugerir o último dia com batida engana. Em 18/09/2026, por exemplo, só a
+    Michelle bateu almoço: a cena fica praticamente igual das 9h às 19h e
+    parece que o botão não funcionou. Aqui o dia é escolhido pelo número de
+    pessoas com o expediente COMPLETO (entrada, saída para o almoço, volta e
+    saída) — quanto mais gente, mais coisa muda ao longo do dia. Empate
+    desempata pelo mais recente.
+
+    Leitura pura."""
+    qs = _batidas_do_elenco()
+    if qs is None:
+        return None
+
+    limite = timezone.localdate() - timedelta(days=JANELA_SUGESTAO_DIAS)
+    marcas: dict[date, dict[int, set[str]]] = {}
+    for colaborador_id, momento, tipo in (
+        qs.filter(momento__date__gte=limite)
+        .values_list("colaborador_id", "momento", "tipo")
+    ):
+        dia = timezone.localtime(momento).date()
+        marcas.setdefault(dia, {}).setdefault(colaborador_id, set()).add(tipo)
+
+    if not marcas:
+        return ultimo_dia_com_movimento()
+
+    def quantas_completas(do_dia: dict[int, set[str]]) -> int:
+        return sum(
+            1 for tipos in do_dia.values()
+            if {"saida_almoco", "volta_almoco"} <= tipos
+        )
+
+    # Mais gente com o dia completo primeiro; empatou, o mais recente.
+    return max(marcas, key=lambda d: (quantas_completas(marcas[d]), d))
+
+
+def _batidas_do_elenco():
+    """Batidas de quem tem personagem cadastrada. `None` se não há elenco."""
+    ids = list(
+        PersonagemEscritorio.objects
+        .filter(ativo=True, colaborador__isnull=False)
+        .values_list("colaborador_id", flat=True)
+    )
+    if not ids:
+        return None
+    return BatidaPonto.objects.filter(colaborador_id__in=ids)
 
 
 def _agora_padrao(dia: date, hoje: date) -> datetime:

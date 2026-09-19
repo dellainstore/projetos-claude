@@ -339,16 +339,40 @@ class PreviewTests(BaseApiTestCase):
         dados = self.get(self.autorizado).json()
         self.assertFalse(dados["preview"]["ativo"])
 
-    def test_sugere_o_ultimo_dia_com_movimento(self):
+    def test_sugere_um_dia_com_expediente_completo(self):
         self.dia_completo(SEGUNDA_A)
         dados = self.get(self.autorizado).json()
+        self.assertEqual(dados["preview"]["diaSugerido"], SEGUNDA_A.isoformat())
+
+    def test_prefere_o_dia_com_almoco_ao_dia_mais_recente(self):
+        """Sugerir só "o último dia com batida" engana: num dia em que
+        ninguém bateu almoço a cena fica igual das 9h às 19h e a
+        pré-visualização parece quebrada. Foi o que aconteceu de verdade em
+        18/09/2026, onde só uma das três bateu almoço."""
+        from datetime import timedelta
+        completo = SEGUNDA_A
+        self.dia_completo(completo)
+
+        # Dia seguinte, mais recente, mas só com entrada e saída.
+        magro = completo + timedelta(days=1)
+        self.bater(magro, 9, 0, "entrada")
+        self.bater(magro, 19, 0, "saida")
+
+        dados = self.get(self.autorizado).json()
         self.assertEqual(
-            dados["preview"]["ultimoDiaComMovimento"], SEGUNDA_A.isoformat(),
+            dados["preview"]["diaSugerido"], completo.isoformat(),
+            "deveria sugerir o dia em que dá para ver movimento",
         )
 
     def test_sem_batida_nenhuma_nao_sugere_data(self):
         dados = self.get(self.autorizado).json()
-        self.assertIsNone(dados["preview"]["ultimoDiaComMovimento"])
+        self.assertIsNone(dados["preview"]["diaSugerido"])
+
+    def test_sem_personagem_cadastrada_nao_sugere_data(self):
+        self.dia_completo(SEGUNDA_A)
+        self.personagem.delete()
+        dados = self.get(self.autorizado).json()
+        self.assertIsNone(dados["preview"]["diaSugerido"])
 
     def test_data_e_hora_projetam_o_instante_escolhido(self):
         self.dia_completo(SEGUNDA_A)

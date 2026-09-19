@@ -26,11 +26,13 @@ import { OfficeStore } from "./state/officeStore";
 import { Poller } from "./state/poller";
 import { DebugPanel, podeSimular } from "./ui/DebugPanel";
 import {
+  assinaturaDaCena,
+  registrarTransicoes,
+  renderizarAviso,
   renderizarCena,
   renderizarContagem,
   renderizarMeta,
   renderizarModo,
-  registrarTransicoes,
   type Alvos,
 } from "./ui/painel";
 import type { Cena, MetaPoll } from "./types";
@@ -45,6 +47,15 @@ function exigir<T extends HTMLElement>(raiz: ParentNode, seletor: string): T {
   const el = raiz.querySelector<T>(seletor);
   if (!el) throw new Error(`elemento ausente no HTML: ${seletor}`);
   return el;
+}
+
+/** Tamanho da planta, para o palco reservar a proporção certa. */
+function tamanhoDoMundo(cena: Cena): { largura: number; altura: number } | null {
+  if (cena.salas.length === 0) return null;
+  const largura = Math.max(...cena.salas.map((s) => s.pos_x + s.largura));
+  const altura = Math.max(...cena.salas.map((s) => s.pos_y + s.altura));
+  // A mesma margem que a cena usa em volta do prédio.
+  return { largura: largura + 92, altura: altura + 92 };
 }
 
 function hhmm(minutos: number): string {
@@ -109,10 +120,12 @@ function iniciar(): void {
     avisos: exigir(raiz, "[data-ev=avisos]"),
     log: exigir(raiz, "[data-ev=log]"),
     modo: exigir(raiz, "[data-ev=modo]"),
+    aviso: exigir(raiz, "[data-ev=aviso]"),
   };
 
   const store = new OfficeStore();
-  montarJogo(exigir(raiz, "[data-ev=palco]"), store);
+  const palco = exigir(raiz, "[data-ev=palco]");
+  montarJogo(palco, store);
 
   const animacoes = new ControleDeAnimacoes();
   let cenaAnterior: Cena | null = null;
@@ -122,14 +135,30 @@ function iniciar(): void {
   const campoHora = exigir<HTMLInputElement>(raiz, "[data-ev=campo-hora]");
 
   // Painel de conferencia e log de transicoes seguem a MESMA cena da 2D.
+  let assinaturaAnterior: string | null = null;
+
   store.assinar((cena, origem) => {
+    const assinatura = assinaturaDaCena(cena);
+    const repetida = assinaturaAnterior === assinatura;
+
     renderizarCena(alvos, cena, estadosQueMudaram(cenaAnterior, cena));
     registrarTransicoes(alvos, animacoes.novasTransicoes(cena));
     renderizarModo(alvos, cena, origem === "simulado");
+    renderizarAviso(alvos, cena, { repetida });
     if (metaAtual) renderizarMeta(alvos, metaAtual);
     cenaAnterior = cena;
+    assinaturaAnterior = assinatura;
 
-    const sugestao = cena.preview?.ultimoDiaComMovimento;
+    // A proporção do palco acompanha a planta. Fixá-la ANTES do canvas
+    // existir evita o "pulo" de layout; deixá-la a cargo do Phaser depois
+    // evita a briga de CSS que fazia a cena puxar zoom sozinha ao abrir.
+    const mundo = tamanhoDoMundo(cena);
+    if (mundo) {
+      palco.style.aspectRatio = `${mundo.largura} / ${mundo.altura}`;
+      palco.classList.add("ev-palco-pronto");
+    }
+
+    const sugestao = cena.preview?.diaSugerido;
     if (sugestao && !campoData.value) campoData.value = sugestao;
   });
 
@@ -191,15 +220,17 @@ function iniciar(): void {
       });
       if (!resposta.ok) {
         const corpo = await resposta.json().catch(() => ({}));
+        const mensagem = corpo.detalhe ?? `erro ${resposta.status}`;
         metaAtual = {
           situacao: "erro",
           ultimaAtualizacao: null,
           ultimaTentativa: new Date(),
           falhasSeguidas: 1,
           proximoEmMs: 0,
-          mensagemErro: corpo.detalhe ?? `erro ${resposta.status}`,
+          mensagemErro: mensagem,
         };
         renderizarMeta(alvos, metaAtual);
+        renderizarAviso(alvos, null, { erro: mensagem });
         pararReplay();
         return;
       }
@@ -272,6 +303,7 @@ function iniciar(): void {
     buscando?.abort();
     store.voltarAoVivo();
     campoHora.value = "";
+    renderizarAviso(alvos, null);
     poller.iniciar();
     void poller.consultarAgora();
   });

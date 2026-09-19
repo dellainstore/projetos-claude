@@ -34,47 +34,91 @@ export const CHANFRO = 40;
 // nos pisos, dourado nos detalhes, rosa queimado na Anaca.
 
 export const COR = {
-  foraDoPredio: 0x2a221e,
-  fachada: 0x3c3733,
-  fachadaTopo: 0x4a4440,
-  parede: 0x39332f,
-  paredeTopo: 0x555049,
-  paredeInterna: 0xe8e0d4,
+  // Fora e estrutura.
+  foraDoPredio: 0x232a36,
+  fachada: 0x3a4152,
+  fachadaTopo: 0x4a5265,
+  parede: 0x272d3a,
+  paredeTopo: 0x555d70,
+  paredeInterna: 0xf5ece0,
+  /** Contorno de TODO objeto. E' o que faz o desenho ser legivel. */
+  contorno: 0x2f2822,
 
-  pisoShowroom: 0xf0e9de,
-  pisoAnaca: 0xf3ece1,
-  pisoCorredor: 0xe7dfd1,
-  pisoRefeitorio: 0xe9e3d8,
-  pisoEntrada: 0xe4ddd1,
+  // Pisos: cada ambiente com material proprio, nao tudo bege.
+  pisoShowroom: 0xdcb98c,
+  pisoShowroomListra: 0xcaa675,
+  pisoAnaca: 0xdcb98c,
+  pisoAnacaListra: 0xcaa675,
+  pisoCorredor: 0xcfc2ad,
+  pisoCorredorListra: 0xc0b19a,
+  pisoRefeitorio: 0xe6e3da,
+  pisoRefeitorioListra: 0xd2cec2,
+  pisoEntrada: 0xd8cdbb,
+  pisoEntradaListra: 0xc7bba6,
 
-  tapeteShowroom: 0xded2c0,
-  tapeteAnaca: 0xc09a8d,
-  tapeteCorredor: 0xd6c7b2,
-  tapeteEntrada: 0x4a443e,
+  // Tapetes com cor de verdade.
+  tapeteShowroom: 0x9d5a66,
+  tapeteShowroomBorda: 0x7d434e,
+  tapeteAnaca: 0xb26a4e,
+  tapeteAnacaBorda: 0x8d5039,
+  tapeteCorredor: 0x8f6f8d,
+  tapeteCorredorBorda: 0x6f5470,
+  tapeteEntrada: 0x3b3a44,
 
-  madeira: 0xb08d63,
-  madeiraEscura: 0x6f5641,
-  movelPreto: 0x2f2b28,
-  movelClaro: 0xf3efe8,
-  metalDourado: 0xc8a457,
-  vidro: 0xd9e4e8,
-  planta: 0x4f7a52,
-  plantaClara: 0x6b9a63,
-  aco: 0xc9cdd1,
+  // Materiais.
+  madeira: 0xa8743f,
+  madeiraClara: 0xc8975d,
+  madeiraEscura: 0x6d4726,
+  movelPreto: 0x2f2b30,
+  movelClaro: 0xf7f1e6,
+  metalDourado: 0xd8a94e,
+  aco: 0xb9c2cb,
+  acoClaro: 0xd8dfe6,
+  vidro: 0xa8cfdd,
+  tela: 0x1d2430,
+  telaLuz: 0x4fb0d8,
 
-  acentoAnaca: 0xa8705f,
-  acentoShowroom: 0x1d1a17,
+  // Verde das plantas e vasos.
+  planta: 0x3f7d4a,
+  plantaClara: 0x5aa85c,
+  plantaEscura: 0x2d5c37,
+  vaso: 0xb8724a,
+  vasoEscuro: 0x8d5335,
 
-  texto: 0x3a332b,
-  textoPlaca: 0xd9c38a,
+  // Estofados.
+  estofado: 0xc98a92,
+  estofadoEscuro: 0xa2646d,
+
+  // Acentos de marca.
+  acentoAnaca: 0x9c5a46,
+  acentoShowroom: 0x232021,
+
+  // Roupas nas araras: paleta saturada, para a arara ser reconhecivel.
+  roupas: [
+    0xe8dccb, 0xc86b7a, 0x2f2b30, 0xf0e4d4,
+    0xb2674e, 0x4a6b8a, 0xd9a05b, 0x7a4a63,
+  ] as number[],
+
+  texto: 0x33291f,
+  textoPlaca: 0xf0d089,
   textoFraco: 0x8a8177,
-  luzApagada: 0x1a1410,
-  alerta: 0xc0392b,
+  luzApagada: 0x141a28,
+  alerta: 0xd2483c,
 } as const;
 
+/** Contorno padrao de objeto: escuro e fino, no estilo de jogo 2D. */
+export const CONTORNO: { cor: number; largura: number; alpha: number } = {
+  cor: 0x2f2822, largura: 2, alpha: 0.85,
+};
+
 /** Acabamento de cada comodo. Comodo desconhecido cai no padrao. */
+export type PadraoDePiso = "tabua-horizontal" | "tabua-vertical" | "ladrilho";
+
 export interface EstiloComodo {
   piso: number;
+  /** Cor das tabuas/ladrilhos, sobre a cor do piso. */
+  listra: number;
+  padrao: PadraoDePiso;
   /** Cor da parede de fundo vista por dentro (a parede de acento). */
   fundo: number;
   /** Cor da placa de identificacao; `null` esconde a placa. */
@@ -84,6 +128,8 @@ export interface EstiloComodo {
 
 const PADRAO: EstiloComodo = {
   piso: COR.pisoShowroom,
+  listra: COR.pisoShowroomListra,
+  padrao: "tabua-horizontal",
   fundo: COR.paredeInterna,
   placa: COR.textoFraco,
   fundoPlaca: null,
@@ -91,22 +137,29 @@ const PADRAO: EstiloComodo = {
 
 const ESTILOS: Record<string, EstiloComodo> = {
   [SLUG.SHOWROOM]: {
-    piso: COR.pisoShowroom, fundo: COR.acentoShowroom,
+    piso: COR.pisoShowroom, listra: COR.pisoShowroomListra,
+    padrao: "tabua-horizontal", fundo: COR.acentoShowroom,
     placa: COR.textoPlaca, fundoPlaca: null,
   },
   [SLUG.ANACA]: {
-    piso: COR.pisoAnaca, fundo: COR.acentoAnaca,
+    piso: COR.pisoAnaca, listra: COR.pisoAnacaListra,
+    padrao: "tabua-horizontal", fundo: COR.acentoAnaca,
     placa: COR.textoPlaca, fundoPlaca: null,
   },
   [SLUG.CORREDOR]: {
-    piso: COR.pisoCorredor, fundo: COR.paredeInterna, placa: null, fundoPlaca: null,
+    piso: COR.pisoCorredor, listra: COR.pisoCorredorListra,
+    padrao: "tabua-vertical", fundo: COR.paredeInterna,
+    placa: null, fundoPlaca: null,
   },
   [SLUG.REFEITORIO]: {
-    piso: COR.pisoRefeitorio, fundo: COR.paredeInterna,
+    piso: COR.pisoRefeitorio, listra: COR.pisoRefeitorioListra,
+    padrao: "ladrilho", fundo: COR.paredeInterna,
     placa: COR.texto, fundoPlaca: null,
   },
   [SLUG.ENTRADA]: {
-    piso: COR.pisoEntrada, fundo: COR.paredeInterna, placa: null, fundoPlaca: null,
+    piso: COR.pisoEntrada, listra: COR.pisoEntradaListra,
+    padrao: "ladrilho", fundo: COR.paredeInterna,
+    placa: null, fundoPlaca: null,
   },
 };
 

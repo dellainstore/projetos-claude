@@ -22,8 +22,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from apps.escritorio_virtual.services.projecao import (
+    dia_sugerido_para_preview,
     projetar_cena,
-    ultimo_dia_com_movimento,
 )
 from apps.escritorio_virtual.services.serializacao import (
     calcular_etag,
@@ -77,10 +77,12 @@ def _resolver_instante(request: HttpRequest) -> tuple[date | None, datetime | No
     if not bruto_data and not bruto_hora:
         return None, None, {
             "ativo": False,
-            # Sugestão de data para a tela: sem isso, quem abre num sábado à
-            # noite escolhe no escuro.
-            "ultimoDiaComMovimento": (
-                d.isoformat() if (d := ultimo_dia_com_movimento()) else None
+            # Sugestão de data para a tela. Não é "o último dia com batida":
+            # é o último dia em que dá para VER movimento (alguém com almoço
+            # registrado). Num dia sem almoço a cena fica igual das 9h às 19h
+            # e parece que a pré-visualização não funciona.
+            "diaSugerido": (
+                d.isoformat() if (d := dia_sugerido_para_preview()) else None
             ),
         }
 

@@ -17,14 +17,25 @@
   .ev-controles input { padding:.3rem .45rem; border:1px solid var(--cinza-medio);
                         border-radius:6px; font-size:.78rem; background:var(--branco);
                         color:var(--preto); }
+  .ev-aviso { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+              background:#fef3c7; border:1px solid #f0c674; color:#7a4a08;
+              border-radius:10px; padding:.55rem .8rem; margin-bottom:.7rem;
+              font-size:.8rem; font-weight:600; }
+  .ev-aviso[data-tom="erro"] { background:#fee2e2; border-color:#f0a0a0; color:#8a1c14; }
+  .ev-aviso .ev-aviso-detalhe { font-weight:400; }
+
   .ev-modo { margin-left:auto; font-weight:600; }
   .ev-modo[data-modo="preview"] { color:#b45309; }
   .ev-modo[data-modo="vivo"] { color:#15803d; }
 
   .ev-palco { background:var(--branco); border:1px solid var(--cinza-medio);
-              border-radius:12px; padding:.5rem; overflow:hidden; }
-  .ev-palco canvas { display:block; margin:0 auto; max-width:100%; height:auto !important;
-                     border-radius:8px; }
+              border-radius:12px; padding:.5rem; overflow:hidden;
+              /* Proporção reservada antes do canvas existir: sem isso o
+                 layout muda quando o Phaser entra e a cena "pula". O valor
+                 é reescrito pelo JS assim que a planta chega. */
+              aspect-ratio: 1532 / 992; }
+  .ev-palco canvas { display:block; margin:0 auto; border-radius:8px; }
+  .ev-palco.ev-palco-pronto { aspect-ratio:auto; }
 
   .ev-cards { display:grid; gap:.75rem; margin:1rem 0 1.25rem;
               grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); }
@@ -122,6 +133,8 @@
     <button type="button" class="ev-botao" data-ev="ao-vivo">Ao vivo</button>
     <span class="ev-modo" data-ev="modo" data-modo="vivo">ao vivo</span>
   </div>
+
+  <div class="ev-aviso" data-ev="aviso" hidden></div>
 
   <div class="ev-palco" data-ev="palco"></div>
 
