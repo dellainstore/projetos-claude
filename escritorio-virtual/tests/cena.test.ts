@@ -22,22 +22,11 @@ prepararDOM();
 // conseguir carregar. Carregamos um unico Phaser (nao o bundle `dist`) para
 // a cena e o teste compartilharem a mesma instancia.
 const Phaser = require("phaser") as typeof import("phaser");
-const { CenaEscritorio } = require("../src/cena/escritorio") as typeof import("../src/cena/escritorio");
+const { CenaEscritorio } = require("../src/scenes/OfficeScene") as typeof import("../src/scenes/OfficeScene");
 
 import type { Cena, Personagem, Sala } from "../src/types";
 
-function sala(
-  slug: string, nome: string, pos_x: number, pos_y: number, largura: number, altura: number,
-): Sala {
-  return { slug, nome, ordem: 0, pos_x, pos_y, largura, altura };
-}
-
-const PLANTA: Sala[] = [
-  sala("store-entrance", "Entrada", 0, 240, 200, 140),
-  sala("showroom-1", "Showroom 1", 220, 0, 320, 220),
-  sala("showroom-2", "Showroom 2", 560, 0, 320, 220),
-  sala("cafeteria", "Refeitório", 220, 240, 320, 180),
-];
+import { PLANTA, sala } from "./planta";
 
 function personagem(p: Partial<Personagem> = {}): Personagem {
   return {
@@ -48,8 +37,8 @@ function personagem(p: Partial<Personagem> = {}): Personagem {
     estado: "WORKING",
     estadoEstavel: "WORKING",
     desde: "2026-09-14T09:00:00-03:00",
-    sala: "showroom-1",
-    salaTrabalho: "showroom-1",
+    sala: "showroom",
+    salaTrabalho: "showroom",
     salaOrigem: "loja",
     posX: 0,
     posY: 0,
@@ -69,6 +58,7 @@ function cena(
     data: "2026-09-14",
     geradoEm: "2026-09-14T09:00:00-03:00",
     pollSegundos: 10,
+    preview: { ativo: false },
     loja: {
       estado: "OPEN", luzesAcesas: true, portaAberta: true, pendencias: 0, ...loja,
     },
@@ -139,8 +129,8 @@ test("a cena boota e desenha a planta vinda da API", async () => {
   await espera(40);
 
   // A planta tem 880x420 mais margens; o canvas precisa ter sido redimensionado.
-  assert.ok(jogo.scale.width >= 880, `canvas estreito demais: ${jogo.scale.width}`);
-  assert.ok(jogo.scale.height >= 420, `canvas baixo demais: ${jogo.scale.height}`);
+  assert.ok(jogo.scale.width >= 900, `canvas estreito demais: ${jogo.scale.width}`);
+  assert.ok(jogo.scale.height >= 470, `canvas baixo demais: ${jogo.scale.height}`);
   jogo.destroy(true);
 });
 
@@ -150,7 +140,7 @@ test("cria uma personagem por item do payload e some com quem saiu", async () =>
   palco.aplicar(cena([
     personagem({ id: 1, personagem: "tina", nome: "Tina" }),
     personagem({ id: 2, personagem: "sara", nome: "Sara" }),
-    personagem({ id: 3, personagem: "michelle", nome: "Michelle", sala: "showroom-2" }),
+    personagem({ id: 3, personagem: "michelle", nome: "Michelle", sala: "anaca" }),
   ]));
   await espera(40);
   assert.equal(atores.size, 3);
@@ -169,8 +159,8 @@ test("cria uma personagem por item do payload e some com quem saiu", async () =>
 test("colegas de sala nao ficam na mesma posicao", async () => {
   const { cena: palco, jogo, atores } = await abrirCena();
   palco.aplicar(cena([
-    personagem({ id: 1, personagem: "tina", nome: "Tina", sala: "showroom-1" }),
-    personagem({ id: 2, personagem: "sara", nome: "Sara", sala: "showroom-1" }),
+    personagem({ id: 1, personagem: "tina", nome: "Tina", sala: "showroom" }),
+    personagem({ id: 2, personagem: "sara", nome: "Sara", sala: "showroom" }),
   ]));
   await espera(40);
 
@@ -194,7 +184,7 @@ test("quem esta fora de cena nao fica visivel", async () => {
 test("ir para o almoco faz a personagem caminhar ate o refeitorio", async () => {
   const { cena: palco, jogo, atores } = await abrirCena();
 
-  palco.aplicar(cena([personagem({ estado: "WORKING", sala: "showroom-1" })]));
+  palco.aplicar(cena([personagem({ estado: "WORKING", sala: "showroom" })]));
   await espera(60);
   const ator = atores.get(1);
   const noShowroom = { x: ator.x, y: ator.y };
@@ -203,11 +193,11 @@ test("ir para o almoco faz a personagem caminhar ate o refeitorio", async () => 
   await espera(40);
   assert.equal(ator.salaAtual, "cafeteria");
 
-  await aguardarAte(() => ator.y > 240, "a personagem chegar ao refeitório");
+  await aguardarAte(() => ator.y < 250, "a personagem chegar ao refeitório");
   const noRefeitorio = { x: ator.x, y: ator.y };
   assert.notDeepEqual(noRefeitorio, noShowroom, "a personagem nao saiu do lugar");
   assert.ok(
-    noRefeitorio.x > 220 && noRefeitorio.x < 540,
+    noRefeitorio.x > 520 && noRefeitorio.x < 920,
     `fora do refeitorio no eixo x: ${noRefeitorio.x}`,
   );
   jogo.destroy(true);
@@ -216,7 +206,7 @@ test("ir para o almoco faz a personagem caminhar ate o refeitorio", async () => 
 test("o estado do servidor cancela uma caminhada em andamento", async () => {
   const { cena: palco, jogo, atores } = await abrirCena();
 
-  palco.aplicar(cena([personagem({ estado: "WORKING", sala: "showroom-1" })]));
+  palco.aplicar(cena([personagem({ estado: "WORKING", sala: "showroom" })]));
   await espera(60);
   const ator = atores.get(1);
 
@@ -224,22 +214,23 @@ test("o estado do servidor cancela uma caminhada em andamento", async () => {
   palco.aplicar(cena([personagem({ estado: "LUNCH", sala: "cafeteria" })]));
   await espera(150);
   // ...e no meio do caminho o servidor diz que ela esta no showroom 2.
-  palco.aplicar(cena([personagem({ estado: "WORKING", sala: "showroom-2" })]));
+  palco.aplicar(cena([personagem({ estado: "WORKING", sala: "anaca" })]));
 
-  assert.equal(ator.salaAtual, "showroom-2");
+  assert.equal(ator.salaAtual, "anaca");
   await aguardarAte(
-    () => ator.x > 560 && ator.y < 220,
-    "a personagem obedecer ao servidor e ir para o showroom 2",
+    () => ator.x > 880,
+    "a personagem obedecer ao servidor e ir para a Anacã",
   );
-  // Nunca chegou ao refeitorio: o destino antigo foi descartado no meio.
-  assert.ok(ator.y < 220, `deveria estar no showroom: y=${ator.y}`);
+  // Nunca chegou ao refeitorio (que fica no topo): o destino antigo foi
+  // descartado no meio do caminho.
+  assert.ok(ator.y > 250, `deveria estar na Anacã, não no refeitório: y=${ator.y}`);
   jogo.destroy(true);
 });
 
 test("sair do expediente esconde a personagem", async () => {
   const { cena: palco, jogo, atores } = await abrirCena();
 
-  palco.aplicar(cena([personagem({ estado: "WORKING", sala: "showroom-1" })]));
+  palco.aplicar(cena([personagem({ estado: "WORKING", sala: "showroom" })]));
   await espera(60);
   assert.equal(atores.get(1).estaVisivel, true);
 
@@ -252,30 +243,60 @@ test("sair do expediente esconde a personagem", async () => {
   jogo.destroy(true);
 });
 
-test("luzes apagam quando a loja fecha e acendem quando abre", async () => {
+test("a luz e' por comodo: acende onde tem gente, apaga o resto", async () => {
   const { cena: palco, jogo } = await abrirCena();
-  const escuridao = (palco as unknown as { escuridao: Phaser.GameObjects.Rectangle }).escuridao;
+  const luz = (slug: string) => ({ alpha: palco.opacidadeDaLuz(slug) ?? 1 });
 
-  palco.aplicar(cena([personagem()], { estado: "OPEN", luzesAcesas: true }));
-  await aguardarAte(() => escuridao.alpha < 0.05, "as luzes acenderem");
+  palco.aplicar(cena(
+    [personagem({ estado: "WORKING", sala: "showroom" })],
+    { estado: "OPEN", luzesAcesas: true },
+  ));
+
+  await aguardarAte(() => luz("showroom").alpha < 0.05, "a luz do showroom acender");
+  assert.ok(luz("corredor").alpha < 0.05, "o corredor fica aceso com a loja aberta");
+  assert.ok(luz("anaca").alpha > 0.2, `a Anacã está vazia e deveria estar apagada: ${luz("anaca").alpha}`);
+  assert.ok(luz("cafeteria").alpha > 0.2, "o refeitório vazio deveria estar apagado");
+  jogo.destroy(true);
+});
+
+test("a luz segue a pessoa quando ela troca de comodo", async () => {
+  const { cena: palco, jogo } = await abrirCena();
+  const luz = (slug: string) => ({ alpha: palco.opacidadeDaLuz(slug) ?? 1 });
+
+  palco.aplicar(cena(
+    [personagem({ estado: "WORKING", sala: "showroom" })],
+    { estado: "OPEN", luzesAcesas: true },
+  ));
+  await aguardarAte(() => luz("showroom").alpha < 0.05, "a luz do showroom acender");
+
+  palco.aplicar(cena(
+    [personagem({ estado: "LUNCH", sala: "cafeteria" })],
+    { estado: "OPEN_LUNCH_ONLY", luzesAcesas: true },
+  ));
+  await aguardarAte(() => luz("cafeteria").alpha < 0.05, "a luz do refeitório acender");
+  await aguardarAte(() => luz("showroom").alpha > 0.2, "a luz do showroom apagar");
+  jogo.destroy(true);
+});
+
+test("loja fechada apaga todos os comodos", async () => {
+  const { cena: palco, jogo } = await abrirCena();
+  const slugs = PLANTA.map((s) => s.slug);
+  const luz = (slug: string) => palco.opacidadeDaLuz(slug) ?? 1;
+
+  palco.aplicar(cena(
+    [personagem({ estado: "WORKING", sala: "showroom" })],
+    { estado: "OPEN", luzesAcesas: true },
+  ));
+  await aguardarAte(() => luz("showroom") < 0.05, "a loja abrir");
 
   palco.aplicar(cena(
     [personagem({ estado: "OFF_SHIFT", sala: null })],
     { estado: "CLOSED", luzesAcesas: false, portaAberta: false },
   ));
-  await aguardarAte(() => escuridao.alpha > 0.4, "as luzes apagarem");
-  jogo.destroy(true);
-});
-
-test("almoco de todas mantem a loja acesa", async () => {
-  const { cena: palco, jogo } = await abrirCena();
-  const escuridao = (palco as unknown as { escuridao: Phaser.GameObjects.Rectangle }).escuridao;
-
-  palco.aplicar(cena(
-    [personagem({ estado: "LUNCH", sala: "cafeteria" })],
-    { estado: "OPEN_LUNCH_ONLY", luzesAcesas: true, portaAberta: true },
-  ));
-  await aguardarAte(() => escuridao.alpha < 0.05, "as luzes continuarem acesas no almoço");
+  await aguardarAte(
+    () => slugs.every((slug) => luz(slug) > 0.5),
+    "todos os cômodos apagarem",
+  );
   jogo.destroy(true);
 });
 
@@ -301,7 +322,7 @@ test("planta nova redesenha o mapa sem perder as personagens", async () => {
   await espera(60);
   assert.equal(atores.size, 1);
 
-  const ampliada = [...PLANTA, sala("showroom-3", "Showroom 3", 900, 0, 300, 220)];
+  const ampliada = [...PLANTA, sala("showroom-3", "Showroom 3", 900, 0, 300, 230)];
   palco.aplicar(cena([personagem({ sala: "showroom-3" })], {}, ampliada));
   await espera(60);
 

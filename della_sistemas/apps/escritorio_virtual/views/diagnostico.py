@@ -24,4 +24,9 @@ def view_diagnostico(request: HttpRequest) -> HttpResponse:
     parametros = ParametrosEscritorio.atual()
     return render(request, "escritorio/diagnostico.html", {
         "poll_segundos": parametros.poll_segundos,
+        # Painel de simulação: só para quem administra o cenário. Ele não
+        # cria batida nem chama endpoint de escrita (ver ui/DebugPanel.ts),
+        # mas mostra estados que não são os reais, então não deve aparecer
+        # para quem só assiste.
+        "pode_simular": request.user.tem_perm("escritorio.configurar"),
     })

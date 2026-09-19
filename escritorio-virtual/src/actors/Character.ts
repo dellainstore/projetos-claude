@@ -15,16 +15,16 @@
 import Phaser from "phaser";
 
 import type { Personagem } from "../types";
-import type { Ponto } from "./mapa";
-import { CENARIO, clarear, escurecer, hex, paletaDe } from "./paleta";
+import type { Ponto } from "../environment/geometry";
+import { CENARIO, clarear, escurecer, hex, paletaDe } from "../config/characters";
 
 /** Velocidade da caminhada, em unidades de mundo por segundo. */
-const VELOCIDADE = 150;
+const VELOCIDADE = 230;
 const DURACAO_MINIMA = 160;
 
-const LARGURA_CORPO = 22;
-const ALTURA_CORPO = 24;
-const RAIO_CABECA = 9;
+const LARGURA_CORPO = 34;
+const ALTURA_CORPO = 38;
+const RAIO_CABECA = 14;
 
 export class Personagem2D {
   readonly id: number;
@@ -35,7 +35,6 @@ export class Personagem2D {
   private readonly pernaDir: Phaser.GameObjects.Rectangle;
   private readonly bracoEsq: Phaser.GameObjects.Rectangle;
   private readonly bracoDir: Phaser.GameObjects.Rectangle;
-  private readonly rotulo: Phaser.GameObjects.Text;
   private readonly selo: Phaser.GameObjects.Text;
 
   private caminhada: Phaser.Tweens.TweenChain | null = null;
@@ -56,10 +55,10 @@ export class Personagem2D {
     const paleta = paletaDe(dados.personagem);
     this.slugAtual = dados.personagem;
 
-    const sombra = cena.add.ellipse(0, 4, LARGURA_CORPO + 8, 9, 0x000000, 0.16);
+    const sombra = cena.add.ellipse(0, 5, LARGURA_CORPO + 12, 13, 0x000000, 0.18);
 
-    this.pernaEsq = cena.add.rectangle(-5, -6, 6, 13, escurecer(paleta.roupa, 0.45));
-    this.pernaDir = cena.add.rectangle(5, -6, 6, 13, escurecer(paleta.roupa, 0.45));
+    this.pernaEsq = cena.add.rectangle(-8, -9, 9, 20, escurecer(paleta.roupa, 0.45));
+    this.pernaDir = cena.add.rectangle(8, -9, 9, 20, escurecer(paleta.roupa, 0.45));
     this.pernaEsq.setOrigin(0.5, 0);
     this.pernaDir.setOrigin(0.5, 0);
 
@@ -67,45 +66,38 @@ export class Personagem2D {
 
     const corpo = cena.add.graphics();
     corpo.fillStyle(paleta.roupa, 1);
-    corpo.fillRoundedRect(-LARGURA_CORPO / 2, -ALTURA_CORPO - 6, LARGURA_CORPO, ALTURA_CORPO, 7);
+    corpo.fillRoundedRect(-LARGURA_CORPO / 2, -ALTURA_CORPO - 9, LARGURA_CORPO, ALTURA_CORPO, 10);
     corpo.fillStyle(paleta.detalhe, 1);
-    corpo.fillRoundedRect(-LARGURA_CORPO / 2, -ALTURA_CORPO - 6, LARGURA_CORPO, 7, 4);
+    corpo.fillRoundedRect(-LARGURA_CORPO / 2, -ALTURA_CORPO - 9, LARGURA_CORPO, 11, 6);
 
-    this.bracoEsq = cena.add.rectangle(-LARGURA_CORPO / 2 - 2, -ALTURA_CORPO - 2, 5, 16, paleta.roupa);
-    this.bracoDir = cena.add.rectangle(LARGURA_CORPO / 2 + 2, -ALTURA_CORPO - 2, 5, 16, paleta.roupa);
+    this.bracoEsq = cena.add.rectangle(-LARGURA_CORPO / 2 - 3, -ALTURA_CORPO - 4, 8, 25, paleta.roupa);
+    this.bracoDir = cena.add.rectangle(LARGURA_CORPO / 2 + 3, -ALTURA_CORPO - 4, 8, 25, paleta.roupa);
     this.bracoEsq.setOrigin(0.5, 0);
     this.bracoDir.setOrigin(0.5, 0);
 
-    const pescoco = cena.add.rectangle(0, -ALTURA_CORPO - 6, 7, 5, paleta.pele);
+    const pescoco = cena.add.rectangle(0, -ALTURA_CORPO - 9, 11, 8, paleta.pele);
     pescoco.setOrigin(0.5, 1);
 
-    const cabeca = cena.add.circle(0, -ALTURA_CORPO - 13 - RAIO_CABECA, RAIO_CABECA, paleta.pele);
+    const cabeca = cena.add.circle(0, -ALTURA_CORPO - 15 - RAIO_CABECA, RAIO_CABECA, paleta.pele);
 
     const cabelo = cena.add.graphics();
     cabelo.fillStyle(paleta.cabelo, 1);
-    cabelo.fillCircle(0, -ALTURA_CORPO - 15 - RAIO_CABECA, RAIO_CABECA + 1.5);
+    cabelo.fillCircle(0, -ALTURA_CORPO - 18 - RAIO_CABECA, RAIO_CABECA + 2.5);
     cabelo.fillRect(
-      -RAIO_CABECA - 1.5, -ALTURA_CORPO - 15 - RAIO_CABECA,
-      (RAIO_CABECA + 1.5) * 2, RAIO_CABECA + 4,
+      -RAIO_CABECA - 2.5, -ALTURA_CORPO - 18 - RAIO_CABECA,
+      (RAIO_CABECA + 2.5) * 2, RAIO_CABECA + 7,
     );
     cabelo.fillStyle(paleta.pele, 1);
-    cabelo.fillCircle(0, -ALTURA_CORPO - 12 - RAIO_CABECA, RAIO_CABECA - 0.5);
+    cabelo.fillCircle(0, -ALTURA_CORPO - 14 - RAIO_CABECA, RAIO_CABECA - 0.5);
 
-    const olhoEsq = cena.add.circle(-3, -ALTURA_CORPO - 13 - RAIO_CABECA, 1.2, 0x2b2119);
-    const olhoDir = cena.add.circle(3, -ALTURA_CORPO - 13 - RAIO_CABECA, 1.2, 0x2b2119);
+    const olhoEsq = cena.add.circle(-4.5, -ALTURA_CORPO - 17 - RAIO_CABECA, 1.8, 0x2b2119);
+    const olhoDir = cena.add.circle(4.5, -ALTURA_CORPO - 17 - RAIO_CABECA, 1.8, 0x2b2119);
 
     this.corpoGrupo.add([
       corpo, this.bracoEsq, this.bracoDir, pescoco, cabelo, cabeca, olhoEsq, olhoDir,
     ]);
 
-    this.rotulo = cena.add.text(0, 10, "", {
-      fontFamily: "system-ui, sans-serif",
-      fontSize: "11px",
-      color: hex(CENARIO.texto),
-    });
-    this.rotulo.setOrigin(0.5, 0);
-
-    this.selo = cena.add.text(RAIO_CABECA + 4, -ALTURA_CORPO - 26 - RAIO_CABECA, "", {
+    this.selo = cena.add.text(RAIO_CABECA + 6, -ALTURA_CORPO - 30 - RAIO_CABECA, "", {
       fontFamily: "system-ui, sans-serif",
       fontSize: "13px",
       fontStyle: "bold",
@@ -115,7 +107,7 @@ export class Personagem2D {
     this.selo.setVisible(false);
 
     this.raiz.add([
-      sombra, this.pernaEsq, this.pernaDir, this.corpoGrupo, this.rotulo, this.selo,
+      sombra, this.pernaEsq, this.pernaDir, this.corpoGrupo, this.selo,
     ]);
     this.raiz.setAlpha(0);
     this.raiz.setVisible(false);
@@ -142,13 +134,21 @@ export class Personagem2D {
     return this.visivel;
   }
 
+  /** Opacidade atual, para a etiqueta sumir junto com a personagem. */
+  get opacidade(): number {
+    return this.raiz.alpha;
+  }
+
   /** True quando a aparencia depende de um slug diferente do atual. */
   precisaRecriar(dados: Personagem): boolean {
     return dados.personagem !== this.slugAtual;
   }
 
+  /** Nome exibido, para a etiqueta que a cena mantem acima da cabeca. */
+  nome = "";
+
   aplicar(dados: Personagem): void {
-    this.rotulo.setText(dados.nome);
+    this.nome = dados.nome;
     const precisaSelo = dados.estado === "AWAY";
     this.selo.setVisible(precisaSelo);
     if (precisaSelo) this.selo.setText("!");

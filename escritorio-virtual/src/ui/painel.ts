@@ -6,8 +6,8 @@
  * O Phaser entra numa fase seguinte consumindo o mesmo endpoint.
  */
 
-import type { Cena, MetaPoll, Personagem, SituacaoConexao } from "./types";
-import type { Transicao } from "./diff";
+import type { Cena, MetaPoll, Personagem, SituacaoConexao } from "../types";
+import type { Transicao } from "../state/diff";
 
 const ROTULO_ESTADO: Record<Personagem["estado"], string> = {
   OFFLINE: "Fora do ar",
@@ -70,6 +70,24 @@ export interface Alvos {
   erro: HTMLElement;
   avisos: HTMLElement;
   log: HTMLElement;
+  modo: HTMLElement;
+}
+
+export function renderizarModo(alvos: Alvos, cena: Cena, simulado = false): void {
+  if (simulado) {
+    texto(alvos.modo, "simulação (não é o ponto real)");
+    alvos.modo.dataset.modo = "simulado";
+    return;
+  }
+  if (!cena.preview?.ativo) {
+    texto(alvos.modo, "ao vivo");
+    alvos.modo.dataset.modo = "vivo";
+    return;
+  }
+  const dia = new Date(`${cena.data}T12:00:00`).toLocaleDateString("pt-BR");
+  const hora = cena.preview.hora ? ` às ${cena.preview.hora}` : " (fim do dia)";
+  texto(alvos.modo, `pré-visualização de ${dia}${hora}`);
+  alvos.modo.dataset.modo = "preview";
 }
 
 export function renderizarCena(alvos: Alvos, cena: Cena, destacar: Set<number>): void {

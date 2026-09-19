@@ -10,7 +10,7 @@ import {
   hex,
   hslParaHex,
   paletaDe,
-} from "../src/cena/paleta";
+} from "../src/config/characters";
 
 test("a mesma personagem sempre recebe a mesma paleta", () => {
   assert.deepEqual(paletaDe("tina"), paletaDe("tina"));

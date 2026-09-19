@@ -17,7 +17,7 @@
  *   proprio a partir de evento, so renderiza o que veio.
  */
 
-import type { Cena, MetaPoll } from "./types";
+import type { Cena, MetaPoll } from "../types";
 
 export interface OpcoesPoller {
   url: string;

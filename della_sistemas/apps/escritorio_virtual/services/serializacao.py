@@ -89,12 +89,17 @@ def _personagem(ator) -> dict:
     }
 
 
-def serializar_cena(cena: Cena) -> dict:
-    """Payload completo da API interna."""
+def serializar_cena(cena: Cena, preview: dict | None = None) -> dict:
+    """Payload completo da API interna.
+
+    `preview` descreve a pré-visualização em curso (data e hora escolhidas),
+    ou o modo ao vivo. Entra no payload e, por consequência, no ETag: duas
+    horas diferentes do mesmo dia são cenas diferentes."""
     pendencias = sum(
         1 for a in cena.atores if a.estado == EstadoPersonagem.MISSING_PUNCH
     )
     return {
+        "preview": preview or {"ativo": False},
         "versao": VERSAO_CONTRATO,
         "data": cena.data.isoformat(),
         "geradoEm": _iso_minuto(cena.gerado_em),

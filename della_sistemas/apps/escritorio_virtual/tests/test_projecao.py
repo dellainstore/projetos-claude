@@ -94,12 +94,12 @@ class BaseEscritorioTestCase(TestCase):
             defaults={"nome": "Entrada", "ordem": 0, "ativo": True, "loja": None},
         )
         self.showroom1, _ = SalaEscritorio.objects.update_or_create(
-            slug="showroom-1",
-            defaults={"nome": "Showroom 1", "ordem": 1, "ativo": True, "loja": self.loja_sp},
+            slug="showroom",
+            defaults={"nome": "Show Room", "ordem": 1, "ativo": True, "loja": self.loja_sp},
         )
         self.showroom2, _ = SalaEscritorio.objects.update_or_create(
-            slug="showroom-2",
-            defaults={"nome": "Showroom 2", "ordem": 2, "ativo": True, "loja": self.loja_anaca},
+            slug="anaca",
+            defaults={"nome": "Anacã", "ordem": 2, "ativo": True, "loja": self.loja_anaca},
         )
         self.refeitorio, _ = SalaEscritorio.objects.update_or_create(
             slug=svc_salas.SLUG_REFEITORIO,
@@ -308,7 +308,7 @@ class DiaEmAndamentoTests(BaseEscritorioTestCase):
             self.bater(SEGUNDA_A, 9, 0, "entrada")
             ator = self.ator(dia=SEGUNDA_A, agora=aware(SEGUNDA_A, 10, 30))
         self.assertEqual(ator.estado, EstadoPersonagem.WORKING)
-        self.assertEqual(ator.sala.slug, "showroom-1")
+        self.assertEqual(ator.sala.slug, "showroom")
 
     def test_no_almoco_vai_para_o_refeitorio(self):
         with hoje_fixo(SEGUNDA_A):
@@ -317,7 +317,7 @@ class DiaEmAndamentoTests(BaseEscritorioTestCase):
             ator = self.ator(dia=SEGUNDA_A, agora=aware(SEGUNDA_A, 12, 30))
         self.assertEqual(ator.estado, EstadoPersonagem.LUNCH)
         self.assertEqual(ator.sala.slug, svc_salas.SLUG_REFEITORIO)
-        self.assertEqual(ator.sala_trabalho.slug, "showroom-1")
+        self.assertEqual(ator.sala_trabalho.slug, "showroom")
 
     def test_retorno_do_almoco_anima_e_depois_estabiliza(self):
         with hoje_fixo(SEGUNDA_A):

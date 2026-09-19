@@ -9,6 +9,18 @@
   .ev-topo h1 { font-family:'Playfair Display', serif; font-size:1.5rem; color:var(--preto); }
   .ev-sub { font-size:.8rem; color:var(--cinza-escuro); margin-top:.2rem; max-width:56ch; }
 
+  .ev-controles { display:flex; flex-wrap:wrap; gap:.5rem .7rem; align-items:center;
+                  background:var(--branco); border:1px solid var(--cinza-medio);
+                  border-radius:10px; padding:.6rem .8rem; margin-bottom:.9rem;
+                  font-size:.78rem; color:var(--cinza-escuro); }
+  .ev-controles label { display:inline-flex; align-items:center; gap:.35rem; }
+  .ev-controles input { padding:.3rem .45rem; border:1px solid var(--cinza-medio);
+                        border-radius:6px; font-size:.78rem; background:var(--branco);
+                        color:var(--preto); }
+  .ev-modo { margin-left:auto; font-weight:600; }
+  .ev-modo[data-modo="preview"] { color:#b45309; }
+  .ev-modo[data-modo="vivo"] { color:#15803d; }
+
   .ev-palco { background:var(--branco); border:1px solid var(--cinza-medio);
               border-radius:12px; padding:.5rem; overflow:hidden; }
   .ev-palco canvas { display:block; margin:0 auto; max-width:100%; height:auto !important;
@@ -60,6 +72,18 @@
             color:var(--cinza-escuro); font-family:ui-monospace, monospace; }
   .ev-log li { padding:.15rem 0; }
 
+  .ev-debug { background:var(--branco); border:1px solid var(--cinza-medio);
+              border-radius:10px; padding:.7rem .9rem; margin-top:.9rem;
+              font-size:.78rem; color:var(--cinza-escuro); }
+  .ev-debug > strong { display:block; margin-bottom:.5rem; font-size:.75rem;
+                       text-transform:uppercase; letter-spacing:.04em; }
+  .ev-debug-linha { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center;
+                    padding:.25rem 0; }
+  .ev-debug-nome { min-width:90px; font-weight:600; color:var(--preto); }
+  .ev-botao-mini { padding:.2rem .5rem; font-size:.72rem; }
+
+  .ev-modo[data-modo="simulado"] { color:#7c3aed; }
+
   .ev-botao { padding:.4rem .8rem; border-radius:6px; border:1px solid var(--cinza-medio);
               background:var(--branco); font-size:.78rem; cursor:pointer; }
 
@@ -77,7 +101,9 @@
     <h1>Escritório Virtual</h1>
     <p class="ev-sub">
       Representação visual do ponto, atualizada sozinha a cada {{ poll_segundos }} segundos.
-      Nada aqui altera o ponto: correções continuam em RH &rsaquo; Ponto &rsaquo; Jornada.
+      Para ver o movimento fora do expediente, escolha um dia e uma hora: a cena é
+      montada com as batidas reais daquele instante. Nada aqui altera o ponto;
+      correções continuam em RH &rsaquo; Ponto &rsaquo; Jornada.
     </p>
   </div>
   <button type="button" class="ev-botao" data-ev="atualizar">Atualizar agora</button>
@@ -85,9 +111,21 @@
 
 <div id="escritorio-diagnostico"
      data-api-url="{% url 'escritorio:api_estado' %}"
-     data-poll-segundos="{{ poll_segundos }}">
+     data-poll-segundos="{{ poll_segundos }}"
+     data-debug="{% if pode_simular %}1{% else %}0{% endif %}">
+
+  <div class="ev-controles">
+    <label>Dia <input type="date" data-ev="campo-data"></label>
+    <label>Hora <input type="time" step="300" data-ev="campo-hora"></label>
+    <button type="button" class="ev-botao" data-ev="ver">Ver esse momento</button>
+    <button type="button" class="ev-botao" data-ev="tocar">Tocar o dia</button>
+    <button type="button" class="ev-botao" data-ev="ao-vivo">Ao vivo</button>
+    <span class="ev-modo" data-ev="modo" data-modo="vivo">ao vivo</span>
+  </div>
 
   <div class="ev-palco" data-ev="palco"></div>
+
+  <div data-ev="debug"></div>
 
   <div class="ev-cards">
     <div class="ev-card">

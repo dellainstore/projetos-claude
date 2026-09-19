@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ControleDeAnimacoes, estadosQueMudaram } from "../src/diff";
+import { ControleDeAnimacoes, estadosQueMudaram } from "../src/state/diff";
 import type { Cena, Personagem } from "../src/types";
 
 function personagem(parcial: Partial<Personagem> = {}): Personagem {
@@ -28,6 +28,7 @@ function personagem(parcial: Partial<Personagem> = {}): Personagem {
 
 function cena(personagens: Personagem[]): Cena {
   return {
+    preview: { ativo: false },
     versao: 1,
     data: "2026-09-14",
     geradoEm: "2026-09-14T09:00:00-03:00",

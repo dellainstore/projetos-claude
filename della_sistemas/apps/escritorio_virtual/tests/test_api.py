@@ -4,6 +4,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.test import override_settings
+from django.utils import timezone
 from django.urls import reverse
 
 from apps.escritorio_virtual.services.projecao import EstadoPersonagem
@@ -112,8 +113,8 @@ class ContratoDoPayloadTests(BaseApiTestCase):
         dados = self.get(self.autorizado).json()
         self.assertEqual(
             set(dados),
-            {"versao", "data", "geradoEm", "pollSegundos", "loja", "salas",
-             "personagens", "avisos"},
+            {"preview", "versao", "data", "geradoEm", "pollSegundos", "loja",
+             "salas", "personagens", "avisos"},
         )
         self.assertEqual(
             set(dados["loja"]),
@@ -173,8 +174,12 @@ class ContratoDoPayloadTests(BaseApiTestCase):
         self.assertEqual(trabalhando["estado"], EstadoPersonagem.WORKING)
         self.assertIsNotNone(trabalhando["desde"])
 
+        # O instante também é fixado aqui: sem isso o teste passaria ou
+        # falharia conforme o dia da semana em que rodasse (num sábado a
+        # colaboradora está de folga, e folga não é ausência).
         BatidaPonto.objects.all().delete()
-        ausente = self.get(self.autorizado).json()["personagens"][0]
+        with instante_fixo(SEGUNDA_A, 21, 0):
+            ausente = self.client.get(self.url).json()["personagens"][0]
         self.assertEqual(ausente["estado"], EstadoPersonagem.ABSENT)
         self.assertIsNone(ausente["desde"], "ausência não precisa carimbar horário")
 
@@ -190,7 +195,7 @@ class ContratoDoPayloadTests(BaseApiTestCase):
     def test_salas_vem_com_layout(self):
         dados = self.get(self.autorizado).json()
         slugs = {s["slug"] for s in dados["salas"]}
-        self.assertIn("showroom-1", slugs)
+        self.assertIn("showroom", slugs)
         self.assertIn("cafeteria", slugs)
         self.assertEqual(
             set(dados["salas"][0]),
@@ -321,3 +326,118 @@ class PaginaDiagnosticaTests(BaseApiTestCase):
         with override_settings(ESCRITORIO_ATIVO=False):
             r = self.client.get(reverse("escritorio:diagnostico"))
         self.assertEqual(r.status_code, 404)
+
+
+class PreviewTests(BaseApiTestCase):
+    """Pré-visualização de um instante passado, com as batidas REAIS do dia.
+
+    Existe porque fora do expediente a cena fica vazia, e inventar batida de
+    teste no banco corromperia o ponto (entraria no banco de horas, geraria
+    pendência e apareceria no espelho de ponto da colaboradora)."""
+
+    def test_sem_parametro_fica_ao_vivo(self):
+        dados = self.get(self.autorizado).json()
+        self.assertFalse(dados["preview"]["ativo"])
+
+    def test_sugere_o_ultimo_dia_com_movimento(self):
+        self.dia_completo(SEGUNDA_A)
+        dados = self.get(self.autorizado).json()
+        self.assertEqual(
+            dados["preview"]["ultimoDiaComMovimento"], SEGUNDA_A.isoformat(),
+        )
+
+    def test_sem_batida_nenhuma_nao_sugere_data(self):
+        dados = self.get(self.autorizado).json()
+        self.assertIsNone(dados["preview"]["ultimoDiaComMovimento"])
+
+    def test_data_e_hora_projetam_o_instante_escolhido(self):
+        self.dia_completo(SEGUNDA_A)
+        self.client.force_login(self.autorizado)
+
+        manha = self.client.get(
+            self.url, {"data": SEGUNDA_A.isoformat(), "hora": "10:30"},
+        ).json()
+        self.assertTrue(manha["preview"]["ativo"])
+        self.assertEqual(manha["preview"]["data"], SEGUNDA_A.isoformat())
+        self.assertEqual(manha["preview"]["hora"], "10:30")
+        self.assertEqual(manha["personagens"][0]["estado"], EstadoPersonagem.WORKING)
+        self.assertEqual(manha["loja"]["estado"], "OPEN")
+
+        almoco = self.client.get(
+            self.url, {"data": SEGUNDA_A.isoformat(), "hora": "12:30"},
+        ).json()
+        self.assertEqual(almoco["personagens"][0]["estado"], EstadoPersonagem.LUNCH)
+        self.assertEqual(almoco["personagens"][0]["sala"], "cafeteria")
+
+        noite = self.client.get(
+            self.url, {"data": SEGUNDA_A.isoformat(), "hora": "21:00"},
+        ).json()
+        self.assertEqual(noite["personagens"][0]["estado"], EstadoPersonagem.OFF_SHIFT)
+        self.assertEqual(noite["loja"]["estado"], "CLOSED")
+
+    def test_so_a_data_projeta_o_fim_daquele_dia(self):
+        self.dia_completo(SEGUNDA_A)
+        self.client.force_login(self.autorizado)
+        dados = self.client.get(self.url, {"data": SEGUNDA_A.isoformat()}).json()
+        self.assertTrue(dados["preview"]["ativo"])
+        self.assertIsNone(dados["preview"]["hora"])
+        self.assertEqual(dados["personagens"][0]["estado"], EstadoPersonagem.OFF_SHIFT)
+
+    def test_horas_diferentes_tem_etag_diferente(self):
+        self.dia_completo(SEGUNDA_A)
+        self.client.force_login(self.autorizado)
+        manha = self.client.get(self.url, {"data": SEGUNDA_A.isoformat(), "hora": "10:00"})
+        tarde = self.client.get(self.url, {"data": SEGUNDA_A.isoformat(), "hora": "15:00"})
+        self.assertNotEqual(manha["ETag"], tarde["ETag"])
+
+    def test_mesmo_instante_devolve_304(self):
+        self.dia_completo(SEGUNDA_A)
+        self.client.force_login(self.autorizado)
+        params = {"data": SEGUNDA_A.isoformat(), "hora": "10:00"}
+        primeira = self.client.get(self.url, params)
+        segunda = self.client.get(self.url, params, HTTP_IF_NONE_MATCH=primeira["ETag"])
+        self.assertEqual(segunda.status_code, 304)
+
+    def test_data_no_futuro_e_recusada(self):
+        from datetime import timedelta
+        self.client.force_login(self.autorizado)
+        amanha = (timezone.localdate() + timedelta(days=1)).isoformat()
+        r = self.client.get(self.url, {"data": amanha})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["erro"], "parametro_invalido")
+
+    def test_data_malformada_e_recusada(self):
+        self.client.force_login(self.autorizado)
+        r = self.client.get(self.url, {"data": "14/09/2026"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_hora_malformada_e_recusada(self):
+        self.client.force_login(self.autorizado)
+        r = self.client.get(self.url, {"data": SEGUNDA_A.isoformat(), "hora": "meio-dia"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_preview_exige_a_mesma_permissao(self):
+        params = {"data": SEGUNDA_A.isoformat(), "hora": "10:00"}
+        self.assertEqual(self.client.get(self.url, params).status_code, 401)
+        self.client.force_login(self.sem_permissao)
+        self.assertEqual(self.client.get(self.url, params).status_code, 403)
+
+    def test_preview_nao_escreve_nada(self):
+        self.dia_completo(SEGUNDA_A)
+        antes = BatidaPonto.objects.count()
+        ids_antes = set(BatidaPonto.objects.values_list("pk", flat=True))
+        self.client.force_login(self.autorizado)
+        for hora in ("08:00", "10:00", "12:30", "15:00", "19:30"):
+            self.client.get(self.url, {"data": SEGUNDA_A.isoformat(), "hora": hora})
+        self.assertEqual(BatidaPonto.objects.count(), antes)
+        self.assertEqual(set(BatidaPonto.objects.values_list("pk", flat=True)), ids_antes)
+        self.assertEqual(NotificacaoPonto.objects.count(), 0)
+
+    def test_preview_nao_expoe_mais_do_que_o_ao_vivo(self):
+        self.dia_completo(SEGUNDA_A)
+        self.client.force_login(self.autorizado)
+        bruto = self.client.get(
+            self.url, {"data": SEGUNDA_A.isoformat(), "hora": "10:00"},
+        ).content.decode()
+        for proibido in ("latitude", "longitude", "distancia", "motivo", "MARIA DA COSTA"):
+            self.assertNotIn(proibido, bruto)

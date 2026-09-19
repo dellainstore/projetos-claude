@@ -234,7 +234,13 @@ def _estado_estavel_do_ator(
         return EstadoPersonagem.DAY_OFF, Motivo.FOLGA_ESCALA, None, None
 
     janela = _janela_fechamento(dia, params, tempos)
-    dia_fechado = dia < hoje or agora > janela
+    # "Dia encerrado" e' uma pergunta sobre o INSTANTE observado, nao sobre o
+    # calendario: o expediente daquele dia ja tinha acabado quando `agora`
+    # aconteceu? Usar `dia < hoje` aqui quebraria a pre-visualizacao — um dia
+    # passado apareceria sempre no estado final, mesmo pedindo as 10:30. Para
+    # o modo ao vivo o resultado e' o mesmo, porque `agora` de um dia anterior
+    # e' necessariamente posterior a janela daquele dia.
+    dia_fechado = agora > janela
 
     # 4. Dia encerrado: a autoridade sobre "faltou batida" é o próprio ponto.
     if dia_fechado:
@@ -349,6 +355,25 @@ def _estado_da_loja(atores: list[AtorProjetado]) -> str:
     return EstadoLoja.CLOSED
 
 
+def ultimo_dia_com_movimento(personagens_apenas: bool = True) -> date | None:
+    """Último dia (local) com alguma batida registrada.
+
+    Serve só para sugerir uma data na pré-visualização: sem isso, quem abre a
+    página num sábado à noite escolhe datas no escuro. Leitura pura."""
+    qs = BatidaPonto.objects.all()
+    if personagens_apenas:
+        ids = list(
+            PersonagemEscritorio.objects
+            .filter(ativo=True, colaborador__isnull=False)
+            .values_list("colaborador_id", flat=True)
+        )
+        if not ids:
+            return None
+        qs = qs.filter(colaborador_id__in=ids)
+    ultima = qs.order_by("-momento").values_list("momento", flat=True).first()
+    return timezone.localtime(ultima).date() if ultima else None
+
+
 def _agora_padrao(dia: date, hoje: date) -> datetime:
     """Instante de referência. Para um dia passado, o fim daquele dia — assim
     o diagnóstico mostra como a cena terminou, não como ela estaria agora."""
@@ -382,9 +407,14 @@ def projetar_cena(
     ids = [p.colaborador_id for p in personagens if p.colaborador_id]
     batidas_por_colaborador: dict[int, list[BatidaPonto]] = {i: [] for i in ids}
     if ids:
+        # `momento__lte=agora` e' o que faz a pre-visualizacao funcionar: no
+        # instante observado, uma batida que so aconteceu mais tarde ainda nao
+        # existe. No modo ao vivo o filtro e' inofensivo (nao ha batida no
+        # futuro), mas sem ele pedir "segunda as 10:30" mostraria a pessoa ja
+        # de saida, porque a batida das 19:00 do mesmo dia entraria na conta.
         for b in (
             BatidaPonto.objects
-            .filter(colaborador_id__in=ids, momento__date=dia)
+            .filter(colaborador_id__in=ids, momento__date=dia, momento__lte=agora)
             .select_related("loja")
             .order_by("momento")
         ):

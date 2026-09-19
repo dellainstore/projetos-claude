@@ -19,14 +19,14 @@ class ResolucaoDeSalaTests(BaseEscritorioTestCase):
     def test_loja_conhecida_resolve_pela_loja(self):
         self.dia_completo(SEGUNDA_A, loja="sp")
         r = self._sala_trabalho()
-        self.assertEqual(r.slug, "showroom-1")
+        self.assertEqual(r.slug, "showroom")
         self.assertEqual(r.origem, svc_salas.ORIGEM_LOJA)
         self.assertIsNone(r.aviso)
 
     def test_outra_loja_resolve_para_outra_sala(self):
         self.dia_completo(SEGUNDA_A, loja="anaca")
         r = self._sala_trabalho()
-        self.assertEqual(r.slug, "showroom-2")
+        self.assertEqual(r.slug, "anaca")
         self.assertEqual(r.origem, svc_salas.ORIGEM_LOJA)
 
     def test_usa_a_loja_da_batida_mais_recente(self):
@@ -34,7 +34,7 @@ class ResolucaoDeSalaTests(BaseEscritorioTestCase):
         self.bater(SEGUNDA_A, 12, 0, "saida_almoco", loja="sp")
         self.bater(SEGUNDA_A, 13, 0, "volta_almoco", loja="anaca")
         self.bater(SEGUNDA_A, 19, 0, "saida", loja="anaca")
-        self.assertEqual(self._sala_trabalho().slug, "showroom-2")
+        self.assertEqual(self._sala_trabalho().slug, "anaca")
 
     def test_loja_sem_sala_mapeada_cai_na_sala_padrao_com_aviso(self):
         self.showroom2.loja = None
@@ -42,20 +42,20 @@ class ResolucaoDeSalaTests(BaseEscritorioTestCase):
         self.dia_completo(SEGUNDA_A, loja="anaca")
         r = self._sala_trabalho()
         self.assertEqual(r.origem, svc_salas.ORIGEM_SALA_PADRAO)
-        self.assertEqual(r.slug, "showroom-1")
+        self.assertEqual(r.slug, "showroom")
         self.assertEqual(r.aviso, "loja_sem_sala_mapeada")
 
     def test_batida_sem_loja_cai_na_sala_padrao(self):
         self.dia_completo(SEGUNDA_A, loja=None)
         r = self._sala_trabalho()
         self.assertEqual(r.origem, svc_salas.ORIGEM_SALA_PADRAO)
-        self.assertEqual(r.slug, "showroom-1")
+        self.assertEqual(r.slug, "showroom")
         self.assertIsNone(r.aviso)
 
     def test_sem_batida_nenhuma_usa_sala_padrao(self):
         r = self._sala_trabalho()
         self.assertEqual(r.origem, svc_salas.ORIGEM_SALA_PADRAO)
-        self.assertEqual(r.slug, "showroom-1")
+        self.assertEqual(r.slug, "showroom")
 
     def test_personagem_sem_sala_padrao_usa_entrada_como_fallback(self):
         self.personagem.sala_padrao = None
@@ -101,7 +101,7 @@ class SalaDaCenaTests(BaseEscritorioTestCase):
             ator = self.ator(dia=SEGUNDA_A, agora=self._agora(12, 30))
         self.assertEqual(ator.estado, EstadoPersonagem.LUNCH)
         self.assertEqual(ator.sala.slug, svc_salas.SLUG_REFEITORIO)
-        self.assertEqual(ator.sala_trabalho.slug, "showroom-2")
+        self.assertEqual(ator.sala_trabalho.slug, "anaca")
 
     def test_sem_refeitorio_configurado_avisa_e_mantem_a_sala(self):
         self.refeitorio.delete()
@@ -109,7 +109,7 @@ class SalaDaCenaTests(BaseEscritorioTestCase):
             self.bater(SEGUNDA_A, 9, 0, "entrada")
             self.bater(SEGUNDA_A, 12, 0, "saida_almoco")
             ator = self.ator(dia=SEGUNDA_A, agora=self._agora(12, 30))
-        self.assertEqual(ator.sala.slug, "showroom-1")
+        self.assertEqual(ator.sala.slug, "showroom")
         self.assertIn("sem_refeitorio_configurado", ator.avisos)
 
     def test_estados_sem_presenca_nao_renderizam_sala(self):

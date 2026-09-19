@@ -61,7 +61,16 @@ export interface Sala {
   altura: number;
 }
 
+/** Pré-visualização de um instante passado (ver views/api.py). */
+export interface Preview {
+  ativo: boolean;
+  data?: string;
+  hora?: string | null;
+  ultimoDiaComMovimento?: string | null;
+}
+
 export interface Cena {
+  preview: Preview;
   versao: number;
   data: string;
   geradoEm: string;

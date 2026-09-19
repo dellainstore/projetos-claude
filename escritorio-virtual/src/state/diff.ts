@@ -20,7 +20,7 @@
  * transicao, nunca qual estado a personagem tem.
  */
 
-import type { Cena, Personagem } from "./types";
+import type { Cena, Personagem } from "../types";
 
 export interface Transicao {
   personagemId: number;

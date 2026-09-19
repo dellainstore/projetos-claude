@@ -15,24 +15,43 @@ bundle; quem serve a página é o Django (`apps.escritorio_virtual`) e o Nginx.
 
 ```
 src/
-├── main.ts            liga o poller à cena e ao painel
-├── poller.ts          polling 10s, ETag/304, backoff, pausa em aba oculta
-├── diff.ts            controla quais eventId já foram animados
-├── render.ts          painel de conferência (tabela, indicadores)
-├── types.ts           contrato da API (espelha serializacao.py)
-└── cena/
-    ├── mapa.ts        geometria: corredor, vagas, caminhos (PURO, sem Phaser)
-    ├── paleta.ts      cores por slug de personagem (PURO, sem Phaser)
-    ├── personagem.ts  a personagem 2D desenhada por código
-    └── escritorio.ts  a cena Phaser
+├── main.ts                       liga a API à cena, ao painel e à simulação
+├── types.ts                      contrato da API (espelha serializacao.py)
+├── config/
+│   ├── rooms.ts                  paleta, mobiliário e silhueta (PURO)
+│   ├── paths.ts                  waypoints nomeados e rotas (PURO)
+│   └── characters.ts             cor por slug de personagem (PURO)
+├── scenes/
+│   ├── BootScene.ts              carga (hoje instantânea: arte é procedural)
+│   └── OfficeScene.ts            a cena, em camadas
+├── actors/
+│   └── Character.ts              a personagem 2D desenhada por código
+├── environment/
+│   ├── geometry.ts               planta, portas, vagas, luz (PURO)
+│   ├── DoorController.ts         porta de rua com 4 estados
+│   ├── LightingController.ts     luz por cômodo
+│   └── StoreController.ts        estado da loja -> decisões visuais (PURO)
+├── state/
+│   ├── poller.ts                 polling 10s, ETag/304, backoff, aba oculta
+│   ├── diff.ts                   quais eventId já foram animados
+│   └── officeStore.ts            guarda-cena: API x simulação (PURO)
+└── ui/
+    ├── painel.ts                 tabela de conferência
+    ├── NameTag.ts                etiqueta de nome, acima dos móveis
+    └── DebugPanel.ts             simulação (não escreve em lugar nenhum)
 ```
+
+Os módulos marcados como PURO não importam Phaser nem tocam no DOM: é o que
+permite testar planta, rota, luz e transição de loja sem subir um navegador.
 
 ## Comandos
 
 ```bash
 npm ci          # instala as dependências de build
 npm run build   # typecheck + bundle em ../della_sistemas/static/escritorio/
-npm test        # 65 testes: mapa, paleta, poller, animações e a cena headless
+npm test        # 110 testes: geometria, rotas, paleta, poller, animações,
+                # guarda-cena, painel de simulação e a cena headless
+node scripts/capturar.mjs   # capturas reais do bundle (Chromium headless)
 npm run dev     # rebuild em watch, para desenvolvimento
 ```
 
@@ -49,17 +68,17 @@ cd ../della_sistemas
 (cerca de 340 KB comprimido), quase tudo Phaser. É o preço de poder crescer
 com salas, objetos clicáveis e balões; para um painel interno é aceitável.
 
-**A planta vem do banco, não do código.** `mapa.ts` recebe as salas da API
+**A planta vem do banco, não do código.** `environment/geometry.ts` recebe as salas da API
 (`SalaEscritorio`: slug, posição, tamanho) e calcula tudo a partir delas,
-inclusive **onde fica o corredor**: ele é a faixa horizontal mais larga que
-nenhuma sala ocupa. Mover ou acrescentar uma sala no banco muda o mapa e o
+inclusive as PORTAS, deduzidas de onde cada cômodo encosta no corredor (que
+também é uma sala de verdade). Mover ou acrescentar um cômodo no banco muda o
 trajeto das personagens sem tocar em uma linha de TypeScript.
 
 **Personagens desenhadas por código.** Não há arte de terceiros: cabeça,
 cabelo, corpo, braços e pernas são formas do Phaser, coloridas por uma paleta
 derivada do slug da personagem (com ajuste manual opcional por slug, nunca por
 nome de pessoa). Cadastrar alguém novo já aparece com cor própria.
-**Para trocar por sprites de verdade depois, só `personagem.ts` muda**: a cena
+**Para trocar por sprites de verdade depois, só `actors/Character.ts` muda**: a cena
 conversa com ela por `posicionar`, `caminharPor`, `aplicar`, `mostrar` e
 `esconder`, e nenhum desses contratos depende de como ela é desenhada.
 
@@ -105,6 +124,31 @@ Três armadilhas do ambiente, todas documentadas no código:
 Como os tweens andam pelo relógio real, os testes de movimento esperam uma
 **condição** (`aguardarAte`) em vez de um tempo fixo, e não ficam reféns da
 carga da máquina.
+
+## Capturas
+
+`node scripts/capturar.mjs` abre o **bundle de produção** num Chromium
+headless, com uma API falsa interceptada no navegador, e fotografa cada
+situação (loja fechada, todas trabalhando, alguém no corredor, almoço,
+pendência, mobile). Não é mockup: é o mesmo `escritorio.js` que vai para a
+loja. As imagens saem em `capturas/`.
+
+O `puppeteer` entra como devDependency só para isso. Ele arrasta um aviso de
+`npm audit` (`extract-zip`, alta): a falha está na EXTRAÇÃO do arquivo do
+navegador na hora de instalar, vindo do endpoint oficial do Chrome for
+Testing, e nada disso entra no bundle. Se preferir não conviver com o aviso,
+remova o pacote e reinstale só quando for gerar captura.
+
+## Limitações visuais conhecidas
+
+- **Não é isométrico de verdade.** É uma planta em corte vista de cima, com
+  as paredes de fundo aparecendo dentro de cada cômodo. A referência é
+  desenhada à mão em perspectiva; aqui tudo é geometria procedural.
+- **As personagens são formas, não pixel art.** Trocar por sprites mexe só
+  em `src/actors/Character.ts`: a cena conversa com ela por `posicionar`,
+  `caminharPor`, `aplicar`, `mostrar` e `esconder`.
+- **O mobiliário é estilizado.** Cafeteira, pia e prateleiras existem como
+  volumes, não como desenhos detalhados.
 
 ## Próxima fase
 

@@ -716,10 +716,16 @@ Projeção 2D do controle de ponto. **Somente leitura**: não cria, altera nem
 apaga `BatidaPonto`. O ponto (`apps/rh`) segue sendo a fonte oficial.
 Documentação completa em [`apps/escritorio_virtual/README.md`](apps/escritorio_virtual/README.md).
 
-**Status (2026-09-19):** fases 1 a 7 implementadas (domínio, projeção, comando
-de diagnóstico, API autenticada, poller, cenário 2D, personagens e transições
-por batida). Migrations criadas e **não aplicadas em produção**. O relatório
-diário (fase 8) e o recorte de visão por perfil (fase 9) ficam para depois.
+**Status (2026-09-19):** fundação (fases 1 a 4) **aplicada em produção pelo
+dono**; etapa visual concluída, com a planta da imagem de referência
+(`projetos-claude/escritorio-virtual/design/reference/`). O relatório diário
+(fase 8) e o recorte de visão por perfil (fase 9) ficam para depois.
+
+> **Migration `0003_planta_integrada` NÃO está aplicada em produção.** Ela
+> renomeia `showroom-1`/`showroom-2` para `showroom`/`anaca`, cria o cômodo
+> `corredor` e reposiciona tudo na planta 1440x900. O bundle novo espera essa
+> planta, então `migrate` e `collectstatic` andam **juntos**: rodar só um
+> deixa a cena incoerente.
 
 - Rotas: `/escritorio/` (página diagnóstica) e `/escritorio/api/estado/` (JSON).
   Não existe endpoint público.
@@ -735,10 +741,16 @@ diário (fase 8) e o recorte de visão por perfil (fase 9) ficam para depois.
   (Phaser 3 + TypeScript + Vite). Node só em build, nunca em runtime. Saída em
   `static/escritorio/escritorio.js` (~1,2 MB, ~340 KB comprimido),
   referenciada com `{% estatico %}`.
-- A planta do mapa vem da tabela `SalaEscritorio`: sala nova no banco vira
-  sala nova na cena, sem deploy de JS. As personagens são desenhadas por
-  código (sem arte de terceiros); trocar por sprites mexe só em
-  `src/cena/personagem.ts`.
+- A planta do mapa vem da tabela `SalaEscritorio`: cômodo novo no banco vira
+  cômodo novo na cena, com porta e rota, sem deploy de JS. As personagens são
+  desenhadas por código (sem arte de terceiros); trocar por sprites mexe só em
+  `src/actors/Character.ts`.
+- Painel de simulação (`ui/DebugPanel.ts`) só aparece para quem tem
+  `escritorio.configurar`. Ele **não** cria batida nem chama endpoint de
+  escrita: só transforma a cena que está na tela. Há teste clicando em todos
+  os botões e conferindo que nenhum `fetch` acontece.
+- Capturas de revisão: `node scripts/capturar.mjs` no workspace do frontend
+  abre o bundle de produção num Chromium headless e fotografa cada situação.
 
 > Atenção ao reciclar workers: o serviço roda **sem `--preload`** e com
 > `--max-requests 500`, então código novo no disco entra em produção aos

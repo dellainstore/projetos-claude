@@ -21,7 +21,7 @@ class EscritorioDebugTests(BaseEscritorioTestCase):
         self.dia_completo(SEGUNDA_A)
         texto = self._rodar("--data", SEGUNDA_A.isoformat())
         self.assertIn("OFF_SHIFT", texto)
-        self.assertIn("showroom-1", texto)
+        self.assertIn("showroom", texto)
         self.assertIn("dia_encerrado", texto)
         self.assertIn("Tina", texto)
 
@@ -140,7 +140,7 @@ class EscritorioPersonagemCommandTests(BaseEscritorioTestCase):
     def test_lista_elenco(self):
         texto = self._rodar("--listar")
         self.assertIn("tina", texto)
-        self.assertIn("showroom-1", texto)
+        self.assertIn("showroom", texto)
 
     def test_lista_colaboradores_com_id(self):
         texto = self._rodar("--colaboradores")
@@ -152,11 +152,11 @@ class EscritorioPersonagemCommandTests(BaseEscritorioTestCase):
         for _ in range(2):
             self._rodar(
                 "--colaborador-id", str(self.colab.pk),
-                "--personagem", "tina", "--sala", "showroom-2",
+                "--personagem", "tina", "--sala", "anaca",
             )
         self.assertEqual(PersonagemEscritorio.objects.count(), 1)
         self.assertEqual(
-            PersonagemEscritorio.objects.get().sala_padrao.slug, "showroom-2",
+            PersonagemEscritorio.objects.get().sala_padrao.slug, "anaca",
         )
 
     def test_sala_inexistente_reclama(self):

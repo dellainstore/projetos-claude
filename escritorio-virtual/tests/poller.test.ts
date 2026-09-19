@@ -7,13 +7,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { Poller } from "../src/poller";
+import { Poller } from "../src/state/poller";
 import type { Cena } from "../src/types";
 
 const URL_FAKE = "/escritorio/api/estado/";
 
 function cenaFake(estadoLoja: Cena["loja"]["estado"] = "OPEN"): Cena {
   return {
+    preview: { ativo: false },
     versao: 1,
     data: "2026-09-14",
     geradoEm: "2026-09-14T10:00:00-03:00",
