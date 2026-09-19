@@ -13,8 +13,12 @@ const SAIDA = resolve(
 export default defineConfig({
   build: {
     outDir: SAIDA,
-    // A pasta e' exclusiva deste bundle, entao limpar e' seguro.
-    emptyOutDir: true,
+    // NAO limpar a pasta: ela tambem guarda `office-bg.png` (arte oficial)
+    // e `office-bg-placeholder.svg`, que nao fazem parte do build do Vite.
+    // `emptyOutDir: true` ja apagou esses dois arquivos uma vez (bug real,
+    // corrigido em 2026-09-19) — nunca mais ligar isso aqui. O nome do
+    // bundle e' fixo (sem hash), entao nao ha risco de acumular JS orfao.
+    emptyOutDir: false,
     target: "es2020",
     sourcemap: false,
     lib: {

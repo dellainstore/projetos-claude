@@ -716,45 +716,103 @@ Projeção 2D do controle de ponto. **Somente leitura**: não cria, altera nem
 apaga `BatidaPonto`. O ponto (`apps/rh`) segue sendo a fonte oficial.
 Documentação completa em [`apps/escritorio_virtual/README.md`](apps/escritorio_virtual/README.md).
 
-**Status (2026-09-19):** fundação (fases 1 a 4) **aplicada em produção pelo
-dono**; etapa visual concluída, com a planta da imagem de referência
-(`projetos-claude/escritorio-virtual/design/reference/`). O relatório diário
-(fase 8) e o recorte de visão por perfil (fase 9) ficam para depois.
+**Status (2026-09-19):** fundação (fases 1-4) e o cenário procedural (fases
+5-7) **já foram aplicados em produção pelo dono** (`ESCRITORIO_ATIVO=True`,
+migration `0003_planta_integrada` aplicada). Nesta mesma data, o cenário
+visual foi **reescrito do zero** para usar a imagem de fundo REAL (pixel art
+aprovada pelo dono), substituindo o cenário procedural cinza/geométrico.
+**Esta reescrita ainda NÃO foi implantada** (ver "Deploy pendente" abaixo). O
+relatório diário (fase 8) e o recorte de visão por perfil (fase 9) continuam
+para depois.
 
-> **Migration `0003_planta_integrada` NÃO está aplicada em produção.** Ela
-> renomeia `showroom-1`/`showroom-2` para `showroom`/`anaca`, cria o cômodo
-> `corredor` e reposiciona tudo na planta 1440x900. O bundle novo espera essa
-> planta, então `migrate` e `collectstatic` andam **juntos**: rodar só um
-> deixa a cena incoerente.
+### Arquitetura visual (reescrita 2026-09-19)
 
-- Rotas: `/escritorio/` (página diagnóstica) e `/escritorio/api/estado/` (JSON).
-  Não existe endpoint público.
-- Permissões: `escritorio.ver` e `escritorio.configurar`, ambas **False** em
-  todos os papéis do fallback — acesso é concedido a dedo em `/usuarios/`.
-- Interruptor: `ESCRITORIO_ATIVO` no `.env`, padrão **False**. Com False,
-  `/escritorio/` responde 404. Ligar só depois de `migrate escritorio_virtual`.
-- Tempo real: **polling** HTTP de 10s com `ETag`/`If-None-Match`/304.
-  Nada de WebSocket nem SSE: o gunicorn roda com 2 workers `sync` e uma
-  conexão persistente ocuparia um worker inteiro, travando o painel (inclusive
-  a tela de bater ponto).
+A posição de tudo na tela agora vem de **duas fontes**, propositalmente
+separadas:
+
+- **QUAL sala cada colaboradora está** — continua vindo só da API
+  (`Personagem.sala`), sem nenhuma mudança na integração com o ponto;
+- **ONDE isso fica desenhado** — vem de `escritorio-virtual/src/config/officeZones.ts`
+  (zonas) e `officePaths.ts` (rotas de caminhada), calibrados visualmente
+  sobre a arte oficial. A geometria antiga em pixels do backend
+  (`SalaEscritorio.pos_x/pos_y/...`) não é mais usada para desenhar nada —
+  só o **slug** de cada sala importa agora.
+
+Arquivos novos principais: `config/{officeZones,officePaths,employees}.ts`,
+`environment/ImageLayout.ts`, `systems/{LightingSystem,InteractionSystem}.ts`,
+`ui/{EmployeeCard,StatusLegend}.ts`, `actors/EmployeeCharacter.ts` (pixel art
+procedural — substitui o antigo `actors/Character.ts`, que continua no disco
+mas não é mais usado por nada).
+
+Arquivos antigos **preservados mas não usados** pela cena nova (política do
+projeto: não apagar código, só parar de referenciar): `config/rooms.ts`,
+`config/paths.ts`, `environment/{DoorController,LightingController}.ts`. Já
+`environment/geometry.ts` continua ATIVO (usado por
+`environment/StoreController.ts`, que é 100% reaproveitado sem mudança
+nenhuma — a lógica de loja aberta/fechada e luz por ambiente é agnóstica de
+pixel, só depende de slugs).
+
+**A arte oficial:** `della_sistemas/static/escritorio/office-bg.png`
+(1536×1024px, fornecida pelo dono nesta conversa — ver
+`escritorio-virtual/ASSETS_LICENSES.md` para origem/licença). A view
+(`views/diagnostico.py::_bg_estatico`) detecta sozinha se esse arquivo existe
+e cai automaticamente no placeholder (`office-bg-placeholder.svg`) se não —
+nenhuma edição de template é necessária no dia em que a arte for trocada, só
+sobrescrever o PNG com esse nome exato.
+
+**Personagens:** ainda são pixel art PROCEDURAL (desenhada por código,
+`actors/EmployeeCharacter.ts`), não um spritesheet de verdade — nenhuma foto
+real da Tina/Sara/Michelle foi recebida nesta conversa (só a imagem do
+cenário chegou). A especificação exata do que um spritesheet real precisaria
+ter está em `ASSETS_LICENSES.md`.
+
+### Deploy pendente (reescrita visual, 2026-09-19)
+
+**Nada disto foi rodado ainda.** `static/escritorio/escritorio.js` já foi
+recompilado localmente com o novo código, mas `staticfiles/` (o que o
+WhiteNoise realmente serve) continua com o bundle ANTERIOR (cenário
+procedural cinza) até alguém rodar:
+
+```bash
+cd /var/www/della-sistemas/projetos-claude/della_sistemas
+.venv/bin/python manage.py collectstatic --noinput
+# conferir o access log antes de reiniciar (regra do projeto)
+della restart admin && della health admin
+```
+
+Não precisa de `migrate` (nenhum model mudou nesta rodada). `ESCRITORIO_ATIVO`
+já está `True` em produção — este deploy só troca o bundle JS e adiciona o
+PNG novo em `static/`, ambos servidos como estático puro.
+
+### O que já valia antes e continua igual
+
+- Rotas: `/escritorio/` (página) e `/escritorio/api/estado/` (JSON). Não
+  existe endpoint público.
+- Permissões: `escritorio.ver` e `escritorio.configurar`, concedidas a dedo
+  em `/usuarios/`.
+- Tempo real: **polling** HTTP de 10s com `ETag`/`If-None-Match`/304. Nada
+  de WebSocket nem SSE: o gunicorn roda com 2 workers `sync` e uma conexão
+  persistente ocuparia um worker inteiro, travando o painel (inclusive a
+  tela de bater ponto).
 - Frontend: workspace de build em `projetos-claude/escritorio-virtual/`
-  (Phaser 3 + TypeScript + Vite). Node só em build, nunca em runtime. Saída em
-  `static/escritorio/escritorio.js` (~1,2 MB, ~340 KB comprimido),
-  referenciada com `{% estatico %}`.
-- A planta do mapa vem da tabela `SalaEscritorio`: cômodo novo no banco vira
-  cômodo novo na cena, com porta e rota, sem deploy de JS. As personagens são
-  desenhadas por código (sem arte de terceiros); trocar por sprites mexe só em
-  `src/actors/Character.ts`.
+  (Phaser 3 + TypeScript + Vite). Node só em build, nunca em runtime.
 - Painel de simulação (`ui/DebugPanel.ts`) só aparece para quem tem
-  `escritorio.configurar`. Ele **não** cria batida nem chama endpoint de
-  escrita: só transforma a cena que está na tela. Há teste clicando em todos
-  os botões e conferindo que nenhum `fetch` acontece.
+  `escritorio.configurar`. Não cria batida nem chama endpoint de escrita —
+  só transforma a cena que já está na tela. Teste clica em todos os botões e
+  confere que nenhum `fetch` acontece.
 - Capturas de revisão: `node scripts/capturar.mjs` no workspace do frontend
-  abre o bundle de produção num Chromium headless e fotografa cada situação.
+  abre o bundle de produção (com a arte real embutida via `data:` URI) num
+  Chromium headless e fotografa cada situação — não é mockup.
 
 > Atenção ao reciclar workers: o serviço roda **sem `--preload`** e com
 > `--max-requests 500`, então código novo no disco entra em produção aos
-> poucos, sem restart. É por isso que `ESCRITORIO_ATIVO` nasce em False.
+> poucos, sem restart manual.
+
+> **Cuidado com `vite.config.ts` (`emptyOutDir`):** ele TEM que ficar
+> `false`. A pasta de saída do build (`static/escritorio/`) também guarda
+> `office-bg.png` e `office-bg-placeholder.svg`, que não fazem parte do
+> build do Vite — com `emptyOutDir: true` o `npm run build` apaga os dois
+> silenciosamente (aconteceu de verdade nesta sessão; corrigido).
 
 Decisões do relatório diário do ponto (ainda não implementado) estão em
 [`apps/rh/RELATORIO_DIARIO.md`](apps/rh/RELATORIO_DIARIO.md): autorização e

@@ -321,6 +321,23 @@ class PaginaDiagnosticaTests(BaseApiTestCase):
         # O nome civil completo não aparece em lugar nenhum da página.
         self.assertNotIn("MARIA DA COSTA", html.upper())
 
+    def test_usa_placeholder_quando_a_arte_oficial_nao_existe(self):
+        self.client.force_login(self.autorizado)
+        html = self.client.get(reverse("escritorio:diagnostico")).content.decode()
+        self.assertIn("office-bg-placeholder.svg", html)
+        self.assertNotIn('data-bg-url="/static/escritorio/office-bg.png', html)
+
+    def test_usa_a_arte_oficial_quando_o_arquivo_existe(self):
+        import pathlib as _pathlib
+        from django.conf import settings as _settings
+        caminho = _pathlib.Path(_settings.BASE_DIR) / "static" / "escritorio" / "office-bg.png"
+        caminho.write_bytes(b"PNG-fake-so-para-o-teste")
+        self.addCleanup(caminho.unlink)
+        self.client.force_login(self.autorizado)
+        html = self.client.get(reverse("escritorio:diagnostico")).content.decode()
+        self.assertIn("office-bg.png", html)
+        self.assertNotIn("office-bg-placeholder.svg", html)
+
     def test_interruptor_desliga_a_pagina(self):
         self.client.force_login(self.autorizado)
         with override_settings(ESCRITORIO_ATIVO=False):

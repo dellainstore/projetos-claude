@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <!-- PLACEHOLDER temporario: nao e a arte final. -->
+  <rect width="1440" height="900" fill="#1c2230"/>
+  <rect x="389" y="0" width="518" height="221" fill="#3a4030" stroke="#20241a" stroke-width="4"/>
+  <text x="648" y="40" font-family="monospace" font-size="26" fill="#e6dfc8" text-anchor="middle">REFEITORIO</text>
+  <rect x="22" y="221" width="540" height="554" fill="#402230" stroke="#20141c" stroke-width="4"/>
+  <text x="292" y="260" font-family="monospace" font-size="26" fill="#e6c8d8" text-anchor="middle">SHOW ROOM</text>
+  <rect x="562" y="221" width="194" height="554" fill="#2a2f22" stroke="#181c14" stroke-width="4"/>
+  <rect x="756" y="221" width="662" height="554" fill="#1f3a2c" stroke="#12241a" stroke-width="4"/>
+  <text x="1087" y="260" font-family="monospace" font-size="26" fill="#c8e6d2" text-anchor="middle">ANACA</text>
+  <rect x="432" y="720" width="432" height="166" fill="#332c20" stroke="#1e1a12" stroke-width="4"/>
+  <text x="648" y="810" font-family="monospace" font-size="24" fill="#e6dfc8" text-anchor="middle">ENTRADA</text>
+  <text x="720" y="450" font-family="monospace" font-size="30" fill="#ffd94a" text-anchor="middle" opacity="0.85">AGUARDANDO ARTE OFICIAL</text>
+</svg>

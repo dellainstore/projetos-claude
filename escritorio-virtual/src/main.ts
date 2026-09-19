@@ -17,10 +17,9 @@
 
 import Phaser from "phaser";
 
-import { COR } from "./config/rooms";
-import { hex } from "./config/characters";
 import { BootScene } from "./scenes/BootScene";
-import { CenaEscritorio } from "./scenes/OfficeScene";
+import { OfficeScene } from "./scenes/OfficeScene";
+import { montarLegenda } from "./ui/StatusLegend";
 import { ControleDeAnimacoes, estadosQueMudaram } from "./state/diff";
 import { OfficeStore } from "./state/officeStore";
 import { Poller } from "./state/poller";
@@ -49,49 +48,64 @@ function exigir<T extends HTMLElement>(raiz: ParentNode, seletor: string): T {
   return el;
 }
 
-/** Tamanho da planta, para o palco reservar a proporção certa. */
-function tamanhoDoMundo(cena: Cena): { largura: number; altura: number } | null {
-  if (cena.salas.length === 0) return null;
-  const largura = Math.max(...cena.salas.map((s) => s.pos_x + s.largura));
-  const altura = Math.max(...cena.salas.map((s) => s.pos_y + s.altura));
-  // A mesma margem que a cena usa em volta do prédio.
-  return { largura: largura + 92, altura: altura + 92 };
-}
-
 function hhmm(minutos: number): string {
   const h = Math.floor(minutos / 60);
   const m = minutos % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-function montarJogo(destino: HTMLElement, store: OfficeStore): Phaser.Game {
-  let cenaJogo: CenaEscritorio | null = null;
+/**
+ * Caminho da imagem de fundo. Enquanto o arquivo oficial não é aprovado e
+ * salvo em `della_sistemas/static/escritorio/office-bg.png`, cai num
+ * placeholder claramente identificado (não é a arte final — ver
+ * `ASSETS_LICENSES.md`).
+ */
+function resolverUrlDeFundo(raiz: HTMLElement): string {
+  return raiz.dataset.bgUrl || "escritorio/office-bg-placeholder.svg";
+}
+
+function montarJogo(
+  destino: HTMLElement, cardHost: HTMLElement, store: OfficeStore, bgUrl: string,
+  aoRedimensionar: (tamanho: { width: number; height: number }) => void,
+): Phaser.Game {
+  let cenaJogo: OfficeScene | null = null;
 
   const jogo = new Phaser.Game({
     type: Phaser.AUTO,
     parent: destino,
-    width: 1532,
-    height: 992,
-    backgroundColor: hex(COR.foraDoPredio),
+    width: 1440,
+    height: 900,
+    backgroundColor: "#1c2230",
     banner: false,
     audio: { noAudio: true },
+    // Pixel art nítida: sem suavização/antialiasing e com os pixels sempre
+    // arredondados para posição inteira na tela.
+    pixelArt: true,
+    roundPixels: true,
+    antialias: false,
     scale: {
-      // FIT mantem a proporcao da planta em qualquer tela: nada de comodo
+      // FIT mantém a proporção da arte em qualquer tela: nada de ambiente
       // esticado no celular nem entrada cortada.
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
     },
-    scene: [BootScene, CenaEscritorio],
+    scene: [BootScene, OfficeScene],
+  });
+
+  jogo.registry.set("bgUrl", bgUrl);
+  jogo.registry.set("cardHost", cardHost);
+  jogo.registry.events.on("changedata-bgSize", (_parent: unknown, value: { width: number; height: number }) => {
+    aoRedimensionar(value);
   });
 
   // Uma unica assinatura: o store decide o que vale, a cena so reflete.
   store.assinar((cena) => {
-    cenaJogo ??= jogo.scene.getScene("escritorio") as CenaEscritorio | null;
+    cenaJogo ??= jogo.scene.getScene("escritorio") as OfficeScene | null;
     cenaJogo?.aplicar(cena);
   });
 
   jogo.events.once("ready", () => {
-    cenaJogo = jogo.scene.getScene("escritorio") as CenaEscritorio;
+    cenaJogo = jogo.scene.getScene("escritorio") as OfficeScene;
     const atual = store.atual;
     if (atual) cenaJogo.aplicar(atual);
   });
@@ -125,7 +139,20 @@ function iniciar(): void {
 
   const store = new OfficeStore();
   const palco = exigir(raiz, "[data-ev=palco]");
-  montarJogo(palco, store);
+  const cardHost = palco; // o card fica ancorado dentro do próprio palco.
+  const bgUrl = resolverUrlDeFundo(raiz);
+
+  // Proporção do palco: parte de um valor padrão (evita "pulo" de layout) e
+  // é corrigida para a proporção REAL da imagem assim que ela carrega — é
+  // isso, e não mais brigar com `height:auto` no CSS, que evita a cena
+  // "puxando zoom" sozinha ao abrir.
+  palco.style.aspectRatio = "1440 / 900";
+  montarJogo(palco, cardHost, store, bgUrl, ({ width, height }) => {
+    palco.style.aspectRatio = `${width} / ${height}`;
+    palco.classList.add("ev-palco-pronto");
+  });
+
+  montarUiComplementar(raiz, palco);
 
   const animacoes = new ControleDeAnimacoes();
   let cenaAnterior: Cena | null = null;
@@ -148,15 +175,6 @@ function iniciar(): void {
     if (metaAtual) renderizarMeta(alvos, metaAtual);
     cenaAnterior = cena;
     assinaturaAnterior = assinatura;
-
-    // A proporção do palco acompanha a planta. Fixá-la ANTES do canvas
-    // existir evita o "pulo" de layout; deixá-la a cargo do Phaser depois
-    // evita a briga de CSS que fazia a cena puxar zoom sozinha ao abrir.
-    const mundo = tamanhoDoMundo(cena);
-    if (mundo) {
-      palco.style.aspectRatio = `${mundo.largura} / ${mundo.altura}`;
-      palco.classList.add("ev-palco-pronto");
-    }
 
     const sugestao = cena.preview?.diaSugerido;
     if (sugestao && !campoData.value) campoData.value = sugestao;
@@ -319,6 +337,60 @@ function iniciar(): void {
   // Contagem regressiva: timer próprio, só de exibição (um só, não um por
   // personagem), e o poller não é consultado dentro do loop do Phaser.
   window.setInterval(() => renderizarContagem(alvos, poller.msAteProximo()), 500);
+}
+
+/**
+ * Título, relógio (America/Sao_Paulo), indicador de som (inerte — sem áudio
+ * implementado ainda) e tela cheia. Interface discreta: nada disso cobre o
+ * cenário.
+ */
+function montarUiComplementar(raiz: HTMLElement, palco: HTMLElement): void {
+  const relogio = raiz.querySelector<HTMLElement>("[data-ev=relogio]");
+  if (relogio) {
+    const atualizar = () => {
+      relogio.textContent = new Date().toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+    };
+    atualizar();
+    window.setInterval(atualizar, 30_000);
+  }
+
+  const legenda = raiz.querySelector<HTMLElement>("[data-ev=legenda]");
+  if (legenda) montarLegenda(legenda);
+
+  const botaoSom = raiz.querySelector<HTMLButtonElement>("[data-ev=som]");
+  if (botaoSom) {
+    let ligado = false;
+    botaoSom.setAttribute("aria-pressed", "false");
+    botaoSom.addEventListener("click", () => {
+      // Sem áudio implementado ainda (pedido explícito: som desabilitado
+      // por padrão). O botão só guarda a preferência para quando existir.
+      ligado = !ligado;
+      botaoSom.setAttribute("aria-pressed", String(ligado));
+      botaoSom.textContent = ligado ? "🔊" : "🔇";
+      botaoSom.title = ligado ? "Som ligado (sem efeitos sonoros ainda)" : "Som desligado";
+    });
+  }
+
+  const botaoTelaCheia = raiz.querySelector<HTMLButtonElement>("[data-ev=tela-cheia]");
+  if (botaoTelaCheia) {
+    if (!document.fullscreenEnabled) {
+      botaoTelaCheia.hidden = true;
+    } else {
+      botaoTelaCheia.addEventListener("click", () => {
+        if (document.fullscreenElement) {
+          void document.exitFullscreen();
+        } else {
+          void palco.requestFullscreen().catch(() => {
+            /* navegador recusou; sem tela cheia, sem quebrar o resto. */
+          });
+        }
+      });
+    }
+  }
 }
 
 if (document.readyState === "loading") {

@@ -20,18 +20,22 @@ import puppeteer from "puppeteer";
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, "..");
 const BUNDLE = resolve(RAIZ, "../della_sistemas/static/escritorio/escritorio.js");
+const BG_PNG = resolve(RAIZ, "../della_sistemas/static/escritorio/office-bg.png");
 const SAIDA = resolve(RAIZ, "capturas");
 
 // ── Planta: a MESMA da migration 0003_planta_integrada ────────────────────
 const sala = (slug, nome, ordem, pos_x, pos_y, largura, altura) =>
   ({ slug, nome, ordem, pos_x, pos_y, largura, altura });
 
+// A geometria (x/y/largura/altura) nao importa mais para renderizacao — a
+// posicao na tela vem de config/officeZones.ts, calibrada sobre a arte
+// oficial. So os slugs precisam bater com o que a API manda de verdade.
 const PLANTA = [
-  sala("store-entrance", "Entrada", 0, 560, 760, 320, 140),
-  sala("showroom", "Show Room", 1, 0, 250, 560, 510),
-  sala("anaca", "Anacã", 2, 880, 250, 560, 510),
-  sala("corredor", "Corredor", 3, 560, 250, 320, 510),
-  sala("cafeteria", "Refeitório", 4, 520, 0, 400, 250),
+  sala("store-entrance", "Entrada", 0, 0, 0, 100, 100),
+  sala("showroom", "Show Room", 1, 0, 0, 100, 100),
+  sala("anaca", "Anacã", 2, 0, 0, 100, 100),
+  sala("corredor", "Corredor", 3, 0, 0, 100, 100),
+  sala("cafeteria", "Refeitório", 4, 0, 0, 100, 100),
 ];
 
 const pessoa = (id, personagem, nome, estado, sala, salaTrabalho) => ({
@@ -131,7 +135,7 @@ const VIEWPORTS = {
   mobile: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 };
 
-function paginaHtml(bundle, roteiro) {
+function paginaHtml(bundle, roteiro, bgDataUrl) {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -144,12 +148,19 @@ function paginaHtml(bundle, roteiro) {
   .ev-palco { background:#fff; border:1px solid var(--cinza-medio);
               border-radius:12px; padding:6px; overflow:hidden; }
   .ev-palco canvas { display:block; margin:0 auto; max-width:100%;
-                     height:auto !important; border-radius:8px; }
+                     height:auto !important; border-radius:8px;
+                     image-rendering:pixelated; }
+  .ev-popup { position:absolute; top:10px; right:10px; z-index:5;
+              background:#241f1acc; color:#f5ece0; border:1px solid #4a443e;
+              border-radius:10px; padding:.5rem .7rem; font-size:12px; max-width:220px; }
+  .ev-popup-fechar { position:absolute; top:2px; right:4px; background:none; border:none;
+                     color:#f5ece0; cursor:pointer; }
   .oculto { position:absolute; left:-9999px; }
 </style></head>
 <body>
-<div id="escritorio-diagnostico" data-api-url="/api/estado/" data-poll-segundos="1" data-debug="0">
-  <div class="ev-palco" data-ev="palco"></div>
+<div id="escritorio-diagnostico" data-api-url="/api/estado/" data-poll-segundos="1" data-debug="0"
+     data-bg-url="${bgDataUrl}">
+  <div class="ev-palco" data-ev="palco" style="position:relative"></div>
   <div data-ev="debug"></div>
   <div class="oculto">
     <span data-ev="loja"></span><span data-ev="luzes"></span>
@@ -159,6 +170,7 @@ function paginaHtml(bundle, roteiro) {
     <span data-ev="contagem"></span><span data-ev="erro"></span>
     <span data-ev="avisos"></span><ul data-ev="log"></ul>
     <span data-ev="modo"></span>
+    <div data-ev="aviso" hidden></div>
     <input data-ev="campo-data"><input data-ev="campo-hora">
     <button data-ev="ver"></button><button data-ev="tocar"></button>
     <button data-ev="ao-vivo"></button><button data-ev="atualizar"></button>
@@ -184,15 +196,17 @@ function paginaHtml(bundle, roteiro) {
 
 async function capturar(navegador, nome, roteiro, viewport, sufixo) {
   const bundle = await readFile(BUNDLE, "utf8");
+  const bgBase64 = await readFile(BG_PNG, "base64").catch(() => null);
+  const bgDataUrl = bgBase64 ? `data:image/png;base64,${bgBase64}` : "";
   const pagina = await navegador.newPage();
   await pagina.setViewport(viewport);
   const erros = [];
-  pagina.on("pageerror", (e) => erros.push(String(e)));
+  pagina.on("pageerror", (e) => erros.push(String(e.stack || e)));
   pagina.on("console", (m) => {
     if (m.type() === "error") erros.push(m.text());
   });
 
-  await pagina.setContent(paginaHtml(bundle, roteiro), { waitUntil: "load" });
+  await pagina.setContent(paginaHtml(bundle, roteiro, bgDataUrl), { waitUntil: "load" });
 
   for (let i = 0; i < roteiro.quadros.length; i += 1) {
     await pagina.evaluate((idx) => {
