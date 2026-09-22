@@ -15,6 +15,7 @@ import string
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.templatetags.static import static
@@ -23,6 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 _ADMIN_PREFIX = '/painel/'
+# Limite de tentativas erradas do código OTP (o axes só protege o login).
+# Contadores no cache (FileBasedCache, compartilhado entre os workers).
+_MAX_TENTATIVAS = 5
+_BLOQUEIO_SEGUNDOS = 15 * 60
+_MSG_BLOQUEADO = 'Muitas tentativas incorretas. Aguarde 15 minutos e tente novamente.'
+
 _EXCLUDED = {
     '/painel/verificar/',
     '/painel/login/',
@@ -71,6 +78,39 @@ def _esta_verificado(user):
         return AdminVerificacao.objects.get(user=user).verificado_recentemente()
     except AdminVerificacao.DoesNotExist:
         return False
+
+
+def _chave_falhas(user):
+    return f'admin_otp_falhas:{user.pk}'
+
+
+def _chave_bloqueio(user):
+    return f'admin_otp_bloqueio:{user.pk}'
+
+
+def _bloqueado(user):
+    return bool(cache.get(_chave_bloqueio(user)))
+
+
+def _registrar_falha(user):
+    """Conta uma tentativa errada; ao atingir o limite, bloqueia e invalida os códigos pendentes."""
+    from apps.usuarios.models import AdminCodigo
+
+    chave = _chave_falhas(user)
+    cache.add(chave, 0, _BLOQUEIO_SEGUNDOS)
+    try:
+        falhas = cache.incr(chave)
+    except ValueError:
+        falhas = 1
+        cache.set(chave, falhas, _BLOQUEIO_SEGUNDOS)
+
+    if falhas >= _MAX_TENTATIVAS:
+        AdminCodigo.objects.filter(user=user, usado=False).update(usado=True)
+        cache.set(_chave_bloqueio(user), True, _BLOQUEIO_SEGUNDOS)
+        cache.delete(chave)
+        logger.warning('OTP admin bloqueado por excesso de tentativas: %s', user.email)
+        return True
+    return False
 
 
 def _gerar_codigo():
@@ -187,7 +227,9 @@ def admin_verificar_view(request):
     if request.method == 'POST':
         action = request.POST.get('action', '')
 
-        if action == 'reenviar':
+        if _bloqueado(request.user):
+            error = _MSG_BLOQUEADO
+        elif action == 'reenviar':
             _enviar_codigo(request.user)
             reenviado = True
         else:
@@ -209,13 +251,17 @@ def admin_verificar_view(request):
                     user=request.user,
                     defaults={'ultima_verificacao': timezone.now()},
                 )
+                cache.delete(_chave_falhas(request.user))
 
                 next_url = request.GET.get('next', '/painel/')
                 if not next_url.startswith('/'):
                     next_url = '/painel/'
                 return redirect(next_url)
             else:
-                error = 'Código inválido ou expirado.'
+                if _registrar_falha(request.user):
+                    error = _MSG_BLOQUEADO
+                else:
+                    error = 'Código inválido ou expirado.'
     else:
         # GET: envia código se não há um recente (evita re-envio em cada reload)
         from apps.usuarios.models import AdminCodigo
@@ -224,7 +270,9 @@ def admin_verificar_view(request):
             usado=False,
             criado_em__gt=timezone.now() - timedelta(minutes=2),
         ).exists()
-        if not tem_recente:
+        if _bloqueado(request.user):
+            error = _MSG_BLOQUEADO
+        elif not tem_recente:
             _enviar_codigo(request.user)
 
     email_mascarado = _mascarar_email(request.user.email)
