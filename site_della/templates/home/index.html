@@ -263,7 +263,7 @@
         Look da Semana
       </h2>
 
-      <div class="look-corpo">
+      <div class="look-corpo{% if look_items|length < 3 %} look-corpo-centro{% endif %}">
         <p style="color:var(--cinza-texto);font-size:0.95rem;font-weight:300;line-height:1.8;">
           {% if look_obj and look_obj.descricao %}{{ look_obj.descricao }}{% else %}Sofisticação no detalhe. Este look combina sensualidade e elegância para uma noite especial ou uma ocasião que pede presença marcante.{% endif %}
         </p>

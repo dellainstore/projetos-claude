@@ -1222,6 +1222,18 @@ html[data-tarja="1"] { --tarja-h: 32px; }
   min-height: 0;
 }
 
+/* Look com 1 ou 2 produtos: centraliza o(s) item(ns) no espaço em branco abaixo
+   da descrição (com 3 produtos o space-between acima já distribui certo). */
+.look-corpo-centro {
+  justify-content: flex-start;
+  gap: 1.5rem;
+}
+.look-corpo-centro .look-produto-item:first-of-type { margin-top: auto; }
+.look-corpo-centro .look-produto-item:last-of-type  { margin-bottom: auto; }
+@media (min-width: 1025px) {
+  .look-corpo-centro { gap: 2.5rem; }
+}
+
 .look-produto-item {
   display: flex;
   gap: 1rem;
