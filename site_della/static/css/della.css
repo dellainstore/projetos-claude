@@ -2226,7 +2226,9 @@ html[data-tarja="1"] { --tarja-h: 32px; }
 
 .produto-card-foto .foto-hover { opacity: 0; }
 
-.produto-card:hover .foto-principal { opacity: 0; transform: scale(1.04); }
+.produto-card:hover .foto-principal { transform: scale(1.04); }
+/* A capa só some no hover se existir foto de hover para aparecer no lugar */
+.produto-card:hover .produto-card-foto:has(.foto-hover) .foto-principal { opacity: 0; }
 .produto-card:hover .foto-hover     { opacity: 1; transform: scale(1.04); }
 
 .produto-badge {
