@@ -128,7 +128,11 @@ class ProdutoAdminForm(forms.ModelForm):
     é virtual (não vai pro banco) — só serve para o JS filtrar a lista de subcategorias.
     """
     categoria_pai = forms.ModelChoiceField(
-        queryset=Categoria.objects.filter(parent__isnull=True, ativa=True).order_by('ordem', 'nome'),
+        # Sem filtro `ativa=True`: uma categoria mãe pode ficar inativa de propósito
+        # (ex: Outlet) enquanto os produtos são cadastrados nela aos poucos. A
+        # visibilidade no site continua controlada pela cascata em Categoria.save()
+        # (mãe inativa -> subs inativas), não por este dropdown do admin.
+        queryset=Categoria.objects.filter(parent__isnull=True).order_by('ordem', 'nome'),
         required=True,
         label='Categoria pai',
         empty_label='---------',
