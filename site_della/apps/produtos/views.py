@@ -239,6 +239,77 @@ def feed_meta_xml(request):
     return HttpResponse(xml, content_type='application/xml; charset=utf-8')
 
 
+def feed_google_xml(request):
+    """Feed pro Google Merchant Center — um item por variacao (cor+tamanho),
+    ver apps/produtos/services/google_feed.py pra explicacao de por que isso
+    e' diferente do feed_meta_xml (que agrupa por produto)."""
+    from apps.produtos.models import Produto
+    from apps.produtos.services.google_feed import produto_para_itens_google
+
+    site_url = (getattr(settings, 'SITE_URL', '') or '').rstrip('/')
+    produtos = (
+        Produto.objects
+        .filter(ativo=True, categoria__ativa=True)
+        .select_related('categoria', 'categoria__parent')
+        .prefetch_related('imagens', 'variacoes__cor', 'variacoes__tamanho')
+        .order_by('id')
+    )
+
+    itens = []
+    for produto in produtos:
+        for item in produto_para_itens_google(produto, site_url):
+            categoria_google = escape(item['google_product_category'])
+            parts = [
+                '    <item>',
+                f'      <g:id>{item["id"]}</g:id>',
+                f'      <g:title>{escape(item["title"])}</g:title>',
+                f'      <g:description>{escape(item["description"])}</g:description>',
+                f'      <g:availability>{item["availability"]}</g:availability>',
+            ]
+            if 'availability_date' in item:
+                parts.append(f'      <g:availability_date>{item["availability_date"]}</g:availability_date>')
+            parts += [
+                f'      <g:condition>{item["condition"]}</g:condition>',
+                f'      <g:price>{item["price"]}</g:price>',
+                f'      <g:link>{escape(item["link"])}</g:link>',
+                f'      <g:image_link>{escape(item["image_link"])}</g:image_link>',
+                f'      <g:brand>{item["brand"]}</g:brand>',
+                f'      <g:google_product_category>{categoria_google}</g:google_product_category>',
+                f'      <g:product_type>{escape(item["product_type"])}</g:product_type>',
+                f'      <g:gender>{item["gender"]}</g:gender>',
+                f'      <g:age_group>{item["age_group"]}</g:age_group>',
+                f'      <g:item_group_id>{item["item_group_id"]}</g:item_group_id>',
+                f'      <g:identifier_exists>{"yes" if "mpn" in item else "no"}</g:identifier_exists>',
+            ]
+            if 'sale_price' in item:
+                parts.append(f'      <g:sale_price>{item["sale_price"]}</g:sale_price>')
+            if 'mpn' in item:
+                parts.append(f'      <g:mpn>{escape(item["mpn"])}</g:mpn>')
+            if 'color' in item:
+                parts.append(f'      <g:color>{escape(item["color"])}</g:color>')
+            if 'size' in item:
+                parts.append(f'      <g:size>{escape(item["size"])}</g:size>')
+            if 'min_handling_time' in item:
+                parts.append(f'      <g:min_handling_time>{item["min_handling_time"]}</g:min_handling_time>')
+            if 'max_handling_time' in item:
+                parts.append(f'      <g:max_handling_time>{item["max_handling_time"]}</g:max_handling_time>')
+            parts.append('    </item>')
+            itens.append('\n'.join(parts))
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">\n'
+        '  <channel>\n'
+        '    <title>D\'ELLA Instore</title>\n'
+        f'    <link>{escape(site_url)}</link>\n'
+        '    <description>Catalogo de produtos D\'ELLA Instore para Google Merchant Center.</description>\n'
+        f'{"\n".join(itens)}\n'
+        '  </channel>\n'
+        '</rss>\n'
+    )
+    return HttpResponse(xml, content_type='application/xml; charset=utf-8')
+
+
 def loja(request, categoria_slug=None, parent_slug=None):
     from apps.produtos.models import Categoria, Produto
 

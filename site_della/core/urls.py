@@ -16,7 +16,7 @@ from apps.core_utils.admin_views import (
 from apps.core_utils.admin_verificacao import admin_verificar_view
 from apps.core_utils.health import readyz as _readyz
 from apps.core_utils import monitoramento_views
-from apps.produtos.views import feed_meta_xml
+from apps.produtos.views import feed_meta_xml, feed_google_xml
 from apps.produtos.views_sitemap import sitemap_xml, robots_txt
 from apps.conteudo.views_link_curto import criar_link_curto, abrir_link_curto
 
@@ -51,6 +51,7 @@ urlpatterns = [
     # Admin Django
     path('painel/', admin.site.urls),
     path('feed-meta.xml', feed_meta_xml, name='feed_meta'),
+    path('feed-google.xml', feed_google_xml, name='feed_google'),
     path('sitemap.xml', sitemap_xml, name='sitemap'),
     path('robots.txt', robots_txt, name='robots'),
 
